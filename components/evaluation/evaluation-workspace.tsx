@@ -4,9 +4,88 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateValuation } from "@/lib/valuation";
+import type { MarketComp } from "@/types/comps";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
+
+const targetMileage = 68742;
+
+const initialComps: MarketComp[] = [
+  {
+    id: "comp-1",
+    included: true,
+    source: "MarketCheck/API",
+    distance: 18,
+    year: 2020,
+    model: "Audi Q7",
+    trim: "Premium Plus",
+    mileage: 63421,
+    askingPrice: 34900,
+    qualityScore: 78,
+  },
+  {
+    id: "comp-2",
+    included: true,
+    source: "CarMax",
+    distance: 25,
+    year: 2020,
+    model: "Audi Q7",
+    trim: "Premium Plus",
+    mileage: 70118,
+    askingPrice: 33998,
+    qualityScore: 74,
+  },
+  {
+    id: "comp-3",
+    included: true,
+    source: "Facebook",
+    distance: 12,
+    year: 2020,
+    model: "Audi Q7",
+    trim: "Premium Plus",
+    mileage: 66950,
+    askingPrice: 32500,
+    qualityScore: 68,
+  },
+  {
+    id: "comp-4",
+    included: true,
+    source: "Manual",
+    distance: 90,
+    year: 2020,
+    model: "Audi Q7",
+    trim: "Premium Plus",
+    mileage: 71230,
+    askingPrice: 31900,
+    qualityScore: 66,
+  },
+  {
+    id: "comp-5",
+    included: false,
+    source: "MarketCheck/API",
+    distance: 310,
+    year: 2020,
+    model: "Audi Q7",
+    trim: "Premium Plus",
+    mileage: 59880,
+    askingPrice: 35900,
+    qualityScore: 62,
+  },
+  {
+    id: "comp-6",
+    included: false,
+    source: "CarMax",
+    distance: 200,
+    year: 2020,
+    model: "Audi Q7",
+    trim: "Premium Plus",
+    mileage: 82111,
+    askingPrice: 29998,
+    qualityScore: 58,
+  },
+];
 
 const initialEvaluation: ValuationInput = {
   currentBid: 18200,
@@ -124,13 +203,7 @@ function CurrencyInput({
   );
 }
 
-function StaticField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function StaticField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -146,8 +219,19 @@ function StaticField({
 export function EvaluationWorkspace() {
   const [evaluation, setEvaluation] =
     useState<ValuationInput>(initialEvaluation);
+  const [comps, setComps] = useState<MarketComp[]>(initialComps);
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
     initialSelectedConditions
+  );
+
+  const compSummary = useMemo(
+    () =>
+      calculateCompSummary({
+        comps,
+        targetMileage,
+        assumptions: defaultAssumptions,
+      }),
+    [comps]
   );
 
   const conditionGroups = useMemo(() => {
@@ -157,6 +241,7 @@ export function EvaluationWorkspace() {
       if (!groups[rule.category]) {
         groups[rule.category] = [];
       }
+
       groups[rule.category].push(rule);
       return groups;
     }, {});
@@ -187,9 +272,13 @@ export function EvaluationWorkspace() {
     );
   }, [selectedConditions]);
 
+  const targetResaleUsed =
+    compSummary.fastSaleTarget || evaluation.targetResaleUsed;
+
   const valuationInput = useMemo<ValuationInput>(() => {
     return {
       ...evaluation,
+      targetResaleUsed,
       totalRiskPoints: conditionTotals.riskPoints,
       hasAvoidFlag: Boolean(evaluation.hasAvoidFlag || conditionTotals.hasAvoidFlag),
       costs: {
@@ -197,7 +286,7 @@ export function EvaluationWorkspace() {
         conditionRiskAdd: conditionTotals.reserveAdd,
       },
     };
-  }, [evaluation, conditionTotals]);
+  }, [evaluation, targetResaleUsed, conditionTotals]);
 
   const valuation = useMemo(
     () => calculateValuation(valuationInput, defaultAssumptions),
@@ -229,6 +318,19 @@ export function EvaluationWorkspace() {
       previous.includes(conditionName)
         ? previous.filter((name) => name !== conditionName)
         : [...previous, conditionName]
+    );
+  }
+
+  function toggleCompIncluded(id: string) {
+    setComps((previous) =>
+      previous.map((comp) =>
+        comp.id === id
+          ? {
+              ...comp,
+              included: !comp.included,
+            }
+          : comp
+      )
     );
   }
 
@@ -286,11 +388,6 @@ export function EvaluationWorkspace() {
               Settings
             </div>
           </nav>
-
-          <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-            <div className="font-semibold text-white">Mindful Motors</div>
-            <div>Internal Auction Tool</div>
-          </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -362,7 +459,15 @@ export function EvaluationWorkspace() {
                       />
 
                       <CurrencyInput
-                        label="Target Resale"
+                        label="Manual Target"
+                        value={evaluation.targetResaleUsed}
+                        onChange={(value) =>
+                          updateEvaluationField("targetResaleUsed", value)
+                        }
+                      />
+
+                      <CurrencyInput
+                        label="Target Resale Used"
                         value={valuationInput.targetResaleUsed}
                         onChange={(value) =>
                           updateEvaluationField("targetResaleUsed", value)
@@ -375,11 +480,6 @@ export function EvaluationWorkspace() {
                         onChange={(value) =>
                           updateEvaluationField("targetProfit", value)
                         }
-                      />
-
-                      <StaticField
-                        label="Risk Points"
-                        value={`${valuationInput.totalRiskPoints}`}
                       />
                     </div>
 
@@ -485,17 +585,38 @@ export function EvaluationWorkspace() {
 
                 <SectionCard title="4. Market Comps">
                   <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-                    <MetricCard label="Comp Count" value="6" />
-                    <MetricCard label="Median Adjusted" value="$33,750" />
+                    <MetricCard
+                      label="Comp Count"
+                      value={`${compSummary.includedCount}`}
+                    />
+                    <MetricCard
+                      label="Median Adjusted"
+                      value={money(compSummary.medianAdjusted)}
+                    />
                     <MetricCard
                       label="Fast Sale Target"
-                      value={money(valuationInput.targetResaleUsed)}
+                      value={money(compSummary.fastSaleTarget)}
                     />
-                    <MetricCard label="Confidence" value="72%" tone="green" />
+                    <MetricCard
+                      label="Confidence"
+                      value={compSummary.confidence}
+                      tone={
+                        compSummary.confidence === "High"
+                          ? "green"
+                          : compSummary.confidence === "Medium"
+                          ? "orange"
+                          : "red"
+                      }
+                    />
                     <MetricCard label="Search Type" value="Local + Regional" />
                   </div>
 
-                  <MarketCompsTable />
+                  <MarketCompsTable
+                    comps={comps}
+                    targetMileage={targetMileage}
+                    assumptions={defaultAssumptions}
+                    onToggleIncluded={toggleCompIncluded}
+                  />
                 </SectionCard>
               </div>
 
@@ -541,8 +662,8 @@ export function EvaluationWorkspace() {
                   <div className={`mt-4 rounded-2xl p-5 text-white ${decisionTone}`}>
                     <div className="text-3xl font-black">{valuation.decision}</div>
                     <p className="mt-2 text-sm text-white/90">
-                      Calculated live from bid, costs, assumptions, and selected
-                      condition rules.
+                      Comps, condition rules, costs, and assumptions now feed
+                      the valuation.
                     </p>
                   </div>
                 </SectionCard>

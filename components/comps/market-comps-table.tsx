@@ -9,87 +9,9 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
-
-type MarketComp = {
-  included: boolean;
-  source: string;
-  distance: number;
-  year: number;
-  model: string;
-  trim: string;
-  mileage: number;
-  askingPrice: number;
-  qualityScore: number;
-};
-
-const comps: MarketComp[] = [
-  {
-    included: true,
-    source: "MarketCheck/API",
-    distance: 18,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 63421,
-    askingPrice: 34900,
-    qualityScore: 78,
-  },
-  {
-    included: true,
-    source: "CarMax",
-    distance: 25,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 70118,
-    askingPrice: 33998,
-    qualityScore: 74,
-  },
-  {
-    included: true,
-    source: "Facebook",
-    distance: 12,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 66950,
-    askingPrice: 32500,
-    qualityScore: 68,
-  },
-  {
-    included: true,
-    source: "Manual",
-    distance: 90,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 71230,
-    askingPrice: 31900,
-    qualityScore: 66,
-  },
-  {
-    included: false,
-    source: "MarketCheck/API",
-    distance: 310,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 59880,
-    askingPrice: 35900,
-    qualityScore: 62,
-  },
-  {
-    included: false,
-    source: "CarMax",
-    distance: 200,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 82111,
-    askingPrice: 29998,
-    qualityScore: 58,
-  },
-];
+import { calculateAdjustedCompPrice } from "@/lib/comps";
+import type { Assumptions } from "@/types/assumptions";
+import type { MarketComp } from "@/types/comps";
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -103,7 +25,17 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-export function MarketCompsTable() {
+export function MarketCompsTable({
+  comps,
+  targetMileage,
+  assumptions,
+  onToggleIncluded,
+}: {
+  comps: MarketComp[];
+  targetMileage: number;
+  assumptions: Assumptions;
+  onToggleIncluded: (id: string) => void;
+}) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "qualityScore", desc: true },
   ]);
@@ -114,7 +46,11 @@ export function MarketCompsTable() {
         accessorKey: "included",
         header: "Include",
         cell: ({ row }) => (
-          <input type="checkbox" checked={row.original.included} readOnly />
+          <input
+            type="checkbox"
+            checked={row.original.included}
+            onChange={() => onToggleIncluded(row.original.id)}
+          />
         ),
         enableSorting: true,
       },
@@ -159,6 +95,29 @@ export function MarketCompsTable() {
         ),
       },
       {
+        id: "adjustedPrice",
+        header: "Adjusted",
+        accessorFn: (row) =>
+          calculateAdjustedCompPrice({
+            comp: row,
+            targetMileage,
+            assumptions,
+          }),
+        cell: ({ row }) => {
+          const adjusted = calculateAdjustedCompPrice({
+            comp: row.original,
+            targetMileage,
+            assumptions,
+          });
+
+          return (
+            <span className="font-semibold text-blue-700">
+              {formatMoney(adjusted)}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "qualityScore",
         header: "Score",
         cell: ({ row }) => {
@@ -178,7 +137,7 @@ export function MarketCompsTable() {
         },
       },
     ],
-    []
+    [assumptions, onToggleIncluded, targetMileage]
   );
 
   const table = useReactTable({
