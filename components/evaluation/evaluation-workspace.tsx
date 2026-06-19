@@ -250,6 +250,12 @@ export function EvaluationWorkspace() {
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(null);
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
+  const [notes, setNotes] = useState(
+    "Clean title Q7 with good service history. Minor cosmetic wear, needs tires. Strong local demand for this trim."
+  );
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
     initialSelectedConditions
   );
@@ -424,6 +430,53 @@ export function EvaluationWorkspace() {
     }
   }
 
+  async function saveEvaluation() {
+    setSaveLoading(true);
+    setSaveStatus("");
+
+    try {
+      const response = await fetch("/api/evaluations/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: savedEvaluationId,
+          status: "watching",
+          vehicleTitle,
+          decodedVehicle,
+          targetMileage,
+          evaluation,
+          valuationInput,
+          valuation,
+          compSummary,
+          comps,
+          selectedConditions,
+          notes,
+          auctionSite: "Manheim Phoenix",
+          auctionUrl: "",
+          auctionEndsAt: null,
+          assumptionsSnapshot: defaultAssumptions,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Save failed.");
+      }
+
+      setSavedEvaluationId(data.id);
+      setSaveStatus(
+        data.mode === "updated" ? "Updated in Supabase" : "Saved to Supabase"
+      );
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : "Save failed.");
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
   const decisionTone =
     valuation.decision === "Pass"
       ? "bg-red-600"
@@ -528,8 +581,13 @@ export function EvaluationWorkspace() {
                 >
                   {marketCheckLoading ? "Pulling Comps..." : "Pull MarketCheck Comps"}
                 </button>
-                <button className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm">
-                  Save Evaluation
+                <button
+                  type="button"
+                  onClick={saveEvaluation}
+                  disabled={saveLoading}
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {saveLoading ? "Saving..." : savedEvaluationId ? "Update Evaluation" : "Save Evaluation"}
                 </button>
               </div>
             </div>
