@@ -298,6 +298,18 @@ export function EvaluationWorkspace() {
     [valuationInput]
   );
 
+  const vehicleYear = decodedVehicle?.year || "2020";
+  const vehicleMake = decodedVehicle?.make || "Audi";
+  const vehicleModel = decodedVehicle?.model || "Q7";
+  const vehicleTrim = decodedVehicle?.trim || "quattro Premium Plus";
+  const vehicleBodyClass = decodedVehicle?.bodyClass || "SUV / 4D";
+
+  const vehicleTitle =
+    [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "Auction Vehicle";
+
   function updateEvaluationField(
     key: keyof Omit<ValuationInput, "costs">,
     value: number | boolean
@@ -340,9 +352,9 @@ export function EvaluationWorkspace() {
   }
 
   async function pullMarketCheckComps() {
-    const year = decodedVehicle?.year || "2020";
-    const make = decodedVehicle?.make || "Audi";
-    const model = decodedVehicle?.model || "Q7";
+    const year = vehicleYear;
+    const make = vehicleMake;
+    const model = vehicleModel;
 
     setMarketCheckLoading(true);
     setMarketCheckStatus("");
@@ -469,7 +481,7 @@ export function EvaluationWorkspace() {
                   Back to Evaluations
                 </div>
                 <h1 className="text-3xl font-bold tracking-tight">
-                  2020 Audi Q7 quattro Premium Plus
+                  {vehicleTitle}
                 </h1>
                 <div
                   className={`mt-2 inline-flex rounded-full px-3 py-1 text-sm font-semibold ${decisionBadgeTone}`}
@@ -503,7 +515,7 @@ export function EvaluationWorkspace() {
                       <StaticField label="VIN" value={decodedVehicle?.vin || "WA1LAAF78LD012345"} />
                       <StaticField label="Mileage" value="68,742" />
                       <StaticField label="Auction Site" value="Manheim Phoenix" />
-                      <StaticField label="Vehicle Type" value="SUV / 4D" />
+                      <StaticField label="Vehicle Type" value={vehicleBodyClass} />
 
                       <CurrencyInput
                         label="Current Bid"
