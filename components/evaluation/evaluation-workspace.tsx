@@ -12,7 +12,7 @@ const initialEvaluation: ValuationInput = {
   currentBid: 18200,
   targetResaleUsed: 31250,
   targetProfit: 3500,
-  totalRiskPoints: 125,
+  totalRiskPoints: 0,
   hasAvoidFlag: false,
   costs: {
     auctionFee: 546,
@@ -22,9 +22,15 @@ const initialEvaluation: ValuationInput = {
     generalRiskReserve: 600,
     brandRiskAdd: 250,
     titleHistoryRiskAdd: 500,
-    conditionRiskAdd: 900,
+    conditionRiskAdd: 0,
   },
 };
+
+const initialSelectedConditions = [
+  "Warning Light",
+  "Needs Tires",
+  "Poor Disclosure",
+];
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -32,10 +38,6 @@ function money(value: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function number(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function toNumber(value: string) {
@@ -122,30 +124,6 @@ function CurrencyInput({
   );
 }
 
-function NumberInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="block">
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <input
-        type="number"
-        value={value}
-        onChange={(event) => onChange(toNumber(event.target.value))}
-        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-      />
-    </label>
-  );
-}
-
 function StaticField({
   label,
   value,
@@ -168,10 +146,62 @@ function StaticField({
 export function EvaluationWorkspace() {
   const [evaluation, setEvaluation] =
     useState<ValuationInput>(initialEvaluation);
+  const [selectedConditions, setSelectedConditions] = useState<string[]>(
+    initialSelectedConditions
+  );
+
+  const conditionGroups = useMemo(() => {
+    return defaultAssumptions.conditionRules.reduce<
+      Record<string, typeof defaultAssumptions.conditionRules>
+    >((groups, rule) => {
+      if (!groups[rule.category]) {
+        groups[rule.category] = [];
+      }
+      groups[rule.category].push(rule);
+      return groups;
+    }, {});
+  }, []);
+
+  const conditionTotals = useMemo(() => {
+    return selectedConditions.reduce(
+      (totals, conditionName) => {
+        const rule = defaultAssumptions.conditionRules.find(
+          (conditionRule) => conditionRule.name === conditionName
+        );
+
+        if (!rule) {
+          return totals;
+        }
+
+        return {
+          riskPoints: totals.riskPoints + rule.riskPoints,
+          reserveAdd: totals.reserveAdd + rule.reserveAdd,
+          hasAvoidFlag: totals.hasAvoidFlag || rule.avoidFlag,
+        };
+      },
+      {
+        riskPoints: 0,
+        reserveAdd: 0,
+        hasAvoidFlag: false,
+      }
+    );
+  }, [selectedConditions]);
+
+  const valuationInput = useMemo<ValuationInput>(() => {
+    return {
+      ...evaluation,
+      totalRiskPoints: conditionTotals.riskPoints,
+      hasAvoidFlag: Boolean(evaluation.hasAvoidFlag || conditionTotals.hasAvoidFlag),
+      costs: {
+        ...evaluation.costs,
+        conditionRiskAdd: conditionTotals.reserveAdd,
+      },
+    };
+  }, [evaluation, conditionTotals]);
 
   const valuation = useMemo(
-    () => calculateValuation(evaluation, defaultAssumptions),
-    [evaluation]
+    () => calculateValuation(valuationInput, defaultAssumptions),
+    [valuationInput]
   );
 
   function updateEvaluationField(
@@ -192,6 +222,14 @@ export function EvaluationWorkspace() {
         [key]: value,
       },
     }));
+  }
+
+  function toggleCondition(conditionName: string) {
+    setSelectedConditions((previous) =>
+      previous.includes(conditionName)
+        ? previous.filter((name) => name !== conditionName)
+        : [...previous, conditionName]
+    );
   }
 
   const decisionTone =
@@ -317,7 +355,7 @@ export function EvaluationWorkspace() {
 
                       <CurrencyInput
                         label="Current Bid"
-                        value={evaluation.currentBid}
+                        value={valuationInput.currentBid}
                         onChange={(value) =>
                           updateEvaluationField("currentBid", value)
                         }
@@ -325,7 +363,7 @@ export function EvaluationWorkspace() {
 
                       <CurrencyInput
                         label="Target Resale"
-                        value={evaluation.targetResaleUsed}
+                        value={valuationInput.targetResaleUsed}
                         onChange={(value) =>
                           updateEvaluationField("targetResaleUsed", value)
                         }
@@ -333,18 +371,15 @@ export function EvaluationWorkspace() {
 
                       <CurrencyInput
                         label="Target Profit"
-                        value={evaluation.targetProfit}
+                        value={valuationInput.targetProfit}
                         onChange={(value) =>
                           updateEvaluationField("targetProfit", value)
                         }
                       />
 
-                      <NumberInput
+                      <StaticField
                         label="Risk Points"
-                        value={evaluation.totalRiskPoints}
-                        onChange={(value) =>
-                          updateEvaluationField("totalRiskPoints", value)
-                        }
+                        value={`${valuationInput.totalRiskPoints}`}
                       />
                     </div>
 
@@ -359,7 +394,7 @@ export function EvaluationWorkspace() {
                           )
                         }
                       />
-                      Avoid flag
+                      Manual avoid flag
                     </label>
                   </SectionCard>
 
@@ -393,48 +428,38 @@ export function EvaluationWorkspace() {
 
                   <SectionCard title="3. Condition Checklist">
                     <div className="space-y-4 text-sm">
-                      <div>
-                        <div className="mb-2 font-semibold">Mechanical</div>
-                        <label className="flex items-center justify-between">
-                          <span>
-                            <input className="mr-2" type="checkbox" checked readOnly />
-                            Warning Light
-                          </span>
-                          <span className="text-slate-500">+25</span>
-                        </label>
-                        <label className="flex items-center justify-between">
-                          <span>
-                            <input className="mr-2" type="checkbox" readOnly />
-                            Mechanical Concern
-                          </span>
-                          <span className="text-slate-500">+35</span>
-                        </label>
-                        <label className="flex items-center justify-between">
-                          <span>
-                            <input className="mr-2" type="checkbox" readOnly />
-                            Transmission Concern
-                          </span>
-                          <span className="text-slate-500">+40</span>
-                        </label>
-                      </div>
+                      {Object.entries(conditionGroups).map(([category, rules]) => (
+                        <div key={category}>
+                          <div className="mb-2 font-semibold">{category}</div>
+                          <div className="space-y-1">
+                            {rules.map((rule) => {
+                              const checked = selectedConditions.includes(
+                                rule.name
+                              );
 
-                      <div>
-                        <div className="mb-2 font-semibold">Exterior / Wear</div>
-                        <label className="flex items-center justify-between">
-                          <span>
-                            <input className="mr-2" type="checkbox" checked readOnly />
-                            Minor Cosmetics
-                          </span>
-                          <span className="text-slate-500">+10</span>
-                        </label>
-                        <label className="flex items-center justify-between">
-                          <span>
-                            <input className="mr-2" type="checkbox" checked readOnly />
-                            Needs Tires
-                          </span>
-                          <span className="text-slate-500">+15</span>
-                        </label>
-                      </div>
+                              return (
+                                <label
+                                  key={rule.name}
+                                  className="flex items-center justify-between gap-3"
+                                >
+                                  <span>
+                                    <input
+                                      className="mr-2"
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleCondition(rule.name)}
+                                    />
+                                    {rule.name}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    +{rule.riskPoints} / {money(rule.reserveAdd)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
 
                       <div className="grid grid-cols-2 gap-3 rounded-xl bg-emerald-50 p-3 text-center">
                         <div>
@@ -442,7 +467,7 @@ export function EvaluationWorkspace() {
                             Condition Risk Add
                           </div>
                           <div className="font-bold text-emerald-700">
-                            {money(evaluation.costs.conditionRiskAdd)}
+                            {money(conditionTotals.reserveAdd)}
                           </div>
                         </div>
                         <div>
@@ -450,7 +475,7 @@ export function EvaluationWorkspace() {
                             Condition Points
                           </div>
                           <div className="font-bold">
-                            {evaluation.totalRiskPoints} / 300
+                            {conditionTotals.riskPoints} / 300
                           </div>
                         </div>
                       </div>
@@ -464,7 +489,7 @@ export function EvaluationWorkspace() {
                     <MetricCard label="Median Adjusted" value="$33,750" />
                     <MetricCard
                       label="Fast Sale Target"
-                      value={money(evaluation.targetResaleUsed)}
+                      value={money(valuationInput.targetResaleUsed)}
                     />
                     <MetricCard label="Confidence" value="72%" tone="green" />
                     <MetricCard label="Search Type" value="Local + Regional" />
@@ -516,7 +541,8 @@ export function EvaluationWorkspace() {
                   <div className={`mt-4 rounded-2xl p-5 text-white ${decisionTone}`}>
                     <div className="text-3xl font-black">{valuation.decision}</div>
                     <p className="mt-2 text-sm text-white/90">
-                      Calculated live from the editable fields.
+                      Calculated live from bid, costs, assumptions, and selected
+                      condition rules.
                     </p>
                   </div>
                 </SectionCard>
@@ -525,48 +551,52 @@ export function EvaluationWorkspace() {
                   <div className="space-y-3">
                     <CurrencyInput
                       label="Auction Fee"
-                      value={evaluation.costs.auctionFee}
+                      value={valuationInput.costs.auctionFee}
                       onChange={(value) => updateCost("auctionFee", value)}
                     />
                     <CurrencyInput
                       label="Transport"
-                      value={evaluation.costs.transport}
+                      value={valuationInput.costs.transport}
                       onChange={(value) => updateCost("transport", value)}
                     />
                     <CurrencyInput
                       label="Recon"
-                      value={evaluation.costs.recon}
+                      value={valuationInput.costs.recon}
                       onChange={(value) => updateCost("recon", value)}
                     />
                     <CurrencyInput
                       label="Detail/Admin"
-                      value={evaluation.costs.detailAdmin}
+                      value={valuationInput.costs.detailAdmin}
                       onChange={(value) => updateCost("detailAdmin", value)}
                     />
                     <CurrencyInput
                       label="General Risk Reserve"
-                      value={evaluation.costs.generalRiskReserve}
+                      value={valuationInput.costs.generalRiskReserve}
                       onChange={(value) =>
                         updateCost("generalRiskReserve", value)
                       }
                     />
                     <CurrencyInput
                       label="Brand Risk Add"
-                      value={evaluation.costs.brandRiskAdd}
+                      value={valuationInput.costs.brandRiskAdd}
                       onChange={(value) => updateCost("brandRiskAdd", value)}
                     />
                     <CurrencyInput
                       label="Title/History Risk Add"
-                      value={evaluation.costs.titleHistoryRiskAdd}
+                      value={valuationInput.costs.titleHistoryRiskAdd}
                       onChange={(value) =>
                         updateCost("titleHistoryRiskAdd", value)
                       }
                     />
-                    <CurrencyInput
-                      label="Condition Risk Add"
-                      value={evaluation.costs.conditionRiskAdd}
-                      onChange={(value) => updateCost("conditionRiskAdd", value)}
-                    />
+
+                    <div>
+                      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Condition Risk Add
+                      </div>
+                      <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-emerald-700">
+                        {money(valuationInput.costs.conditionRiskAdd)}
+                      </div>
+                    </div>
 
                     <div className="mt-4 border-t border-slate-200 pt-4">
                       <div className="flex justify-between text-base font-bold">
@@ -575,7 +605,7 @@ export function EvaluationWorkspace() {
                       </div>
                       <div className="mt-2 flex justify-between text-base font-bold text-red-600">
                         <span>Total Risk Points</span>
-                        <span>{evaluation.totalRiskPoints} / 300</span>
+                        <span>{valuationInput.totalRiskPoints} / 300</span>
                       </div>
                     </div>
                   </div>
