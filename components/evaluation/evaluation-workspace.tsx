@@ -518,9 +518,12 @@ export function EvaluationWorkspace() {
             <div className="rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5">
               Vehicles
             </div>
-            <div className="rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5">
+            <Link
+              href="/deals"
+              className="block rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5"
+            >
               Deal Log
-            </div>
+            </Link>
             <Link
               href="/assumptions"
               className="block rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5"
