@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateValuation } from "@/lib/valuation";
@@ -498,33 +499,7 @@ export function EvaluationWorkspace() {
                     </label>
                   </SectionCard>
 
-                  <SectionCard
-                    title="2. VIN Decode"
-                    action={
-                      <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">
-                        Decoded
-                      </span>
-                    }
-                  >
-                    <div className="space-y-2 text-sm">
-                      {[
-                        ["Year", "2020"],
-                        ["Make", "Audi"],
-                        ["Model", "Q7"],
-                        ["Trim", "Premium Plus"],
-                        ["Body Class", "SUV"],
-                        ["Drivetrain", "quattro AWD"],
-                        ["Fuel", "Gasoline"],
-                        ["Engine", "3.0L V6 TFSI"],
-                        ["Plant Country", "Slovakia"],
-                      ].map(([label, value]) => (
-                        <div key={label} className="flex justify-between gap-4">
-                          <span className="text-slate-500">{label}</span>
-                          <span className="font-semibold">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </SectionCard>
+                  <VinDecodeCard />
 
                   <SectionCard title="3. Condition Checklist">
                     <div className="space-y-4 text-sm">
