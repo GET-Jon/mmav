@@ -9,6 +9,7 @@ import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateValuation } from "@/lib/valuation";
 import type { MarketComp } from "@/types/comps";
+import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
 
 const targetMileage = 68742;
@@ -221,6 +222,9 @@ export function EvaluationWorkspace() {
   const [evaluation, setEvaluation] =
     useState<ValuationInput>(initialEvaluation);
   const [comps, setComps] = useState<MarketComp[]>(initialComps);
+  const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(null);
+  const [marketCheckLoading, setMarketCheckLoading] = useState(false);
+  const [marketCheckStatus, setMarketCheckStatus] = useState("");
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
     initialSelectedConditions
   );
@@ -335,6 +339,52 @@ export function EvaluationWorkspace() {
     );
   }
 
+  async function pullMarketCheckComps() {
+    const year = decodedVehicle?.year || "2020";
+    const make = decodedVehicle?.make || "Audi";
+    const model = decodedVehicle?.model || "Q7";
+
+    setMarketCheckLoading(true);
+    setMarketCheckStatus("");
+
+    try {
+      const response = await fetch("/api/marketcheck/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          year,
+          make,
+          model,
+          zips: ["29412", "29201", "28202", "30303", "31401"],
+          radius: 100,
+          rows: 10,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "MarketCheck search failed.");
+      }
+
+      if (!data.comps || data.comps.length === 0) {
+        setMarketCheckStatus("No comps found");
+        return;
+      }
+
+      setComps(data.comps);
+      setMarketCheckStatus(`${data.comps.length} comps loaded`);
+    } catch (error) {
+      setMarketCheckStatus(
+        error instanceof Error ? error.message : "MarketCheck search failed."
+      );
+    } finally {
+      setMarketCheckLoading(false);
+    }
+  }
+
   const decisionTone =
     valuation.decision === "Pass"
       ? "bg-red-600"
@@ -432,8 +482,12 @@ export function EvaluationWorkspace() {
                 <button className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold shadow-sm">
                   Decode VIN
                 </button>
-                <button className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm">
-                  Pull MarketCheck Comps
+                <button
+                  onClick={pullMarketCheckComps}
+                  disabled={marketCheckLoading}
+                  className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {marketCheckLoading ? "Pulling Comps..." : "Pull MarketCheck Comps"}
                 </button>
                 <button className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm">
                   Save Evaluation
@@ -446,7 +500,7 @@ export function EvaluationWorkspace() {
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
                   <SectionCard title="1. Vehicle Basics">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <StaticField label="VIN" value="WA1LAAF78LD012345" />
+                      <StaticField label="VIN" value={decodedVehicle?.vin || "WA1LAAF78LD012345"} />
                       <StaticField label="Mileage" value="68,742" />
                       <StaticField label="Auction Site" value="Manheim Phoenix" />
                       <StaticField label="Vehicle Type" value="SUV / 4D" />
@@ -499,7 +553,7 @@ export function EvaluationWorkspace() {
                     </label>
                   </SectionCard>
 
-                  <VinDecodeCard />
+                  <VinDecodeCard onDecoded={(decoded) => setDecodedVehicle(decoded)} />
 
                   <SectionCard title="3. Condition Checklist">
                     <div className="space-y-4 text-sm">
@@ -558,7 +612,16 @@ export function EvaluationWorkspace() {
                   </SectionCard>
                 </div>
 
-                <SectionCard title="4. Market Comps">
+                <SectionCard
+                  title="4. Market Comps"
+                  action={
+                    marketCheckStatus ? (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                        {marketCheckStatus}
+                      </span>
+                    ) : null
+                  }
+                >
                   <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
                     <MetricCard
                       label="Comp Count"

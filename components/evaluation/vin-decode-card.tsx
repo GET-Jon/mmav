@@ -27,7 +27,7 @@ function FieldRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function VinDecodeCard() {
+export function VinDecodeCard({ onDecoded }: { onDecoded?: (decoded: VinDecodeResult) => void }) {
   const [vin, setVin] = useState(initialDecoded.vin);
   const [decoded, setDecoded] = useState<VinDecodeResult>(initialDecoded);
   const [loading, setLoading] = useState(false);
@@ -55,6 +55,7 @@ export function VinDecodeCard() {
       }
 
       setDecoded(data);
+      onDecoded?.(data);
     } catch (decodeError) {
       setError(
         decodeError instanceof Error
