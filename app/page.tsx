@@ -1,60 +1,4 @@
-const comps = [
-  {
-    source: "MarketCheck/API",
-    distance: "18 mi",
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: "63,421",
-    asking: "$34,900",
-    score: 78,
-    included: true,
-  },
-  {
-    source: "CarMax",
-    distance: "25 mi",
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: "70,118",
-    asking: "$33,998",
-    score: 74,
-    included: true,
-  },
-  {
-    source: "Facebook",
-    distance: "12 mi",
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: "66,950",
-    asking: "$32,500",
-    score: 68,
-    included: true,
-  },
-  {
-    source: "Manual",
-    distance: "90 mi",
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: "71,230",
-    asking: "$31,900",
-    score: 66,
-    included: true,
-  },
-  {
-    source: "MarketCheck/API",
-    distance: "310 mi",
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: "59,880",
-    asking: "$35,900",
-    score: 62,
-    included: false,
-  },
-];
+import { MarketCompsTable } from "@/components/comps/market-comps-table";
 
 function MetricCard({
   label,
@@ -147,9 +91,7 @@ export default function Home() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
-            <div>
-              <div className="text-xl font-bold">Auction Evaluator</div>
-            </div>
+            <div className="text-xl font-bold">Auction Evaluator</div>
             <div className="hidden w-[420px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500 md:block">
               Enter VIN or search vehicles...
             </div>
@@ -301,55 +243,7 @@ export default function Home() {
                     <MetricCard label="Search Type" value="Local + Regional" />
                   </div>
 
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                        <tr>
-                          <th className="px-3 py-3">Include</th>
-                          <th className="px-3 py-3">Source</th>
-                          <th className="px-3 py-3">Distance</th>
-                          <th className="px-3 py-3">Year</th>
-                          <th className="px-3 py-3">Model</th>
-                          <th className="px-3 py-3">Trim</th>
-                          <th className="px-3 py-3">Mileage</th>
-                          <th className="px-3 py-3">Asking</th>
-                          <th className="px-3 py-3">Score</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {comps.map((comp, index) => (
-                          <tr
-                            key={index}
-                            className={!comp.included ? "bg-slate-50 text-slate-400" : ""}
-                          >
-                            <td className="px-3 py-3">
-                              <input type="checkbox" checked={comp.included} readOnly />
-                            </td>
-                            <td className="px-3 py-3 font-medium">{comp.source}</td>
-                            <td className="px-3 py-3">{comp.distance}</td>
-                            <td className="px-3 py-3">{comp.year}</td>
-                            <td className="px-3 py-3">{comp.model}</td>
-                            <td className="px-3 py-3">{comp.trim}</td>
-                            <td className="px-3 py-3">{comp.mileage}</td>
-                            <td className="px-3 py-3 font-semibold">{comp.asking}</td>
-                            <td className="px-3 py-3">
-                              <span
-                                className={`rounded-full px-2 py-1 text-xs font-bold ${
-                                  comp.score >= 70
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : comp.score >= 60
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-red-100 text-red-700"
-                                }`}
-                              >
-                                {comp.score}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <MarketCompsTable />
                 </SectionCard>
               </div>
 
