@@ -107,7 +107,11 @@ const initialEvaluation: ValuationInput = {
   },
 };
 
-const initialSelectedConditions: string[] = [];
+const initialSelectedConditions = [
+  "Warning Light",
+  "Needs Tires",
+  "Poor Disclosure",
+];
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -439,30 +443,6 @@ export function EvaluationWorkspace({
     );
   }
 
-  function resetForDecodedVin(decoded: VinDecodeResult) {
-    setDecodedVehicle(decoded);
-    setVin(decoded.vin);
-
-    setEvaluation({
-      ...initialEvaluation,
-      currentBid: 0,
-      targetResaleUsed: 0,
-      hasAvoidFlag: false,
-      costs: {
-        ...initialEvaluation.costs,
-      },
-    });
-
-    setTargetMileage(0);
-    setFinalTargetOverride(null);
-    setComps([]);
-    setSelectedConditions([]);
-    setMarketCheckStatus("");
-    setSavedEvaluationId(null);
-    setSaveStatus("");
-    setNotes("");
-  }
-
   function toggleCompIncluded(id: string) {
     setComps((previous) =>
       previous.map((comp) =>
@@ -691,9 +671,10 @@ export function EvaluationWorkspace({
               </div>
             </div>
 
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_1.15fr_1fr]">
-                <SectionCard title="1. Vehicle Basics">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_370px]">
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+                  <SectionCard title="1. Vehicle Basics">
                     <div className="space-y-4">
                       <FormRow label="VIN">
                         <input
@@ -701,7 +682,7 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setVin(event.target.value.toUpperCase())
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
@@ -712,7 +693,7 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setTargetMileage(toNumber(event.target.value))
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
@@ -720,7 +701,7 @@ export function EvaluationWorkspace({
                         <select
                           value={auctionSite}
                           onChange={(event) => setAuctionSite(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         >
                           <option>ACV Auctions</option>
                           <option>Manheim</option>
@@ -744,13 +725,13 @@ export function EvaluationWorkspace({
                                 toNumber(event.target.value)
                               )
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
 
                       <FormRow label="Target Resale Used">
-                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900">
                           {money(targetResaleUsed)}
                         </div>
                       </FormRow>
@@ -764,7 +745,7 @@ export function EvaluationWorkspace({
                             onChange={(event) =>
                               setFinalTargetOverride(toNumber(event.target.value))
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
@@ -781,7 +762,7 @@ export function EvaluationWorkspace({
                                 toNumber(event.target.value)
                               )
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
@@ -802,62 +783,16 @@ export function EvaluationWorkspace({
                     </div>
                   </SectionCard>
 
-                <VinDecodeCard
-                  vin={vin}
-                  onVinChange={setVin}
-                  onDecoded={(decoded) => resetForDecodedVin(decoded)}
-                />
+                  <VinDecodeCard
+                    vin={vin}
+                    onVinChange={setVin}
+                    onDecoded={(decoded) => {
+                      setDecodedVehicle(decoded);
+                      setVin(decoded.vin);
+                    }}
+                  />
 
-                <SectionCard title="6. Output / Decision">
-                  <div className="grid grid-cols-2 gap-3">
-                    <MetricCard
-                      label="All-In Cost"
-                      value={money(valuation.allInCost)}
-                    />
-                    <MetricCard
-                      label="Gross Profit"
-                      value={money(valuation.expectedGrossProfit)}
-                      tone={valuation.expectedGrossProfit >= 0 ? "green" : "red"}
-                    />
-                    <MetricCard
-                      label="Safe Bid"
-                      value={money(valuation.safeBid)}
-                    />
-                    <MetricCard
-                      label="Max Smart Bid"
-                      value={money(valuation.maxSmartBid)}
-                      tone="blue"
-                    />
-                    <MetricCard
-                      label="Stretch Bid"
-                      value={money(valuation.stretchBid)}
-                      tone="purple"
-                    />
-                    <MetricCard
-                      label="Risk Grade"
-                      value={valuation.riskGrade}
-                      tone={
-                        valuation.riskGrade === "Low"
-                          ? "green"
-                          : valuation.riskGrade === "Medium"
-                          ? "orange"
-                          : "red"
-                      }
-                    />
-                  </div>
-
-                  <div className={`mt-4 rounded-2xl p-5 text-white ${decisionTone}`}>
-                    <div className="text-3xl font-black">{valuation.decision}</div>
-                    <p className="mt-2 text-sm text-white/90">
-                      Comps, condition rules, costs, and assumptions now feed
-                      the valuation.
-                    </p>
-                  </div>
-                </SectionCard>
-              </div>
-
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1.15fr_.9fr]">
-                <SectionCard title="3. Condition Checklist">
+                  <SectionCard title="3. Condition Checklist">
                     <div className="space-y-4 text-sm">
                       {Object.entries(conditionGroups).map(([category, rules]) => (
                         <div key={category}>
@@ -912,6 +847,101 @@ export function EvaluationWorkspace({
                       </div>
                     </div>
                   </SectionCard>
+                </div>
+
+                <SectionCard
+                  title="4. Market Comps"
+                  action={
+                    marketCheckStatus ? (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                        {marketCheckStatus}
+                      </span>
+                    ) : null
+                  }
+                >
+                  <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+                    <MetricCard
+                      label="Comp Count"
+                      value={`${compSummary.includedCount}`}
+                    />
+                    <MetricCard
+                      label="Median Adjusted"
+                      value={money(compSummary.medianAdjusted)}
+                    />
+                    <MetricCard
+                      label="Fast Sale Target"
+                      value={money(compSummary.fastSaleTarget)}
+                    />
+                    <MetricCard
+                      label="Confidence"
+                      value={compSummary.confidence}
+                      tone={
+                        compSummary.confidence === "High"
+                          ? "green"
+                          : compSummary.confidence === "Medium"
+                          ? "orange"
+                          : "red"
+                      }
+                    />
+                    <MetricCard label="Search Type" value="Local + Regional" />
+                  </div>
+
+                  <MarketCompsTable
+                    comps={comps}
+                    targetMileage={targetMileage}
+                    assumptions={defaultAssumptions}
+                    onToggleIncluded={toggleCompIncluded}
+                  />
+                </SectionCard>
+              </div>
+
+              <aside className="space-y-5">
+                <SectionCard title="6. Output / Decision">
+                  <div className="grid grid-cols-2 gap-3">
+                    <MetricCard
+                      label="All-In Cost"
+                      value={money(valuation.allInCost)}
+                    />
+                    <MetricCard
+                      label="Gross Profit"
+                      value={money(valuation.expectedGrossProfit)}
+                      tone={valuation.expectedGrossProfit >= 0 ? "green" : "red"}
+                    />
+                    <MetricCard
+                      label="Safe Bid"
+                      value={money(valuation.safeBid)}
+                    />
+                    <MetricCard
+                      label="Max Smart Bid"
+                      value={money(valuation.maxSmartBid)}
+                      tone="blue"
+                    />
+                    <MetricCard
+                      label="Stretch Bid"
+                      value={money(valuation.stretchBid)}
+                      tone="purple"
+                    />
+                    <MetricCard
+                      label="Risk Grade"
+                      value={valuation.riskGrade}
+                      tone={
+                        valuation.riskGrade === "Low"
+                          ? "green"
+                          : valuation.riskGrade === "Medium"
+                          ? "orange"
+                          : "red"
+                      }
+                    />
+                  </div>
+
+                  <div className={`mt-4 rounded-2xl p-5 text-white ${decisionTone}`}>
+                    <div className="text-3xl font-black">{valuation.decision}</div>
+                    <p className="mt-2 text-sm text-white/90">
+                      Comps, condition rules, costs, and assumptions now feed
+                      the valuation.
+                    </p>
+                  </div>
+                </SectionCard>
 
                 <SectionCard title="5. Cost & Risk">
                   <div className="space-y-3">
@@ -986,52 +1016,7 @@ export function EvaluationWorkspace({
                     Save Note
                   </button>
                 </SectionCard>
-              </div>
-
-              <SectionCard
-                  title="4. Market Comps"
-                  action={
-                    marketCheckStatus ? (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                        {marketCheckStatus}
-                      </span>
-                    ) : null
-                  }
-                >
-                  <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-                    <MetricCard
-                      label="Comp Count"
-                      value={`${compSummary.includedCount}`}
-                    />
-                    <MetricCard
-                      label="Median Adjusted"
-                      value={money(compSummary.medianAdjusted)}
-                    />
-                    <MetricCard
-                      label="Fast Sale Target"
-                      value={money(compSummary.fastSaleTarget)}
-                    />
-                    <MetricCard
-                      label="Confidence"
-                      value={compSummary.confidence}
-                      tone={
-                        compSummary.confidence === "High"
-                          ? "green"
-                          : compSummary.confidence === "Medium"
-                          ? "orange"
-                          : "red"
-                      }
-                    />
-                    <MetricCard label="Search Type" value="Local + Regional" />
-                  </div>
-
-                  <MarketCompsTable
-                    comps={comps}
-                    targetMileage={targetMileage}
-                    assumptions={defaultAssumptions}
-                    onToggleIncluded={toggleCompIncluded}
-                  />
-                </SectionCard>
+              </aside>
             </div>
           </div>
         </div>

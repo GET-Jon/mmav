@@ -453,7 +453,7 @@ export function EvaluationWorkspace({
       },
     });
 
-    setTargetMileage(0);
+    setTargetMileage(initialTargetMileage);
     setFinalTargetOverride(null);
     setComps([]);
     setSelectedConditions([]);
@@ -692,7 +692,7 @@ export function EvaluationWorkspace({
             </div>
 
             <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_1.15fr_1fr]">
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_1.25fr_1fr]">
                 <SectionCard title="1. Vehicle Basics">
                     <div className="space-y-4">
                       <FormRow label="VIN">
@@ -701,7 +701,7 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setVin(event.target.value.toUpperCase())
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
@@ -712,7 +712,7 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setTargetMileage(toNumber(event.target.value))
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
@@ -720,7 +720,7 @@ export function EvaluationWorkspace({
                         <select
                           value={auctionSite}
                           onChange={(event) => setAuctionSite(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         >
                           <option>ACV Auctions</option>
                           <option>Manheim</option>
@@ -744,13 +744,13 @@ export function EvaluationWorkspace({
                                 toNumber(event.target.value)
                               )
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
 
                       <FormRow label="Target Resale Used">
-                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900">
                           {money(targetResaleUsed)}
                         </div>
                       </FormRow>
@@ -764,7 +764,7 @@ export function EvaluationWorkspace({
                             onChange={(event) =>
                               setFinalTargetOverride(toNumber(event.target.value))
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
@@ -781,7 +781,7 @@ export function EvaluationWorkspace({
                                 toNumber(event.target.value)
                               )
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
@@ -801,13 +801,11 @@ export function EvaluationWorkspace({
                       </label>
                     </div>
                   </SectionCard>
-
                 <VinDecodeCard
-                  vin={vin}
-                  onVinChange={setVin}
-                  onDecoded={(decoded) => resetForDecodedVin(decoded)}
-                />
-
+                    vin={vin}
+                    onVinChange={setVin}
+                    onDecoded={(decoded) => resetForDecodedVin(decoded)}
+                  />
                 <SectionCard title="6. Output / Decision">
                   <div className="grid grid-cols-2 gap-3">
                     <MetricCard
@@ -856,7 +854,15 @@ export function EvaluationWorkspace({
                 </SectionCard>
               </div>
 
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1.15fr_.9fr]">
+              <div
+              className="min-w-0"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1.15fr .9fr",
+                gap: "1.25rem",
+                alignItems: "start",
+              }}
+            >
                 <SectionCard title="3. Condition Checklist">
                     <div className="space-y-4 text-sm">
                       {Object.entries(conditionGroups).map(([category, rules]) => (
@@ -912,7 +918,7 @@ export function EvaluationWorkspace({
                       </div>
                     </div>
                   </SectionCard>
-
+                </div>
                 <SectionCard title="5. Cost & Risk">
                   <div className="space-y-3">
                     <CurrencyInput
@@ -976,7 +982,6 @@ export function EvaluationWorkspace({
                     </div>
                   </div>
                 </SectionCard>
-
                 <SectionCard title="7. Deal Notes">
                   <textarea
                     className="h-28 w-full rounded-xl border border-slate-200 p-3 text-sm"
@@ -1032,7 +1037,6 @@ export function EvaluationWorkspace({
                     onToggleIncluded={toggleCompIncluded}
                   />
                 </SectionCard>
-            </div>
           </div>
         </div>
       </div>

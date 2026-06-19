@@ -439,30 +439,6 @@ export function EvaluationWorkspace({
     );
   }
 
-  function resetForDecodedVin(decoded: VinDecodeResult) {
-    setDecodedVehicle(decoded);
-    setVin(decoded.vin);
-
-    setEvaluation({
-      ...initialEvaluation,
-      currentBid: 0,
-      targetResaleUsed: 0,
-      hasAvoidFlag: false,
-      costs: {
-        ...initialEvaluation.costs,
-      },
-    });
-
-    setTargetMileage(0);
-    setFinalTargetOverride(null);
-    setComps([]);
-    setSelectedConditions([]);
-    setMarketCheckStatus("");
-    setSavedEvaluationId(null);
-    setSaveStatus("");
-    setNotes("");
-  }
-
   function toggleCompIncluded(id: string) {
     setComps((previous) =>
       previous.map((comp) =>
@@ -701,7 +677,7 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setVin(event.target.value.toUpperCase())
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
@@ -712,7 +688,7 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setTargetMileage(toNumber(event.target.value))
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
@@ -720,7 +696,7 @@ export function EvaluationWorkspace({
                         <select
                           value={auctionSite}
                           onChange={(event) => setAuctionSite(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         >
                           <option>ACV Auctions</option>
                           <option>Manheim</option>
@@ -744,13 +720,13 @@ export function EvaluationWorkspace({
                                 toNumber(event.target.value)
                               )
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
 
                       <FormRow label="Target Resale Used">
-                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900">
                           {money(targetResaleUsed)}
                         </div>
                       </FormRow>
@@ -764,7 +740,7 @@ export function EvaluationWorkspace({
                             onChange={(event) =>
                               setFinalTargetOverride(toNumber(event.target.value))
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
@@ -781,7 +757,7 @@ export function EvaluationWorkspace({
                                 toNumber(event.target.value)
                               )
                             }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
                           />
                         </div>
                       </FormRow>
@@ -803,10 +779,13 @@ export function EvaluationWorkspace({
                   </SectionCard>
 
                 <VinDecodeCard
-                  vin={vin}
-                  onVinChange={setVin}
-                  onDecoded={(decoded) => resetForDecodedVin(decoded)}
-                />
+                    vin={vin}
+                    onVinChange={setVin}
+                    onDecoded={(decoded) => {
+                      setDecodedVehicle(decoded);
+                      setVin(decoded.vin);
+                    }}
+                  />
 
                 <SectionCard title="6. Output / Decision">
                   <div className="grid grid-cols-2 gap-3">
