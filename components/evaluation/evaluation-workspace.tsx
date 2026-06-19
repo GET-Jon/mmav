@@ -369,6 +369,8 @@ export function EvaluationWorkspace() {
           year,
           make,
           model,
+          trim: vehicleTrim,
+          targetMileage,
           zips: ["29412", "29201", "28202", "30303", "31401"],
           radius: 100,
           rows: 10,

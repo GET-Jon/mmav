@@ -9,32 +9,75 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalize(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function trimMatches({
+  listingTrim,
+  preferredTrim,
+}: {
+  listingTrim: string;
+  preferredTrim: string;
+}) {
+  const listing = normalize(listingTrim);
+  const preferred = normalize(preferredTrim);
+
+  if (!preferred || !listing) {
+    return true;
+  }
+
+  return listing.includes(preferred) || preferred.includes(listing);
+}
+
 function calculateQualityScore({
   listing,
   searchYear,
+  targetMileage,
+  preferredTrim,
 }: {
   listing: MarketCheckListing;
   searchYear: number;
+  targetMileage: number;
+  preferredTrim: string;
 }) {
+  const build = listing.build || {};
+
   const distance = toNumber(listing.dist ?? listing.distance);
   const mileage = toNumber(listing.miles ?? listing.mileage ?? listing.odometer);
-  const year = toNumber(listing.build?.year ?? listing.year, searchYear);
+  const year = toNumber(build.year ?? listing.year, searchYear);
+  const listingTrim = String(build.trim || listing.trim || "");
 
-  let score = 80;
+  let score = 100;
 
-  if (distance > 150) score -= 14;
-  else if (distance > 100) score -= 10;
-  else if (distance > 50) score -= 5;
+  if (searchYear && year !== searchYear) {
+    score -= 20;
+  }
 
-  if (mileage > 100000) score -= 16;
-  else if (mileage > 85000) score -= 10;
-  else if (mileage > 75000) score -= 5;
+  if (preferredTrim && !trimMatches({ listingTrim, preferredTrim })) {
+    score -= 10;
+  }
 
-  if (searchYear && year !== searchYear) score -= 10;
+  if (targetMileage && mileage) {
+    const mileageDelta = Math.abs(mileage - targetMileage);
+    score -= Math.min(24, Math.round(mileageDelta / 2500));
+  } else {
+    score -= 10;
+  }
 
-  if (!listing.price && !listing.list_price && !listing.msrp) score -= 20;
+  if (distance) {
+    score -= Math.min(16, Math.round(distance / 10));
+  } else {
+    score -= 3;
+  }
 
-  return Math.max(40, Math.min(95, score));
+  if (!listing.price && !listing.list_price && !listing.msrp) {
+    score -= 20;
+  }
+
+  return Math.max(40, Math.min(100, score));
 }
 
 function mapListingToComp({
@@ -43,12 +86,16 @@ function mapListingToComp({
   searchYear,
   searchMake,
   searchModel,
+  targetMileage,
+  preferredTrim,
 }: {
   listing: MarketCheckListing;
   index: number;
   searchYear: number;
   searchMake: string;
   searchModel: string;
+  targetMileage: number;
+  preferredTrim: string;
 }): MarketComp | null {
   const build = listing.build || {};
 
@@ -69,7 +116,7 @@ function mapListingToComp({
 
   return {
     id: String(listing.id || listing.vin || `marketcheck-${index}`),
-    included: index < 6,
+    included: false,
     source: "MarketCheck/API",
     distance: toNumber(listing.dist ?? listing.distance),
     year: toNumber(build.year ?? listing.year, searchYear),
@@ -80,6 +127,8 @@ function mapListingToComp({
     qualityScore: calculateQualityScore({
       listing,
       searchYear,
+      targetMileage,
+      preferredTrim,
     }),
   };
 }
@@ -168,6 +217,8 @@ export async function POST(request: Request) {
     const year = toNumber(body.year);
     const make = String(body.make || "").trim();
     const model = String(body.model || "").trim();
+    const preferredTrim = String(body.trim || "").trim();
+    const targetMileage = toNumber(body.targetMileage);
     const radius = Math.min(toNumber(body.radius, 100), 100);
     const rows = Math.min(toNumber(body.rows, 10), 25);
     const debug = Boolean(body.debug);
@@ -266,12 +317,14 @@ export async function POST(request: Request) {
         searchYear: year,
         searchMake: make,
         searchModel: model,
+        targetMileage,
+        preferredTrim,
       })
     );
 
     const mappedNullCount = mapped.filter((comp) => !comp).length;
 
-    const comps = mapped
+    const deduped = mapped
       .filter(Boolean)
       .filter((comp) => {
         const typedComp = comp as MarketComp;
@@ -285,11 +338,32 @@ export async function POST(request: Request) {
         return true;
       }) as MarketComp[];
 
+    const rankedComps = deduped.sort((a, b) => {
+      if (b.qualityScore !== a.qualityScore) {
+        return b.qualityScore - a.qualityScore;
+      }
+
+      if (a.distance !== b.distance) {
+        return a.distance - b.distance;
+      }
+
+      return Math.abs(a.mileage - targetMileage) - Math.abs(b.mileage - targetMileage);
+    });
+
+    const comps = rankedComps.map((comp, index) => ({
+      ...comp,
+      included:
+        index < 6 &&
+        comp.qualityScore >= defaultAssumptions.compSettings.minimumQualityScore,
+    }));
+
     return NextResponse.json({
       search: {
         year,
         make,
         model,
+        preferredTrim,
+        targetMileage,
         zips,
         radius,
         rows,
