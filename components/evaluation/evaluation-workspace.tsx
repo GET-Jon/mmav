@@ -12,7 +12,7 @@ import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
 
-const targetMileage = 68742;
+const initialTargetMileage = 68742;
 
 const initialComps: MarketComp[] = [
   {
@@ -205,6 +205,30 @@ function CurrencyInput({
   );
 }
 
+function NumberInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <input
+        type="number"
+        value={value}
+        onChange={(event) => onChange(toNumber(event.target.value))}
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+      />
+    </label>
+  );
+}
+
 function StaticField({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -221,6 +245,7 @@ function StaticField({ label, value }: { label: string; value: string }) {
 export function EvaluationWorkspace() {
   const [evaluation, setEvaluation] =
     useState<ValuationInput>(initialEvaluation);
+  const [targetMileage, setTargetMileage] = useState(initialTargetMileage);
   const [comps, setComps] = useState<MarketComp[]>(initialComps);
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(null);
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
@@ -236,7 +261,7 @@ export function EvaluationWorkspace() {
         targetMileage,
         assumptions: defaultAssumptions,
       }),
-    [comps]
+    [comps, targetMileage]
   );
 
   const conditionGroups = useMemo(() => {
@@ -515,7 +540,11 @@ export function EvaluationWorkspace() {
                   <SectionCard title="1. Vehicle Basics">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <StaticField label="VIN" value={decodedVehicle?.vin || "WA1LAAF78LD012345"} />
-                      <StaticField label="Mileage" value="68,742" />
+                      <NumberInput
+                        label="Mileage"
+                        value={targetMileage}
+                        onChange={setTargetMileage}
+                      />
                       <StaticField label="Auction Site" value="Manheim Phoenix" />
                       <StaticField label="Vehicle Type" value={vehicleBodyClass} />
 
