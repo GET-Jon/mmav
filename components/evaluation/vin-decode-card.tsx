@@ -27,8 +27,15 @@ function FieldRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function VinDecodeCard({ onDecoded }: { onDecoded?: (decoded: VinDecodeResult) => void }) {
-  const [vin, setVin] = useState(initialDecoded.vin);
+export function VinDecodeCard({
+  vin,
+  onVinChange,
+  onDecoded,
+}: {
+  vin: string;
+  onVinChange: (vin: string) => void;
+  onDecoded?: (decoded: VinDecodeResult) => void;
+}) {
   const [decoded, setDecoded] = useState<VinDecodeResult>(initialDecoded);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -87,7 +94,7 @@ export function VinDecodeCard({ onDecoded }: { onDecoded?: (decoded: VinDecodeRe
           </div>
           <input
             value={vin}
-            onChange={(event) => setVin(event.target.value.toUpperCase())}
+            onChange={(event) => onVinChange(event.target.value.toUpperCase())}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
           />
         </label>

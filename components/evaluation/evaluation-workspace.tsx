@@ -229,6 +229,21 @@ function NumberInput({
   );
 }
 
+function FormRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+      <div className="text-sm font-semibold text-slate-700">{label}</div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
 function StaticField({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -243,6 +258,9 @@ function StaticField({ label, value }: { label: string; value: string }) {
 }
 
 type SavedEvaluationPayload = {
+  vin?: string;
+  auctionSite?: string;
+  finalTargetOverride?: number | null;
   decodedVehicle?: VinDecodeResult | null;
   targetMileage?: number;
   evaluation?: ValuationInput;
@@ -260,6 +278,22 @@ export function EvaluationWorkspace({
 }) {
   const [evaluation, setEvaluation] = useState<ValuationInput>(
     initialSavedPayload?.evaluation || initialEvaluation
+  );
+
+  const [vin, setVin] = useState(
+    initialSavedPayload?.vin ||
+      initialSavedPayload?.decodedVehicle?.vin ||
+      "WA1LAAF78LD012345"
+  );
+
+  const [auctionSite, setAuctionSite] = useState(
+    initialSavedPayload?.auctionSite || "ACV Auctions"
+  );
+
+  const [finalTargetOverride, setFinalTargetOverride] = useState<number | null>(
+    typeof initialSavedPayload?.finalTargetOverride === "number"
+      ? initialSavedPayload.finalTargetOverride
+      : null
   );
 
   const [targetMileage, setTargetMileage] = useState(
@@ -346,10 +380,15 @@ export function EvaluationWorkspace({
   const targetResaleUsed =
     compSummary.fastSaleTarget || evaluation.targetResaleUsed;
 
+  const finalTargetUsed =
+    finalTargetOverride && finalTargetOverride > 0
+      ? finalTargetOverride
+      : targetResaleUsed;
+
   const valuationInput = useMemo<ValuationInput>(() => {
     return {
       ...evaluation,
-      targetResaleUsed,
+      targetResaleUsed: finalTargetUsed,
       totalRiskPoints: conditionTotals.riskPoints,
       hasAvoidFlag: Boolean(evaluation.hasAvoidFlag || conditionTotals.hasAvoidFlag),
       costs: {
@@ -357,7 +396,7 @@ export function EvaluationWorkspace({
         conditionRiskAdd: conditionTotals.reserveAdd,
       },
     };
-  }, [evaluation, targetResaleUsed, conditionTotals]);
+  }, [evaluation, finalTargetUsed, conditionTotals]);
 
   const valuation = useMemo(
     () => calculateValuation(valuationInput, defaultAssumptions),
@@ -479,6 +518,11 @@ export function EvaluationWorkspace({
           id: savedEvaluationId,
           status: "watching",
           vehicleTitle,
+          vin,
+          auctionSite,
+          finalTargetOverride,
+          targetResaleFromComps: targetResaleUsed,
+          finalTargetUsed,
           decodedVehicle,
           targetMileage,
           evaluation,
@@ -488,7 +532,6 @@ export function EvaluationWorkspace({
           comps,
           selectedConditions,
           notes,
-          auctionSite: "Manheim Phoenix",
           auctionUrl: "",
           auctionEndsAt: null,
           assumptionsSnapshot: defaultAssumptions,
@@ -530,14 +573,12 @@ export function EvaluationWorkspace({
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
         <aside className="hidden w-64 shrink-0 bg-slate-950 p-5 text-white lg:block">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400 text-xl font-black text-slate-950">
-              M
-            </div>
-            <div>
-              <div className="text-lg font-bold leading-tight">Mindful</div>
-              <div className="text-lg font-bold leading-tight">Motors</div>
-            </div>
+          <div className="mb-10 flex items-center justify-center">
+            <img
+              src="/mindful-badge-sm.png"
+              alt="Mindful Motors"
+              className="h-16 w-auto object-contain"
+            />
           </div>
 
           <nav className="space-y-2 text-sm">
@@ -634,65 +675,122 @@ export function EvaluationWorkspace({
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
                   <SectionCard title="1. Vehicle Basics">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <StaticField label="VIN" value={decodedVehicle?.vin || "WA1LAAF78LD012345"} />
-                      <NumberInput
-                        label="Mileage"
-                        value={targetMileage}
-                        onChange={setTargetMileage}
-                      />
-                      <StaticField label="Auction Site" value="Manheim Phoenix" />
-                      <StaticField label="Vehicle Type" value={vehicleBodyClass} />
+                    <div className="space-y-4">
+                      <FormRow label="VIN">
+                        <input
+                          value={vin}
+                          onChange={(event) =>
+                            setVin(event.target.value.toUpperCase())
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                        />
+                      </FormRow>
 
-                      <CurrencyInput
-                        label="Current Bid"
-                        value={valuationInput.currentBid}
-                        onChange={(value) =>
-                          updateEvaluationField("currentBid", value)
-                        }
-                      />
+                      <FormRow label="Mileage">
+                        <input
+                          type="number"
+                          value={targetMileage}
+                          onChange={(event) =>
+                            setTargetMileage(toNumber(event.target.value))
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                        />
+                      </FormRow>
 
-                      <CurrencyInput
-                        label="Manual Target"
-                        value={evaluation.targetResaleUsed}
-                        onChange={(value) =>
-                          updateEvaluationField("targetResaleUsed", value)
-                        }
-                      />
+                      <FormRow label="Auction Site">
+                        <select
+                          value={auctionSite}
+                          onChange={(event) => setAuctionSite(event.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                        >
+                          <option>ACV Auctions</option>
+                          <option>Manheim</option>
+                          <option>Cars & Bids</option>
+                          <option>Bring a Trailer</option>
+                          <option>Facebook</option>
+                          <option>Private Party</option>
+                          <option>Other</option>
+                        </select>
+                      </FormRow>
 
-                      <CurrencyInput
-                        label="Target Resale Used"
-                        value={valuationInput.targetResaleUsed}
-                        onChange={(value) =>
-                          updateEvaluationField("targetResaleUsed", value)
-                        }
-                      />
+                      <FormRow label="Current Bid">
+                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                          <span className="pl-3 text-sm text-slate-400">$</span>
+                          <input
+                            type="number"
+                            value={valuationInput.currentBid}
+                            onChange={(event) =>
+                              updateEvaluationField(
+                                "currentBid",
+                                toNumber(event.target.value)
+                              )
+                            }
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
+                          />
+                        </div>
+                      </FormRow>
 
-                      <CurrencyInput
-                        label="Target Profit"
-                        value={valuationInput.targetProfit}
-                        onChange={(value) =>
-                          updateEvaluationField("targetProfit", value)
-                        }
-                      />
+                      <FormRow label="Target Resale Used">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900">
+                          {money(targetResaleUsed)}
+                        </div>
+                      </FormRow>
+
+                      <FormRow label="Final Target">
+                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                          <span className="pl-3 text-sm text-slate-400">$</span>
+                          <input
+                            type="number"
+                            value={finalTargetOverride ?? targetResaleUsed}
+                            onChange={(event) =>
+                              setFinalTargetOverride(toNumber(event.target.value))
+                            }
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
+                          />
+                        </div>
+                      </FormRow>
+
+                      <FormRow label="Target Profit">
+                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                          <span className="pl-3 text-sm text-slate-400">$</span>
+                          <input
+                            type="number"
+                            value={valuationInput.targetProfit}
+                            onChange={(event) =>
+                              updateEvaluationField(
+                                "targetProfit",
+                                toNumber(event.target.value)
+                              )
+                            }
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
+                          />
+                        </div>
+                      </FormRow>
+
+                      <label className="flex items-center gap-2 pt-2 text-sm font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(evaluation.hasAvoidFlag)}
+                          onChange={(event) =>
+                            updateEvaluationField(
+                              "hasAvoidFlag",
+                              event.target.checked
+                            )
+                          }
+                        />
+                        Manual avoid flag
+                      </label>
                     </div>
-
-                    <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(evaluation.hasAvoidFlag)}
-                        onChange={(event) =>
-                          updateEvaluationField(
-                            "hasAvoidFlag",
-                            event.target.checked
-                          )
-                        }
-                      />
-                      Manual avoid flag
-                    </label>
                   </SectionCard>
 
-                  <VinDecodeCard onDecoded={(decoded) => setDecodedVehicle(decoded)} />
+                  <VinDecodeCard
+                    vin={vin}
+                    onVinChange={setVin}
+                    onDecoded={(decoded) => {
+                      setDecodedVehicle(decoded);
+                      setVin(decoded.vin);
+                    }}
+                  />
 
                   <SectionCard title="3. Condition Checklist">
                     <div className="space-y-4 text-sm">
