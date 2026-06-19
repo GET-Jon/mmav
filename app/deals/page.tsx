@@ -131,7 +131,12 @@ export default async function DealsPage() {
                   {formatDate(evaluation.updated_at)}
                 </td>
                 <td className="px-4 py-3 font-semibold">
-                  {evaluation.vehicle_title || "Untitled Vehicle"}
+                  <Link
+                    href={`/deals/${evaluation.id}`}
+                    className="text-blue-700 hover:underline"
+                  >
+                    {evaluation.vehicle_title || "Untitled Vehicle"}
+                  </Link>
                 </td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">
                   {evaluation.vin || "—"}

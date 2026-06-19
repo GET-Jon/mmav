@@ -242,22 +242,57 @@ function StaticField({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function EvaluationWorkspace() {
-  const [evaluation, setEvaluation] =
-    useState<ValuationInput>(initialEvaluation);
-  const [targetMileage, setTargetMileage] = useState(initialTargetMileage);
-  const [comps, setComps] = useState<MarketComp[]>(initialComps);
-  const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(null);
+type SavedEvaluationPayload = {
+  decodedVehicle?: VinDecodeResult | null;
+  targetMileage?: number;
+  evaluation?: ValuationInput;
+  comps?: MarketComp[];
+  selectedConditions?: string[];
+  notes?: string;
+};
+
+export function EvaluationWorkspace({
+  initialSavedEvaluationId = null,
+  initialSavedPayload = null,
+}: {
+  initialSavedEvaluationId?: string | null;
+  initialSavedPayload?: SavedEvaluationPayload | null;
+}) {
+  const [evaluation, setEvaluation] = useState<ValuationInput>(
+    initialSavedPayload?.evaluation || initialEvaluation
+  );
+
+  const [targetMileage, setTargetMileage] = useState(
+    initialSavedPayload?.targetMileage || initialTargetMileage
+  );
+
+  const [comps, setComps] = useState<MarketComp[]>(
+    initialSavedPayload?.comps?.length ? initialSavedPayload.comps : initialComps
+  );
+
+  const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
+    initialSavedPayload?.decodedVehicle || null
+  );
+
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
-  const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(null);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("");
-  const [notes, setNotes] = useState(
-    "Clean title Q7 with good service history. Minor cosmetic wear, needs tires. Strong local demand for this trim."
+
+  const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(
+    initialSavedEvaluationId
   );
+
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(
+    initialSavedEvaluationId ? "Loaded saved evaluation" : ""
+  );
+
+  const [notes, setNotes] = useState(
+    initialSavedPayload?.notes ||
+      "Clean title Q7 with good service history. Minor cosmetic wear, needs tires. Strong local demand for this trim."
+  );
+
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
-    initialSelectedConditions
+    initialSavedPayload?.selectedConditions || initialSelectedConditions
   );
 
   const compSummary = useMemo(
