@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
@@ -338,19 +338,77 @@ export function EvaluationWorkspace({
     initialSavedPayload?.selectedConditions || initialSelectedConditions
   );
 
+  const [activeAssumptions, setActiveAssumptions] = useState(defaultAssumptions);
+  const [assumptionsSource, setAssumptionsSource] = useState<"default" | "saved">(
+    "default"
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSavedAssumptions() {
+      try {
+        const response = await fetch("/api/assumptions", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load assumptions.");
+        }
+
+        const data = await response.json();
+
+        if (!cancelled && data?.assumptions) {
+          setActiveAssumptions(data.assumptions);
+          setAssumptionsSource(data.source === "saved" ? "saved" : "default");
+
+          if (!initialSavedEvaluationId) {
+            const defaultCost = data.assumptions.costDefaults?.[0];
+
+            if (defaultCost) {
+              setEvaluation((previous) => ({
+                ...previous,
+                targetProfit: Math.max(
+                  defaultCost.targetProfit,
+                  data.assumptions.bidSettings?.minimumTargetProfit || 0
+                ),
+                costs: {
+                  ...previous.costs,
+                  auctionFee: defaultCost.auctionFee,
+                  transport: defaultCost.transport,
+                  recon: defaultCost.recon,
+                  detailAdmin: defaultCost.detailAdmin,
+                  generalRiskReserve: defaultCost.riskReserve,
+                },
+              }));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load saved assumptions:", error);
+      }
+    }
+
+    loadSavedAssumptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const compSummary = useMemo(
     () =>
       calculateCompSummary({
         comps,
         targetMileage,
-        assumptions: defaultAssumptions,
+        assumptions: activeAssumptions,
       }),
     [comps, targetMileage]
   );
 
   const conditionGroups = useMemo(() => {
-    return defaultAssumptions.conditionRules.reduce<
-      Record<string, typeof defaultAssumptions.conditionRules>
+    return activeAssumptions.conditionRules.reduce<
+      Record<string, typeof activeAssumptions.conditionRules>
     >((groups, rule) => {
       if (!groups[rule.category]) {
         groups[rule.category] = [];
@@ -359,12 +417,12 @@ export function EvaluationWorkspace({
       groups[rule.category].push(rule);
       return groups;
     }, {});
-  }, []);
+  }, [activeAssumptions]);
 
   const conditionTotals = useMemo(() => {
     return selectedConditions.reduce(
       (totals, conditionName) => {
-        const rule = defaultAssumptions.conditionRules.find(
+        const rule = activeAssumptions.conditionRules.find(
           (conditionRule) => conditionRule.name === conditionName
         );
 
@@ -384,7 +442,7 @@ export function EvaluationWorkspace({
         hasAvoidFlag: false,
       }
     );
-  }, [selectedConditions]);
+  }, [selectedConditions, activeAssumptions]);
 
   const targetResaleUsed =
     compSummary.fastSaleTarget || evaluation.targetResaleUsed;
@@ -408,7 +466,7 @@ export function EvaluationWorkspace({
   }, [evaluation, finalTargetUsed, conditionTotals]);
 
   const valuation = useMemo(
-    () => calculateValuation(valuationInput, defaultAssumptions),
+    () => calculateValuation(valuationInput, activeAssumptions),
     [valuationInput]
   );
 
@@ -591,7 +649,7 @@ export function EvaluationWorkspace({
           notes,
           auctionUrl: "",
           auctionEndsAt: null,
-          assumptionsSnapshot: defaultAssumptions,
+          assumptionsSnapshot: activeAssumptions,
         }),
       });
 
@@ -1073,7 +1131,7 @@ export function EvaluationWorkspace({
                   <MarketCompsTable
                     comps={comps}
                     targetMileage={targetMileage}
-                    assumptions={defaultAssumptions}
+                    assumptions={activeAssumptions}
                     onToggleIncluded={toggleCompIncluded}
                   />
                 </SectionCard>
