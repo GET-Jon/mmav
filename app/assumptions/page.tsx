@@ -1,8 +1,54 @@
 import Link from "next/link";
 import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
 import { defaultAssumptions } from "@/lib/assumptions";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import type { Assumptions } from "@/types/assumptions";
 
-export default function AssumptionsPage() {
+export const dynamic = "force-dynamic";
+
+const SETTINGS_KEY = "underwriting_assumptions";
+
+async function loadAssumptions(): Promise<{
+  assumptions: Assumptions;
+  source: "saved" | "default";
+}> {
+  try {
+    const supabase = createSupabaseAdminClient();
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("payload")
+      .eq("key", SETTINGS_KEY)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (data?.payload) {
+      return {
+        assumptions: data.payload as Assumptions,
+        source: "saved",
+      };
+    }
+
+    return {
+      assumptions: defaultAssumptions,
+      source: "default",
+    };
+  } catch (error) {
+    console.error("Failed to load saved assumptions:", error);
+
+    return {
+      assumptions: defaultAssumptions,
+      source: "default",
+    };
+  }
+}
+
+export default async function AssumptionsPage() {
+  const { assumptions, source } = await loadAssumptions();
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
@@ -41,8 +87,14 @@ export default function AssumptionsPage() {
                 Assumptions used by the auction valuation engine
               </div>
             </div>
-            <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-              Local defaults
+            <div
+              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                source === "saved"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {source === "saved" ? "Saved Supabase rules" : "Code defaults"}
             </div>
           </header>
 
@@ -52,13 +104,13 @@ export default function AssumptionsPage() {
                 Assumptions
               </h1>
               <p className="mt-2 max-w-3xl text-slate-600">
-                These settings are currently local defaults. Later, this page
-                will save changes to Supabase so you can adjust bidding logic,
-                fee tiers, risk rules, and comp settings without editing code.
+                These settings control bidding logic, fee tiers, risk rules, and
+                comp adjustments. Saved changes are stored in Supabase and can
+                be updated without editing code.
               </p>
             </div>
 
-            <AssumptionsTabs assumptions={defaultAssumptions} />
+            <AssumptionsTabs assumptions={assumptions} />
           </div>
         </div>
       </div>
