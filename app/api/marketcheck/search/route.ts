@@ -4,6 +4,49 @@ import type { MarketComp } from "@/types/comps";
 
 type MarketCheckListing = Record<string, any>;
 
+type MarketCheckSearchResult = {
+  ok: boolean;
+  status: number;
+  zip: string;
+  attemptName: string;
+  retryAfter: string | null;
+  requested: {
+    year?: number;
+    make: string;
+    model?: string;
+    zip: string;
+    radius: number;
+    rows: number;
+  };
+  numFound: number;
+  listingCount: number;
+  payload: Record<string, any>;
+};
+
+type CachedMarketCheckResponse = {
+  createdAt: string;
+  expiresAt: number;
+  payload: Record<string, any>;
+};
+
+const CACHE_TTL_MS = 30 * 60 * 1000;
+const MIN_MARKETCHECK_INTERVAL_MS = 350;
+
+const globalForMarketCheck = globalThis as typeof globalThis & {
+  __marketCheckSearchCache?: Map<string, CachedMarketCheckResponse>;
+  __marketCheckLastRequestAt?: number;
+};
+
+const marketCheckSearchCache =
+  globalForMarketCheck.__marketCheckSearchCache ||
+  new Map<string, CachedMarketCheckResponse>();
+
+globalForMarketCheck.__marketCheckSearchCache = marketCheckSearchCache;
+
+if (typeof globalForMarketCheck.__marketCheckLastRequestAt !== "number") {
+  globalForMarketCheck.__marketCheckLastRequestAt = 0;
+}
+
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -13,6 +56,100 @@ function normalize(value: unknown) {
   return String(value || "")
     .trim()
     .toLowerCase();
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForMarketCheckSlot() {
+  const lastRequestAt = globalForMarketCheck.__marketCheckLastRequestAt || 0;
+  const elapsed = Date.now() - lastRequestAt;
+  const waitMs = Math.max(0, MIN_MARKETCHECK_INTERVAL_MS - elapsed);
+
+  if (waitMs > 0) {
+    await wait(waitMs);
+  }
+
+  globalForMarketCheck.__marketCheckLastRequestAt = Date.now();
+}
+
+function makeStableSearchKey({
+  year,
+  make,
+  model,
+  preferredTrim,
+  targetMileage,
+  zips,
+  radius,
+  rows,
+}: {
+  year: number;
+  make: string;
+  model: string;
+  preferredTrim: string;
+  targetMileage: number;
+  zips: string[];
+  radius: number;
+  rows: number;
+}) {
+  return JSON.stringify({
+    year,
+    make: normalize(make),
+    model: normalize(model),
+    trim: normalize(preferredTrim),
+    targetMileage,
+    zips: [...zips].map((zip) => String(zip).trim()).filter(Boolean).sort(),
+    radius,
+    rows,
+    searchType: "used-active-comps",
+  });
+}
+
+function logMarketCheckCall({
+  endpoint,
+  searchKey,
+  cacheHit,
+  reason,
+  details = {},
+}: {
+  endpoint: string;
+  searchKey: string;
+  cacheHit: boolean;
+  reason: string;
+  details?: Record<string, unknown>;
+}) {
+  console.info("[MarketCheck]", {
+    endpoint,
+    searchKey,
+    timestamp: new Date().toISOString(),
+    cacheHit,
+    reason,
+    ...details,
+  });
+}
+
+function getCachedResponse(searchKey: string) {
+  const cached = marketCheckSearchCache.get(searchKey);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() > cached.expiresAt) {
+    marketCheckSearchCache.delete(searchKey);
+    return null;
+  }
+
+  return cached;
+}
+
+function setCachedResponse(searchKey: string, payload: Record<string, any>) {
+  marketCheckSearchCache.set(searchKey, {
+    createdAt: new Date().toISOString(),
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    payload,
+  });
 }
 
 function trimMatches({
@@ -142,6 +279,8 @@ async function searchMarketCheck({
   radius,
   rows,
   attemptName,
+  searchKey,
+  reason,
 }: {
   apiKey: string;
   year?: number;
@@ -151,7 +290,9 @@ async function searchMarketCheck({
   radius: number;
   rows: number;
   attemptName: string;
-}) {
+  searchKey: string;
+  reason: string;
+}): Promise<MarketCheckSearchResult> {
   const params = new URLSearchParams({
     api_key: apiKey,
     car_type: "used",
@@ -169,19 +310,49 @@ async function searchMarketCheck({
     params.set("model", model);
   }
 
+  const endpoint = "/v2/search/car/active";
   const marketCheckUrl = `https://api.marketcheck.com/v2/search/car/active?${params.toString()}`;
+
+  await waitForMarketCheckSlot();
+
+  logMarketCheckCall({
+    endpoint,
+    searchKey,
+    cacheHit: false,
+    reason,
+    details: {
+      attemptName,
+      zip,
+      year,
+      make,
+      model,
+      radius,
+      rows,
+    },
+  });
 
   const response = await fetch(marketCheckUrl, {
     cache: "no-store",
   });
 
-  const payload = await response.json();
+  const rawPayload = await response.text();
+
+  let payload: Record<string, any> = {};
+
+  try {
+    payload = rawPayload ? JSON.parse(rawPayload) : {};
+  } catch {
+    payload = {
+      message: rawPayload,
+    };
+  }
 
   return {
     ok: response.ok,
     status: response.status,
     zip,
     attemptName,
+    retryAfter: response.headers.get("retry-after"),
     requested: {
       year,
       make,
@@ -196,7 +367,99 @@ async function searchMarketCheck({
   };
 }
 
+async function runMarketCheckSearches({
+  apiKey,
+  year,
+  make,
+  model,
+  zips,
+  radius,
+  rows,
+  attemptName,
+  searchKey,
+  reason,
+}: {
+  apiKey: string;
+  year?: number;
+  make: string;
+  model: string;
+  zips: string[];
+  radius: number;
+  rows: number;
+  attemptName: string;
+  searchKey: string;
+  reason: string;
+}) {
+  const searches: MarketCheckSearchResult[] = [];
+
+  for (const zip of zips) {
+    const result = await searchMarketCheck({
+      apiKey,
+      year,
+      make,
+      model,
+      zip,
+      radius,
+      rows,
+      attemptName,
+      searchKey,
+      reason,
+    });
+
+    searches.push(result);
+
+    if (!result.ok) {
+      break;
+    }
+  }
+
+  return searches;
+}
+
+function buildFailedMarketCheckResponse(failedSearch: MarketCheckSearchResult) {
+  if (failedSearch.status === 429) {
+    const retryAfterSeconds = failedSearch.retryAfter
+      ? Number(failedSearch.retryAfter)
+      : null;
+
+    return NextResponse.json(
+      {
+        error: retryAfterSeconds
+          ? `MarketCheck rate limit hit. Wait ${retryAfterSeconds} seconds and try again.`
+          : "MarketCheck rate limit hit. Wait a few seconds and try again.",
+        failedZip: failedSearch.zip,
+        failedAttempt: failedSearch.attemptName,
+        retryAfter: failedSearch.retryAfter,
+      },
+      {
+        status: 429,
+        headers: failedSearch.retryAfter
+          ? {
+              "Retry-After": failedSearch.retryAfter,
+            }
+          : undefined,
+      }
+    );
+  }
+
+  return NextResponse.json(
+    {
+      error:
+        failedSearch.payload?.message ||
+        failedSearch.payload?.error ||
+        `MarketCheck failed with status ${failedSearch.status}.`,
+      failedZip: failedSearch.zip,
+      failedAttempt: failedSearch.attemptName,
+    },
+    {
+      status: failedSearch.status,
+    }
+  );
+}
+
 export async function POST(request: Request) {
+  const endpoint = "/api/marketcheck/search";
+
   try {
     const apiKey = process.env.MARKETCHECK_API_KEY;
 
@@ -222,6 +485,7 @@ export async function POST(request: Request) {
     const radius = Math.min(toNumber(body.radius, 100), 100);
     const rows = Math.min(toNumber(body.rows, 10), 25);
     const debug = Boolean(body.debug);
+    const reason = String(body.reason || "explicit-user-comp-search");
 
     const requestedZips = Array.isArray(body.zips)
       ? body.zips.map((zip: unknown) => String(zip).trim()).filter(Boolean)
@@ -244,20 +508,76 @@ export async function POST(request: Request) {
       );
     }
 
-    const exactSearches = await Promise.all(
-      zips.map((zip) =>
-        searchMarketCheck({
-          apiKey,
-          year,
-          make,
-          model,
-          zip,
-          radius,
-          rows,
-          attemptName: "exact-year-make-model",
-        })
-      )
-    );
+    const searchKey = makeStableSearchKey({
+      year,
+      make,
+      model,
+      preferredTrim,
+      targetMileage,
+      zips,
+      radius,
+      rows,
+    });
+
+    const cached = getCachedResponse(searchKey);
+
+    if (cached) {
+      logMarketCheckCall({
+        endpoint,
+        searchKey,
+        cacheHit: true,
+        reason,
+        details: {
+          cachedAt: cached.createdAt,
+        },
+      });
+
+      return NextResponse.json({
+        ...cached.payload,
+        cache: {
+          hit: true,
+          searchKey,
+          cachedAt: cached.createdAt,
+          ttlMs: CACHE_TTL_MS,
+        },
+      });
+    }
+
+    logMarketCheckCall({
+      endpoint,
+      searchKey,
+      cacheHit: false,
+      reason,
+      details: {
+        zips,
+        year,
+        make,
+        model,
+        preferredTrim,
+        targetMileage,
+        radius,
+        rows,
+      },
+    });
+
+    const exactSearches = await runMarketCheckSearches({
+      apiKey,
+      year,
+      make,
+      model,
+      zips,
+      radius,
+      rows,
+      attemptName: "exact-year-make-model",
+      searchKey,
+      reason,
+    });
+
+    const failedExactSearch = exactSearches.find((search) => !search.ok);
+
+    if (failedExactSearch) {
+      return buildFailedMarketCheckResponse(failedExactSearch);
+    }
 
     let searches = exactSearches;
 
@@ -267,39 +587,25 @@ export async function POST(request: Request) {
     );
 
     if (exactRawCount === 0) {
-      const fallbackSearches = await Promise.all(
-        zips.map((zip) =>
-          searchMarketCheck({
-            apiKey,
-            make,
-            model,
-            zip,
-            radius,
-            rows,
-            attemptName: "fallback-make-model",
-          })
-        )
-      );
+      const fallbackSearches = await runMarketCheckSearches({
+        apiKey,
+        make,
+        model,
+        zips,
+        radius,
+        rows,
+        attemptName: "fallback-make-model",
+        searchKey,
+        reason,
+      });
+
+      const failedFallbackSearch = fallbackSearches.find((search) => !search.ok);
+
+      if (failedFallbackSearch) {
+        return buildFailedMarketCheckResponse(failedFallbackSearch);
+      }
 
       searches = [...exactSearches, ...fallbackSearches];
-    }
-
-    const failedSearch = searches.find((search) => !search.ok);
-
-    if (failedSearch) {
-      return NextResponse.json(
-        {
-          error:
-            failedSearch.payload?.message ||
-            failedSearch.payload?.error ||
-            `MarketCheck failed with status ${failedSearch.status}.`,
-          failedZip: failedSearch.zip,
-          failedAttempt: failedSearch.attemptName,
-        },
-        {
-          status: failedSearch.status,
-        }
-      );
     }
 
     const allListings = searches.flatMap((search) =>
@@ -307,7 +613,6 @@ export async function POST(request: Request) {
     );
 
     const rawCount = searches.reduce((sum, search) => sum + search.numFound, 0);
-
     const seen = new Set<string>();
 
     const mapped = allListings.map((listing: MarketCheckListing, index: number) =>
@@ -357,7 +662,7 @@ export async function POST(request: Request) {
         comp.qualityScore >= defaultAssumptions.compSettings.minimumQualityScore,
     }));
 
-    return NextResponse.json({
+    const responsePayload = {
       search: {
         year,
         make,
@@ -372,6 +677,11 @@ export async function POST(request: Request) {
       totalListingsReturned: allListings.length,
       filteredOutMissingPriceOrMileage: mappedNullCount,
       comps,
+      cache: {
+        hit: false,
+        searchKey,
+        ttlMs: CACHE_TTL_MS,
+      },
       debug: debug
         ? {
             attempts: searches.map((search) => ({
@@ -387,8 +697,18 @@ export async function POST(request: Request) {
             sampleListing: allListings[0] || null,
           }
         : undefined,
-    });
+    };
+
+    setCachedResponse(searchKey, responsePayload);
+
+    return NextResponse.json(responsePayload);
   } catch (error) {
+    console.error("[MarketCheck] search route failed", {
+      endpoint,
+      timestamp: new Date().toISOString(),
+      error,
+    });
+
     return NextResponse.json(
       {
         error: "MarketCheck search failed.",

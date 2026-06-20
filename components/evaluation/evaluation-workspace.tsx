@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
@@ -319,6 +319,7 @@ export function EvaluationWorkspace({
 
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const marketCheckInFlightRef = useRef(false);
 
   const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(
     initialSavedEvaluationId
@@ -362,27 +363,23 @@ export function EvaluationWorkspace({
           setActiveAssumptions(data.assumptions);
           setAssumptionsSource(data.source === "saved" ? "saved" : "default");
 
-          if (!initialSavedEvaluationId) {
-            const defaultCost = data.assumptions.costDefaults?.[0];
+            if (!initialSavedEvaluationId) {
+              const matchingCostDefault = getMatchingCostDefault(
+                data.assumptions,
+                decodedVehicle,
+                targetMileage
+              );
 
-            if (defaultCost) {
-              setEvaluation((previous) => ({
-                ...previous,
-                targetProfit: Math.max(
-                  defaultCost.targetProfit,
-                  data.assumptions.bidSettings?.minimumTargetProfit || 0
-                ),
-                costs: {
-                  ...previous.costs,
-                  auctionFee: defaultCost.auctionFee,
-                  transport: defaultCost.transport,
-                  recon: defaultCost.recon,
-                  detailAdmin: defaultCost.detailAdmin,
-                  generalRiskReserve: defaultCost.riskReserve,
-                },
-              }));
+              if (matchingCostDefault) {
+                setEvaluation((previous) =>
+                  applyCostDefaultToEvaluation(
+                    previous,
+                    matchingCostDefault,
+                    data.assumptions
+                  )
+                );
+              }
             }
-          }
         }
       } catch (error) {
         console.error("Failed to load saved assumptions:", error);
@@ -482,6 +479,72 @@ export function EvaluationWorkspace({
       .join(" ")
       .trim() || "Auction Vehicle";
 
+  function normalizeMatchText(value: string | number | null | undefined) {
+    return String(value || "").toLowerCase();
+  }
+
+  function getMatchingCostDefault(
+    assumptions: typeof defaultAssumptions,
+    decoded: VinDecodeResult | null,
+    mileage: number
+  ) {
+    const enabledRules = (assumptions.vehicleClassificationRules || [])
+      .filter((rule) => rule.enabled)
+      .sort((a, b) => b.priority - a.priority);
+
+    const currentYear = new Date().getFullYear();
+    const decodedYear = Number(decoded?.year || vehicleYear || 0);
+    const vehicleAge = decodedYear > 0 ? currentYear - decodedYear : 0;
+
+    const fields = {
+      make: normalizeMatchText(decoded?.make || vehicleMake),
+      model: normalizeMatchText(decoded?.model || vehicleModel),
+      trim: normalizeMatchText(decoded?.trim || vehicleTrim),
+      body: normalizeMatchText(decoded?.bodyClass || vehicleBodyClass),
+      fuel: normalizeMatchText(decoded?.fuelType),
+    };
+
+    const matchingRule = enabledRules.find((rule) => {
+      if (rule.matchType === "ageMileage") {
+        return vehicleAge >= 10 || mileage >= 120000;
+      }
+
+      const fieldValue = fields[rule.matchType] || "";
+
+      return rule.matchValues.some((matchValue) =>
+        fieldValue.includes(normalizeMatchText(matchValue))
+      );
+    });
+
+    return (
+      assumptions.costDefaults.find(
+        (costDefault) => costDefault.vehicleType === matchingRule?.costProfile
+      ) || assumptions.costDefaults[0]
+    );
+  }
+
+  function applyCostDefaultToEvaluation(
+    previous: ValuationInput,
+    costDefault: typeof defaultAssumptions.costDefaults[number],
+    assumptions: typeof defaultAssumptions
+  ): ValuationInput {
+    return {
+      ...previous,
+      targetProfit: Math.max(
+        costDefault.targetProfit,
+        assumptions.bidSettings.minimumTargetProfit || 0
+      ),
+      costs: {
+        ...previous.costs,
+        auctionFee: costDefault.auctionFee,
+        transport: costDefault.transport,
+        recon: costDefault.recon,
+        detailAdmin: costDefault.detailAdmin,
+        generalRiskReserve: costDefault.riskReserve,
+      },
+    };
+  }
+
   function updateEvaluationField(
     key: keyof Omit<ValuationInput, "costs">,
     value: number | boolean
@@ -514,7 +577,8 @@ export function EvaluationWorkspace({
     setDecodedVehicle(decoded);
     setVin(decoded.vin);
 
-    setEvaluation({
+    const matchingCostDefault = getMatchingCostDefault(activeAssumptions, decoded, 0);
+    const baseEvaluation: ValuationInput = {
       ...initialEvaluation,
       currentBid: 0,
       targetResaleUsed: 0,
@@ -522,7 +586,17 @@ export function EvaluationWorkspace({
       costs: {
         ...initialEvaluation.costs,
       },
-    });
+    };
+
+    setEvaluation(
+      matchingCostDefault
+        ? applyCostDefaultToEvaluation(
+            baseEvaluation,
+            matchingCostDefault,
+            activeAssumptions
+          )
+        : baseEvaluation
+    );
 
     setTargetMileage(0);
     setFinalTargetOverride(null);
@@ -572,12 +646,19 @@ export function EvaluationWorkspace({
   }
 
   async function pullMarketCheckComps() {
+    if (marketCheckInFlightRef.current || marketCheckLoading) {
+      setMarketCheckStatus("MarketCheck search already in progress.");
+      return;
+    }
+
+    marketCheckInFlightRef.current = true;
+
     const year = vehicleYear;
     const make = vehicleMake;
     const model = vehicleModel;
 
     setMarketCheckLoading(true);
-    setMarketCheckStatus("");
+    setMarketCheckStatus("Searching MarketCheck comps...");
 
     try {
       const response = await fetch("/api/marketcheck/search", {
@@ -609,12 +690,15 @@ export function EvaluationWorkspace({
       }
 
       setComps(data.comps);
-      setMarketCheckStatus(`${data.comps.length} comps loaded`);
+      setMarketCheckStatus(
+        `${data.comps.length} comps loaded${data.cache?.hit ? " from cache" : ""}`
+      );
     } catch (error) {
       setMarketCheckStatus(
         error instanceof Error ? error.message : "MarketCheck search failed."
       );
     } finally {
+      marketCheckInFlightRef.current = false;
       setMarketCheckLoading(false);
     }
   }
