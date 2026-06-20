@@ -11,6 +11,7 @@ import type {
   CostDefault,
   RegionalMarket,
   SourceDiscount,
+  VehicleClassificationRule,
 } from "@/types/assumptions";
 
 type Tab =
@@ -42,32 +43,6 @@ function TextInput({
   value: string;
   onChange: (value: string) => void;
 }) {
-    async function saveAssumptions() {
-      try {
-        setSaveLoading(true);
-        setSaveStatus("");
-
-        const response = await fetch("/api/assumptions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ assumptions: draft }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to save assumptions.");
-        }
-
-        setDirty(false);
-        setSaveStatus("Saved to Supabase");
-      } catch (error) {
-        console.error(error);
-        setSaveStatus("Save failed");
-      } finally {
-        setSaveLoading(false);
-      }
-    }
 
   return (
     <input
