@@ -118,8 +118,17 @@ function money(value: number) {
 }
 
 function toNumber(value: string) {
-  const parsed = Number(value);
+  const cleaned = value.replace(/[^0-9.-]/g, "");
+  const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumberInput(value: number) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  return Math.round(value).toLocaleString("en-US");
 }
 
 function MetricCard({
@@ -191,10 +200,12 @@ function CurrencyInput({
       <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
         <span className="pl-3 text-sm text-slate-400">$</span>
         <input
-          type="number"
-          value={value}
+          type="text"
+          inputMode="numeric"
+          value={formatNumberInput(value)}
+          onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => onChange(toNumber(event.target.value))}
-          className="w-full rounded-xl bg-transparent px-3 py-2 text-sm font-semibold text-slate-900 outline-none"
+          className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
         />
       </div>
     </label>
@@ -216,10 +227,12 @@ function NumberInput({
         {label}
       </div>
       <input
-        type="number"
-        value={value}
+        type="text"
+        inputMode="numeric"
+        value={formatNumberInput(value)}
+        onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => onChange(toNumber(event.target.value))}
-        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
       />
     </label>
   );
@@ -725,26 +738,28 @@ export function EvaluationWorkspace({
                           onChange={(event) =>
                             setVin(event.target.value.toUpperCase())
                           }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         />
                       </FormRow>
 
                       <FormRow label="Mileage">
-                        <input
-                          type="number"
-                          value={targetMileage}
-                          onChange={(event) =>
-                            setTargetMileage(toNumber(event.target.value))
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                        />
-                      </FormRow>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formatNumberInput(targetMileage)}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onChange={(event) =>
+                              setTargetMileage(toNumber(event.target.value))
+                            }
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          />
+                        </FormRow>
 
                       <FormRow label="Auction Site">
                         <select
                           value={auctionSite}
                           onChange={(event) => setAuctionSite(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                         >
                           <option>ACV Auctions</option>
                           <option>Manheim</option>
@@ -757,58 +772,64 @@ export function EvaluationWorkspace({
                       </FormRow>
 
                       <FormRow label="Current Bid">
-                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                          <span className="pl-3 text-sm text-slate-400">$</span>
-                          <input
-                            type="number"
-                            value={valuationInput.currentBid}
-                            onChange={(event) =>
-                              updateEvaluationField(
-                                "currentBid",
-                                toNumber(event.target.value)
-                              )
-                            }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-right text-sm font-semibold text-slate-900 outline-none"
-                          />
-                        </div>
-                      </FormRow>
+                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <span className="pl-3 text-sm text-slate-400">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatNumberInput(valuationInput.currentBid)}
+                              onFocus={(event) => event.currentTarget.select()}
+                              onChange={(event) =>
+                                updateEvaluationField(
+                                  "currentBid",
+                                  toNumber(event.target.value)
+                                )
+                              }
+                              className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            />
+                          </div>
+                        </FormRow>
 
                       <FormRow label="Target Resale Used">
-                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-right text-sm font-bold text-slate-900">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
                           {money(targetResaleUsed)}
                         </div>
                       </FormRow>
 
                       <FormRow label="Final Target">
-                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                          <span className="pl-3 text-sm text-slate-400">$</span>
-                          <input
-                            type="number"
-                            value={finalTargetOverride ?? targetResaleUsed}
-                            onChange={(event) =>
-                              setFinalTargetOverride(toNumber(event.target.value))
-                            }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-right text-sm font-semibold text-slate-900 outline-none"
-                          />
-                        </div>
-                      </FormRow>
+                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <span className="pl-3 text-sm text-slate-400">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatNumberInput(finalTargetOverride ?? targetResaleUsed)}
+                              onFocus={(event) => event.currentTarget.select()}
+                              onChange={(event) =>
+                                setFinalTargetOverride(toNumber(event.target.value))
+                              }
+                              className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            />
+                          </div>
+                        </FormRow>
 
                       <FormRow label="Target Profit">
-                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                          <span className="pl-3 text-sm text-slate-400">$</span>
-                          <input
-                            type="number"
-                            value={valuationInput.targetProfit}
-                            onChange={(event) =>
-                              updateEvaluationField(
-                                "targetProfit",
-                                toNumber(event.target.value)
-                              )
-                            }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-right text-sm font-semibold text-slate-900 outline-none"
-                          />
-                        </div>
-                      </FormRow>
+                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <span className="pl-3 text-sm text-slate-400">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatNumberInput(valuationInput.targetProfit)}
+                              onFocus={(event) => event.currentTarget.select()}
+                              onChange={(event) =>
+                                updateEvaluationField(
+                                  "targetProfit",
+                                  toNumber(event.target.value)
+                                )
+                              }
+                              className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                            />
+                          </div>
+                        </FormRow>
 
                       <label className="flex items-center gap-2 pt-2 text-sm font-semibold text-slate-700">
                         <input
