@@ -40,6 +40,33 @@ function TextInput({
   value: string;
   onChange: (value: string) => void;
 }) {
+    async function saveAssumptions() {
+      try {
+        setSaveLoading(true);
+        setSaveStatus("");
+
+        const response = await fetch("/api/assumptions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ assumptions: draft }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to save assumptions.");
+        }
+
+        setDirty(false);
+        setSaveStatus("Saved to Supabase");
+      } catch (error) {
+        console.error(error);
+        setSaveStatus("Save failed");
+      } finally {
+        setSaveLoading(false);
+      }
+    }
+
   return (
     <input
       value={value}
@@ -85,6 +112,8 @@ export function AssumptionsTabs({
   const [activeTab, setActiveTab] = useState<Tab>("bid");
   const [draft, setDraft] = useState<Assumptions>(assumptions);
   const [dirty, setDirty] = useState(false);
+    const [saveLoading, setSaveLoading] = useState(false);
+    const [saveStatus, setSaveStatus] = useState("");
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "bid", label: "Bid Settings" },
@@ -260,12 +289,48 @@ export function AssumptionsTabs({
           >
             Reset
           </button>
-          <button
-            disabled
-            className="rounded-xl bg-slate-300 px-3 py-2 text-sm font-semibold text-white"
-          >
-            Save to Supabase Later
-          </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  setSaveLoading(true);
+                  setSaveStatus("");
+
+                  const response = await fetch("/api/assumptions", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ assumptions: draft }),
+                  });
+
+                  if (!response.ok) {
+                    throw new Error("Failed to save assumptions.");
+                  }
+
+                  setDirty(false);
+                  setSaveStatus("Saved to Supabase");
+                } catch (error) {
+                  console.error(error);
+                  setSaveStatus("Save failed");
+                } finally {
+                  setSaveLoading(false);
+                }
+              }}
+              disabled={saveLoading || !dirty}
+              className={`rounded-xl px-3 py-2 text-sm font-semibold text-white ${
+                saveLoading || !dirty
+                  ? "cursor-not-allowed bg-slate-300"
+                  : "bg-emerald-700 hover:bg-emerald-800"
+              }`}
+            >
+              {saveLoading ? "Saving..." : "Save Assumptions"}
+            </button>
+            {saveStatus && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                {saveStatus}
+              </span>
+            )}
         </div>
       </div>
 
