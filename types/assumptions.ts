@@ -44,6 +44,23 @@ export type RegionalMarket = {
   enabled: boolean;
 };
 
+export type VehicleClassificationMatchType =
+  | "make"
+  | "model"
+  | "trim"
+  | "body"
+  | "fuel"
+  | "ageMileage";
+
+export type VehicleClassificationRule = {
+  name: string;
+  matchType: VehicleClassificationMatchType;
+  matchValues: string[];
+  costProfile: string;
+  priority: number;
+  enabled: boolean;
+};
+
 export type CompSettings = {
   mileageAdjustmentPerThousand: number;
   fastSaleDiscount: number;
@@ -61,4 +78,5 @@ export type Assumptions = {
   auctionFeeRules: AuctionFeeRule[];
   compSettings: CompSettings;
   regionalMarkets: RegionalMarket[];
+  vehicleClassificationRules?: VehicleClassificationRule[];
 };

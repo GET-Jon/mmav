@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { defaultAssumptions } from "@/lib/assumptions";
 import type {
   Assumptions,
   AuctionFeeRule,
@@ -18,6 +19,7 @@ type Tab =
   | "risk"
   | "auctionFees"
   | "comps"
+    | "vehicleRules"
   | "regional";
 
 function money(value: number) {
@@ -109,8 +111,17 @@ export function AssumptionsTabs({
 }: {
   assumptions: Assumptions;
 }) {
+    const normalizedAssumptions: Assumptions = {
+      ...defaultAssumptions,
+      ...assumptions,
+      vehicleClassificationRules:
+        assumptions.vehicleClassificationRules?.length
+          ? assumptions.vehicleClassificationRules
+          : defaultAssumptions.vehicleClassificationRules,
+    };
+
   const [activeTab, setActiveTab] = useState<Tab>("bid");
-  const [draft, setDraft] = useState<Assumptions>(assumptions);
+    const [draft, setDraft] = useState<Assumptions>(normalizedAssumptions);
   const [dirty, setDirty] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState("");
@@ -121,6 +132,7 @@ export function AssumptionsTabs({
     { id: "risk", label: "Risk Rules" },
     { id: "auctionFees", label: "Auction Fees" },
     { id: "comps", label: "Comp Settings" },
+      { id: "vehicleRules", label: "Vehicle Rules" },
     { id: "regional", label: "Regional Search" },
   ];
 
@@ -245,8 +257,29 @@ export function AssumptionsTabs({
     setDirty(true);
   }
 
+    function updateVehicleClassificationRule(
+      index: number,
+      key: keyof VehicleClassificationRule,
+      value: string | number | boolean | string[]
+    ) {
+      setDraft((previous) => ({
+        ...previous,
+        vehicleClassificationRules: (
+          previous.vehicleClassificationRules || []
+        ).map((row, rowIndex) =>
+          rowIndex === index
+            ? {
+                ...row,
+                [key]: value,
+              }
+            : row
+        ),
+      }));
+      setDirty(true);
+    }
+
   function resetDraft() {
-    setDraft(assumptions);
+      setDraft(normalizedAssumptions);
     setDirty(false);
   }
 
@@ -763,6 +796,126 @@ export function AssumptionsTabs({
                         }
                         suffix="%"
                         step={0.1}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "vehicleRules" && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-bold">Vehicle Classification Rules</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Match decoded vehicle details to a default cost profile. Highest priority matching rule wins.
+          </p>
+
+          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-[1100px] w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-3">Enabled</th>
+                  <th className="px-3 py-3">Rule Name</th>
+                  <th className="px-3 py-3">Match Type</th>
+                  <th className="px-3 py-3">Match Values</th>
+                  <th className="px-3 py-3">Cost Profile</th>
+                  <th className="px-3 py-3">Priority</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(draft.vehicleClassificationRules || []).map((row, index) => (
+                  <tr key={index}>
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={row.enabled}
+                        onChange={(event) =>
+                          updateVehicleClassificationRule(
+                            index,
+                            "enabled",
+                            event.target.checked
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <TextInput
+                        value={row.name}
+                        onChange={(value) =>
+                          updateVehicleClassificationRule(index, "name", value)
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <select
+                        value={row.matchType}
+                        onChange={(event) =>
+                          updateVehicleClassificationRule(
+                            index,
+                            "matchType",
+                            event.target.value as VehicleClassificationRule["matchType"]
+                          )
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm"
+                      >
+                        <option value="make">Make</option>
+                        <option value="model">Model</option>
+                        <option value="trim">Trim</option>
+                        <option value="body">Body</option>
+                        <option value="fuel">Fuel</option>
+                        <option value="ageMileage">Age / Mileage</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-3">
+                      <TextInput
+                        value={row.matchValues.join(", ")}
+                        onChange={(value) =>
+                          updateVehicleClassificationRule(
+                            index,
+                            "matchValues",
+                            value
+                              .split(",")
+                              .map((item) => item.trim())
+                              .filter(Boolean)
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <select
+                        value={row.costProfile}
+                        onChange={(event) =>
+                          updateVehicleClassificationRule(
+                            index,
+                            "costProfile",
+                            event.target.value
+                          )
+                        }
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm"
+                      >
+                        {draft.costDefaults.map((costDefault) => (
+                          <option
+                            key={costDefault.vehicleType}
+                            value={costDefault.vehicleType}
+                          >
+                            {costDefault.vehicleType}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3">
+                      <NumberInput
+                        value={row.priority}
+                        onChange={(value) =>
+                          updateVehicleClassificationRule(
+                            index,
+                            "priority",
+                            value
+                          )
+                        }
                       />
                     </td>
                   </tr>
