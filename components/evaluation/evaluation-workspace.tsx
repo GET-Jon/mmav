@@ -344,6 +344,13 @@ export function EvaluationWorkspace({
     "default"
   );
 
+  const [appliedVehicleProfile, setAppliedVehicleProfile] = useState<{
+    profile: string;
+    ruleName: string;
+    source: string;
+    reason: string;
+  } | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -364,10 +371,23 @@ export function EvaluationWorkspace({
           setAssumptionsSource(data.source === "saved" ? "saved" : "default");
 
             if (!initialSavedEvaluationId) {
-              const matchingCostDefault = getMatchingCostDefault(
+              const profileMatch = getAppliedVehicleProfile(
                 data.assumptions,
                 decodedVehicle,
                 targetMileage
+              );
+
+              const matchingCostDefault = profileMatch?.costDefault;
+
+              setAppliedVehicleProfile(
+                profileMatch
+                  ? {
+                      profile: profileMatch.profile,
+                      ruleName: profileMatch.ruleName,
+                      source: profileMatch.source,
+                      reason: profileMatch.reason,
+                    }
+                  : null
               );
 
               if (matchingCostDefault) {
@@ -545,6 +565,66 @@ export function EvaluationWorkspace({
     };
   }
 
+
+  function getAppliedVehicleProfile(
+    assumptions: typeof defaultAssumptions,
+    decoded: VinDecodeResult | null,
+    mileage: number
+  ) {
+    const enabledRules = (assumptions.vehicleClassificationRules || [])
+      .filter((rule) => rule.enabled)
+      .sort((a, b) => b.priority - a.priority);
+
+    const currentYear = new Date().getFullYear();
+    const decodedYear = Number(decoded?.year || vehicleYear || 0);
+    const vehicleAge = decodedYear > 0 ? currentYear - decodedYear : 0;
+
+    const fields = {
+      make: normalizeMatchText(decoded?.make || vehicleMake),
+      model: normalizeMatchText(decoded?.model || vehicleModel),
+      trim: normalizeMatchText(decoded?.trim || vehicleTrim),
+      body: normalizeMatchText(decoded?.bodyClass || vehicleBodyClass),
+      fuel: normalizeMatchText(decoded?.fuelType),
+    };
+
+    const matchingRule = enabledRules.find((rule) => {
+      if (rule.matchType === "ageMileage") {
+        return vehicleAge >= 10 || mileage >= 120000;
+      }
+
+      const fieldValue = fields[rule.matchType] || "";
+
+      return rule.matchValues.some((matchValue) =>
+        fieldValue.includes(normalizeMatchText(matchValue))
+      );
+    });
+
+    const costDefault =
+      assumptions.costDefaults.find(
+        (row) => row.vehicleType === matchingRule?.costProfile
+      ) || assumptions.costDefaults[0];
+
+    if (!costDefault) {
+      return null;
+    }
+
+    const matchedFieldValue =
+      matchingRule && matchingRule.matchType !== "ageMileage"
+        ? fields[matchingRule.matchType]
+        : "";
+
+    return {
+      costDefault,
+      profile: costDefault.vehicleType,
+      ruleName: matchingRule?.name || "Default cost profile",
+      source: matchingRule ? "Vehicle Rules" : "Default",
+      reason: matchingRule
+        ? matchingRule.matchType === "ageMileage"
+          ? `Age ${vehicleAge} years or mileage ${mileage.toLocaleString()} triggered this profile.`
+          : `${matchingRule.matchType} matched ${matchedFieldValue || "decoded vehicle"}`
+        : "No enabled vehicle rule matched; using first cost profile.",
+    };
+  }
   function updateEvaluationField(
     key: keyof Omit<ValuationInput, "costs">,
     value: number | boolean
@@ -573,11 +653,52 @@ export function EvaluationWorkspace({
     );
   }
 
+
+  function reapplyVehicleProfile() {
+    const profileMatch = getAppliedVehicleProfile(
+      activeAssumptions,
+      decodedVehicle,
+      targetMileage
+    );
+
+    if (!profileMatch) {
+      setAppliedVehicleProfile(null);
+      return;
+    }
+
+    setEvaluation((previous) =>
+      applyCostDefaultToEvaluation(
+        previous,
+        profileMatch.costDefault,
+        activeAssumptions
+      )
+    );
+
+    setAppliedVehicleProfile({
+      profile: profileMatch.profile,
+      ruleName: profileMatch.ruleName,
+      source: profileMatch.source,
+      reason: profileMatch.reason,
+    });
+  }
   function handleDecodedVinAndReset(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
     setVin(decoded.vin);
 
-    const matchingCostDefault = getMatchingCostDefault(activeAssumptions, decoded, 0);
+    const profileMatch = getAppliedVehicleProfile(activeAssumptions, decoded, 0);
+    const matchingCostDefault = profileMatch?.costDefault;
+
+    setAppliedVehicleProfile(
+      profileMatch
+        ? {
+            profile: profileMatch.profile,
+            ruleName: profileMatch.ruleName,
+            source: profileMatch.source,
+            reason: profileMatch.reason,
+          }
+        : null
+    );
+
     const baseEvaluation: ValuationInput = {
       ...initialEvaluation,
       currentBid: 0,
@@ -835,9 +956,6 @@ export function EvaluationWorkspace({
           <div className="flex-1 p-6">
             <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
               <div>
-                <div className="mb-2 text-sm font-medium text-blue-700">
-                  Back to Evaluations
-                </div>
                 <h1 className="text-3xl font-bold tracking-tight">
                   {vehicleTitle}
                 </h1>
@@ -849,9 +967,6 @@ export function EvaluationWorkspace({
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <button className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold shadow-sm">
-                  Decode VIN
-                </button>
                 <button
                   onClick={pullMarketCheckComps}
                   disabled={marketCheckLoading}
@@ -993,6 +1108,8 @@ export function EvaluationWorkspace({
                   vin={vin}
                   onVinChange={setVin}
                   onDecoded={(decoded) => handleDecodedVinAndReset(decoded)}
+                  appliedVehicleProfile={appliedVehicleProfile}
+                  onReapplyVehicleProfile={reapplyVehicleProfile}
                 />
 
                 <SectionCard title="6. Output / Decision">
@@ -1101,7 +1218,7 @@ export function EvaluationWorkspace({
                   </SectionCard>
 
                 <SectionCard title="5. Cost & Risk">
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <CurrencyInput
                       label="Auction Fee"
                       value={valuationInput.costs.auctionFee}
@@ -1151,14 +1268,21 @@ export function EvaluationWorkspace({
                       </div>
                     </div>
 
-                    <div className="mt-4 border-t border-slate-200 pt-4">
-                      <div className="flex justify-between text-base font-bold">
-                        <span>Total Cost Adders</span>
-                        <span>{money(valuation.totalCostAdders)}</span>
-                      </div>
-                      <div className="mt-2 flex justify-between text-base font-bold text-red-600">
-                        <span>Total Risk Points</span>
-                        <span>{valuationInput.totalRiskPoints} / 300</span>
+                    <div className="md:col-span-2 rounded-xl bg-emerald-50 px-4 py-4">
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div>
+                          <p className="text-sm text-slate-500">Total Cost Adders</p>
+                          <p className="mt-1 text-base font-bold text-emerald-700">
+                            {money(valuation.totalCostAdders)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-sm text-slate-500">Total Risk Points</p>
+                          <p className="mt-1 text-base font-bold text-slate-950">
+                            {valuationInput.totalRiskPoints} / 300
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>

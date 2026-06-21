@@ -18,6 +18,13 @@ const initialDecoded: VinDecodeResult = {
   plantCountry: "Slovakia",
 };
 
+type AppliedVehicleProfile = {
+  profile: string;
+  ruleName: string;
+  source: string;
+  reason: string;
+};
+
 function FieldRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
@@ -31,10 +38,14 @@ export function VinDecodeCard({
   vin,
   onVinChange,
   onDecoded,
+  appliedVehicleProfile,
+  onReapplyVehicleProfile,
 }: {
   vin: string;
   onVinChange: (vin: string) => void;
   onDecoded?: (decoded: VinDecodeResult) => void;
+  appliedVehicleProfile?: AppliedVehicleProfile | null;
+  onReapplyVehicleProfile?: () => void;
 }) {
   const [decoded, setDecoded] = useState<VinDecodeResult>(initialDecoded);
   const [loading, setLoading] = useState(false);
@@ -136,6 +147,37 @@ export function VinDecodeCard({
         />
         <FieldRow label="Plant Country" value={decoded.plantCountry} />
       </div>
+
+      {appliedVehicleProfile ? (
+        <div
+          data-vin-profile-footer
+          className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                Applied Profile
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-900">
+                {appliedVehicleProfile.profile}
+                <span className="ml-2 font-medium text-slate-500">
+                  · {appliedVehicleProfile.reason}
+                </span>
+              </p>
+            </div>
+
+            {onReapplyVehicleProfile ? (
+              <button
+                type="button"
+                onClick={onReapplyVehicleProfile}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100"
+              >
+                Reapply
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
