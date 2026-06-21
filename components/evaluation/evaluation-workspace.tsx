@@ -320,7 +320,16 @@ export function EvaluationWorkspace({
 
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const [marketCheckSearchMeta, setMarketCheckSearchMeta] = useState<{
+    loadedCount: number;
+    regionsChecked: string[];
+    lowConfidenceFallback: boolean;
+    minimumQualityScore?: number;
+  } | null>(null);
   const marketCheckInFlightRef = useRef(false);
+  const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
+  const [vinDecodeError, setVinDecodeError] = useState("");
+  const mileageInputRef = useRef<HTMLInputElement | null>(null);
 
   const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(
     initialSavedEvaluationId
@@ -682,6 +691,42 @@ export function EvaluationWorkspace({
       reason: profileMatch.reason,
     });
   }
+  async function decodeVinFromBasics() {
+    setVinDecodeLoading(true);
+    setVinDecodeError("");
+
+    try {
+      const response = await fetch("/api/vin/decode", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vin,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "VIN decode failed.");
+      }
+
+      handleDecodedVinAndReset(data);
+
+      window.setTimeout(() => {
+        mileageInputRef.current?.focus();
+        mileageInputRef.current?.select();
+      }, 0);
+    } catch (error) {
+      setVinDecodeError(
+        error instanceof Error ? error.message : "VIN decode failed."
+      );
+    } finally {
+      setVinDecodeLoading(false);
+    }
+  }
+
   function handleDecodedVinAndReset(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
     setVin(decoded.vin);
@@ -817,13 +862,30 @@ export function EvaluationWorkspace({
       }
 
       if (!data.comps || data.comps.length === 0) {
+        setComps([]);
+        setMarketCheckSearchMeta({
+          loadedCount: 0,
+          regionsChecked: data.search?.regionsChecked || [],
+          lowConfidenceFallback: false,
+          minimumQualityScore: data.minimumQualityScore,
+        });
         setMarketCheckStatus("No comps found");
         return;
       }
 
       setComps(data.comps);
+      setMarketCheckSearchMeta({
+        loadedCount: data.comps.length,
+        regionsChecked: data.search?.regionsChecked || [],
+        lowConfidenceFallback: Boolean(data.lowConfidenceFallback),
+        minimumQualityScore: data.minimumQualityScore,
+      });
+      const regionsCheckedCount = data.search?.regionsChecked?.length || 0;
+
       setMarketCheckStatus(
-        `${data.comps.length} comps loaded${data.cache?.hit ? " from cache" : ""}`
+        `${data.comps.length} comps loaded${
+          regionsCheckedCount ? ` · ${regionsCheckedCount} regions checked` : ""
+        }${data.cache?.hit ? " from cache" : ""}`
       );
     } catch (error) {
       setMarketCheckStatus(
@@ -963,17 +1025,36 @@ export function EvaluationWorkspace({
                 <SectionCard title="1. Vehicle Basics">
                     <div className="space-y-4">
                       <FormRow label="VIN">
-                        <input
-                          value={vin}
-                          onChange={(event) =>
-                            setVin(event.target.value.toUpperCase())
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                        />
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              value={vin}
+                              onChange={(event) =>
+                                setVin(event.target.value.toUpperCase())
+                              }
+                              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={decodeVinFromBasics}
+                              disabled={vinDecodeLoading || vin.trim().length < 17}
+                              className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
+                            >
+                              {vinDecodeLoading ? "Decoding..." : "Decode"}
+                            </button>
+                          </div>
+
+                          {vinDecodeError ? (
+                            <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                              {vinDecodeError}
+                            </div>
+                          ) : null}
+                        </div>
                       </FormRow>
 
                       <FormRow label="Mileage">
                           <input
+                            ref={mileageInputRef}
                             type="text"
                             inputMode="numeric"
                             value={formatNumberInput(targetMileage)}
@@ -1078,9 +1159,7 @@ export function EvaluationWorkspace({
                   </SectionCard>
 
                 <VinDecodeCard
-                  vin={vin}
-                  onVinChange={setVin}
-                  onDecoded={(decoded) => handleDecodedVinAndReset(decoded)}
+                  decoded={decodedVehicle}
                   appliedVehicleProfile={appliedVehicleProfile}
                   onReapplyVehicleProfile={reapplyVehicleProfile}
                 />
@@ -1283,31 +1362,69 @@ export function EvaluationWorkspace({
                     ) : null
                   }
                 >
-                  <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-                    <MetricCard
-                      label="Comp Count"
-                      value={`${compSummary.includedCount}`}
-                    />
-                    <MetricCard
-                      label="Median Adjusted"
-                      value={money(compSummary.medianAdjusted)}
-                    />
-                    <MetricCard
-                      label="Fast Sale Target"
-                      value={money(compSummary.fastSaleTarget)}
-                    />
-                    <MetricCard
-                      label="Confidence"
-                      value={compSummary.confidence}
-                      tone={
-                        compSummary.confidence === "High"
-                          ? "green"
-                          : compSummary.confidence === "Medium"
-                          ? "orange"
-                          : "red"
-                      }
-                    />
-                    <MetricCard label="Search Type" value="Local + Regional" />
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
+                      <span>
+                        <span className="font-bold text-slate-950">
+                          {marketCheckSearchMeta?.loadedCount ?? comps.length}
+                        </span>{" "}
+                        loaded
+                      </span>
+
+                      <span>
+                        <span className="font-bold text-slate-950">
+                          {compSummary.includedCount}
+                        </span>{" "}
+                        included
+                      </span>
+
+                      <span>
+                        Median{" "}
+                        <span className="font-bold text-slate-950">
+                          {money(compSummary.medianAdjusted)}
+                        </span>
+                      </span>
+
+                      <span>
+                        Fast sale{" "}
+                        <span className="font-bold text-slate-950">
+                          {money(compSummary.fastSaleTarget)}
+                        </span>
+                      </span>
+
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-bold ${
+                          compSummary.confidence === "High"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : compSummary.confidence === "Medium"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {compSummary.confidence} confidence
+                      </span>
+
+                    </div>
+
+                    {marketCheckSearchMeta?.regionsChecked.length ? (
+                      <div className="mt-2 text-sm text-slate-500">
+                        <span className="font-semibold text-slate-700">
+                          Regions checked:
+                        </span>{" "}
+                        {marketCheckSearchMeta.regionsChecked.join(" → ")}
+                      </div>
+                    ) : null}
+
+                    {marketCheckSearchMeta?.lowConfidenceFallback ? (
+                      <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                        Low-confidence fallback: no comps met the quality
+                        threshold
+                        {marketCheckSearchMeta.minimumQualityScore
+                          ? ` (${marketCheckSearchMeta.minimumQualityScore})`
+                          : ""}
+                        , so the top 3 available comps were included.
+                      </div>
+                    ) : null}
                   </div>
 
                   <MarketCompsTable

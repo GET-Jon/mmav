@@ -64,6 +64,19 @@ export function MarketCompsTable({
         ),
       },
       {
+        accessorKey: "region",
+        header: "Region",
+        cell: ({ row }) => {
+          const region = row.original.region;
+
+          return (
+            <span className="text-slate-700">
+              {region || "—"}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "distance",
         header: "Distance",
         cell: ({ row }) => `${row.original.distance} mi`,

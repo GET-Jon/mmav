@@ -103,6 +103,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
+    cacheVersion: "progressive-regions-low-confidence-v4",
   });
 }
 
@@ -255,6 +256,8 @@ function mapListingToComp({
     id: String(listing.id || listing.vin || `marketcheck-${index}`),
     included: false,
     source: "MarketCheck/API",
+    region: String(listing.__searchRegion || ""),
+    regionZip: String(listing.__searchZip || ""),
     distance: toNumber(listing.dist ?? listing.distance),
     year: toNumber(build.year ?? listing.year, searchYear),
     model: `${make} ${model}`.trim(),
@@ -599,9 +602,21 @@ export async function POST(request: Request) {
     const MIN_INITIAL_REGIONS = Math.min(2, zips.length);
 
     function buildCompSummary(currentSearches: MarketCheckSearchResult[]) {
-      const allListings = currentSearches.flatMap((search) =>
-        Array.isArray(search.payload.listings) ? search.payload.listings : []
-      );
+      const allListings = currentSearches.flatMap((search) => {
+        const region = orderedRegions.find(
+          (orderedRegion: { zip: string }) => orderedRegion.zip === search.zip
+        );
+
+        const listings = Array.isArray(search.payload.listings)
+          ? search.payload.listings
+          : [];
+
+        return listings.map((listing: MarketCheckListing) => ({
+          ...listing,
+          __searchZip: search.zip,
+          __searchRegion: region?.market || "",
+        }));
+      });
 
       const rawCount = currentSearches.reduce(
         (sum, search) => sum + search.numFound,
@@ -654,19 +669,32 @@ export async function POST(request: Request) {
         );
       });
 
-      const comps = rankedComps.map((comp, index) => ({
+      const minimumQualityScore =
+        defaultAssumptions.compSettings.minimumQualityScore;
+
+      const scoredComps = rankedComps.map((comp, index) => ({
         ...comp,
-        included:
-          index < 6 &&
-          comp.qualityScore >=
-            defaultAssumptions.compSettings.minimumQualityScore,
+        included: index < 6 && comp.qualityScore >= minimumQualityScore,
       }));
+
+      const hasAutoIncludedComps = scoredComps.some((comp) => comp.included);
+      const lowConfidenceFallback =
+        scoredComps.length > 0 && !hasAutoIncludedComps;
+
+      const comps = lowConfidenceFallback
+        ? scoredComps.map((comp, index) => ({
+            ...comp,
+            included: index < 3,
+          }))
+        : scoredComps;
 
       return {
         allListings,
         rawCount,
         mappedNullCount,
         comps,
+        lowConfidenceFallback,
+        minimumQualityScore,
       };
     }
 
@@ -748,6 +776,8 @@ export async function POST(request: Request) {
       rawCount,
       mappedNullCount,
       comps,
+      lowConfidenceFallback,
+      minimumQualityScore,
     } = buildCompSummary(searches);
 
     const responsePayload = {
@@ -758,12 +788,22 @@ export async function POST(request: Request) {
         preferredTrim,
         targetMileage,
         zips,
+          regions: orderedRegions,
+          regionsChecked: searches.map((search) => {
+            const region = orderedRegions.find(
+              (orderedRegion: { zip: string; market?: string }) => orderedRegion.zip === search.zip
+            );
+
+            return region ? `${region.market} (${region.zip})` : search.zip;
+          }),
         radius,
         rows,
       },
       rawCount,
       totalListingsReturned: allListings.length,
       filteredOutMissingPriceOrMileage: mappedNullCount,
+      lowConfidenceFallback,
+      minimumQualityScore,
       comps,
       cache: {
         hit: false,

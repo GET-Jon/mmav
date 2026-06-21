@@ -2,6 +2,8 @@ export type MarketComp = {
   id: string;
   included: boolean;
   source: string;
+  region?: string;
+  regionZip?: string;
   distance: number;
   year: number;
   model: string;
