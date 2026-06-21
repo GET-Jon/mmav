@@ -793,7 +793,17 @@ export function EvaluationWorkspace({
           model,
           trim: vehicleTrim,
           targetMileage,
-          zips: ["29412", "29201", "28202", "30303", "31401"],
+          regions: activeAssumptions.regionalMarkets
+            .filter((market) => market.enabled)
+            .map((market, index) => ({
+              market: market.market,
+              zip: market.zip,
+              order:
+                typeof market.order === "number" && Number.isFinite(market.order)
+                  ? market.order
+                  : index + 1,
+              enabled: market.enabled,
+            })),
           radius: 100,
           rows: 10,
         }),

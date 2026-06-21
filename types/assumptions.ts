@@ -41,6 +41,7 @@ export type SourceDiscount = {
 export type RegionalMarket = {
   market: string;
   zip: string;
+  order: number;
   enabled: boolean;
 };
 

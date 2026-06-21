@@ -99,7 +99,7 @@ function makeStableSearchKey({
     model: normalize(model),
     trim: normalize(preferredTrim),
     targetMileage,
-    zips: [...zips].map((zip) => String(zip).trim()).filter(Boolean).sort(),
+    zips: [...zips].map((zip) => String(zip).trim()).filter(Boolean),
     radius,
     rows,
     searchType: "used-active-comps",
@@ -475,6 +475,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const marketCheckApiKey = apiKey;
+
     const body = await request.json();
 
     const year = toNumber(body.year);
@@ -487,15 +489,48 @@ export async function POST(request: Request) {
     const debug = Boolean(body.debug);
     const reason = String(body.reason || "explicit-user-comp-search");
 
-    const requestedZips = Array.isArray(body.zips)
-      ? body.zips.map((zip: unknown) => String(zip).trim()).filter(Boolean)
+    const requestedRegions = Array.isArray(body.regions)
+      ? body.regions
+          .map((region: any, index: number) => ({
+            market: String(region.market || `Region ${index + 1}`).trim(),
+            zip: String(region.zip || "").trim(),
+            order: toNumber(region.order, index + 1),
+            enabled: region.enabled !== false,
+          }))
+          .filter((region: { zip: string; enabled: boolean }) => region.zip && region.enabled)
       : [];
 
-    const defaultZips = defaultAssumptions.regionalMarkets
-      .filter((market) => market.enabled)
-      .map((market) => market.zip);
+    const legacyRequestedRegions = Array.isArray(body.zips)
+      ? body.zips
+          .map((zip: unknown, index: number) => ({
+            market: `Region ${index + 1}`,
+            zip: String(zip).trim(),
+            order: index + 1,
+            enabled: true,
+          }))
+          .filter((region: { zip: string }) => region.zip)
+      : [];
 
-    const zips = requestedZips.length ? requestedZips : defaultZips;
+    const defaultRegions = defaultAssumptions.regionalMarkets
+      .filter((market) => market.enabled)
+      .map((market, index) => ({
+        market: market.market,
+        zip: market.zip,
+        order: typeof market.order === "number" ? market.order : index + 1,
+        enabled: market.enabled,
+      }));
+
+    const orderedRegions = (
+      requestedRegions.length
+        ? requestedRegions
+        : legacyRequestedRegions.length
+        ? legacyRequestedRegions
+        : defaultRegions
+    ).sort(
+      (a: { order: number }, b: { order: number }) => a.order - b.order
+    );
+
+    const zips = orderedRegions.map((region: { zip: string }) => region.zip);
 
     if (!make || !model) {
       return NextResponse.json(
@@ -560,17 +595,126 @@ export async function POST(request: Request) {
       },
     });
 
-    const exactSearches = await runMarketCheckSearches({
-      apiKey,
-      year,
-      make,
-      model,
-      zips,
-      radius,
-      rows,
+    const MIN_USABLE_COMPS = 10;
+    const MIN_INITIAL_REGIONS = Math.min(2, zips.length);
+
+    function buildCompSummary(currentSearches: MarketCheckSearchResult[]) {
+      const allListings = currentSearches.flatMap((search) =>
+        Array.isArray(search.payload.listings) ? search.payload.listings : []
+      );
+
+      const rawCount = currentSearches.reduce(
+        (sum, search) => sum + search.numFound,
+        0
+      );
+
+      const seen = new Set<string>();
+
+      const mapped = allListings.map(
+        (listing: MarketCheckListing, index: number) =>
+          mapListingToComp({
+            listing,
+            index,
+            searchYear: year,
+            searchMake: make,
+            searchModel: model,
+            targetMileage,
+            preferredTrim,
+          })
+      );
+
+      const mappedNullCount = mapped.filter((comp) => !comp).length;
+
+      const deduped = mapped
+        .filter(Boolean)
+        .filter((comp) => {
+          const typedComp = comp as MarketComp;
+          const key = typedComp.id;
+
+          if (seen.has(key)) {
+            return false;
+          }
+
+          seen.add(key);
+          return true;
+        }) as MarketComp[];
+
+      const rankedComps = deduped.sort((a, b) => {
+        if (b.qualityScore !== a.qualityScore) {
+          return b.qualityScore - a.qualityScore;
+        }
+
+        if (a.distance !== b.distance) {
+          return a.distance - b.distance;
+        }
+
+        return (
+          Math.abs(a.mileage - targetMileage) -
+          Math.abs(b.mileage - targetMileage)
+        );
+      });
+
+      const comps = rankedComps.map((comp, index) => ({
+        ...comp,
+        included:
+          index < 6 &&
+          comp.qualityScore >=
+            defaultAssumptions.compSettings.minimumQualityScore,
+      }));
+
+      return {
+        allListings,
+        rawCount,
+        mappedNullCount,
+        comps,
+      };
+    }
+
+    async function runProgressiveRegionSearches({
+      attemptName,
+      attemptYear,
+    }: {
+      attemptName: string;
+      attemptYear?: number;
+    }) {
+      const progressiveSearches: MarketCheckSearchResult[] = [];
+
+      for (let regionIndex = 0; regionIndex < zips.length; regionIndex += 1) {
+        const zip = zips[regionIndex];
+
+        const result = await searchMarketCheck({
+          apiKey: marketCheckApiKey,
+          year: attemptYear,
+          make,
+          model,
+          zip,
+          radius,
+          rows,
+          attemptName,
+          searchKey,
+          reason,
+        });
+
+        progressiveSearches.push(result);
+
+        if (!result.ok) {
+          break;
+        }
+
+        const summary = buildCompSummary(progressiveSearches);
+        const searchedMinimumRegions = regionIndex + 1 >= MIN_INITIAL_REGIONS;
+
+        if (searchedMinimumRegions && summary.comps.length >= MIN_USABLE_COMPS) {
+          break;
+        }
+      }
+
+      return progressiveSearches;
+    }
+
+    const exactSearches = await runProgressiveRegionSearches({
       attemptName: "exact-year-make-model",
-      searchKey,
-      reason,
+      attemptYear: year,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
@@ -581,25 +725,16 @@ export async function POST(request: Request) {
 
     let searches = exactSearches;
 
-    const exactRawCount = exactSearches.reduce(
-      (sum, search) => sum + search.numFound,
-      0
-    );
+    const exactSummary = buildCompSummary(exactSearches);
 
-    if (exactRawCount === 0) {
-      const fallbackSearches = await runMarketCheckSearches({
-        apiKey,
-        make,
-        model,
-        zips,
-        radius,
-        rows,
+    if (exactSummary.rawCount === 0) {
+      const fallbackSearches = await runProgressiveRegionSearches({
         attemptName: "fallback-make-model",
-        searchKey,
-        reason,
       });
 
-      const failedFallbackSearch = fallbackSearches.find((search) => !search.ok);
+      const failedFallbackSearch = fallbackSearches.find(
+        (search) => !search.ok
+      );
 
       if (failedFallbackSearch) {
         return buildFailedMarketCheckResponse(failedFallbackSearch);
@@ -608,59 +743,12 @@ export async function POST(request: Request) {
       searches = [...exactSearches, ...fallbackSearches];
     }
 
-    const allListings = searches.flatMap((search) =>
-      Array.isArray(search.payload.listings) ? search.payload.listings : []
-    );
-
-    const rawCount = searches.reduce((sum, search) => sum + search.numFound, 0);
-    const seen = new Set<string>();
-
-    const mapped = allListings.map((listing: MarketCheckListing, index: number) =>
-      mapListingToComp({
-        listing,
-        index,
-        searchYear: year,
-        searchMake: make,
-        searchModel: model,
-        targetMileage,
-        preferredTrim,
-      })
-    );
-
-    const mappedNullCount = mapped.filter((comp) => !comp).length;
-
-    const deduped = mapped
-      .filter(Boolean)
-      .filter((comp) => {
-        const typedComp = comp as MarketComp;
-        const key = typedComp.id;
-
-        if (seen.has(key)) {
-          return false;
-        }
-
-        seen.add(key);
-        return true;
-      }) as MarketComp[];
-
-    const rankedComps = deduped.sort((a, b) => {
-      if (b.qualityScore !== a.qualityScore) {
-        return b.qualityScore - a.qualityScore;
-      }
-
-      if (a.distance !== b.distance) {
-        return a.distance - b.distance;
-      }
-
-      return Math.abs(a.mileage - targetMileage) - Math.abs(b.mileage - targetMileage);
-    });
-
-    const comps = rankedComps.map((comp, index) => ({
-      ...comp,
-      included:
-        index < 6 &&
-        comp.qualityScore >= defaultAssumptions.compSettings.minimumQualityScore,
-    }));
+    const {
+      allListings,
+      rawCount,
+      mappedNullCount,
+      comps,
+    } = buildCompSummary(searches);
 
     const responsePayload = {
       search: {

@@ -93,6 +93,17 @@ export function AssumptionsTabs({
         assumptions.vehicleClassificationRules?.length
           ? assumptions.vehicleClassificationRules
           : defaultAssumptions.vehicleClassificationRules,
+      regionalMarkets: (
+        assumptions.regionalMarkets?.length
+          ? assumptions.regionalMarkets
+          : defaultAssumptions.regionalMarkets
+      ).map((market, index) => ({
+        ...market,
+        order:
+          typeof market.order === "number" && Number.isFinite(market.order)
+            ? market.order
+            : index + 1,
+      })),
     };
 
   const [activeTab, setActiveTab] = useState<Tab>("bid");
@@ -216,7 +227,7 @@ export function AssumptionsTabs({
   function updateRegionalMarket(
     index: number,
     key: keyof RegionalMarket,
-    value: string | boolean
+    value: string | number | boolean
   ) {
     setDraft((previous) => ({
       ...previous,
@@ -249,6 +260,22 @@ export function AssumptionsTabs({
               }
             : row
         ),
+      }));
+      setDirty(true);
+    }
+
+    function addRegionalMarket() {
+      setDraft((previous) => ({
+        ...previous,
+        regionalMarkets: [
+          ...previous.regionalMarkets,
+          {
+            market: "New Region",
+            zip: "",
+            order: previous.regionalMarkets.length + 1,
+            enabled: true,
+          },
+        ],
       }));
       setDirty(true);
     }
@@ -904,9 +931,18 @@ export function AssumptionsTabs({
       {activeTab === "regional" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">Regional Search</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            MarketCheck regional ZIPs for 100-mile searches.
-          </p>
+          <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm text-slate-500">
+              MarketCheck regional ZIPs for ordered comp expansion.
+            </p>
+            <button
+              type="button"
+              onClick={addRegionalMarket}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700"
+            >
+              Add Region
+            </button>
+          </div>
 
           <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
             <table className="w-full text-left text-sm">
@@ -915,6 +951,7 @@ export function AssumptionsTabs({
                   <th className="px-3 py-3">Market</th>
                   <th className="px-3 py-3">ZIP</th>
                   <th className="px-3 py-3">Enabled</th>
+                  <th className="w-20 px-3 py-3 text-center">Order</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -948,6 +985,16 @@ export function AssumptionsTabs({
                           )
                         }
                       />
+                    </td>
+                    <td className="w-20 px-3 py-3">
+                      <div className="mx-auto w-16">
+                        <NumberInput
+                          value={row.order}
+                          onChange={(value) =>
+                            updateRegionalMarket(index, "order", value)
+                          }
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}

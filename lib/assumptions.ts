@@ -257,36 +257,43 @@ export const defaultAssumptions: Assumptions = {
     {
       market: "Charleston",
       zip: "29412",
+      order: 1,
       enabled: true,
     },
     {
       market: "Columbia",
       zip: "29201",
+      order: 2,
       enabled: true,
     },
     {
       market: "Charlotte",
       zip: "28202",
+      order: 3,
       enabled: true,
     },
     {
       market: "Raleigh",
       zip: "27601",
+      order: 4,
       enabled: false,
     },
     {
       market: "Atlanta",
       zip: "30303",
+      order: 5,
       enabled: true,
     },
     {
       market: "Savannah",
       zip: "31401",
+      order: 6,
       enabled: true,
     },
     {
       market: "Jacksonville",
       zip: "32202",
+      order: 7,
       enabled: false,
     },
   ],
