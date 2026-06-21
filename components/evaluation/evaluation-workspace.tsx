@@ -13,97 +13,26 @@ import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
 
-const initialTargetMileage = 68742;
+const draftStorageKey = "mmav:evaluationDraft:v1";
 
-const initialComps: MarketComp[] = [
-  {
-    id: "comp-1",
-    included: true,
-    source: "MarketCheck/API",
-    distance: 18,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 63421,
-    askingPrice: 34900,
-    qualityScore: 78,
-  },
-  {
-    id: "comp-2",
-    included: true,
-    source: "CarMax",
-    distance: 25,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 70118,
-    askingPrice: 33998,
-    qualityScore: 74,
-  },
-  {
-    id: "comp-3",
-    included: true,
-    source: "Facebook",
-    distance: 12,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 66950,
-    askingPrice: 32500,
-    qualityScore: 68,
-  },
-  {
-    id: "comp-4",
-    included: true,
-    source: "Manual",
-    distance: 90,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 71230,
-    askingPrice: 31900,
-    qualityScore: 66,
-  },
-  {
-    id: "comp-5",
-    included: false,
-    source: "MarketCheck/API",
-    distance: 310,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 59880,
-    askingPrice: 35900,
-    qualityScore: 62,
-  },
-  {
-    id: "comp-6",
-    included: false,
-    source: "CarMax",
-    distance: 200,
-    year: 2020,
-    model: "Audi Q7",
-    trim: "Premium Plus",
-    mileage: 82111,
-    askingPrice: 29998,
-    qualityScore: 58,
-  },
-];
+const initialTargetMileage = 0;
+
+const initialComps: MarketComp[] = [];
 
 const initialEvaluation: ValuationInput = {
-  currentBid: 18200,
-  targetResaleUsed: 31250,
-  targetProfit: 3500,
+  currentBid: 0,
+  targetResaleUsed: 0,
+  targetProfit: 0,
   totalRiskPoints: 0,
   hasAvoidFlag: false,
   costs: {
-    auctionFee: 546,
-    transport: 800,
-    recon: 950,
-    detailAdmin: 250,
-    generalRiskReserve: 600,
-    brandRiskAdd: 250,
-    titleHistoryRiskAdd: 500,
+    auctionFee: 0,
+    transport: 0,
+    recon: 0,
+    detailAdmin: 0,
+    generalRiskReserve: 0,
+    brandRiskAdd: 0,
+    titleHistoryRiskAdd: 0,
     conditionRiskAdd: 0,
   },
 };
@@ -293,7 +222,7 @@ export function EvaluationWorkspace({
   const [vin, setVin] = useState(
     initialSavedPayload?.vin ||
       initialSavedPayload?.decodedVehicle?.vin ||
-      "WA1LAAF78LD012345"
+      ""
   );
 
   const [auctionSite, setAuctionSite] = useState(
@@ -327,6 +256,7 @@ export function EvaluationWorkspace({
     minimumQualityScore?: number;
   } | null>(null);
   const marketCheckInFlightRef = useRef(false);
+  const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
@@ -340,10 +270,7 @@ export function EvaluationWorkspace({
     initialSavedEvaluationId ? "Loaded saved evaluation" : ""
   );
 
-  const [notes, setNotes] = useState(
-    initialSavedPayload?.notes ||
-      "Clean title Q7 with good service history. Minor cosmetic wear, needs tires. Strong local demand for this trim."
-  );
+  const [notes, setNotes] = useState(initialSavedPayload?.notes || "");
 
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
     initialSavedPayload?.selectedConditions || initialSelectedConditions
@@ -380,7 +307,7 @@ export function EvaluationWorkspace({
           setActiveAssumptions(data.assumptions);
           setAssumptionsSource(data.source === "saved" ? "saved" : "default");
 
-            if (!initialSavedEvaluationId) {
+            if (!initialSavedEvaluationId && decodedVehicle) {
               const profileMatch = getAppliedVehicleProfile(
                 data.assumptions,
                 decodedVehicle,
@@ -422,6 +349,115 @@ export function EvaluationWorkspace({
       cancelled = true;
     };
   }, []);
+
+
+  useEffect(() => {
+    if (initialSavedEvaluationId || initialSavedPayload) {
+      setDraftReady(true);
+      return;
+    }
+
+    try {
+      const rawDraft =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(draftStorageKey)
+          : null;
+
+      if (!rawDraft) {
+        setDraftReady(true);
+        return;
+      }
+
+      const draft = JSON.parse(rawDraft);
+
+      if (typeof draft.vin === "string") {
+        setVin(draft.vin);
+      }
+
+      if (typeof draft.auctionSite === "string") {
+        setAuctionSite(draft.auctionSite);
+      }
+
+      if (
+        typeof draft.finalTargetOverride === "number" ||
+        draft.finalTargetOverride === null
+      ) {
+        setFinalTargetOverride(draft.finalTargetOverride);
+      }
+
+      if (draft.decodedVehicle) {
+        setDecodedVehicle(draft.decodedVehicle);
+      }
+
+      if (typeof draft.targetMileage === "number") {
+        setTargetMileage(draft.targetMileage);
+      }
+
+      if (draft.evaluation) {
+        setEvaluation(draft.evaluation);
+      }
+
+      if (Array.isArray(draft.comps)) {
+        setComps(draft.comps);
+      }
+
+      if (Array.isArray(draft.selectedConditions)) {
+        setSelectedConditions(draft.selectedConditions);
+      }
+
+      if (typeof draft.notes === "string") {
+        setNotes(draft.notes);
+      }
+
+      setMarketCheckStatus(draft.marketCheckStatus || "");
+      setMarketCheckSearchMeta(draft.marketCheckSearchMeta || null);
+    } catch (error) {
+      console.error("Failed to load local evaluator draft:", error);
+    } finally {
+      setDraftReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || initialSavedEvaluationId) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          vin,
+          auctionSite,
+          finalTargetOverride,
+          decodedVehicle,
+          targetMileage,
+          evaluation,
+          comps,
+          selectedConditions,
+          notes,
+          marketCheckStatus,
+          marketCheckSearchMeta,
+        })
+      );
+    } catch (error) {
+      console.error("Failed to save local evaluator draft:", error);
+    }
+  }, [
+    vin,
+    auctionSite,
+    finalTargetOverride,
+    decodedVehicle,
+    targetMileage,
+    evaluation,
+    comps,
+    selectedConditions,
+    notes,
+    marketCheckStatus,
+    marketCheckSearchMeta,
+    draftReady,
+    initialSavedEvaluationId,
+  ]);
 
   const compSummary = useMemo(
     () =>
@@ -497,11 +533,11 @@ export function EvaluationWorkspace({
     [valuationInput]
   );
 
-  const vehicleYear = decodedVehicle?.year || "2020";
-  const vehicleMake = decodedVehicle?.make || "Audi";
-  const vehicleModel = decodedVehicle?.model || "Q7";
-  const vehicleTrim = decodedVehicle?.trim || "quattro Premium Plus";
-  const vehicleBodyClass = decodedVehicle?.bodyClass || "SUV / 4D";
+  const vehicleYear = decodedVehicle?.year || "";
+  const vehicleMake = decodedVehicle?.make || "";
+  const vehicleModel = decodedVehicle?.model || "";
+  const vehicleTrim = decodedVehicle?.trim || "";
+  const vehicleBodyClass = decodedVehicle?.bodyClass || "";
 
   const vehicleTitle =
     [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
@@ -770,6 +806,7 @@ export function EvaluationWorkspace({
     setComps([]);
     setSelectedConditions([]);
     setMarketCheckStatus("");
+    setMarketCheckSearchMeta(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
     setNotes("");
@@ -948,6 +985,30 @@ export function EvaluationWorkspace({
     }
   }
 
+
+  function clearLocalDraft() {
+    try {
+      window.localStorage.removeItem(draftStorageKey);
+    } catch (error) {
+      console.error("Failed to clear local evaluator draft:", error);
+    }
+
+    setVin("");
+    setAuctionSite("ACV Auctions");
+    setFinalTargetOverride(null);
+    setDecodedVehicle(null);
+    setTargetMileage(initialTargetMileage);
+    setEvaluation(initialEvaluation);
+    setComps(initialComps);
+    setSelectedConditions(initialSelectedConditions);
+    setMarketCheckStatus("");
+    setMarketCheckSearchMeta(null);
+    setSavedEvaluationId(null);
+    setSaveStatus("");
+    setNotes("");
+    setAppliedVehicleProfile(null);
+  }
+
   const decisionTone =
     valuation.decision === "Pass"
       ? "bg-red-600"
@@ -1003,13 +1064,6 @@ export function EvaluationWorkspace({
 
               <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={pullMarketCheckComps}
-                  disabled={marketCheckLoading}
-                  className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
-                >
-                  {marketCheckLoading ? "Pulling Comps..." : "Pull MarketCheck Comps"}
-                </button>
-                <button
                   type="button"
                   onClick={saveEvaluation}
                   disabled={saveLoading}
@@ -1017,12 +1071,20 @@ export function EvaluationWorkspace({
                 >
                   {saveLoading ? "Saving..." : savedEvaluationId ? "Update Evaluation" : "Save Evaluation"}
                 </button>
+                <button
+                  type="button"
+                  onClick={clearLocalDraft}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  Clear Draft
+                </button>
               </div>
             </div>
 
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_1.15fr_1fr]">
                 <SectionCard title="1. Vehicle Basics">
+                  <div className="space-y-5">
                     <div className="space-y-4">
                       <FormRow label="VIN">
                         <div className="space-y-2">
@@ -1032,6 +1094,7 @@ export function EvaluationWorkspace({
                               onChange={(event) =>
                                 setVin(event.target.value.toUpperCase())
                               }
+                              placeholder="Enter VIN"
                               className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                             />
                             <button
@@ -1053,18 +1116,18 @@ export function EvaluationWorkspace({
                       </FormRow>
 
                       <FormRow label="Mileage">
-                          <input
-                            ref={mileageInputRef}
-                            type="text"
-                            inputMode="numeric"
-                            value={formatNumberInput(targetMileage)}
-                            onFocus={(event) => event.currentTarget.select()}
-                            onChange={(event) =>
-                              setTargetMileage(toNumber(event.target.value))
-                            }
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                          />
-                        </FormRow>
+                        <input
+                          ref={mileageInputRef}
+                          type="text"
+                          inputMode="numeric"
+                          value={formatNumberInput(targetMileage)}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onChange={(event) =>
+                            setTargetMileage(toNumber(event.target.value))
+                          }
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                        />
+                      </FormRow>
 
                       <FormRow label="Auction Site">
                         <select
@@ -1083,37 +1146,65 @@ export function EvaluationWorkspace({
                       </FormRow>
 
                       <FormRow label="Current Bid">
-                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <span className="pl-3 text-sm text-slate-400">$</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={formatNumberInput(valuationInput.currentBid)}
-                              onFocus={(event) => event.currentTarget.select()}
-                              onChange={(event) =>
-                                updateEvaluationField(
-                                  "currentBid",
-                                  toNumber(event.target.value)
-                                )
-                              }
-                              className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
-                            />
+                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                          <span className="pl-3 text-sm text-slate-400">$</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formatNumberInput(valuationInput.currentBid)}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onChange={(event) =>
+                              updateEvaluationField(
+                                "currentBid",
+                                toNumber(event.target.value)
+                              )
+                            }
+                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                          />
+                        </div>
+                      </FormRow>
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-5">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-bold text-slate-950">
+                            Market Pricing
+                          </h3>
+
+                          {marketCheckStatus ? (
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                              {marketCheckStatus}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={pullMarketCheckComps}
+                          disabled={marketCheckLoading}
+                          className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
+                        >
+                          {marketCheckLoading ? "Pulling..." : "Pull Comps"}
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        <FormRow label="Market Comp Avg">
+                          <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
+                            {money(compSummary.averageAdjusted)}
                           </div>
                         </FormRow>
 
-                      <FormRow label="Target Resale Used">
-                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
-                          {money(targetResaleUsed)}
-                        </div>
-                      </FormRow>
-
-                      <FormRow label="Final Target">
+                        <FormRow label="Final Retail Target">
                           <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                             <span className="pl-3 text-sm text-slate-400">$</span>
                             <input
                               type="text"
                               inputMode="numeric"
-                              value={formatNumberInput(finalTargetOverride ?? targetResaleUsed)}
+                              value={formatNumberInput(
+                                finalTargetOverride ?? targetResaleUsed
+                              )}
                               onFocus={(event) => event.currentTarget.select()}
                               onChange={(event) =>
                                 setFinalTargetOverride(toNumber(event.target.value))
@@ -1123,7 +1214,7 @@ export function EvaluationWorkspace({
                           </div>
                         </FormRow>
 
-                      <FormRow label="Target Profit">
+                        <FormRow label="Target Profit">
                           <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                             <span className="pl-3 text-sm text-slate-400">$</span>
                             <input
@@ -1141,21 +1232,9 @@ export function EvaluationWorkspace({
                             />
                           </div>
                         </FormRow>
-
-                      <label className="flex items-center gap-2 pt-2 text-sm font-semibold text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(evaluation.hasAvoidFlag)}
-                          onChange={(event) =>
-                            updateEvaluationField(
-                              "hasAvoidFlag",
-                              event.target.checked
-                            )
-                          }
-                        />
-                        Manual avoid flag
-                      </label>
+                      </div>
                     </div>
+                  </div>
                   </SectionCard>
 
                 <VinDecodeCard
@@ -1343,7 +1422,9 @@ export function EvaluationWorkspace({
                 <SectionCard title="7. Deal Notes">
                   <textarea
                     className="h-28 w-full rounded-xl border border-slate-200 p-3 text-sm"
-                    defaultValue="Clean title Q7 with good service history. Minor cosmetic wear, needs tires. Strong local demand for this trim."
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Add auction notes, recon concerns, seller comments, or follow-up items..."
                   />
                   <button className="mt-3 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
                     Save Note
