@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
+import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Assumptions } from "@/types/assumptions";
@@ -52,32 +53,7 @@ export default async function AssumptionsPage() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 bg-slate-950 p-5 text-white lg:block">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400 text-xl font-black text-slate-950">
-              M
-            </div>
-            <div>
-              <div className="text-lg font-bold leading-tight">Mindful</div>
-              <div className="text-lg font-bold leading-tight">Motors</div>
-            </div>
-          </div>
-
-          <nav className="space-y-2 text-sm">
-            <Link
-              href="/"
-              className="block rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5"
-            >
-              Auction Evaluator
-            </Link>
-            <Link
-              href="/assumptions"
-              className="block rounded-xl bg-cyan-500/20 px-4 py-3 text-cyan-200"
-            >
-              Rules & Defaults
-            </Link>
-          </nav>
-        </aside>
+        <AppSidebar active="assumptions" />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">

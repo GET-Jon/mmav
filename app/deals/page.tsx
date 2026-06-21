@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -90,13 +91,24 @@ export default async function DealsPage() {
   const evaluations = await getSavedEvaluations();
 
   return (
-    <main className="min-h-screen bg-slate-100 p-6 text-slate-950">
+    <main className="min-h-screen bg-slate-100 text-slate-950">
+      <div className="flex min-h-screen">
+        <AppSidebar active="saved" />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
+            <div>
+              <div className="text-xl font-bold">Saved Searches</div>
+              <div className="text-sm text-slate-500">
+                Saved auction evaluations from Supabase
+              </div>
+            </div>
+          </header>
+
+          <div className="flex-1 p-6">
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <Link href="/" className="mb-2 block text-sm font-semibold text-blue-700">
-            Back to Auction Evaluator
-          </Link>
-          <h1 className="text-3xl font-bold tracking-tight">Deal Log</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Saved Searches</h1>
           <p className="mt-1 text-slate-600">
             Saved auction evaluations from Supabase.
           </p>
@@ -178,6 +190,9 @@ export default async function DealsPage() {
             ) : null}
           </tbody>
         </table>
+      </div>
+          </div>
+        </div>
       </div>
     </main>
   );

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
+import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateValuation } from "@/lib/valuation";
@@ -902,45 +903,7 @@ export function EvaluationWorkspace({
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 bg-slate-950 p-5 text-white lg:block">
-          <div className="mb-10 flex items-center justify-center">
-            <img
-              src="/mindful-badge-sm.png"
-              alt="Mindful Motors"
-              className="h-16 w-auto object-contain"
-            />
-          </div>
-
-          <nav className="space-y-2 text-sm">
-            <Link
-              href="/"
-              className="block rounded-xl bg-cyan-500/20 px-4 py-3 text-cyan-200"
-            >
-              Auction Evaluator
-            </Link>
-            <div className="rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5">
-              Market Comps
-            </div>
-            <div className="rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5">
-              Vehicles
-            </div>
-            <Link
-              href="/deals"
-              className="block rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5"
-            >
-              Deal Log
-            </Link>
-            <Link
-              href="/assumptions"
-              className="block rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5"
-            >
-              Rules & Defaults
-            </Link>
-            <div className="rounded-xl px-4 py-3 text-slate-300 hover:bg-white/5">
-              Settings
-            </div>
-          </nav>
-        </aside>
+        <AppSidebar active="evaluator" />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
@@ -1309,7 +1272,8 @@ export function EvaluationWorkspace({
                 </SectionCard>
               </div>
 
-              <SectionCard
+              <div id="market-comps" className="scroll-mt-6">
+                <SectionCard
                   title="4. Market Comps"
                   action={
                     marketCheckStatus ? (
@@ -1353,6 +1317,7 @@ export function EvaluationWorkspace({
                     onToggleIncluded={toggleCompIncluded}
                   />
                 </SectionCard>
+              </div>
             </div>
           </div>
         </div>
