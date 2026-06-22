@@ -732,7 +732,7 @@ export async function POST(request: Request) {
         const summary = buildCompSummary(progressiveSearches);
         const searchedMinimumRegions = regionIndex + 1 >= MIN_INITIAL_REGIONS;
 
-        if (searchedMinimumRegions && summary.comps.length >= MIN_USABLE_COMPS) {
+        if (summary.comps.length >= MIN_USABLE_COMPS) {
           break;
         }
       }
