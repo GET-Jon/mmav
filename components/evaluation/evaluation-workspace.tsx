@@ -39,6 +39,22 @@ const initialEvaluation: ValuationInput = {
 
 const initialSelectedConditions: string[] = [];
 
+type ManualVehicleBasics = {
+  year: string;
+  make: string;
+  model: string;
+  trim: string;
+  bodyClass: string;
+};
+
+const initialManualVehicle: ManualVehicleBasics = {
+  year: "",
+  make: "",
+  model: "",
+  trim: "",
+  bodyClass: "",
+};
+
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -201,6 +217,7 @@ type SavedEvaluationPayload = {
   auctionSite?: string;
   finalTargetOverride?: number | null;
   decodedVehicle?: VinDecodeResult | null;
+  manualVehicle?: ManualVehicleBasics;
   targetMileage?: number;
   evaluation?: ValuationInput;
   comps?: MarketComp[];
@@ -245,6 +262,10 @@ export function EvaluationWorkspace({
 
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null
+  );
+
+  const [manualVehicle, setManualVehicle] = useState<ManualVehicleBasics>(
+    initialSavedPayload?.manualVehicle || initialManualVehicle
   );
 
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
@@ -389,6 +410,10 @@ export function EvaluationWorkspace({
         setDecodedVehicle(draft.decodedVehicle);
       }
 
+      if (draft.manualVehicle) {
+        setManualVehicle(draft.manualVehicle);
+      }
+
       if (typeof draft.targetMileage === "number") {
         setTargetMileage(draft.targetMileage);
       }
@@ -431,6 +456,7 @@ export function EvaluationWorkspace({
           auctionSite,
           finalTargetOverride,
           decodedVehicle,
+          manualVehicle,
           targetMileage,
           evaluation,
           comps,
@@ -448,6 +474,7 @@ export function EvaluationWorkspace({
     auctionSite,
     finalTargetOverride,
     decodedVehicle,
+    manualVehicle,
     targetMileage,
     evaluation,
     comps,
@@ -533,17 +560,18 @@ export function EvaluationWorkspace({
     [valuationInput]
   );
 
-  const vehicleYear = decodedVehicle?.year || "";
-  const vehicleMake = decodedVehicle?.make || "";
-  const vehicleModel = decodedVehicle?.model || "";
-  const vehicleTrim = decodedVehicle?.trim || "";
-  const vehicleBodyClass = decodedVehicle?.bodyClass || "";
+  const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
+  const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
+  const vehicleModel = decodedVehicle?.model || manualVehicle.model || "";
+  const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
+  const vehicleBodyClass =
+    decodedVehicle?.bodyClass || manualVehicle.bodyClass || "";
 
   const vehicleTitle =
     [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
       .filter(Boolean)
       .join(" ")
-      .trim() || "Auction Vehicle";
+      .trim() || "New Auction Evaluation";
 
   function normalizeMatchText(value: string | number | null | undefined) {
     return String(value || "").toLowerCase();
@@ -671,6 +699,16 @@ export function EvaluationWorkspace({
         : "No enabled vehicle rule matched; using first cost profile.",
     };
   }
+  function updateManualVehicleField(
+    key: keyof ManualVehicleBasics,
+    value: string
+  ) {
+    setManualVehicle((previous) => ({
+      ...previous,
+      [key]: key === "make" ? value.toUpperCase() : value,
+    }));
+  }
+
   function updateEvaluationField(
     key: keyof Omit<ValuationInput, "costs">,
     value: number | boolean
@@ -765,6 +803,7 @@ export function EvaluationWorkspace({
 
   function handleDecodedVinAndReset(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
+    setManualVehicle(initialManualVehicle);
     setVin(decoded.vin);
 
     const profileMatch = getAppliedVehicleProfile(activeAssumptions, decoded, 0);
@@ -814,6 +853,7 @@ export function EvaluationWorkspace({
 
   function resetForDecodedVin(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
+    setManualVehicle(initialManualVehicle);
     setVin(decoded.vin);
 
     setEvaluation({
@@ -860,6 +900,13 @@ export function EvaluationWorkspace({
     const year = vehicleYear;
     const make = vehicleMake;
     const model = vehicleModel;
+
+    if (!year || !make || !model) {
+      setMarketCheckStatus(
+        "Enter a VIN or enter Year, Make, and Model before pulling comps."
+      );
+      return;
+    }
 
     setMarketCheckLoading(true);
     setMarketCheckStatus("Searching MarketCheck comps...");
@@ -954,6 +1001,7 @@ export function EvaluationWorkspace({
           targetResaleFromComps: targetResaleUsed,
           finalTargetUsed,
           decodedVehicle,
+          manualVehicle,
           targetMileage,
           evaluation,
           valuationInput,
@@ -997,6 +1045,7 @@ export function EvaluationWorkspace({
     setAuctionSite("ACV Auctions");
     setFinalTargetOverride(null);
     setDecodedVehicle(null);
+    setManualVehicle(initialManualVehicle);
     setTargetMileage(initialTargetMileage);
     setEvaluation(initialEvaluation);
     setComps(initialComps);
@@ -1114,6 +1163,89 @@ export function EvaluationWorkspace({
                           ) : null}
                         </div>
                       </FormRow>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-bold text-slate-950">
+                              No VIN? Enter vehicle manually
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Year, make, and model are required to pull comps.
+                              Trim is optional but improves match quality.
+                            </div>
+                          </div>
+
+                          {decodedVehicle ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">
+                              VIN decoded
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block">
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Year
+                            </div>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={manualVehicle.year}
+                              onChange={(event) =>
+                                updateManualVehicleField("year", event.target.value)
+                              }
+                              placeholder="2020"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Make
+                            </div>
+                            <input
+                              type="text"
+                              value={manualVehicle.make}
+                              onChange={(event) =>
+                                updateManualVehicleField("make", event.target.value)
+                              }
+                              placeholder="BMW"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Model
+                            </div>
+                            <input
+                              type="text"
+                              value={manualVehicle.model}
+                              onChange={(event) =>
+                                updateManualVehicleField("model", event.target.value)
+                              }
+                              placeholder="X5"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Trim
+                            </div>
+                            <input
+                              type="text"
+                              value={manualVehicle.trim}
+                              onChange={(event) =>
+                                updateManualVehicleField("trim", event.target.value)
+                              }
+                              placeholder="xDrive40i"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                            />
+                          </label>
+                        </div>
+                      </div>
 
                       <FormRow label="Mileage">
                         <input

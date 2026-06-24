@@ -25,19 +25,20 @@ export async function POST(request: Request) {
     const id = toStringOrNull(body.id);
 
     const decodedVehicle = body.decodedVehicle || {};
+    const manualVehicle = body.manualVehicle || {};
     const valuationInput = body.valuationInput || {};
     const valuation = body.valuation || {};
 
     const row = {
       status: body.status || "watching",
 
-      vin: toStringOrNull(decodedVehicle.vin),
+      vin: toStringOrNull(decodedVehicle.vin || body.vin),
       vehicle_title: toStringOrNull(body.vehicleTitle),
 
-      year: toInteger(decodedVehicle.year),
-      make: toStringOrNull(decodedVehicle.make),
-      model: toStringOrNull(decodedVehicle.model),
-      trim: toStringOrNull(decodedVehicle.trim),
+      year: toInteger(decodedVehicle.year || manualVehicle.year),
+      make: toStringOrNull(decodedVehicle.make || manualVehicle.make),
+      model: toStringOrNull(decodedVehicle.model || manualVehicle.model),
+      trim: toStringOrNull(decodedVehicle.trim || manualVehicle.trim),
       mileage: toInteger(body.targetMileage),
 
       auction_site: toStringOrNull(body.auctionSite),
