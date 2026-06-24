@@ -1164,89 +1164,6 @@ export function EvaluationWorkspace({
                         </div>
                       </FormRow>
 
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="mb-3 flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-bold text-slate-950">
-                              No VIN? Enter vehicle manually
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              Year, make, and model are required to pull comps.
-                              Trim is optional but improves match quality.
-                            </div>
-                          </div>
-
-                          {decodedVehicle ? (
-                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">
-                              VIN decoded
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="block">
-                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Year
-                            </div>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={manualVehicle.year}
-                              onChange={(event) =>
-                                updateManualVehicleField("year", event.target.value)
-                              }
-                              placeholder="2020"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                            />
-                          </label>
-
-                          <label className="block">
-                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Make
-                            </div>
-                            <input
-                              type="text"
-                              value={manualVehicle.make}
-                              onChange={(event) =>
-                                updateManualVehicleField("make", event.target.value)
-                              }
-                              placeholder="BMW"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                            />
-                          </label>
-
-                          <label className="block">
-                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Model
-                            </div>
-                            <input
-                              type="text"
-                              value={manualVehicle.model}
-                              onChange={(event) =>
-                                updateManualVehicleField("model", event.target.value)
-                              }
-                              placeholder="X5"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                            />
-                          </label>
-
-                          <label className="block">
-                            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Trim
-                            </div>
-                            <input
-                              type="text"
-                              value={manualVehicle.trim}
-                              onChange={(event) =>
-                                updateManualVehicleField("trim", event.target.value)
-                              }
-                              placeholder="xDrive40i"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                            />
-                          </label>
-                        </div>
-                      </div>
-
                       <FormRow label="Mileage">
                         <input
                           ref={mileageInputRef}
@@ -1371,6 +1288,8 @@ export function EvaluationWorkspace({
 
                 <VinDecodeCard
                   decoded={decodedVehicle}
+                  manualVehicle={manualVehicle}
+                  onManualVehicleChange={updateManualVehicleField}
                   appliedVehicleProfile={appliedVehicleProfile}
                   onReapplyVehicleProfile={reapplyVehicleProfile}
                 />
