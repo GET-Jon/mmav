@@ -81,14 +81,32 @@ async function getSavedEvaluations() {
     .limit(50);
 
   if (error) {
-    throw new Error(error.message);
+    return {
+      evaluations: [] as SavedEvaluation[],
+      error: error.message,
+    };
   }
 
-  return data as SavedEvaluation[];
+  return {
+    evaluations: data as SavedEvaluation[],
+    error: null as string | null,
+  };
 }
 
 export default async function DealsPage() {
-  const evaluations = await getSavedEvaluations();
+  let evaluations: SavedEvaluation[] = [];
+  let loadError: string | null = null;
+
+  try {
+    const result = await getSavedEvaluations();
+    evaluations = result.evaluations;
+    loadError = result.error;
+  } catch (error) {
+    loadError =
+      error instanceof Error
+        ? error.message
+        : "Saved Searches failed to load.";
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -118,6 +136,12 @@ export default async function DealsPage() {
           {evaluations.length} saved evaluations
         </div>
       </div>
+
+      {loadError ? (
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          Saved Searches could not load: {loadError}
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
