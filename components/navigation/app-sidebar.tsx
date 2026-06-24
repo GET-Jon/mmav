@@ -33,10 +33,6 @@ export function AppSidebar({ active = "evaluator" }: AppSidebarProps) {
           Market Comps
         </Link>
 
-        <div className="rounded-xl px-4 py-3 text-slate-500">
-          Vehicles
-        </div>
-
         <Link href="/deals" className={navClass(active === "saved")}>
           Saved Searches
         </Link>
