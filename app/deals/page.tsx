@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
+import { DealStatusSelect } from "@/components/deals/deal-status-select";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -118,7 +119,7 @@ export default async function DealsPage() {
             <div>
               <div className="text-xl font-bold">Saved Searches</div>
               <div className="text-sm text-slate-500">
-                Saved auction evaluations from Supabase
+                Saved auction evaluations and active deal pipeline
               </div>
             </div>
           </header>
@@ -128,7 +129,7 @@ export default async function DealsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Saved Searches</h1>
           <p className="mt-1 text-slate-600">
-            Saved auction evaluations from Supabase.
+            Track watched vehicles, bids, passes, wins, losses, and purchases.
           </p>
         </div>
 
@@ -148,6 +149,7 @@ export default async function DealsPage() {
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th className="px-4 py-3">Saved</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Vehicle</th>
               <th className="px-4 py-3">VIN</th>
               <th className="px-4 py-3">Mileage</th>
@@ -165,6 +167,12 @@ export default async function DealsPage() {
               <tr key={evaluation.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 text-slate-500">
                   {formatDate(evaluation.updated_at)}
+                </td>
+                <td className="px-4 py-3">
+                  <DealStatusSelect
+                    evaluationId={evaluation.id}
+                    initialStatus={evaluation.status}
+                  />
                 </td>
                 <td className="px-4 py-3 font-semibold">
                   <Link
@@ -207,7 +215,7 @@ export default async function DealsPage() {
 
             {evaluations.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-slate-500" colSpan={10}>
+                <td className="px-4 py-8 text-center text-slate-500" colSpan={11}>
                   No saved evaluations yet.
                 </td>
               </tr>
