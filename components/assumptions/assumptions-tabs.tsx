@@ -980,9 +980,12 @@ export function AssumptionsTabs({
 
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Mileage Adjustment / 1k Miles
-              </label>
+              <FieldLabelWithHelp
+                label="Mileage Adjustment / 1k Miles"
+                description="Adjusts comparable vehicle pricing based on mileage difference. If a comp has meaningfully more or fewer miles than the target vehicle, this setting helps normalize the comp value."
+                suggestedRange="$75–$250 per 1,000 miles depending on segment"
+                usedIn="Market comp adjustment and resale target"
+              />
               <NumberInput
                 value={draft.compSettings.mileageAdjustmentPerThousand}
                 onChange={(value) =>
@@ -993,9 +996,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Fast Sale Discount
-              </label>
+              <FieldLabelWithHelp
+                label="Fast Sale Discount"
+                description="Reduces the comp-derived resale target to estimate a faster, more conservative exit price instead of assuming full retail ask."
+                suggestedRange="3%–12%"
+                usedIn="Fast sale target and conservative valuation"
+              />
               <NumberInput
                 value={draft.compSettings.fastSaleDiscount * 100}
                 onChange={(value) =>
@@ -1007,9 +1013,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Minimum Quality Score
-              </label>
+              <FieldLabelWithHelp
+                label="Minimum Quality Score"
+                description="Sets the minimum comp quality score required before a comp can be automatically trusted. Higher scores mean cleaner comps but fewer included vehicles."
+                suggestedRange="50–70 out of 100"
+                usedIn="Automatic comp inclusion and confidence"
+              />
               <NumberInput
                 value={draft.compSettings.minimumQualityScore}
                 onChange={(value) =>
@@ -1019,9 +1028,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Minimum Medium Confidence Comps
-              </label>
+              <FieldLabelWithHelp
+                label="Minimum Medium Confidence Comps"
+                description="The number of usable comps needed before the evaluator can treat the comp set as medium confidence."
+                suggestedRange="3–5 comps"
+                usedIn="Market confidence grade"
+              />
               <NumberInput
                 value={draft.compSettings.minimumCompsForMediumConfidence}
                 onChange={(value) =>
@@ -1031,9 +1043,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Minimum High Confidence Comps
-              </label>
+              <FieldLabelWithHelp
+                label="Minimum High Confidence Comps"
+                description="The number of usable comps needed before the evaluator can treat the comp set as high confidence, assuming the spread is also tight enough."
+                suggestedRange="5–8 comps"
+                usedIn="Market confidence grade"
+              />
               <NumberInput
                 value={draft.compSettings.minimumCompsForHighConfidence}
                 onChange={(value) =>
@@ -1043,9 +1058,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Max Spread for High Confidence
-              </label>
+              <FieldLabelWithHelp
+                label="Max Spread for High Confidence"
+                description="Limits how far apart the selected comps can be while still earning a high-confidence grade. A wide spread means the market is less certain."
+                suggestedRange="10%–20%"
+                usedIn="High-confidence comp validation"
+              />
               <NumberInput
                 value={draft.compSettings.maxSpreadForHighConfidence * 100}
                 onChange={(value) =>
