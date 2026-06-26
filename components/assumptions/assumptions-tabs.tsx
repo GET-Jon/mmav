@@ -925,11 +925,46 @@ export function AssumptionsTabs({
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">Category</th>
-                  <th className="px-3 py-3">Condition</th>
-                  <th className="px-3 py-3">Risk Points</th>
-                  <th className="px-3 py-3">Reserve Add</th>
-                  <th className="px-3 py-3">Avoid</th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Category"
+                      description="Groups related risk rules together, such as title, mechanical, cosmetic, tires, warning lights, or structural concerns."
+                      suggestedRange="Use clear operating categories"
+                      usedIn="Condition checklist organization"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Condition"
+                      description="The specific condition, disclosure, or issue that can be selected during evaluation."
+                      suggestedRange="Use short, clear labels operators can recognize quickly"
+                      usedIn="Condition checklist and risk scoring"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Risk Points"
+                      description="Adds risk score when this condition is present. Higher points push the vehicle toward Medium, High, or Avoid risk."
+                      suggestedRange="1–3 minor, 4–7 meaningful, 8+ severe"
+                      usedIn="Risk grade assignment"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Reserve Add"
+                      description="Adds extra dollars to the risk reserve when this issue is present, protecting margin against unknown repair or resale risk."
+                      suggestedRange="$0–$5,000+ depending on severity"
+                      usedIn="All-in cost and Max Smart Bid"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Avoid"
+                      description="Marks this issue as serious enough to recommend avoiding the vehicle, regardless of total risk score."
+                      suggestedRange="Use only for hard-stop issues"
+                      usedIn="Avoid / Pass decision logic"
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
