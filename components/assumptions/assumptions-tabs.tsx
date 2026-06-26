@@ -205,44 +205,27 @@ function TableHeaderWithHelp({
   suggestedRange: string;
   usedIn: string;
 }) {
+  const tooltip = `${label}
+
+${description}
+
+Suggested range: ${suggestedRange}
+
+Used in: ${usedIn}`;
+
   return (
     <div className="flex items-center gap-2">
       <span>{label}</span>
-
-      <div className="group relative inline-flex normal-case">
-        <button
-          type="button"
-          aria-label={`More information about ${label}`}
-          className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-black text-slate-500 shadow-sm hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        >
-          i
-        </button>
-
-        <div className="pointer-events-none absolute bottom-6 left-1/2 z-40 hidden w-80 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-4 text-left text-xs shadow-xl group-hover:block group-focus-within:block">
-          <div className="text-sm font-bold text-slate-950">{label}</div>
-          <div className="mt-2 leading-5 text-slate-600">{description}</div>
-
-          <div className="mt-3 rounded-lg bg-slate-50 p-3">
-            <div className="font-bold uppercase tracking-wide text-slate-500">
-              Suggested Range
-            </div>
-            <div className="mt-1 font-semibold text-slate-800">
-              {suggestedRange}
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg bg-blue-50 p-3">
-            <div className="font-bold uppercase tracking-wide text-blue-500">
-              Used In
-            </div>
-            <div className="mt-1 font-semibold text-blue-800">{usedIn}</div>
-          </div>
-        </div>
-      </div>
+      <span
+        title={tooltip}
+        aria-label={tooltip}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-black text-slate-500 shadow-sm"
+      >
+        i
+      </span>
     </div>
   );
 }
-
 
 export function AssumptionsTabs({
   assumptions,
