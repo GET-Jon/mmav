@@ -145,6 +145,55 @@ function PlainRuleRow({
   );
 }
 
+function FieldLabelWithHelp({
+  label,
+  description,
+  suggestedRange,
+  usedIn,
+}: {
+  label: string;
+  description: string;
+  suggestedRange: string;
+  usedIn: string;
+}) {
+  return (
+    <div className="mb-1 flex items-center gap-2">
+      <label className="text-sm font-semibold text-slate-600">{label}</label>
+
+      <div className="group relative inline-flex">
+        <button
+          type="button"
+          aria-label={`More information about ${label}`}
+          className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-black text-slate-500 shadow-sm hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        >
+          i
+        </button>
+
+        <div className="pointer-events-none absolute bottom-7 left-1/2 z-30 hidden w-80 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-4 text-left text-xs shadow-xl group-hover:block group-focus-within:block">
+          <div className="text-sm font-bold text-slate-950">{label}</div>
+          <div className="mt-2 leading-5 text-slate-600">{description}</div>
+
+          <div className="mt-3 rounded-lg bg-slate-50 p-3">
+            <div className="font-bold uppercase tracking-wide text-slate-500">
+              Suggested Range
+            </div>
+            <div className="mt-1 font-semibold text-slate-800">
+              {suggestedRange}
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg bg-blue-50 p-3">
+            <div className="font-bold uppercase tracking-wide text-blue-500">
+              Used In
+            </div>
+            <div className="mt-1 font-semibold text-blue-800">{usedIn}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 export function AssumptionsTabs({
   assumptions,
@@ -594,9 +643,12 @@ export function AssumptionsTabs({
 
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Safe Bid Discount
-              </label>
+              <FieldLabelWithHelp
+                label="Safe Bid Discount"
+                description="Pulls Safe Bid below Max Smart Bid to create a conservative buy number."
+                suggestedRange="3%–10%"
+                usedIn="Safe Bid calculation"
+              />
               <NumberInput
                 value={draft.bidSettings.safeBidDiscount * 100}
                 onChange={(value) => updateBid("safeBidDiscount", value / 100)}
@@ -606,9 +658,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Stretch Bid Premium
-              </label>
+              <FieldLabelWithHelp
+                label="Stretch Bid Premium"
+                description="Allows a controlled amount above Max Smart Bid when the car is worth chasing."
+                suggestedRange="2%–8%"
+                usedIn="Stretch Bid calculation"
+              />
               <NumberInput
                 value={draft.bidSettings.stretchBidPremium * 100}
                 onChange={(value) => updateBid("stretchBidPremium", value / 100)}
@@ -618,9 +673,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Minimum Target Profit
-              </label>
+              <FieldLabelWithHelp
+                label="Minimum Target Profit"
+                description="Sets the minimum gross profit the evaluator should require before a deal can look attractive."
+                suggestedRange="$2,000–$6,000 depending on vehicle type"
+                usedIn="Target profit and Max Smart Bid"
+              />
               <NumberInput
                 value={draft.bidSettings.minimumTargetProfit}
                 onChange={(value) => updateBid("minimumTargetProfit", value)}
@@ -629,9 +687,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                High Risk Profit Add
-              </label>
+              <FieldLabelWithHelp
+                label="High Risk Profit Add"
+                description="Adds extra required profit when the vehicle lands in the high-risk range."
+                suggestedRange="$1,000–$5,000"
+                usedIn="High-risk bid adjustment"
+              />
               <NumberInput
                 value={draft.bidSettings.highRiskProfitAdd}
                 onChange={(value) => updateBid("highRiskProfitAdd", value)}
@@ -640,9 +701,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Medium Risk Threshold
-              </label>
+              <FieldLabelWithHelp
+                label="Medium Risk Threshold"
+                description="Risk score where the evaluator begins treating a vehicle as medium risk."
+                suggestedRange="3–6 risk points"
+                usedIn="Risk grade assignment"
+              />
               <NumberInput
                 value={draft.bidSettings.mediumRiskThreshold}
                 onChange={(value) => updateBid("mediumRiskThreshold", value)}
@@ -650,9 +714,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                High Risk Threshold
-              </label>
+              <FieldLabelWithHelp
+                label="High Risk Threshold"
+                description="Risk score where the evaluator begins treating a vehicle as high risk and may require additional profit."
+                suggestedRange="7–10 risk points"
+                usedIn="Risk grade and high-risk profit add"
+              />
               <NumberInput
                 value={draft.bidSettings.highRiskThreshold}
                 onChange={(value) => updateBid("highRiskThreshold", value)}
@@ -660,9 +727,12 @@ export function AssumptionsTabs({
             </div>
 
             <div>
-              <label className="text-sm font-semibold text-slate-600">
-                Avoid Risk Threshold
-              </label>
+              <FieldLabelWithHelp
+                label="Avoid Risk Threshold"
+                description="Risk score where the evaluator should strongly recommend avoiding the vehicle unless manually overridden."
+                suggestedRange="10–15 risk points"
+                usedIn="Avoid / Pass logic"
+              />
               <NumberInput
                 value={draft.bidSettings.avoidRiskThreshold}
                 onChange={(value) => updateBid("avoidRiskThreshold", value)}
