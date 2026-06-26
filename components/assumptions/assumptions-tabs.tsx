@@ -1438,9 +1438,23 @@ export function AssumptionsTabs({
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">Market</th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Market"
+                      description="The plain-English name of the region being searched."
+                      suggestedRange="Use recognizable market names like Charleston, Columbia, Charlotte, Atlanta, Savannah"
+                      usedIn="Search log, region order, and operator review"
+                    />
+                  </th>
                   <th className="px-3 py-3">ZIP</th>
-                  <th className="px-3 py-3">Enabled</th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Enabled"
+                      description="Controls whether this regional market is included when pulling MarketCheck comps."
+                      suggestedRange="Enable only the regions you actually want searched"
+                      usedIn="MarketCheck comp search"
+                    />
+                  </th>
                   <th className="w-20 px-3 py-3 text-center">Order</th>
                 </tr>
               </thead>
