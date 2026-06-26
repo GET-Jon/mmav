@@ -258,15 +258,41 @@ export function AssumptionsTabs({
     const [saveLoading, setSaveLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState("");
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "overview", label: "Overview" },
-    { id: "bid", label: "Bid Settings" },
-    { id: "costs", label: "Cost Defaults" },
-    { id: "risk", label: "Risk Rules" },
-    { id: "auctionFees", label: "Auction Fees" },
-    { id: "comps", label: "Comp Settings" },
-      { id: "vehicleRules", label: "Vehicle Rules" },
-    { id: "regional", label: "Regional Search" },
+  const tabGroups: {
+    label: string;
+    description: string;
+    tabs: { id: Tab; label: string }[];
+  }[] = [
+    {
+      label: "Overview",
+      description: "Plain-English summary of the current rule profile.",
+      tabs: [{ id: "overview", label: "Overview" }],
+    },
+    {
+      label: "Valuation",
+      description: "Controls what we can pay, required profit, and default costs.",
+      tabs: [
+        { id: "bid", label: "Bid Settings" },
+        { id: "costs", label: "Cost Defaults" },
+        { id: "auctionFees", label: "Auction Fees" },
+      ],
+    },
+    {
+      label: "Risk & Decisioning",
+      description: "Controls risk scoring, avoid logic, and vehicle classification.",
+      tabs: [
+        { id: "risk", label: "Risk Rules" },
+        { id: "vehicleRules", label: "Vehicle Rules" },
+      ],
+    },
+    {
+      label: "Market Data",
+      description: "Controls comp quality, regional search, and market behavior.",
+      tabs: [
+        { id: "comps", label: "Comp Settings" },
+        { id: "regional", label: "Regional Search" },
+      ],
+    },
   ];
 
   function updateBid(key: keyof BidSettings, value: number) {
@@ -462,20 +488,67 @@ export function AssumptionsTabs({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                activeTab === tab.id
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          {tabGroups.map((group) => {
+            const groupIsActive = group.tabs.some((tab) => tab.id === activeTab);
+            const hasDropdown = group.tabs.length > 1;
+
+            if (!hasDropdown) {
+              const tab = group.tabs[0];
+
+              return (
+                <button
+                  key={group.label}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                    activeTab === tab.id
+                      ? "bg-slate-950 text-white"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            }
+
+            return (
+              <div key={group.label} className="group relative">
+                <button
+                  type="button"
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${
+                    groupIsActive
+                      ? "bg-slate-950 text-white"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {group.label}
+                  <span className="text-xs opacity-70">▾</span>
+                </button>
+
+                <div className="invisible absolute left-0 top-11 z-40 min-w-64 rounded-2xl border border-slate-200 bg-white p-2 opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100">
+                  <div className="px-3 pb-2 pt-2 text-xs leading-5 text-slate-500">
+                    {group.description}
+                  </div>
+
+                  <div className="space-y-1">
+                    {group.tabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                          activeTab === tab.id
+                            ? "bg-slate-950 text-white"
+                            : "text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-2">
