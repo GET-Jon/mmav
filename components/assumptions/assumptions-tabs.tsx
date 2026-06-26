@@ -1267,12 +1267,54 @@ export function AssumptionsTabs({
             <table className="min-w-[1100px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">Enabled</th>
-                  <th className="px-3 py-3">Rule Name</th>
-                  <th className="px-3 py-3">Match Type</th>
-                  <th className="px-3 py-3">Match Values</th>
-                  <th className="px-3 py-3">Cost Profile</th>
-                  <th className="px-3 py-3">Priority</th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Enabled"
+                      description="Controls whether this vehicle classification rule is active. Disabled rules stay saved but are ignored by the evaluator."
+                      suggestedRange="Keep only current, trusted rules enabled"
+                      usedIn="Vehicle classification and cost profile selection"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Rule Name"
+                      description="A human-readable name for the classification rule so operators understand why a vehicle matched a cost profile."
+                      suggestedRange="Use names like German Luxury, Truck/SUV, Exotic, Motorcycle, High-Mileage"
+                      usedIn="Rule management and auditability"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Match Type"
+                      description="The vehicle field this rule checks, such as make, model, trim, body, fuel type, or age/mileage."
+                      suggestedRange="Use the narrowest field that reliably identifies the vehicle group"
+                      usedIn="Automatic cost profile matching"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Match Values"
+                      description="Comma-separated values that trigger this rule. For example, BMW, Mercedes-Benz, Porsche, Truck, SUV, Hybrid, or mileage thresholds depending on match type."
+                      suggestedRange="Use exact, predictable terms and avoid overly broad values"
+                      usedIn="Automatic rule matching"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Cost Profile"
+                      description="The default cost profile assigned when this rule matches. This controls default auction fee, transport, recon, reserve, and target profit."
+                      suggestedRange="Choose the profile that best matches the vehicle's expected cost/risk structure"
+                      usedIn="Cost Defaults, all-in cost, and Max Smart Bid"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Priority"
+                      description="Controls which matching rule wins when more than one rule applies. Higher-priority rules should be more specific."
+                      suggestedRange="Use lower numbers for general rules and higher priority for specific exceptions"
+                      usedIn="Vehicle classification conflict resolution"
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
