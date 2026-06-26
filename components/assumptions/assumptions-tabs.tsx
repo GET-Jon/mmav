@@ -1035,10 +1035,38 @@ export function AssumptionsTabs({
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">Auction Site</th>
-                  <th className="px-3 py-3">Min Bid</th>
-                  <th className="px-3 py-3">Max Bid</th>
-                  <th className="px-3 py-3">Fee</th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Auction Site"
+                      description="The auction source or marketplace this fee tier applies to."
+                      suggestedRange="Use exact source names like ACV Auctions, Manheim, Cars & Bids, Bring a Trailer, Facebook, or Private Party"
+                      usedIn="Auction fee lookup and all-in cost"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Min Bid"
+                      description="The lowest current bid or hammer price where this fee tier begins."
+                      suggestedRange="Set non-overlapping tiers starting at $0"
+                      usedIn="Auction fee tier matching"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Max Bid"
+                      description="The highest current bid or hammer price covered by this fee tier."
+                      suggestedRange="Set non-overlapping tiers that cover the full expected bid range"
+                      usedIn="Auction fee tier matching"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Fee"
+                      description="The estimated buyer fee added to the vehicle cost when this tier matches."
+                      suggestedRange="Use the latest buyer fee schedule from each auction source"
+                      usedIn="All-in cost, gross profit, and Max Smart Bid"
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
