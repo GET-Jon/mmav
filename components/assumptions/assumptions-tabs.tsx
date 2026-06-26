@@ -194,6 +194,55 @@ function FieldLabelWithHelp({
   );
 }
 
+function TableHeaderWithHelp({
+  label,
+  description,
+  suggestedRange,
+  usedIn,
+}: {
+  label: string;
+  description: string;
+  suggestedRange: string;
+  usedIn: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span>{label}</span>
+
+      <div className="group relative inline-flex normal-case">
+        <button
+          type="button"
+          aria-label={`More information about ${label}`}
+          className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-black text-slate-500 shadow-sm hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        >
+          i
+        </button>
+
+        <div className="pointer-events-none absolute bottom-6 left-1/2 z-40 hidden w-80 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-4 text-left text-xs shadow-xl group-hover:block group-focus-within:block">
+          <div className="text-sm font-bold text-slate-950">{label}</div>
+          <div className="mt-2 leading-5 text-slate-600">{description}</div>
+
+          <div className="mt-3 rounded-lg bg-slate-50 p-3">
+            <div className="font-bold uppercase tracking-wide text-slate-500">
+              Suggested Range
+            </div>
+            <div className="mt-1 font-semibold text-slate-800">
+              {suggestedRange}
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg bg-blue-50 p-3">
+            <div className="font-bold uppercase tracking-wide text-blue-500">
+              Used In
+            </div>
+            <div className="mt-1 font-semibold text-blue-800">{usedIn}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 export function AssumptionsTabs({
   assumptions,
@@ -753,13 +802,62 @@ export function AssumptionsTabs({
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">Vehicle Type</th>
-                  <th className="px-3 py-3">Auction Fee</th>
-                  <th className="px-3 py-3">Transport</th>
-                  <th className="px-3 py-3">Recon</th>
-                  <th className="px-3 py-3">Detail/Admin</th>
-                  <th className="px-3 py-3">Risk Reserve</th>
-                  <th className="px-3 py-3">Target Profit</th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Vehicle Type"
+                      description="The cost profile name applied to a vehicle after classification rules run."
+                      suggestedRange="Use clear labels like Standard, Performance, Exotic, Truck/SUV, Motorcycle"
+                      usedIn="Vehicle classification and default cost selection"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Auction Fee"
+                      description="Default buyer fee estimate used when a specific auction fee tier is unavailable or not yet selected."
+                      suggestedRange="$300–$1,500 depending on source and vehicle value"
+                      usedIn="All-in cost and Max Smart Bid"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Transport"
+                      description="Default amount reserved to get the vehicle from auction/seller location to your shop or sales location."
+                      suggestedRange="$250–$1,500 depending on distance and vehicle type"
+                      usedIn="All-in cost and purchase feasibility"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Recon"
+                      description="Default mechanical or cosmetic reconditioning budget before the vehicle is ready to retail."
+                      suggestedRange="$500–$5,000 depending on age, condition, and segment"
+                      usedIn="All-in cost, risk reserve, and gross profit"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Detail/Admin"
+                      description="Default allowance for detail, photos, admin, paperwork, listing prep, and small operating costs."
+                      suggestedRange="$150–$750"
+                      usedIn="All-in cost"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Risk Reserve"
+                      description="Default reserve for unknowns, surprises, and condition uncertainty before final inspection."
+                      suggestedRange="$500–$3,500 depending on complexity and downside risk"
+                      usedIn="All-in cost and risk-adjusted bidding"
+                    />
+                  </th>
+                  <th className="px-3 py-3">
+                    <TableHeaderWithHelp
+                      label="Target Profit"
+                      description="Gross profit target for this vehicle profile before the evaluator recommends a smart maximum bid."
+                      suggestedRange="$2,000–$10,000+ depending on vehicle segment"
+                      usedIn="Max Smart Bid, Safe Bid, and decision output"
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
