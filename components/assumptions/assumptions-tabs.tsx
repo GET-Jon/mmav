@@ -15,12 +15,13 @@ import type {
 } from "@/types/assumptions";
 
 type Tab =
+  | "overview"
   | "bid"
   | "costs"
   | "risk"
   | "auctionFees"
   | "comps"
-    | "vehicleRules"
+  | "vehicleRules"
   | "regional";
 
 function money(value: number) {
@@ -81,6 +82,70 @@ function NumberInput({
   );
 }
 
+function OverviewMetric({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-black text-slate-950">{value}</div>
+      <div className="mt-2 text-sm leading-6 text-slate-600">{helper}</div>
+    </div>
+  );
+}
+
+function ExplanationCard({
+  title,
+  description,
+  bullets,
+}: {
+  title: string;
+  description: string;
+  bullets: string[];
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      <ul className="mt-4 space-y-2 text-sm text-slate-700">
+        {bullets.map((bullet) => (
+          <li key={bullet} className="flex gap-2">
+            <span className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-400" />
+            <span>{bullet}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PlainRuleRow({
+  label,
+  value,
+  explanation,
+}: {
+  label: string;
+  value: string;
+  explanation: string;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 border-b border-slate-100 py-3 last:border-b-0 md:grid-cols-[220px_180px_1fr]">
+      <div className="font-semibold text-slate-700">{label}</div>
+      <div className="font-bold text-slate-950">{value}</div>
+      <div className="text-slate-600">{explanation}</div>
+    </div>
+  );
+}
+
+
 export function AssumptionsTabs({
   assumptions,
 }: {
@@ -106,13 +171,14 @@ export function AssumptionsTabs({
       })),
     };
 
-  const [activeTab, setActiveTab] = useState<Tab>("bid");
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
     const [draft, setDraft] = useState<Assumptions>(normalizedAssumptions);
   const [dirty, setDirty] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState("");
 
   const tabs: { id: Tab; label: string }[] = [
+    { id: "overview", label: "Overview" },
     { id: "bid", label: "Bid Settings" },
     { id: "costs", label: "Cost Defaults" },
     { id: "risk", label: "Risk Rules" },
@@ -285,6 +351,25 @@ export function AssumptionsTabs({
     setDirty(false);
   }
 
+  const defaultCostProfile = draft.costDefaults[0];
+  const enabledRegionalMarkets = draft.regionalMarkets
+    .filter((market) => market.enabled)
+    .sort((a, b) => a.order - b.order);
+  const enabledVehicleRules = (draft.vehicleClassificationRules || []).filter(
+    (rule) => rule.enabled
+  );
+  const avoidConditionRules = draft.conditionRules.filter(
+    (rule) => rule.avoidFlag
+  );
+  const highestTargetProfit = draft.costDefaults.reduce(
+    (highest, row) => Math.max(highest, row.targetProfit),
+    0
+  );
+  const highestRiskReserve = draft.costDefaults.reduce(
+    (highest, row) => Math.max(highest, row.riskReserve),
+    0
+  );
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -368,6 +453,137 @@ export function AssumptionsTabs({
             )}
         </div>
       </div>
+
+
+      {activeTab === "overview" && (
+        <section className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <h2 className="text-2xl font-black">Current Valuation Profile</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                  This is the plain-English summary of the rules currently
+                  loaded into the evaluator. Use it as a sanity check before
+                  changing individual assumptions.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                This overview is explanatory only. It does not change the
+                valuation math.
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <OverviewMetric
+                label="Minimum Target Profit"
+                value={money(draft.bidSettings.minimumTargetProfit)}
+                helper="The evaluator will not target less than this profit floor, even if a vehicle profile has a lower target."
+              />
+              <OverviewMetric
+                label="Highest Profile Profit"
+                value={money(highestTargetProfit)}
+                helper="The largest target profit currently assigned to any vehicle cost profile."
+              />
+              <OverviewMetric
+                label="Comp Quality Floor"
+                value={`${draft.compSettings.minimumQualityScore} / 100`}
+                helper="Market comps below this quality score should not be auto-included unless the search has low confidence."
+              />
+              <OverviewMetric
+                label="Enabled Markets"
+                value={String(enabledRegionalMarkets.length)}
+                helper="The number of regional MarketCheck search areas currently enabled."
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <ExplanationCard
+              title="How the evaluator thinks about a deal"
+              description="The valuation engine combines resale target, costs, profit target, risk reserve, and comp quality into bidding guidance."
+              bullets={[
+                "Retail target comes from market comps or a manually entered final resale target.",
+                "All-in cost includes current bid, auction fee, transport, recon, detail/admin, and risk reserves.",
+                "Max Smart Bid is the practical ceiling after required profit and risk adjustments.",
+                "Safe Bid and Stretch Bid use the discount/premium settings below."
+              ]}
+            />
+
+            <ExplanationCard
+              title="How vehicle profiles are applied"
+              description="Vehicle rules decide which cost profile should be applied when the app can identify make, model, trim, body, fuel type, age, or mileage."
+              bullets={[
+                `${enabledVehicleRules.length} vehicle classification rules are currently enabled.`,
+                defaultCostProfile
+                  ? `The first/default cost profile is ${defaultCostProfile.vehicleType}.`
+                  : "No default cost profile is currently available.",
+                `The highest default risk reserve is ${money(highestRiskReserve)}.`,
+                "If no vehicle rule matches, the evaluator falls back to the first cost profile."
+              ]}
+            />
+
+            <ExplanationCard
+              title="How risk affects the answer"
+              description="Risk rules add points and reserve dollars based on the condition checklist."
+              bullets={[
+                `Medium risk starts at ${draft.bidSettings.mediumRiskThreshold} points.`,
+                `High risk starts at ${draft.bidSettings.highRiskThreshold} points.`,
+                `Avoid starts at ${draft.bidSettings.avoidRiskThreshold} points or an avoid-flag condition.`,
+                `${avoidConditionRules.length} condition rules currently carry an avoid flag.`
+              ]}
+            />
+
+            <ExplanationCard
+              title="How comps are controlled"
+              description="Comp settings decide which comparable vehicles are trusted and how source reliability affects valuation."
+              bullets={[
+                `Minimum comp quality score is ${draft.compSettings.minimumQualityScore}.`,
+                `${draft.compSettings.sourceDiscounts.length} source-discount rules are configured.`,
+                "Higher quality-score requirements produce cleaner but fewer comps.",
+                "Lower quality-score requirements produce more comps but may weaken valuation confidence."
+              ]}
+            />
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-bold">Plain-English Rule Summary</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              These are the main rules operators should understand before
+              trusting or changing the evaluator.
+            </p>
+
+            <div className="mt-5 text-sm">
+              <PlainRuleRow
+                label="Safe Bid Discount"
+                value={`${(draft.bidSettings.safeBidDiscount * 100).toFixed(1)}%`}
+                explanation="Safe Bid is pulled below Max Smart Bid by this percentage to create a more conservative buy number."
+              />
+              <PlainRuleRow
+                label="Stretch Bid Premium"
+                value={`${(draft.bidSettings.stretchBidPremium * 100).toFixed(1)}%`}
+                explanation="Stretch Bid allows a controlled amount above Max Smart Bid when the deal still may be worth chasing."
+              />
+              <PlainRuleRow
+                label="High-Risk Profit Add"
+                value={money(draft.bidSettings.highRiskProfitAdd)}
+                explanation="Extra required profit added when a vehicle lands in the high-risk range."
+              />
+              <PlainRuleRow
+                label="Regional Search Order"
+                value={
+                  enabledRegionalMarkets.length
+                    ? enabledRegionalMarkets
+                        .map((market) => market.market)
+                        .join(" → ")
+                    : "No enabled regions"
+                }
+                explanation="MarketCheck searches should follow this regional order when live comps are pulled."
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       {activeTab === "bid" && (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
