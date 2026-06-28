@@ -81,10 +81,12 @@ function MetricCard({
   label,
   value,
   tone = "default",
+  help,
 }: {
   label: string;
   value: string;
   tone?: "default" | "green" | "blue" | "purple" | "orange" | "red";
+  help?: string;
 }) {
   const toneClass =
     tone === "green"
@@ -101,8 +103,16 @@ function MetricCard({
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
+      <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <span>{label}</span>
+        {help ? (
+          <span
+            title={help}
+            className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-100 text-[10px] font-black normal-case text-slate-500"
+          >
+            i
+          </span>
+        ) : null}
       </div>
       <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
     </div>
@@ -1388,25 +1398,30 @@ export function EvaluationWorkspace({
                     <MetricCard
                       label="All-In Cost"
                       value={money(valuation.allInCost)}
+                      help="Estimated total cost basis after purchase price/current bid plus auction fee, transport, recon, admin, general risk reserve, and specific risk adds."
                     />
                     <MetricCard
                       label="Gross Profit"
                       value={money(valuation.expectedGrossProfit)}
                       tone={valuation.expectedGrossProfit >= 0 ? "green" : "red"}
+                      help="Expected gross profit at the current bid or entered purchase price, after estimated costs and risk reserves."
                     />
                     <MetricCard
                       label="Safe Bid"
                       value={money(valuation.safeBid)}
+                      help="Conservative bid target. This usually leaves more margin for error and is the preferred bid ceiling when comps or condition confidence are weaker."
                     />
                     <MetricCard
                       label="Max Smart Bid"
                       value={money(valuation.maxSmartBid)}
                       tone="blue"
+                      help="Primary recommended ceiling. It backs out required profit, costs, and risk reserves from the expected resale target."
                     />
                     <MetricCard
                       label="Stretch Bid"
                       value={money(valuation.stretchBid)}
                       tone="purple"
+                      help="Aggressive ceiling for cases where the vehicle is unusually attractive, confidence is high, or strategic reasons justify accepting less margin."
                     />
                     <MetricCard
                       label="Risk Grade"
@@ -1418,6 +1433,7 @@ export function EvaluationWorkspace({
                           ? "orange"
                           : "red"
                       }
+                      help="Risk classification based on selected condition issues, avoid flags, and configured risk thresholds. Higher risk should require more profit or a lower bid."
                     />
                   </div>
 
