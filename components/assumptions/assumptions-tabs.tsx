@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { defaultAssumptions } from "@/lib/assumptions";
+import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
 import type {
   Assumptions,
   AuctionFeeRule,
@@ -22,7 +23,8 @@ type Tab =
   | "auctionFees"
   | "comps"
   | "vehicleRules"
-  | "regional";
+  | "regional"
+  | "taxonomy";
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -78,6 +80,9 @@ function NumberInput({
         className="w-full rounded-lg bg-transparent px-3 py-2 text-sm font-medium text-slate-900 outline-none"
       />
       {suffix && <span className="pr-3 text-sm text-slate-400">{suffix}</span>}
+
+      
+
     </div>
   );
 }
@@ -253,6 +258,7 @@ export function AssumptionsTabs({
     };
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [draft, setDraft] = useState<Assumptions>(normalizedAssumptions);
   const [dirty, setDirty] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
@@ -292,6 +298,11 @@ export function AssumptionsTabs({
         { id: "comps", label: "Comp Settings" },
         { id: "regional", label: "Regional Search" },
       ],
+    },
+    {
+      label: "Model Taxonomy",
+      description: "Documents model-family fallback rules and false-positive filters.",
+      tabs: [{ id: "taxonomy", label: "Model Taxonomy" }],
     },
   ];
 
@@ -492,6 +503,7 @@ export function AssumptionsTabs({
           {tabGroups.map((group) => {
             const groupIsActive = group.tabs.some((tab) => tab.id === activeTab);
             const hasDropdown = group.tabs.length > 1;
+            const menuIsOpen = openMenu === group.label;
 
             if (!hasDropdown) {
               const tab = group.tabs[0];
@@ -499,7 +511,11 @@ export function AssumptionsTabs({
               return (
                 <button
                   key={group.label}
-                  onClick={() => setActiveTab(tab.id)}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setOpenMenu(null);
+                  }}
                   className={`rounded-xl px-4 py-2 text-sm font-semibold ${
                     activeTab === tab.id
                       ? "bg-slate-950 text-white"
@@ -512,40 +528,56 @@ export function AssumptionsTabs({
             }
 
             return (
-              <div key={group.label} className="group relative">
+              <div
+                key={group.label}
+                className="relative"
+                onMouseEnter={() => setOpenMenu(group.label)}
+                onMouseLeave={() => setOpenMenu(null)}
+              >
                 <button
                   type="button"
+                  onClick={() =>
+                    setOpenMenu(menuIsOpen ? null : group.label)
+                  }
                   className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${
-                    groupIsActive
+                    groupIsActive || menuIsOpen
                       ? "bg-slate-950 text-white"
                       : "text-slate-700 hover:bg-slate-100"
                   }`}
                 >
                   {group.label}
-                  <span className="text-xs opacity-70">▾</span>
+                  <span className="text-xs opacity-70">
+                    {menuIsOpen ? "▴" : "▾"}
+                  </span>
                 </button>
 
-                <div className="invisible absolute left-0 top-11 z-40 min-w-64 rounded-2xl border border-slate-200 bg-white p-2 opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100">
-                  <div className="px-3 pb-2 pt-2 text-xs leading-5 text-slate-500">
-                    {group.description}
-                  </div>
+                {menuIsOpen && (
+                  <div className="absolute left-0 top-11 z-50 min-w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                    <div className="px-3 pb-2 pt-2 text-xs leading-5 text-slate-500">
+                      {group.description}
+                    </div>
 
-                  <div className="space-y-1">
-                    {group.tabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
-                          activeTab === tab.id
-                            ? "bg-slate-950 text-white"
-                            : "text-slate-700 hover:bg-slate-100"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                    <div className="space-y-1">
+                      {group.tabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab(tab.id);
+                            setOpenMenu(null);
+                          }}
+                          className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                            activeTab === tab.id
+                              ? "bg-slate-950 text-white"
+                              : "text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
@@ -1482,6 +1514,106 @@ export function AssumptionsTabs({
                           )
                         }
                       />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+
+      {activeTab === "taxonomy" && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div>
+              <h2 className="text-xl font-bold">Model Taxonomy</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+                These rules document cases where a data provider may group a
+                true performance model under a broader model family. The broader
+                model should only be used as a candidate retrieval pool. Returned
+                listings still need to pass strict include/reject filters before
+                they can be trusted as comps.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              View-only for now. Editing should come after audit history and
+              role permissions.
+            </div>
+          </div>
+
+          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-[1200px] w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-3">Make</th>
+                  <th className="px-3 py-3">User Model</th>
+                  <th className="px-3 py-3">Fallback Search</th>
+                  <th className="px-3 py-3">Must Include</th>
+                  <th className="px-3 py-3">Reject If Includes</th>
+                  <th className="px-3 py-3">Notes</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {modelTaxonomyFallbacks.map((fallback) => (
+                  <tr key={fallback.id} className="align-top">
+                    <td className="px-3 py-3 font-semibold text-slate-800">
+                      {fallback.make}
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {fallback.requestedModels.map((model) => (
+                          <span
+                            key={model}
+                            className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
+                          >
+                            {model}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-blue-700">
+                        {fallback.fallbackModel}
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-slate-500">
+                        {fallback.fallbackLabel}
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {fallback.mustInclude.map((term) => (
+                          <span
+                            key={term}
+                            className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"
+                          >
+                            {term}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {fallback.rejectIfIncludes.map((term) => (
+                          <span
+                            key={term}
+                            className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700"
+                          >
+                            {term}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-3 leading-6 text-slate-600">
+                      {fallback.notes}
                     </td>
                   </tr>
                 ))}
