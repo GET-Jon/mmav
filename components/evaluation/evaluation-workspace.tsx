@@ -276,6 +276,35 @@ export function EvaluationWorkspace({
     lowConfidenceFallback: boolean;
     minimumQualityScore?: number;
   } | null>(null);
+
+  const [marketCheckApiControls, setMarketCheckApiControls] = useState({
+    liveLookupEnabled: false,
+    maxApiCallsPerSearch: 3,
+    minUsableCompsToStop: 10,
+    minInitialRegions: 2,
+  });
+
+  const [marketCheckApiUsage, setMarketCheckApiUsage] = useState<{
+    apiCallsMade?: number;
+    cacheHit?: boolean;
+    stopReason?: string;
+    usableCompCount?: number;
+    failedStatus?: number;
+    retryAfter?: string | null;
+    searchLog?: {
+      attemptName?: string;
+      label?: string;
+      market?: string;
+      zip?: string;
+      ok?: boolean;
+      status?: number;
+      numFound?: number;
+      listingCount?: number;
+      usableComps?: number;
+      cumulativeUsableComps?: number;
+    }[];
+  } | null>(null);
+
   const marketCheckInFlightRef = useRef(false);
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
@@ -436,6 +465,14 @@ export function EvaluationWorkspace({
 
       setMarketCheckStatus(draft.marketCheckStatus || "");
       setMarketCheckSearchMeta(draft.marketCheckSearchMeta || null);
+      setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
+
+      if (draft.marketCheckApiControls) {
+        setMarketCheckApiControls((previous) => ({
+          ...previous,
+          ...draft.marketCheckApiControls,
+        }));
+      }
     } catch (error) {
       console.error("Failed to load local evaluator draft:", error);
     } finally {
@@ -464,6 +501,8 @@ export function EvaluationWorkspace({
           notes,
           marketCheckStatus,
           marketCheckSearchMeta,
+          marketCheckApiControls,
+          marketCheckApiUsage,
         })
       );
     } catch (error) {
@@ -482,6 +521,8 @@ export function EvaluationWorkspace({
     notes,
     marketCheckStatus,
     marketCheckSearchMeta,
+    marketCheckApiControls,
+    marketCheckApiUsage,
     draftReady,
     initialSavedEvaluationId,
   ]);
@@ -782,6 +823,30 @@ export function EvaluationWorkspace({
 
       const data = await response.json();
 
+      setMarketCheckApiUsage(data.apiUsage || null);
+
+      if (data.apiControls) {
+        setMarketCheckApiControls((previous) => ({
+          ...previous,
+          liveLookupEnabled:
+            typeof data.apiControls.liveLookupEnabled === "boolean"
+              ? data.apiControls.liveLookupEnabled
+              : previous.liveLookupEnabled,
+          maxApiCallsPerSearch:
+            typeof data.apiControls.maxApiCallsPerSearch === "number"
+              ? data.apiControls.maxApiCallsPerSearch
+              : previous.maxApiCallsPerSearch,
+          minUsableCompsToStop:
+            typeof data.apiControls.minUsableCompsToStop === "number"
+              ? data.apiControls.minUsableCompsToStop
+              : previous.minUsableCompsToStop,
+          minInitialRegions:
+            typeof data.apiControls.minInitialRegions === "number"
+              ? data.apiControls.minInitialRegions
+              : previous.minInitialRegions,
+        }));
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "VIN decode failed.");
       }
@@ -846,6 +911,7 @@ export function EvaluationWorkspace({
     setSelectedConditions([]);
     setMarketCheckStatus("");
     setMarketCheckSearchMeta(null);
+    setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
     setNotes("");
@@ -871,6 +937,8 @@ export function EvaluationWorkspace({
     setComps([]);
     setSelectedConditions([]);
     setMarketCheckStatus("");
+    setMarketCheckSearchMeta(null);
+    setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
     setNotes("");
@@ -895,8 +963,6 @@ export function EvaluationWorkspace({
       return;
     }
 
-    marketCheckInFlightRef.current = true;
-
     const year = vehicleYear;
     const make = vehicleMake;
     const model = vehicleModel;
@@ -905,11 +971,17 @@ export function EvaluationWorkspace({
       setMarketCheckStatus(
         "Enter a VIN or enter Year, Make, and Model before pulling comps."
       );
+      marketCheckInFlightRef.current = false;
       return;
     }
 
+    marketCheckInFlightRef.current = true;
     setMarketCheckLoading(true);
-    setMarketCheckStatus("Searching MarketCheck comps...");
+    setMarketCheckStatus(
+      marketCheckApiControls.liveLookupEnabled
+        ? "Searching MarketCheck comps..."
+        : "Live MarketCheck lookup is disabled. Running safe no-call check..."
+    );
 
     try {
       const response = await fetch("/api/marketcheck/search", {
@@ -936,6 +1008,10 @@ export function EvaluationWorkspace({
             })),
           radius: 100,
           rows: 10,
+          liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
+          maxApiCallsPerSearch: marketCheckApiControls.maxApiCallsPerSearch,
+          minUsableCompsToStop: marketCheckApiControls.minUsableCompsToStop,
+          minInitialRegions: marketCheckApiControls.minInitialRegions,
         }),
       });
 
@@ -953,7 +1029,9 @@ export function EvaluationWorkspace({
           lowConfidenceFallback: false,
           minimumQualityScore: data.minimumQualityScore,
         });
-        setMarketCheckStatus("No comps found");
+        setMarketCheckStatus(
+          data.apiUsage?.stopReason || data.error || "No comps found"
+        );
         return;
       }
 
@@ -1052,6 +1130,7 @@ export function EvaluationWorkspace({
     setSelectedConditions(initialSelectedConditions);
     setMarketCheckStatus("");
     setMarketCheckSearchMeta(null);
+    setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
     setNotes("");
@@ -1494,6 +1573,102 @@ export function EvaluationWorkspace({
                     ) : null
                   }
                 >
+                  <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-bold text-blue-950">
+                          MarketCheck API Controls
+                        </div>
+                        <div className="mt-1 text-xs leading-5 text-blue-800">
+                          Live lookups are off by default while the API quota is
+                          limited. Turning this on may consume MarketCheck calls.
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm">
+                        <input
+                          type="checkbox"
+                          checked={marketCheckApiControls.liveLookupEnabled}
+                          onChange={(event) =>
+                            setMarketCheckApiControls((previous) => ({
+                              ...previous,
+                              liveLookupEnabled: event.target.checked,
+                            }))
+                          }
+                        />
+                        Live lookup enabled
+                      </label>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <label className="block">
+                        <div className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">
+                          Max API Calls
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={marketCheckApiControls.maxApiCallsPerSearch}
+                          onChange={(event) =>
+                            setMarketCheckApiControls((previous) => ({
+                              ...previous,
+                              maxApiCallsPerSearch: Math.max(
+                                1,
+                                Math.min(10, toNumber(event.target.value))
+                              ),
+                            }))
+                          }
+                          className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-right text-sm font-bold text-slate-900 shadow-sm outline-none"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <div className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">
+                          Stop After Usable Comps
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={marketCheckApiControls.minUsableCompsToStop}
+                          onChange={(event) =>
+                            setMarketCheckApiControls((previous) => ({
+                              ...previous,
+                              minUsableCompsToStop: Math.max(
+                                1,
+                                Math.min(50, toNumber(event.target.value))
+                              ),
+                            }))
+                          }
+                          className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-right text-sm font-bold text-slate-900 shadow-sm outline-none"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <div className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">
+                          Minimum Initial Regions
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={marketCheckApiControls.minInitialRegions}
+                          onChange={(event) =>
+                            setMarketCheckApiControls((previous) => ({
+                              ...previous,
+                              minInitialRegions: Math.max(
+                                1,
+                                Math.min(10, toNumber(event.target.value))
+                              ),
+                            }))
+                          }
+                          className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-right text-sm font-bold text-slate-900 shadow-sm outline-none"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
                       <span>
@@ -1555,6 +1730,106 @@ export function EvaluationWorkspace({
                           ? ` (${marketCheckSearchMeta.minimumQualityScore})`
                           : ""}
                         , so the top 3 available comps were included.
+                      </div>
+                    ) : null}
+
+                    {marketCheckApiUsage ? (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-700">
+                          <span>
+                            Cache{" "}
+                            <span className="font-bold text-slate-950">
+                              {marketCheckApiUsage.cacheHit ? "Hit" : "Miss"}
+                            </span>
+                          </span>
+
+                          <span>
+                            API calls{" "}
+                            <span className="font-bold text-slate-950">
+                              {marketCheckApiUsage.apiCallsMade ?? 0}
+                            </span>
+                            {" / "}
+                            <span className="font-bold text-slate-950">
+                              {marketCheckApiControls.maxApiCallsPerSearch}
+                            </span>
+                          </span>
+
+                          {typeof marketCheckApiUsage.usableCompCount === "number" ? (
+                            <span>
+                              Usable comps{" "}
+                              <span className="font-bold text-slate-950">
+                                {marketCheckApiUsage.usableCompCount}
+                              </span>
+                            </span>
+                          ) : null}
+
+                          {marketCheckApiUsage.failedStatus ? (
+                            <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
+                              Failed status {marketCheckApiUsage.failedStatus}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {marketCheckApiUsage.stopReason ? (
+                          <div className="mt-2 text-sm font-semibold text-slate-700">
+                            {marketCheckApiUsage.stopReason}
+                          </div>
+                        ) : null}
+
+                        {marketCheckApiUsage.searchLog?.length ? (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-sm font-bold text-slate-700">
+                              Search log
+                            </summary>
+
+                            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+                              <table className="min-w-[760px] w-full text-left text-xs">
+                                <thead className="bg-slate-50 uppercase text-slate-500">
+                                  <tr>
+                                    <th className="px-2 py-2">Attempt</th>
+                                    <th className="px-2 py-2">Region</th>
+                                    <th className="px-2 py-2">Status</th>
+                                    <th className="px-2 py-2">Found</th>
+                                    <th className="px-2 py-2">Returned</th>
+                                    <th className="px-2 py-2">Usable</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white">
+                                  {marketCheckApiUsage.searchLog.map((entry, index) => (
+                                    <tr key={`${entry.attemptName || "search"}-${entry.zip || index}`}>
+                                      <td className="px-2 py-2 font-semibold text-slate-700">
+                                        {entry.attemptName || "—"}
+                                      </td>
+                                      <td className="px-2 py-2 text-slate-600">
+                                        {entry.label || entry.zip || "—"}
+                                      </td>
+                                      <td className="px-2 py-2">
+                                        <span
+                                          className={`rounded-full px-2 py-1 font-bold ${
+                                            entry.ok
+                                              ? "bg-emerald-50 text-emerald-700"
+                                              : "bg-red-50 text-red-700"
+                                          }`}
+                                        >
+                                          {entry.status || "—"}
+                                        </span>
+                                      </td>
+                                      <td className="px-2 py-2 text-slate-600">
+                                        {entry.numFound ?? "—"}
+                                      </td>
+                                      <td className="px-2 py-2 text-slate-600">
+                                        {entry.listingCount ?? "—"}
+                                      </td>
+                                      <td className="px-2 py-2 text-slate-600">
+                                        {entry.usableComps ?? entry.cumulativeUsableComps ?? "—"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
