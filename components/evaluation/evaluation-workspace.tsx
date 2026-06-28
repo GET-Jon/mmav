@@ -133,15 +133,25 @@ function CurrencyInput({
   label,
   value,
   onChange,
+  help,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  help?: string;
 }) {
   return (
     <label className="block">
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <span>{label}</span>
+        {help ? (
+          <span
+            title={help}
+            className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-100 text-[10px] font-black normal-case text-slate-500"
+          >
+            i
+          </span>
+        ) : null}
       </div>
       <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
         <span className="pl-3 text-sm text-slate-400">$</span>
@@ -1482,26 +1492,31 @@ export function EvaluationWorkspace({
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <CurrencyInput
                       label="Auction Fee"
+                      help="Estimated auction buyer fee. This is usually based on the auction platform and the current bid or purchase price."
                       value={valuationInput.costs.auctionFee}
                       onChange={(value) => updateCost("auctionFee", value)}
                     />
                     <CurrencyInput
                       label="Transport"
+                      help="Estimated cost to move the vehicle from the auction or seller location to your store, shop, or staging point."
                       value={valuationInput.costs.transport}
                       onChange={(value) => updateCost("transport", value)}
                     />
                     <CurrencyInput
                       label="Recon"
+                      help="Estimated reconditioning budget for mechanical, cosmetic, tires, brakes, paint correction, parts, and other sale-prep work."
                       value={valuationInput.costs.recon}
                       onChange={(value) => updateCost("recon", value)}
                     />
                     <CurrencyInput
                       label="Detail/Admin"
+                      help="Baseline internal handling cost for detail, photos, listing prep, paperwork, admin time, and small operational costs."
                       value={valuationInput.costs.detailAdmin}
                       onChange={(value) => updateCost("detailAdmin", value)}
                     />
                     <CurrencyInput
                       label="General Risk Reserve"
+                      help="Baseline unknowns buffer from the selected cost profile. It protects against normal auction surprises not already captured by recon, transport, title, brand, or condition-specific risk adds."
                       value={valuationInput.costs.generalRiskReserve}
                       onChange={(value) =>
                         updateCost("generalRiskReserve", value)
@@ -1509,11 +1524,13 @@ export function EvaluationWorkspace({
                     />
                     <CurrencyInput
                       label="Brand Risk Add"
+                      help="Additional reserve for brand-specific exposure, such as expensive parts, known failure points, luxury-brand repair costs, or weaker buyer demand."
                       value={valuationInput.costs.brandRiskAdd}
                       onChange={(value) => updateCost("brandRiskAdd", value)}
                     />
                     <CurrencyInput
                       label="Title/History Risk Add"
+                      help="Additional reserve for title, accident, ownership, mileage, disclosure, or history issues that may reduce resale value or slow the sale."
                       value={valuationInput.costs.titleHistoryRiskAdd}
                       onChange={(value) =>
                         updateCost("titleHistoryRiskAdd", value)
@@ -1521,8 +1538,14 @@ export function EvaluationWorkspace({
                     />
 
                     <div>
-                      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Condition Risk Add
+                      <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <span>Condition Risk Add</span>
+                        <span
+                          title="Reserve automatically added from the selected condition checklist items. Unlike General Risk Reserve, this is driven by specific visible issues selected in the Condition Checklist."
+                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-100 text-[10px] font-black normal-case text-slate-500"
+                        >
+                          i
+                        </span>
                       </div>
                       <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-emerald-700">
                         {money(valuationInput.costs.conditionRiskAdd)}
