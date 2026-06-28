@@ -32,6 +32,15 @@ type CachedMarketCheckResponse = {
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const MIN_MARKETCHECK_INTERVAL_MS = 350;
 
+const MARKETCHECK_API_CONTROLS = {
+  liveLookupEnabled: true,
+  maxApiCallsPerSearch: 3,
+  minUsableCompsToStop: 10,
+  minInitialRegions: 2,
+  hardStopOnRateLimit: true,
+  includeSearchDiagnostics: true,
+};
+
 const globalForMarketCheck = globalThis as typeof globalThis & {
   __marketCheckSearchCache?: Map<string, CachedMarketCheckResponse>;
   __marketCheckLastRequestAt?: number;
@@ -103,7 +112,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-low-confidence-v4",
+    cacheVersion: "progressive-regions-low-confidence-v5-api-meter",
   });
 }
 
@@ -419,7 +428,51 @@ async function runMarketCheckSearches({
   return searches;
 }
 
-function buildFailedMarketCheckResponse(failedSearch: MarketCheckSearchResult) {
+function buildFailedMarketCheckResponse({
+  failedSearch,
+  searches,
+  orderedRegions,
+  apiControls,
+}: {
+  failedSearch: MarketCheckSearchResult;
+  searches: MarketCheckSearchResult[];
+  orderedRegions: { market?: string; zip: string }[];
+  apiControls: typeof MARKETCHECK_API_CONTROLS;
+}) {
+  const searchLog = searches.map((search) => {
+    const region = orderedRegions.find(
+      (orderedRegion) => orderedRegion.zip === search.zip
+    );
+
+    return {
+      attemptName: search.attemptName,
+      market: region?.market || "",
+      zip: search.zip,
+      label: region ? `${region.market} (${region.zip})` : search.zip,
+      ok: search.ok,
+      status: search.status,
+      apiCallMade: true,
+      numFound: search.numFound,
+      listingCount: search.listingCount,
+      retryAfter: search.retryAfter,
+      requested: search.requested,
+    };
+  });
+
+  const apiUsage = {
+    apiCallsMade: searches.length,
+    cacheHit: false,
+    stopReason:
+      failedSearch.status === 429
+        ? "Stopped immediately because MarketCheck returned a rate-limit response."
+        : `Stopped because MarketCheck returned status ${failedSearch.status}.`,
+    failedZip: failedSearch.zip,
+    failedAttempt: failedSearch.attemptName,
+    failedStatus: failedSearch.status,
+    retryAfter: failedSearch.retryAfter,
+    searchLog,
+  };
+
   if (failedSearch.status === 429) {
     const retryAfterSeconds = failedSearch.retryAfter
       ? Number(failedSearch.retryAfter)
@@ -433,6 +486,8 @@ function buildFailedMarketCheckResponse(failedSearch: MarketCheckSearchResult) {
         failedZip: failedSearch.zip,
         failedAttempt: failedSearch.attemptName,
         retryAfter: failedSearch.retryAfter,
+        apiControls,
+        apiUsage,
       },
       {
         status: 429,
@@ -453,6 +508,8 @@ function buildFailedMarketCheckResponse(failedSearch: MarketCheckSearchResult) {
         `MarketCheck failed with status ${failedSearch.status}.`,
       failedZip: failedSearch.zip,
       failedAttempt: failedSearch.attemptName,
+      apiControls,
+      apiUsage,
     },
     {
       status: failedSearch.status,
@@ -486,11 +543,52 @@ export async function POST(request: Request) {
     const make = String(body.make || "").trim();
     const model = String(body.model || "").trim();
     const preferredTrim = String(body.trim || "").trim();
-    const targetMileage = toNumber(body.targetMileage);
+    const targetMileage = toNumber(
+      body.targetMileage ?? body.mileage ?? body.odometer,
+      0
+    );
     const radius = Math.min(toNumber(body.radius, 100), 100);
     const rows = Math.min(toNumber(body.rows, 10), 25);
     const debug = Boolean(body.debug);
     const reason = String(body.reason || "explicit-user-comp-search");
+
+    const apiControls = {
+      ...MARKETCHECK_API_CONTROLS,
+      liveLookupEnabled:
+        body.liveLookupEnabled === false
+          ? false
+          : MARKETCHECK_API_CONTROLS.liveLookupEnabled,
+      maxApiCallsPerSearch: Math.max(
+        1,
+        Math.min(
+          toNumber(
+            body.maxApiCallsPerSearch,
+            MARKETCHECK_API_CONTROLS.maxApiCallsPerSearch
+          ),
+          10
+        )
+      ),
+      minUsableCompsToStop: Math.max(
+        1,
+        Math.min(
+          toNumber(
+            body.minUsableCompsToStop,
+            MARKETCHECK_API_CONTROLS.minUsableCompsToStop
+          ),
+          50
+        )
+      ),
+      minInitialRegions: Math.max(
+        1,
+        Math.min(
+          toNumber(
+            body.minInitialRegions,
+            MARKETCHECK_API_CONTROLS.minInitialRegions
+          ),
+          10
+        )
+      ),
+    };
 
     const requestedRegions = Array.isArray(body.regions)
       ? body.regions
@@ -546,6 +644,31 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!apiControls.liveLookupEnabled) {
+      return NextResponse.json({
+        error: "Live MarketCheck lookup is currently disabled by API controls.",
+        apiControls,
+        apiUsage: {
+          apiCallsMade: 0,
+          cacheHit: false,
+          stopReason: "Live lookup disabled before any MarketCheck API request was made.",
+          searchLog: [],
+        },
+        search: {
+          year,
+          make,
+          model,
+          preferredTrim,
+          targetMileage,
+          zips,
+          regions: orderedRegions,
+          radius,
+          rows,
+        },
+        comps: [],
+      });
+    }
+
     const searchKey = makeStableSearchKey({
       year,
       make,
@@ -572,6 +695,13 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         ...cached.payload,
+        apiControls,
+        apiUsage: {
+          ...(cached.payload.apiUsage || {}),
+          cacheHit: true,
+          apiCallsMade: 0,
+          stopReason: "Returned cached MarketCheck response. No live API call was made.",
+        },
         cache: {
           hit: true,
           searchKey,
@@ -598,8 +728,8 @@ export async function POST(request: Request) {
       },
     });
 
-    const MIN_USABLE_COMPS = 10;
-    const MIN_INITIAL_REGIONS = Math.min(2, zips.length);
+    const MIN_USABLE_COMPS = apiControls.minUsableCompsToStop;
+    const MIN_INITIAL_REGIONS = Math.min(apiControls.minInitialRegions, zips.length);
 
     function buildCompSummary(currentSearches: MarketCheckSearchResult[]) {
       const allListings = currentSearches.flatMap((search) => {
@@ -708,6 +838,10 @@ export async function POST(request: Request) {
       const progressiveSearches: MarketCheckSearchResult[] = [];
 
       for (let regionIndex = 0; regionIndex < zips.length; regionIndex += 1) {
+        if (progressiveSearches.length >= apiControls.maxApiCallsPerSearch) {
+          break;
+        }
+
         const zip = zips[regionIndex];
 
         const result = await searchMarketCheck({
@@ -732,7 +866,10 @@ export async function POST(request: Request) {
         const summary = buildCompSummary(progressiveSearches);
         const searchedMinimumRegions = regionIndex + 1 >= MIN_INITIAL_REGIONS;
 
-        if (summary.comps.length >= MIN_USABLE_COMPS) {
+        if (
+          searchedMinimumRegions &&
+          summary.comps.length >= MIN_USABLE_COMPS
+        ) {
           break;
         }
       }
@@ -748,7 +885,12 @@ export async function POST(request: Request) {
     const failedExactSearch = exactSearches.find((search) => !search.ok);
 
     if (failedExactSearch) {
-      return buildFailedMarketCheckResponse(failedExactSearch);
+      return buildFailedMarketCheckResponse({
+        failedSearch: failedExactSearch,
+        searches: exactSearches,
+        orderedRegions,
+        apiControls,
+      });
     }
 
     let searches = exactSearches;
@@ -765,7 +907,14 @@ export async function POST(request: Request) {
       );
 
       if (failedFallbackSearch) {
-        return buildFailedMarketCheckResponse(failedFallbackSearch);
+        return buildFailedMarketCheckResponse({
+          failedSearch: failedFallbackSearch,
+          searches: searches.length
+            ? [...searches, ...fallbackSearches]
+            : fallbackSearches,
+          orderedRegions,
+          apiControls,
+        });
       }
 
       searches = [...exactSearches, ...fallbackSearches];
@@ -779,6 +928,56 @@ export async function POST(request: Request) {
       lowConfidenceFallback,
       minimumQualityScore,
     } = buildCompSummary(searches);
+
+    const searchLog = searches.map((search, index) => {
+      const region = orderedRegions.find(
+        (orderedRegion: { zip: string; market?: string }) =>
+          orderedRegion.zip === search.zip
+      );
+
+      const individualSummary = buildCompSummary([search]);
+      const cumulativeSummary = buildCompSummary(searches.slice(0, index + 1));
+
+      const usableComps = individualSummary.comps.filter(
+        (comp) => comp.qualityScore >= minimumQualityScore
+      ).length;
+
+      const cumulativeUsableComps = cumulativeSummary.comps.filter(
+        (comp) => comp.qualityScore >= minimumQualityScore
+      ).length;
+
+      return {
+        attemptName: search.attemptName,
+        market: region?.market || "",
+        zip: search.zip,
+        label: region ? `${region.market} (${region.zip})` : search.zip,
+        ok: search.ok,
+        status: search.status,
+        apiCallMade: true,
+        numFound: search.numFound,
+        listingCount: search.listingCount,
+        usableComps,
+        cumulativeUsableComps,
+        requested: search.requested,
+      };
+    });
+
+    const usableCompCount = comps.filter(
+      (comp) => comp.qualityScore >= minimumQualityScore
+    ).length;
+
+    const hitApiCallCap = searches.length >= apiControls.maxApiCallsPerSearch;
+
+    const stopReason =
+      searches.some((search) => !search.ok)
+        ? "Stopped because a MarketCheck request failed."
+        : hitApiCallCap && usableCompCount < MIN_USABLE_COMPS
+        ? `Stopped after reaching the API-call cap of ${apiControls.maxApiCallsPerSearch}.`
+        : rawCount === 0
+        ? "Checked configured regions and no MarketCheck listings were returned."
+        : usableCompCount >= MIN_USABLE_COMPS
+        ? `Stopped after finding ${usableCompCount} usable comps.`
+        : "Checked all required configured regions for this search.";
 
     const responsePayload = {
       search: {
@@ -804,6 +1003,18 @@ export async function POST(request: Request) {
       filteredOutMissingPriceOrMileage: mappedNullCount,
       lowConfidenceFallback,
       minimumQualityScore,
+      apiControls,
+      apiUsage: {
+        apiCallsMade: searches.length,
+        cacheHit: false,
+        stopReason,
+        usableCompCount,
+        searchLog,
+      },
+      apiCallsMade: searches.length,
+      usableCompCount,
+      stopReason,
+      searchLog,
       comps,
       cache: {
         hit: false,
