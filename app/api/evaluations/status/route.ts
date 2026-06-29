@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getDefaultCompanyId } from "@/lib/supabase/company";
 
 const allowedStatuses = new Set([
   "watching",
@@ -34,11 +35,13 @@ export async function PATCH(request: Request) {
     }
 
     const supabase = createSupabaseAdminClient();
+    const companyId = await getDefaultCompanyId(supabase);
 
     const { data, error } = await supabase
       .from("auction_evaluations")
       .update({ status })
       .eq("id", id)
+      .eq("company_id", companyId)
       .select("id, status, updated_at")
       .single();
 

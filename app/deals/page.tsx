@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { DealsPipelineTable } from "@/components/deals/deals-pipeline-table";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getDefaultCompanyId } from "@/lib/supabase/company";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ type SavedEvaluation = {
 
 async function getSavedEvaluations() {
   const supabase = createSupabaseAdminClient();
+  const companyId = await getDefaultCompanyId(supabase);
 
   const { data, error } = await supabase
     .from("auction_evaluations")
@@ -48,6 +50,7 @@ async function getSavedEvaluations() {
       auction_site
     `
     )
+    .eq("company_id", companyId)
     .order("updated_at", {
       ascending: false,
     })

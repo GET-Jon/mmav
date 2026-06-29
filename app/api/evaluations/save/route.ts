@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getDefaultCompanyId } from "@/lib/supabase/company";
 
 function toNumber(value: unknown) {
   const parsed = Number(value);
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const supabase = createSupabaseAdminClient();
+    const companyId = await getDefaultCompanyId(supabase);
 
     const id = toStringOrNull(body.id);
 
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
     const valuation = body.valuation || {};
 
     const row = {
+      company_id: companyId,
       status: body.status || "watching",
 
       vin: toStringOrNull(decodedVehicle.vin || body.vin),
@@ -64,6 +67,7 @@ export async function POST(request: Request) {
         .from("auction_evaluations")
         .update(row)
         .eq("id", id)
+        .eq("company_id", companyId)
         .select("id, updated_at")
         .single();
 
