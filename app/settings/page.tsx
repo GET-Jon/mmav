@@ -1,3 +1,4 @@
+import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -12,13 +13,14 @@ export default async function SettingsPage() {
         <AppSidebar active="settings" userEmail={user?.email} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
+          <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
             <div>
-              <div className="text-xl font-bold">Settings</div>
-              <div className="text-sm text-slate-500">
-                System configuration and valuation controls
+              <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                Settings
               </div>
             </div>
+
+            <AccountStatus userEmail={user?.email} />
           </header>
 
           <div className="flex-1 p-6">

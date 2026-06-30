@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { AccountStatus } from "@/components/auth/account-status";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
@@ -1193,24 +1194,14 @@ export function EvaluationWorkspace({
         <AppSidebar active="evaluator" userEmail={userEmail} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
+          <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
             <div>
-              <div className="text-xl font-bold">Auction Evaluator</div>
-              <div className="text-xs text-slate-500">
-                Live valuation workspace
+              <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                Evaluator
               </div>
             </div>
 
-            <div className="hidden w-[420px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500 md:block">
-              Enter VIN or search vehicles...
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                Buyer
-              </div>
-              <div className="h-9 w-9 rounded-full bg-slate-900" />
-            </div>
+            <AccountStatus userEmail={userEmail} />
           </header>
 
           <div className="flex-1 p-6">
@@ -1249,65 +1240,65 @@ export function EvaluationWorkspace({
               </div>
             </div>
 
-            <section className={`mb-5 rounded-2xl border p-5 shadow-sm ${decisionBannerTone}`}>
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                <div>
-                  <div className={`text-3xl font-black tracking-tight ${decisionTextTone}`}>
+            <section className={`mb-5 rounded-2xl border px-5 py-4 shadow-sm ${decisionBannerTone}`}>
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+                <div className="shrink-0 xl:w-60">
+                  <div className={`text-3xl font-black leading-none tracking-tight ${decisionTextTone}`}>
                     {valuation.decision}
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-3 py-1 text-sm font-bold ${decisionBadgeTone}`}>
                       {valuation.riskGrade} risk
                     </span>
-                    <span className="text-sm font-semibold text-slate-600">
+
+                    <span className="text-sm font-bold text-slate-600">
                       Current bid {money(valuationInput.currentBid)}
                     </span>
                   </div>
                 </div>
 
-                <div className="text-sm font-semibold text-slate-600">
-                  Comps, condition rules, costs, and assumptions feed this recommendation.
-                </div>
-              </div>
+                <div className="hidden h-16 w-px shrink-0 bg-emerald-200/70 xl:block" />
 
-              <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-                {[
-                  {
-                    label: "All-in cost",
-                    value: money(valuation.allInCost),
-                    tone: "text-slate-950",
-                  },
-                  {
-                    label: "Gross profit",
-                    value: money(valuation.expectedGrossProfit),
-                    tone:
-                      valuation.expectedGrossProfit >= 0
-                        ? "text-emerald-700"
-                        : "text-red-700",
-                  },
-                  {
-                    label: "Max smart bid",
-                    value: money(valuation.maxSmartBid),
-                    tone: "text-blue-700",
-                  },
-                  {
-                    label: "Stretch bid",
-                    value: money(valuation.stretchBid),
-                    tone: "text-purple-700",
-                  },
-                ].map((metric) => (
-                  <div
-                    key={metric.label}
-                    className="rounded-xl border border-white/60 bg-white/80 px-4 py-3 shadow-sm"
-                  >
-                    <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      {metric.label}
+                <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    {
+                      label: "All-in cost",
+                      value: money(valuation.allInCost),
+                      tone: "text-slate-950",
+                    },
+                    {
+                      label: "Gross profit",
+                      value: money(valuation.expectedGrossProfit),
+                      tone:
+                        valuation.expectedGrossProfit >= 0
+                          ? "text-emerald-700"
+                          : "text-red-700",
+                    },
+                    {
+                      label: "Max smart bid",
+                      value: money(valuation.maxSmartBid),
+                      tone: "text-blue-700",
+                    },
+                    {
+                      label: "Stretch bid",
+                      value: money(valuation.stretchBid),
+                      tone: "text-purple-700",
+                    },
+                  ].map((metric) => (
+                    <div
+                      key={metric.label}
+                      className="rounded-xl border border-slate-200/70 bg-white/85 px-4 py-3 shadow-sm"
+                    >
+                      <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+                        {metric.label}
+                      </div>
+                      <div className={`mt-1 text-lg font-black leading-tight ${metric.tone}`}>
+                        {metric.value}
+                      </div>
                     </div>
-                    <div className={`mt-1 text-xl font-black ${metric.tone}`}>
-                      {metric.value}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </section>
 
