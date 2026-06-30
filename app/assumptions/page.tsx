@@ -3,6 +3,7 @@ import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
 import type { Assumptions } from "@/types/assumptions";
 
 export const dynamic = "force-dynamic";
@@ -48,12 +49,13 @@ async function loadAssumptions(): Promise<{
 }
 
 export default async function AssumptionsPage() {
+  const user = await getCurrentUser();
   const { assumptions, source } = await loadAssumptions();
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
-        <AppSidebar active="assumptions" />
+        <AppSidebar active="assumptions" userEmail={user?.email} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">

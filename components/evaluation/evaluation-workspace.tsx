@@ -248,9 +248,11 @@ type SavedEvaluationPayload = {
 export function EvaluationWorkspace({
   initialSavedEvaluationId = null,
   initialSavedPayload = null,
+  userEmail = null,
 }: {
   initialSavedEvaluationId?: string | null;
   initialSavedPayload?: SavedEvaluationPayload | null;
+  userEmail?: string | null;
 }) {
   const [evaluation, setEvaluation] = useState<ValuationInput>(
     initialSavedPayload?.evaluation || initialEvaluation
@@ -1174,7 +1176,7 @@ export function EvaluationWorkspace({
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
-        <AppSidebar active="evaluator" />
+        <AppSidebar active="evaluator" userEmail={userEmail} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">

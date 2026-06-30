@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { SignOutButton } from "@/components/auth/sign-out-button";
 
 type AppSidebarProps = {
   active?: "evaluator" | "saved" | "assumptions" | "settings";
+  userEmail?: string | null;
 };
 
 function navClass(isActive: boolean) {
@@ -13,7 +15,10 @@ function navClass(isActive: boolean) {
   ].join(" ");
 }
 
-export function AppSidebar({ active = "evaluator" }: AppSidebarProps) {
+export function AppSidebar({
+  active = "evaluator",
+  userEmail = null,
+}: AppSidebarProps) {
   return (
     <aside className="hidden w-64 shrink-0 bg-slate-950 p-5 text-white lg:block">
       <div className="mb-10 flex items-center justify-center">
@@ -45,6 +50,18 @@ export function AppSidebar({ active = "evaluator" }: AppSidebarProps) {
           Settings
         </Link>
       </nav>
+
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+          Signed in
+        </div>
+
+        <div className="mb-3 truncate text-sm font-semibold text-slate-200">
+          {userEmail || "Unknown user"}
+        </div>
+
+        <SignOutButton />
+      </div>
     </aside>
   );
 }

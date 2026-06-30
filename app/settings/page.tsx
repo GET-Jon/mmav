@@ -1,13 +1,15 @@
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const user = await getCurrentUser();
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
-        <AppSidebar active="settings" />
+        <AppSidebar active="settings" userEmail={user?.email} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">

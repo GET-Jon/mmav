@@ -2,6 +2,7 @@ import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { DealsPipelineTable } from "@/components/deals/deals-pipeline-table";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getDefaultCompanyId } from "@/lib/supabase/company";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,7 @@ async function getSavedEvaluations() {
 }
 
 export default async function DealsPage() {
+  const user = await getCurrentUser();
   let evaluations: SavedEvaluation[] = [];
   let loadError: string | null = null;
 
@@ -87,7 +89,7 @@ export default async function DealsPage() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
-        <AppSidebar active="saved" />
+        <AppSidebar active="saved" userEmail={user?.email} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
