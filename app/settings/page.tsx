@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
+import { CompanyUserActions } from "@/components/settings/company-user-actions";
 import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -232,10 +233,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                   </div>
                 </div>
 
-                <div className="mb-5">
-                  <CompanyUserInviteForm canManageUsers={canManageUsers} />
-                </div>
-
                 <div className="overflow-hidden rounded-xl border border-slate-200">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-xs uppercase text-slate-500">
@@ -364,8 +361,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     <h2 className="text-xl font-bold">Company Users</h2>
                     <p className="mt-1 max-w-3xl text-sm text-slate-600">
                       Users attached to {company?.companyName || "this company"}.
-                      This is read-only for now. Invite, role edit, and deactivate
-                      actions come next.
+                      Add users, adjust roles, and disable access for users who
+                      should no longer see this company workspace.
                     </p>
                   </div>
 
@@ -388,6 +385,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                         <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3">Added</th>
                         <th className="px-4 py-3">Last Sign In</th>
+                        <th className="px-4 py-3">Actions</th>
                       </tr>
                     </thead>
 
@@ -427,12 +425,22 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                             <td className="px-4 py-3 text-slate-600">
                               {formatDate(member.lastSignInAt)}
                             </td>
+
+                            <td className="px-4 py-3">
+                              <CompanyUserActions
+                                membershipId={member.id}
+                                currentRole={member.role || "user"}
+                                currentStatus={member.status || "active"}
+                                canManageUsers={canManageUsers}
+                                isCurrentUser={member.user_id === user?.id}
+                              />
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
                           <td
-                            colSpan={5}
+                            colSpan={6}
                             className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
                           >
                             No company users found.

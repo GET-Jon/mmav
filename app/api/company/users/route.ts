@@ -4,6 +4,7 @@ import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 const allowedRoles = new Set(["company_admin", "user"]);
+const allowedStatuses = new Set(["active", "disabled"]);
 
 function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -17,6 +18,16 @@ function normalizeRole(value: unknown) {
   }
 
   return role;
+}
+
+function normalizeStatus(value: unknown) {
+  const status = String(value || "").trim();
+
+  if (!allowedStatuses.has(status)) {
+    return null;
+  }
+
+  return status;
 }
 
 async function findAuthUserByEmail(
@@ -37,6 +48,27 @@ async function findAuthUserByEmail(
       (user) => user.email?.toLowerCase() === email.toLowerCase()
     ) || null
   );
+}
+
+async function countActiveCompanyAdmins(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  companyId: string
+) {
+  const { count, error } = await supabase
+    .from("company_memberships")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("company_id", companyId)
+    .eq("role", "company_admin")
+    .eq("status", "active");
+
+  if (error) {
+    throw error;
+  }
+
+  return count || 0;
 }
 
 export async function POST(request: Request) {
@@ -140,6 +172,169 @@ export async function POST(request: Request) {
       {
         error:
           error instanceof Error ? error.message : "Failed to add company user.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const body = await request.json();
+
+    const membershipId = String(body.membershipId || "").trim();
+
+    let role: string | undefined;
+    let status: string | undefined;
+
+    if (body.role !== undefined) {
+      const normalizedRole = normalizeRole(body.role);
+
+      if (!normalizedRole) {
+        return NextResponse.json(
+          { error: "Role must be company_admin or user." },
+          { status: 400 }
+        );
+      }
+
+      role = normalizedRole;
+    }
+
+    if (body.status !== undefined) {
+      const normalizedStatus = normalizeStatus(body.status);
+
+      if (!normalizedStatus) {
+        return NextResponse.json(
+          { error: "Status must be active or disabled." },
+          { status: 400 }
+        );
+      }
+
+      status = normalizedStatus;
+    }
+
+    if (!membershipId) {
+      return NextResponse.json(
+        { error: "Membership id is required." },
+        { status: 400 }
+      );
+    }
+
+    if (role === undefined && status === undefined) {
+      return NextResponse.json(
+        { error: "No user changes were provided." },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createSupabaseAdminClient();
+    const company = await getCurrentCompanyForUser(supabase, currentUser.id);
+
+    if (company.role !== "company_admin") {
+      return NextResponse.json(
+        { error: "Only company admins can manage users." },
+        { status: 403 }
+      );
+    }
+
+    const { data: targetMembership, error: targetError } = await supabase
+      .from("company_memberships")
+      .select("id, company_id, user_id, role, status")
+      .eq("id", membershipId)
+      .eq("company_id", company.companyId)
+      .single();
+
+    if (targetError || !targetMembership) {
+      return NextResponse.json(
+        { error: "Company membership not found." },
+        { status: 404 }
+      );
+    }
+
+    const targetIsCurrentUser = targetMembership.user_id === currentUser.id;
+
+    if (targetIsCurrentUser && status === "disabled") {
+      return NextResponse.json(
+        { error: "You cannot disable your own company access." },
+        { status: 400 }
+      );
+    }
+
+    if (targetIsCurrentUser && role === "user") {
+      return NextResponse.json(
+        { error: "You cannot demote your own admin role." },
+        { status: 400 }
+      );
+    }
+
+    const targetCurrentlyActiveAdmin =
+      targetMembership.role === "company_admin" &&
+      targetMembership.status === "active";
+
+    const wouldStopBeingActiveAdmin =
+      targetCurrentlyActiveAdmin &&
+      (role === "user" || status === "disabled");
+
+    if (wouldStopBeingActiveAdmin) {
+      const activeAdminCount = await countActiveCompanyAdmins(
+        supabase,
+        company.companyId
+      );
+
+      if (activeAdminCount <= 1) {
+        return NextResponse.json(
+          {
+            error: "This company must keep at least one active company admin.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const update: {
+      role?: string;
+      status?: string;
+      updated_at: string;
+    } = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (role !== undefined) {
+      update.role = role;
+    }
+
+    if (status !== undefined) {
+      update.status = status;
+    }
+
+    const { data, error } = await supabase
+      .from("company_memberships")
+      .update(update)
+      .eq("id", membershipId)
+      .eq("company_id", company.companyId)
+      .select("id, company_id, user_id, role, status, created_at, updated_at")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      membership: data,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update company user.",
       },
       { status: 500 }
     );
