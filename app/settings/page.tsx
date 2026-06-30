@@ -1,12 +1,139 @@
+import Link from "next/link";
 import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+type SettingsTab = "taxonomy" | "api" | "users" | "organization";
+
+type SettingsPageProps = {
+  searchParams?: Promise<{
+    tab?: string | string[];
+  }>;
+};
+
+type CompanyMemberRow = {
+  id: string;
+  user_id: string;
+  role: string | null;
+  status: string | null;
+  created_at: string | null;
+};
+
+type CompanyMemberView = CompanyMemberRow & {
+  email: string;
+  lastSignInAt: string | null;
+};
+
+function normalizeTab(value: string | string[] | undefined): SettingsTab {
+  const raw = Array.isArray(value) ? value[0] : value;
+
+  if (
+    raw === "api" ||
+    raw === "users" ||
+    raw === "organization" ||
+    raw === "taxonomy"
+  ) {
+    return raw;
+  }
+
+  return "taxonomy";
+}
+
+function tabClass(isActive: boolean) {
+  return [
+    "rounded-full px-4 py-2 text-sm font-bold shadow-sm transition",
+    isActive
+      ? "bg-slate-950 text-white"
+      : "bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800",
+  ].join(" ");
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function roleTone(role: string | null) {
+  switch (role) {
+    case "owner":
+      return "bg-purple-50 text-purple-700";
+    case "admin":
+      return "bg-blue-50 text-blue-700";
+    case "viewer":
+      return "bg-slate-100 text-slate-600";
+    default:
+      return "bg-emerald-50 text-emerald-700";
+  }
+}
+
+async function loadSettingsContext(userId: string) {
+  const supabase = createSupabaseAdminClient();
+  const company = await getCurrentCompanyForUser(supabase, userId);
+
+  const { data: members, error: membersError } = await supabase
+    .from("company_memberships")
+    .select("id, user_id, role, status, created_at")
+    .eq("company_id", company.companyId)
+    .order("created_at", { ascending: true });
+
+  if (membersError) {
+    throw new Error(membersError.message);
+  }
+
+  const enrichedMembers: CompanyMemberView[] = await Promise.all(
+    ((members || []) as CompanyMemberRow[]).map(async (member) => {
+      const { data } = await supabase.auth.admin.getUserById(member.user_id);
+
+      return {
+        ...member,
+        email: data?.user?.email || "Unknown user",
+        lastSignInAt: data?.user?.last_sign_in_at || null,
+      };
+    })
+  );
+
+  return {
+    company,
+    members: enrichedMembers,
+  };
+}
+
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const activeTab = normalizeTab(resolvedSearchParams.tab);
+
   const user = await getCurrentUser();
+
+  let companyContext: Awaited<ReturnType<typeof loadSettingsContext>> | null =
+    null;
+  let loadError: string | null = null;
+
+  if (user) {
+    try {
+      companyContext = await loadSettingsContext(user.id);
+    } catch (error) {
+      loadError =
+        error instanceof Error
+          ? error.message
+          : "Settings data failed to load.";
+    }
+  }
+
+  const company = companyContext?.company;
+  const members = companyContext?.members || [];
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="flex min-h-screen">
@@ -20,128 +147,342 @@ export default async function SettingsPage() {
               </div>
             </div>
 
-            <AccountStatus userEmail={user?.email} />
+            <AccountStatus
+              userEmail={user?.email}
+              roleLabel={company?.role || "Buyer"}
+              companyLabel={company?.companyName || "Mindful Motor Co."}
+            />
           </header>
 
           <div className="flex-1 p-6">
             <div className="mb-6">
               <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
               <p className="mt-1 text-slate-600">
-                Review operational rules used by the auction evaluator.
+                Review operational rules, company users, and organization
+                configuration.
               </p>
             </div>
 
+            {loadError ? (
+              <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                Settings could not load: {loadError}
+              </div>
+            ) : null}
+
             <div className="mb-5 flex flex-wrap gap-2">
-              <div className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">
+              <Link
+                href="/settings?tab=taxonomy"
+                className={tabClass(activeTab === "taxonomy")}
+              >
                 Model Taxonomy
-              </div>
-              <div className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-500 shadow-sm">
+              </Link>
+
+              <Link
+                href="/settings?tab=api"
+                className={tabClass(activeTab === "api")}
+              >
                 API Usage
-              </div>
-              <div className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-500 shadow-sm">
+              </Link>
+
+              <Link
+                href="/settings?tab=users"
+                className={tabClass(activeTab === "users")}
+              >
                 Users
-              </div>
-              <div className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-500 shadow-sm">
+              </Link>
+
+              <Link
+                href="/settings?tab=organization"
+                className={tabClass(activeTab === "organization")}
+              >
                 Organization
-              </div>
+              </Link>
             </div>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                <div>
-                  <h2 className="text-xl font-bold">MarketCheck Model Taxonomy</h2>
+            {activeTab === "taxonomy" ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                  <div>
+                    <h2 className="text-xl font-bold">
+                      MarketCheck Model Taxonomy
+                    </h2>
+                    <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                      These rules handle cases where MarketCheck groups a true
+                      performance model under a broader model family. The broader
+                      model is used only as a candidate retrieval pool. Returned
+                      listings must still pass strict include/reject filters
+                      before they can be used as comps.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                    View-only for now. Admin editing should be added after
+                    Supabase-backed audit history.
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Make</th>
+                        <th className="px-4 py-3">User Model</th>
+                        <th className="px-4 py-3">Fallback Search</th>
+                        <th className="px-4 py-3">Must Include</th>
+                        <th className="px-4 py-3">Reject If Includes</th>
+                        <th className="px-4 py-3">Notes</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {modelTaxonomyFallbacks.map((fallback) => (
+                        <tr
+                          key={fallback.id}
+                          className="align-top hover:bg-slate-50"
+                        >
+                          <td className="px-4 py-3 font-semibold">
+                            {fallback.make}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {fallback.requestedModels.map((model) => (
+                                <span
+                                  key={model}
+                                  className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
+                                >
+                                  {model}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-blue-700">
+                              {fallback.fallbackModel}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {fallback.fallbackLabel}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {fallback.mustInclude.map((term) => (
+                                <span
+                                  key={term}
+                                  className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"
+                                >
+                                  {term}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {fallback.rejectIfIncludes.map((term) => (
+                                <span
+                                  key={term}
+                                  className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700"
+                                >
+                                  {term}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {fallback.notes}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+
+            {activeTab === "api" ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5">
+                  <h2 className="text-xl font-bold">API Usage</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                    These rules handle cases where MarketCheck groups a true
-                    performance model under a broader model family. The broader
-                    model is used only as a candidate retrieval pool. Returned
-                    listings must still pass strict include/reject filters before
-                    they can be used as comps.
+                    Company-level API limits, usage logs, and provider settings
+                    will live here. The current evaluator already supports
+                    MarketCheck call controls; this page will become the admin
+                    view for those controls.
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                  View-only for now. Admin editing should be added after
-                  Supabase-backed audit history.
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Provider
+                    </div>
+                    <div className="mt-2 text-lg font-black">MarketCheck</div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Live Lookups
+                    </div>
+                    <div className="mt-2 text-lg font-black">Controlled</div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Status
+                    </div>
+                    <div className="mt-2 text-lg font-black text-amber-700">
+                      Admin view pending
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </section>
+            ) : null}
 
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Make</th>
-                      <th className="px-4 py-3">User Model</th>
-                      <th className="px-4 py-3">Fallback Search</th>
-                      <th className="px-4 py-3">Must Include</th>
-                      <th className="px-4 py-3">Reject If Includes</th>
-                      <th className="px-4 py-3">Notes</th>
-                    </tr>
-                  </thead>
+            {activeTab === "users" ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                  <div>
+                    <h2 className="text-xl font-bold">Company Users</h2>
+                    <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                      Users attached to {company?.companyName || "this company"}.
+                      This is read-only for now. Invite, role edit, and deactivate
+                      actions come next.
+                    </p>
+                  </div>
 
-                  <tbody className="divide-y divide-slate-100">
-                    {modelTaxonomyFallbacks.map((fallback) => (
-                      <tr key={fallback.id} className="align-top hover:bg-slate-50">
-                        <td className="px-4 py-3 font-semibold">
-                          {fallback.make}
-                        </td>
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-xl bg-slate-300 px-4 py-2 text-sm font-bold text-white"
+                  >
+                    Invite User Soon
+                  </button>
+                </div>
 
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {fallback.requestedModels.map((model) => (
-                              <span
-                                key={model}
-                                className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
-                              >
-                                {model}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-blue-700">
-                            {fallback.fallbackModel}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            {fallback.fallbackLabel}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {fallback.mustInclude.map((term) => (
-                              <span
-                                key={term}
-                                className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"
-                              >
-                                {term}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {fallback.rejectIfIncludes.map((term) => (
-                              <span
-                                key={term}
-                                className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700"
-                              >
-                                {term}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3 text-slate-600">
-                          {fallback.notes}
-                        </td>
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">User</th>
+                        <th className="px-4 py-3">Role</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Added</th>
+                        <th className="px-4 py-3">Last Sign In</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {members.length ? (
+                        members.map((member) => (
+                          <tr key={member.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-3">
+                              <div className="font-bold text-slate-950">
+                                {member.email}
+                              </div>
+                              <div className="mt-1 font-mono text-xs text-slate-400">
+                                {member.user_id}
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <span
+                                className={`rounded-full px-3 py-1 text-xs font-bold ${roleTone(
+                                  member.role
+                                )}`}
+                              >
+                                {member.role || "member"}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                                {member.status || "active"}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-600">
+                              {formatDate(member.created_at)}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-600">
+                              {formatDate(member.lastSignInAt)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
+                          >
+                            No company users found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+
+            {activeTab === "organization" ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5">
+                  <h2 className="text-xl font-bold">Organization</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                    Current company context resolved from the logged-in user's
+                    active company membership.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Company
+                    </div>
+                    <div className="mt-2 text-lg font-black">
+                      {company?.companyName || "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Slug
+                    </div>
+                    <div className="mt-2 font-mono text-sm font-bold">
+                      {company?.companySlug || "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Your Role
+                    </div>
+                    <div className="mt-2 text-lg font-black">
+                      {company?.role || "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Members
+                    </div>
+                    <div className="mt-2 text-lg font-black">
+                      {members.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                  Editing company name, slug, API limits, and user roles should
+                  be added after invite/user-management actions are wired.
+                </div>
+              </section>
+            ) : null}
           </div>
         </div>
       </div>
