@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
+import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
 import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -67,14 +68,23 @@ function formatDate(value: string | null) {
 
 function roleTone(role: string | null) {
   switch (role) {
-    case "owner":
-      return "bg-purple-50 text-purple-700";
-    case "admin":
+    case "company_admin":
       return "bg-blue-50 text-blue-700";
-    case "viewer":
-      return "bg-slate-100 text-slate-600";
-    default:
+    case "user":
       return "bg-emerald-50 text-emerald-700";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+}
+
+function formatRole(role: string | null) {
+  switch (role) {
+    case "company_admin":
+      return "Company Admin";
+    case "user":
+      return "User";
+    default:
+      return role || "User";
   }
 }
 
@@ -133,6 +143,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
   const company = companyContext?.company;
   const members = companyContext?.members || [];
+  const canManageUsers = company?.role === "company_admin";
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -219,6 +230,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     View-only for now. Admin editing should be added after
                     Supabase-backed audit history.
                   </div>
+                </div>
+
+                <div className="mb-5">
+                  <CompanyUserInviteForm canManageUsers={canManageUsers} />
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -354,13 +369,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    disabled
-                    className="rounded-xl bg-slate-300 px-4 py-2 text-sm font-bold text-white"
-                  >
-                    Invite User Soon
-                  </button>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                    User invites are now available for company admins. Email
+                    delivery/password setup can be refined next.
+                  </div>
+                </div>
+
+                <div className="mb-5">
+                  <CompanyUserInviteForm canManageUsers={canManageUsers} />
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -394,7 +410,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                                   member.role
                                 )}`}
                               >
-                                {member.role || "member"}
+                                {formatRole(member.role)}
                               </span>
                             </td>
 
