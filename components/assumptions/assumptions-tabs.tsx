@@ -536,9 +536,7 @@ export function AssumptionsTabs({
               >
                 <button
                   type="button"
-                  onClick={() =>
-                    setOpenMenu(menuIsOpen ? null : group.label)
-                  }
+                  onClick={() => setOpenMenu(menuIsOpen ? null : group.label)}
                   className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${
                     groupIsActive || menuIsOpen
                       ? "bg-slate-950 text-white"
@@ -552,29 +550,31 @@ export function AssumptionsTabs({
                 </button>
 
                 {menuIsOpen && (
-                  <div className="absolute left-0 top-11 z-50 min-w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                    <div className="px-3 pb-2 pt-2 text-xs leading-5 text-slate-500">
-                      {group.description}
-                    </div>
+                  <div className="absolute left-0 top-full z-50 min-w-64 pt-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                      <div className="px-3 pb-2 pt-2 text-xs leading-5 text-slate-500">
+                        {group.description}
+                      </div>
 
-                    <div className="space-y-1">
-                      {group.tabs.map((tab) => (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => {
-                            setActiveTab(tab.id);
-                            setOpenMenu(null);
-                          }}
-                          className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
-                            activeTab === tab.id
-                              ? "bg-slate-950 text-white"
-                              : "text-slate-700 hover:bg-slate-100"
-                          }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
+                      <div className="space-y-1">
+                        {group.tabs.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(tab.id);
+                              setOpenMenu(null);
+                            }}
+                            className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                              activeTab === tab.id
+                                ? "bg-slate-950 text-white"
+                                : "text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
