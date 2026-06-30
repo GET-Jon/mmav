@@ -48,8 +48,16 @@ export function CompanyUserInviteForm({
 
       setEmail("");
       setRole("user");
-      setStatus(`Added ${data.user?.email || "user"} to the company.`);
-      router.refresh();
+
+      if (data.inviteSent) {
+        setStatus(`Invite sent to ${data.user?.email || "user"}. Refreshing user list...`);
+      } else {
+        setStatus(`${data.user?.email || "User"} already existed. Company access updated. Refreshing user list...`);
+      }
+
+      setTimeout(() => {
+        router.refresh();
+      }, 1200);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to add user.");
     } finally {
@@ -63,7 +71,7 @@ export function CompanyUserInviteForm({
       className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
     >
       <div className="mb-3">
-        <div className="text-sm font-black text-slate-950">Add user</div>
+        <div className="text-sm font-black text-slate-950">Invite user</div>
         <div className="mt-1 text-xs leading-5 text-slate-500">
           Creates or finds a Supabase Auth user and attaches them to this company.
           They can log in with magic link or a password set later.
@@ -106,7 +114,7 @@ export function CompanyUserInviteForm({
           disabled={!canManageUsers || submitting}
           className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          {submitting ? "Adding..." : "Add User"}
+          {submitting ? "Inviting..." : "Invite User"}
         </button>
       </div>
 

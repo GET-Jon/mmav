@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
+import { getSiteUrl } from "@/lib/site-url";
 
 const allowedRoles = new Set(["company_admin", "user"]);
 const allowedStatuses = new Set(["active", "disabled"]);
@@ -109,23 +110,29 @@ export async function POST(request: Request) {
     }
 
     let authUser = await findAuthUserByEmail(supabase, email);
+    let inviteSent = false;
 
     if (!authUser) {
-      const { data, error } = await supabase.auth.admin.createUser({
+      const { data, error } = await supabase.auth.admin.inviteUserByEmail(
         email,
-        email_confirm: true,
-        user_metadata: {
-          source: "mmav_company_user_add",
-          company_id: company.companyId,
-          company_name: company.companyName,
-        },
-      });
+        {
+          redirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(
+            "/set-password"
+          )}`,
+          data: {
+            source: "mmav_company_user_invite",
+            company_id: company.companyId,
+            company_name: company.companyName,
+          },
+        }
+      );
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
       authUser = data.user;
+      inviteSent = true;
     }
 
     if (!authUser?.id) {
@@ -166,6 +173,7 @@ export async function POST(request: Request) {
         email: authUser.email,
       },
       membership,
+      inviteSent,
     });
   } catch (error) {
     return NextResponse.json(
