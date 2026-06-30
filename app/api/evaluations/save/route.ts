@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { getDefaultCompanyId } from "@/lib/supabase/company";
+import { getCurrentCompanyForUser } from "@/lib/supabase/company";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 function toNumber(value: unknown) {
   const parsed = Number(value);
@@ -19,10 +20,16 @@ function toStringOrNull(value: unknown) {
 
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const body = await request.json();
 
     const supabase = createSupabaseAdminClient();
-    const companyId = await getDefaultCompanyId(supabase);
+    const company = await getCurrentCompanyForUser(supabase, user.id);
 
     const id = toStringOrNull(body.id);
 
@@ -32,7 +39,7 @@ export async function POST(request: Request) {
     const valuation = body.valuation || {};
 
     const row = {
-      company_id: companyId,
+      company_id: company.companyId,
       status: body.status || "watching",
 
       vin: toStringOrNull(decodedVehicle.vin || body.vin),
@@ -59,6 +66,8 @@ export async function POST(request: Request) {
       decision: toStringOrNull(valuation.decision),
       risk_grade: toStringOrNull(valuation.riskGrade),
 
+      updated_by: user.id,
+
       payload: body,
     };
 
@@ -67,7 +76,7 @@ export async function POST(request: Request) {
         .from("auction_evaluations")
         .update(row)
         .eq("id", id)
-        .eq("company_id", companyId)
+        .eq("company_id", company.companyId)
         .select("id, updated_at")
         .single();
 
@@ -84,7 +93,10 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from("auction_evaluations")
-      .insert(row)
+      .insert({
+        ...row,
+        created_by: user.id,
+      })
       .select("id, created_at")
       .single();
 

@@ -2,7 +2,7 @@ import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { DealsPipelineTable } from "@/components/deals/deals-pipeline-table";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { getDefaultCompanyId } from "@/lib/supabase/company";
+import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +26,9 @@ type SavedEvaluation = {
   auction_site: string | null;
 };
 
-async function getSavedEvaluations() {
+async function getSavedEvaluations(userId: string) {
   const supabase = createSupabaseAdminClient();
-  const companyId = await getDefaultCompanyId(supabase);
+  const company = await getCurrentCompanyForUser(supabase, userId);
 
   const { data, error } = await supabase
     .from("auction_evaluations")
@@ -52,7 +52,7 @@ async function getSavedEvaluations() {
       auction_site
     `
     )
-    .eq("company_id", companyId)
+    .eq("company_id", company.companyId)
     .order("updated_at", {
       ascending: false,
     })
@@ -77,7 +77,11 @@ export default async function DealsPage() {
   let loadError: string | null = null;
 
   try {
-    const result = await getSavedEvaluations();
+    if (!user) {
+      throw new Error("You must be signed in to view saved searches.");
+    }
+
+    const result = await getSavedEvaluations(user.id);
     evaluations = result.evaluations;
     loadError = result.error;
   } catch (error) {

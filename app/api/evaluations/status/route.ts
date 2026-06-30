@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { getDefaultCompanyId } from "@/lib/supabase/company";
+import { getCurrentCompanyForUser } from "@/lib/supabase/company";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 const allowedStatuses = new Set([
   "watching",
@@ -15,6 +16,12 @@ const allowedStatuses = new Set([
 
 export async function PATCH(request: Request) {
   try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const body = await request.json();
 
     const id = String(body.id || "").trim();
@@ -35,13 +42,16 @@ export async function PATCH(request: Request) {
     }
 
     const supabase = createSupabaseAdminClient();
-    const companyId = await getDefaultCompanyId(supabase);
+    const company = await getCurrentCompanyForUser(supabase, user.id);
 
     const { data, error } = await supabase
       .from("auction_evaluations")
-      .update({ status })
+      .update({
+        status,
+        updated_by: user.id,
+      })
       .eq("id", id)
-      .eq("company_id", companyId)
+      .eq("company_id", company.companyId)
       .select("id, status, updated_at")
       .single();
 
