@@ -1159,19 +1159,33 @@ export function EvaluationWorkspace({
     setAppliedVehicleProfile(null);
   }
 
-  const decisionTone =
-    valuation.decision === "Pass"
-      ? "bg-red-600"
-      : valuation.decision === "Watch / Stretch Only"
-      ? "bg-amber-500"
-      : "bg-emerald-600";
-
   const decisionBadgeTone =
     valuation.decision === "Pass"
       ? "bg-red-100 text-red-700"
       : valuation.decision === "Watch / Stretch Only"
       ? "bg-amber-100 text-amber-700"
       : "bg-emerald-100 text-emerald-700";
+
+  const decisionBannerTone =
+    valuation.decision === "Pass"
+      ? "border-red-200 bg-red-50 text-red-950"
+      : valuation.decision === "Watch / Stretch Only"
+      ? "border-amber-200 bg-amber-50 text-amber-950"
+      : "border-emerald-200 bg-emerald-50 text-emerald-950";
+
+  const decisionTextTone =
+    valuation.decision === "Pass"
+      ? "text-red-700"
+      : valuation.decision === "Watch / Stretch Only"
+      ? "text-amber-700"
+      : "text-emerald-700";
+
+  const vehicleMetaItems = [
+    vin ? `VIN ${vin}` : null,
+    auctionSite || null,
+    targetMileage ? `${formatNumberInput(targetMileage)} miles` : null,
+    savedEvaluationId ? "Saved evaluation" : "Draft evaluation",
+  ].filter(Boolean);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -1200,15 +1214,15 @@ export function EvaluationWorkspace({
           </header>
 
           <div className="flex-1 p-6">
-            <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+            <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <div className="text-3xl font-bold tracking-tight">
                   {vehicleTitle}
-                </h1>
-                <div
-                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-sm font-semibold ${decisionBadgeTone}`}
-                >
-                  {valuation.decision}
+                </div>
+                <div className="mt-2 text-sm font-medium text-slate-500">
+                  {vehicleMetaItems.length
+                    ? vehicleMetaItems.join(" · ")
+                    : "Start by entering a VIN, mileage, auction site, and current bid."}
                 </div>
               </div>
 
@@ -1219,7 +1233,11 @@ export function EvaluationWorkspace({
                   disabled={saveLoading}
                   className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  {saveLoading ? "Saving..." : savedEvaluationId ? "Update Evaluation" : "Save Evaluation"}
+                  {saveLoading
+                    ? "Saving..."
+                    : savedEvaluationId
+                    ? "Update Evaluation"
+                    : "Save Evaluation"}
                 </button>
                 <button
                   type="button"
@@ -1231,9 +1249,71 @@ export function EvaluationWorkspace({
               </div>
             </div>
 
+            <section className={`mb-5 rounded-2xl border p-5 shadow-sm ${decisionBannerTone}`}>
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                <div>
+                  <div className={`text-3xl font-black tracking-tight ${decisionTextTone}`}>
+                    {valuation.decision}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-3 py-1 text-sm font-bold ${decisionBadgeTone}`}>
+                      {valuation.riskGrade} risk
+                    </span>
+                    <span className="text-sm font-semibold text-slate-600">
+                      Current bid {money(valuationInput.currentBid)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-sm font-semibold text-slate-600">
+                  Comps, condition rules, costs, and assumptions feed this recommendation.
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+                {[
+                  {
+                    label: "All-in cost",
+                    value: money(valuation.allInCost),
+                    tone: "text-slate-950",
+                  },
+                  {
+                    label: "Gross profit",
+                    value: money(valuation.expectedGrossProfit),
+                    tone:
+                      valuation.expectedGrossProfit >= 0
+                        ? "text-emerald-700"
+                        : "text-red-700",
+                  },
+                  {
+                    label: "Max smart bid",
+                    value: money(valuation.maxSmartBid),
+                    tone: "text-blue-700",
+                  },
+                  {
+                    label: "Stretch bid",
+                    value: money(valuation.stretchBid),
+                    tone: "text-purple-700",
+                  },
+                ].map((metric) => (
+                  <div
+                    key={metric.label}
+                    className="rounded-xl border border-white/60 bg-white/80 px-4 py-3 shadow-sm"
+                  >
+                    <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      {metric.label}
+                    </div>
+                    <div className={`mt-1 text-xl font-black ${metric.tone}`}>
+                      {metric.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_1.15fr_1fr]">
-                <SectionCard title="1. Vehicle Basics">
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_1fr]">
+                <SectionCard title="Vehicle & Bid">
                   <div className="space-y-5">
                     <div className="space-y-4">
                       <FormRow label="VIN">
@@ -1394,63 +1474,10 @@ export function EvaluationWorkspace({
                   appliedVehicleProfile={appliedVehicleProfile}
                   onReapplyVehicleProfile={reapplyVehicleProfile}
                 />
-
-                <SectionCard title="6. Output / Decision">
-                  <div className="grid grid-cols-2 gap-3">
-                    <MetricCard
-                      label="All-In Cost"
-                      value={money(valuation.allInCost)}
-                      help="Estimated total cost basis after purchase price/current bid plus auction fee, transport, recon, admin, general risk reserve, and specific risk adds."
-                    />
-                    <MetricCard
-                      label="Gross Profit"
-                      value={money(valuation.expectedGrossProfit)}
-                      tone={valuation.expectedGrossProfit >= 0 ? "green" : "red"}
-                      help="Expected gross profit at the current bid or entered purchase price, after estimated costs and risk reserves."
-                    />
-                    <MetricCard
-                      label="Safe Bid"
-                      value={money(valuation.safeBid)}
-                      help="Conservative bid target. This usually leaves more margin for error and is the preferred bid ceiling when comps or condition confidence are weaker."
-                    />
-                    <MetricCard
-                      label="Max Smart Bid"
-                      value={money(valuation.maxSmartBid)}
-                      tone="blue"
-                      help="Primary recommended ceiling. It backs out required profit, costs, and risk reserves from the expected resale target."
-                    />
-                    <MetricCard
-                      label="Stretch Bid"
-                      value={money(valuation.stretchBid)}
-                      tone="purple"
-                      help="Aggressive ceiling for cases where the vehicle is unusually attractive, confidence is high, or strategic reasons justify accepting less margin."
-                    />
-                    <MetricCard
-                      label="Risk Grade"
-                      value={valuation.riskGrade}
-                      tone={
-                        valuation.riskGrade === "Low"
-                          ? "green"
-                          : valuation.riskGrade === "Medium"
-                          ? "orange"
-                          : "red"
-                      }
-                      help="Risk classification based on selected condition issues, avoid flags, and configured risk thresholds. Higher risk should require more profit or a lower bid."
-                    />
-                  </div>
-
-                  <div className={`mt-4 rounded-2xl p-5 text-white ${decisionTone}`}>
-                    <div className="text-3xl font-black">{valuation.decision}</div>
-                    <p className="mt-2 text-sm text-white/90">
-                      Comps, condition rules, costs, and assumptions now feed
-                      the valuation.
-                    </p>
-                  </div>
-                </SectionCard>
               </div>
 
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1.15fr_.9fr]">
-                <SectionCard title="3. Condition Checklist">
+                <SectionCard title="Condition Checklist">
                     <div className="space-y-4 text-sm">
                       {Object.entries(conditionGroups).map(([category, rules]) => (
                         <div key={category}>
@@ -1506,7 +1533,7 @@ export function EvaluationWorkspace({
                     </div>
                   </SectionCard>
 
-                <SectionCard title="5. Cost & Risk">
+                <SectionCard title="Cost & Risk">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <CurrencyInput
                       label="Auction Fee"
@@ -1590,7 +1617,7 @@ export function EvaluationWorkspace({
                   </div>
                 </SectionCard>
 
-                <SectionCard title="7. Deal Notes">
+                <SectionCard title="Deal Notes">
                   <textarea
                     className="h-28 w-full rounded-xl border border-slate-200 p-3 text-sm"
                     value={notes}
@@ -1605,7 +1632,7 @@ export function EvaluationWorkspace({
 
               <div id="market-comps" className="scroll-mt-6">
                 <SectionCard
-                  title="4. Market Comps"
+                  title="Market Comps"
                   action={
                     marketCheckStatus ? (
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
