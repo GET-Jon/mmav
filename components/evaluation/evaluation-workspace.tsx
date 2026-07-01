@@ -5,6 +5,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AccountStatus } from "@/components/auth/account-status";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import {
+  MARKETCHECK_API_CONTROLS_STORAGE_KEY,
+  defaultMarketCheckApiControls,
+  normalizeMarketCheckApiControls,
+} from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { calculateCompSummary } from "@/lib/comps";
@@ -300,12 +305,54 @@ export function EvaluationWorkspace({
     minimumQualityScore?: number;
   } | null>(null);
 
-  const [marketCheckApiControls, setMarketCheckApiControls] = useState({
-    liveLookupEnabled: false,
-    maxApiCallsPerSearch: 3,
-    minUsableCompsToStop: 10,
-    minInitialRegions: 2,
+  const [marketCheckApiControls, setMarketCheckApiControls] = useState(() => {
+    if (typeof window === "undefined") {
+      return defaultMarketCheckApiControls;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(
+        MARKETCHECK_API_CONTROLS_STORAGE_KEY
+      );
+
+      if (stored) {
+        return normalizeMarketCheckApiControls(JSON.parse(stored));
+      }
+    } catch {}
+
+    return defaultMarketCheckApiControls;
   });
+
+  useEffect(() => {
+    function syncMarketCheckApiControlsFromStorage() {
+      try {
+        const stored = window.localStorage.getItem(
+          MARKETCHECK_API_CONTROLS_STORAGE_KEY
+        );
+
+        if (stored) {
+          setMarketCheckApiControls(
+            normalizeMarketCheckApiControls(JSON.parse(stored))
+          );
+          return;
+        }
+      } catch {}
+
+      setMarketCheckApiControls(defaultMarketCheckApiControls);
+    }
+
+    syncMarketCheckApiControlsFromStorage();
+
+    window.addEventListener("focus", syncMarketCheckApiControlsFromStorage);
+    window.addEventListener("pageshow", syncMarketCheckApiControlsFromStorage);
+    window.addEventListener("storage", syncMarketCheckApiControlsFromStorage);
+
+    return () => {
+      window.removeEventListener("focus", syncMarketCheckApiControlsFromStorage);
+      window.removeEventListener("pageshow", syncMarketCheckApiControlsFromStorage);
+      window.removeEventListener("storage", syncMarketCheckApiControlsFromStorage);
+    };
+  }, []);
 
   const [marketCheckApiUsage, setMarketCheckApiUsage] = useState<{
     apiCallsMade?: number;
@@ -498,13 +545,6 @@ export function EvaluationWorkspace({
       setMarketCheckStatus(draft.marketCheckStatus || "");
       setMarketCheckSearchMeta(draft.marketCheckSearchMeta || null);
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
-
-      if (draft.marketCheckApiControls) {
-        setMarketCheckApiControls((previous) => ({
-          ...previous,
-          ...draft.marketCheckApiControls,
-        }));
-      }
     } catch (error) {
       console.error("Failed to load local evaluator draft:", error);
     } finally {
@@ -533,7 +573,6 @@ export function EvaluationWorkspace({
           notes,
           marketCheckStatus,
           marketCheckSearchMeta,
-          marketCheckApiControls,
           marketCheckApiUsage,
         })
       );
@@ -553,7 +592,6 @@ export function EvaluationWorkspace({
     notes,
     marketCheckStatus,
     marketCheckSearchMeta,
-    marketCheckApiControls,
     marketCheckApiUsage,
     draftReady,
     initialSavedEvaluationId,
@@ -891,25 +929,6 @@ export function EvaluationWorkspace({
       setMarketCheckApiUsage(data.apiUsage || null);
 
       if (data.apiControls) {
-        setMarketCheckApiControls((previous) => ({
-          ...previous,
-          liveLookupEnabled:
-            typeof data.apiControls.liveLookupEnabled === "boolean"
-              ? data.apiControls.liveLookupEnabled
-              : previous.liveLookupEnabled,
-          maxApiCallsPerSearch:
-            typeof data.apiControls.maxApiCallsPerSearch === "number"
-              ? data.apiControls.maxApiCallsPerSearch
-              : previous.maxApiCallsPerSearch,
-          minUsableCompsToStop:
-            typeof data.apiControls.minUsableCompsToStop === "number"
-              ? data.apiControls.minUsableCompsToStop
-              : previous.minUsableCompsToStop,
-          minInitialRegions:
-            typeof data.apiControls.minInitialRegions === "number"
-              ? data.apiControls.minInitialRegions
-              : previous.minInitialRegions,
-        }));
       }
 
       if (!response.ok) {
@@ -1676,100 +1695,18 @@ export function EvaluationWorkspace({
                     ) : null
                   }
                 >
-                  <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-bold text-blue-950">
-                          MarketCheck API Controls
-                        </div>
-                        <div className="mt-1 text-xs leading-5 text-blue-800">
-                          Live lookups are off by default while the API quota is
-                          limited. Turning this on may consume MarketCheck calls.
-                        </div>
-                      </div>
-
-                      <label className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm">
-                        <input
-                          type="checkbox"
-                          checked={marketCheckApiControls.liveLookupEnabled}
-                          onChange={(event) =>
-                            setMarketCheckApiControls((previous) => ({
-                              ...previous,
-                              liveLookupEnabled: event.target.checked,
-                            }))
-                          }
-                        />
-                        Live lookup enabled
-                      </label>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <label className="block">
-                        <div className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">
-                          Max API Calls
-                        </div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={marketCheckApiControls.maxApiCallsPerSearch}
-                          onChange={(event) =>
-                            setMarketCheckApiControls((previous) => ({
-                              ...previous,
-                              maxApiCallsPerSearch: Math.max(
-                                1,
-                                Math.min(10, toNumber(event.target.value))
-                              ),
-                            }))
-                          }
-                          className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-right text-sm font-bold text-slate-900 shadow-sm outline-none"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <div className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">
-                          Stop After Usable Comps
-                        </div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={marketCheckApiControls.minUsableCompsToStop}
-                          onChange={(event) =>
-                            setMarketCheckApiControls((previous) => ({
-                              ...previous,
-                              minUsableCompsToStop: Math.max(
-                                1,
-                                Math.min(50, toNumber(event.target.value))
-                              ),
-                            }))
-                          }
-                          className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-right text-sm font-bold text-slate-900 shadow-sm outline-none"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <div className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">
-                          Minimum Initial Regions
-                        </div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={marketCheckApiControls.minInitialRegions}
-                          onChange={(event) =>
-                            setMarketCheckApiControls((previous) => ({
-                              ...previous,
-                              minInitialRegions: Math.max(
-                                1,
-                                Math.min(10, toNumber(event.target.value))
-                              ),
-                            }))
-                          }
-                          className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-right text-sm font-bold text-slate-900 shadow-sm outline-none"
-                        />
-                      </label>
-                    </div>
+                  <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                    <span className="font-bold">MarketCheck:</span>{" "}
+                    {marketCheckApiControls.liveLookupEnabled
+                      ? "Live lookup enabled"
+                      : "Live lookup disabled"}
+                    {" · "}
+                    {marketCheckApiControls.maxApiCallsPerSearch}-call cap
+                    {" · stop after "}
+                    {marketCheckApiControls.minUsableCompsToStop} usable comps
+                    {" · "}
+                    {marketCheckApiControls.minInitialRegions} initial region
+                    {marketCheckApiControls.minInitialRegions === 1 ? "" : "s"}
                   </div>
 
                   <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">

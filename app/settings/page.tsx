@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
+import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
 import { CompanyUserActions } from "@/components/settings/company-user-actions";
 import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -316,42 +317,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             ) : null}
 
             {activeTab === "api" ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-5">
-                  <h2 className="text-xl font-bold">API Usage</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                    Company-level API limits, usage logs, and provider settings
-                    will live here. The current evaluator already supports
-                    MarketCheck call controls; this page will become the admin
-                    view for those controls.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Provider
-                    </div>
-                    <div className="mt-2 text-lg font-black">MarketCheck</div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Live Lookups
-                    </div>
-                    <div className="mt-2 text-lg font-black">Controlled</div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Status
-                    </div>
-                    <div className="mt-2 text-lg font-black text-amber-700">
-                      Admin view pending
-                    </div>
-                  </div>
-                </div>
-              </section>
+              <MarketCheckApiSettingsCard />
             ) : null}
 
             {activeTab === "users" ? (

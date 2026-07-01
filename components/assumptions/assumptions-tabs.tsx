@@ -1614,7 +1614,22 @@ export function AssumptionsTabs({
 
                     <td className="px-3 py-3 leading-6 text-slate-600">
                       {fallback.notes}
-                    </td>
+cd /workspaces/mmav
+
+echo "----- types/comps.ts -----"
+sed -n '1,220p' types/comps.ts
+
+echo "----- marketcheck normalize area -----"
+sed -n '180,290p' app/api/marketcheck/search/route.ts
+
+echo "----- comps summary lib -----"
+sed -n '1,160p' lib/comps.ts
+
+echo "----- market comps table -----"
+sed -n '1,240p' components/comps/market-comps-table.tsx
+
+echo "----- market comps UI section -----"
+sed -n '1620,1910p' components/evaluation/evaluation-workspace.tsx                    </td>
                   </tr>
                 ))}
               </tbody>
