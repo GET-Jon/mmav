@@ -11,6 +11,8 @@ export type MarketComp = {
   mileage: number;
   askingPrice: number;
   qualityScore: number;
+  dealerDays?: number | null;
+  marketDays?: number | null;
 };
 
 export type CompConfidence = "Low" | "Medium" | "High";
@@ -23,4 +25,7 @@ export type CompSummary = {
   averageAdjusted: number;
   fastSaleTarget: number;
   confidence: CompConfidence;
+  averageDealerDays: number;
+  averageMarketDays: number;
+  marketSpeedSignal: "Unknown" | "Fast" | "Normal" | "Slow" | "Very Slow";
 };

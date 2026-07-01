@@ -28,6 +28,34 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function averageOptional(values: Array<number | null | undefined>) {
+  const validValues = values.filter(
+    (value): value is number => typeof value === "number" && value > 0
+  );
+
+  return validValues.length ? Math.round(average(validValues)) : 0;
+}
+
+function getMarketSpeedSignal(days: number) {
+  if (!days) {
+    return "Unknown";
+  }
+
+  if (days <= 30) {
+    return "Fast";
+  }
+
+  if (days <= 75) {
+    return "Normal";
+  }
+
+  if (days <= 120) {
+    return "Slow";
+  }
+
+  return "Very Slow";
+}
+
 export function getSourceDiscount(source: string, assumptions: Assumptions) {
   const match = assumptions.compSettings.sourceDiscounts.find(
     (discount) => discount.source === source
@@ -92,6 +120,18 @@ export function calculateCompSummary({
       )
     : 0;
 
+  const averageDealerDays = averageOptional(
+    validComps.map((comp) => comp.dealerDays)
+  );
+
+  const averageMarketDays = averageOptional(
+    validComps.map((comp) => comp.marketDays)
+  );
+
+  const marketSpeedSignal = getMarketSpeedSignal(
+    averageMarketDays || averageDealerDays
+  );
+
   const spread =
     medianAdjusted > 0 ? (highAdjusted - lowAdjusted) / medianAdjusted : 1;
 
@@ -111,5 +151,8 @@ export function calculateCompSummary({
     averageAdjusted,
     fastSaleTarget,
     confidence,
+    averageDealerDays,
+    averageMarketDays,
+    marketSpeedSignal,
   };
 }

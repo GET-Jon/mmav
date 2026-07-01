@@ -326,6 +326,15 @@ export function EvaluationWorkspace({
       usableComps?: number;
       cumulativeUsableComps?: number;
     }[];
+    marketTiming?: {
+      averageDealerDays?: number;
+      averageMarketDays?: number;
+    };
+    marketTimingDebug?: {
+      statsKeys?: string[];
+      statsSample?: unknown;
+      timingListingKeys?: string[];
+    };
   } | null>(null);
 
   const marketCheckInFlightRef = useRef(false);
@@ -559,6 +568,39 @@ export function EvaluationWorkspace({
       }),
     [comps, targetMileage]
   );
+
+  const marketTimingAverageDealerDays =
+    compSummary.averageDealerDays ||
+    marketCheckApiUsage?.marketTiming?.averageDealerDays ||
+    0;
+
+  const marketTimingAverageMarketDays =
+    compSummary.averageMarketDays ||
+    marketCheckApiUsage?.marketTiming?.averageMarketDays ||
+    0;
+
+  const marketTimingSpeedSignal = (() => {
+    const days = marketTimingAverageMarketDays || marketTimingAverageDealerDays;
+
+    if (!days) {
+      return "Unknown";
+    }
+
+    if (days <= 30) {
+      return "Fast";
+    }
+
+    if (days <= 75) {
+      return "Normal";
+    }
+
+    if (days <= 120) {
+      return "Slow";
+    }
+
+    return "Very Slow";
+  })();
+
 
   const conditionGroups = useMemo(() => {
     return activeAssumptions.conditionRules.reduce<
@@ -1046,6 +1088,7 @@ export function EvaluationWorkspace({
 
       if (!data.comps || data.comps.length === 0) {
         setComps([]);
+        setMarketCheckApiUsage(data.apiUsage || null);
         setMarketCheckSearchMeta({
           loadedCount: 0,
           regionsChecked: data.search?.regionsChecked || [],
@@ -1059,6 +1102,7 @@ export function EvaluationWorkspace({
       }
 
       setComps(data.comps);
+      setMarketCheckApiUsage(data.apiUsage || null);
       setMarketCheckSearchMeta({
         loadedCount: data.comps.length,
         regionsChecked: data.search?.regionsChecked || [],
@@ -1756,6 +1800,40 @@ export function EvaluationWorkspace({
                         <span className="font-bold text-slate-950">
                           {money(compSummary.fastSaleTarget)}
                         </span>
+                      </span>
+
+                      <span>
+                        Avg dealer days{" "}
+                        <span className="font-bold text-slate-950">
+                          {marketTimingAverageDealerDays
+                            ? `${marketTimingAverageDealerDays} days`
+                            : "—"}
+                        </span>
+                      </span>
+
+                      <span>
+                        Avg market days{" "}
+                        <span className="font-bold text-slate-950">
+                          {marketTimingAverageMarketDays
+                            ? `${marketTimingAverageMarketDays} days`
+                            : "—"}
+                        </span>
+                      </span>
+
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-bold ${
+                          marketTimingSpeedSignal === "Fast"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : marketTimingSpeedSignal === "Normal"
+                            ? "bg-blue-100 text-blue-700"
+                            : marketTimingSpeedSignal === "Slow"
+                            ? "bg-amber-100 text-amber-700"
+                            : marketTimingSpeedSignal === "Very Slow"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {marketTimingSpeedSignal} market
                       </span>
 
                       <span

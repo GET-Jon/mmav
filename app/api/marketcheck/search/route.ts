@@ -312,6 +312,7 @@ async function searchMarketCheck({
     zip,
     radius: String(radius),
     rows: String(rows),
+    stats: "dom,d om_180,dom_active,dos_active".replace("d om", "dom"),
   });
 
   if (year) {
@@ -515,6 +516,103 @@ function buildFailedMarketCheckResponse({
       status: failedSearch.status,
     }
   );
+}
+
+
+function getStatNumber(value: unknown) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return toNumber(
+    record.avg ??
+      record.average ??
+      record.mean ??
+      record.median ??
+      record.value
+  );
+}
+
+function getPayloadStat(payload: Record<string, any>, keys: string[]) {
+  const stats = payload?.stats;
+
+  if (!stats || typeof stats !== "object") {
+    return 0;
+  }
+
+  for (const key of keys) {
+    const value = getStatNumber((stats as Record<string, unknown>)[key]);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return 0;
+}
+
+function averagePositive(values: number[]) {
+  const positiveValues = values.filter((value) => value > 0);
+
+  if (!positiveValues.length) {
+    return 0;
+  }
+
+  return Math.round(
+    positiveValues.reduce((sum, value) => sum + value, 0) /
+      positiveValues.length
+  );
+}
+
+function getMarketTimingStats(searches: MarketCheckSearchResult[]) {
+  const dealerDaysBySearch = searches.map((search) =>
+    getPayloadStat(search.payload, ["dos_active", "dos", "days_on_site"])
+  );
+
+  const marketDaysBySearch = searches.map((search) =>
+    getPayloadStat(search.payload, [
+      "dom_active",
+      "dom_180",
+      "dom",
+      "days_on_market",
+    ])
+  );
+
+  return {
+    averageDealerDays: averagePositive(dealerDaysBySearch),
+    averageMarketDays: averagePositive(marketDaysBySearch),
+  };
+}
+
+
+function getMarketTimingDebug(searches: MarketCheckSearchResult[]) {
+  const firstPayload = searches[0]?.payload || {};
+  const firstStats = firstPayload?.stats;
+  const firstListing = Array.isArray(firstPayload?.listings)
+    ? firstPayload.listings[0]
+    : null;
+
+  const listingKeys = firstListing ? Object.keys(firstListing) : [];
+  const timingListingKeys = listingKeys.filter((key) =>
+    key.toLowerCase().includes("dom") ||
+    key.toLowerCase().includes("dos") ||
+    key.toLowerCase().includes("day")
+  );
+
+  const statsKeys =
+    firstStats && typeof firstStats === "object" ? Object.keys(firstStats) : [];
+
+  return {
+    statsKeys,
+    statsSample: firstStats || null,
+    timingListingKeys,
+  };
 }
 
 export async function POST(request: Request) {
@@ -979,6 +1077,9 @@ export async function POST(request: Request) {
         ? `Stopped after finding ${usableCompCount} usable comps.`
         : "Checked all required configured regions for this search.";
 
+    const marketTiming = getMarketTimingStats(searches);
+    const marketTimingDebug = getMarketTimingDebug(searches);
+
     const responsePayload = {
       search: {
         year,
@@ -1010,6 +1111,8 @@ export async function POST(request: Request) {
         stopReason,
         usableCompCount,
         searchLog,
+        marketTiming,
+        marketTimingDebug,
       },
       apiCallsMade: searches.length,
       usableCompCount,
