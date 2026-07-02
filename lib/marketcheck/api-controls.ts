@@ -34,3 +34,7 @@ export function normalizeMarketCheckApiControls(
     ),
   };
 }
+
+
+export const MARKETCHECK_LAST_API_USAGE_STORAGE_KEY =
+  "mmav_marketcheck_last_api_usage";

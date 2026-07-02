@@ -7,6 +7,7 @@ import { AccountStatus } from "@/components/auth/account-status";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
+  MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
   defaultMarketCheckApiControls,
   normalizeMarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
@@ -305,23 +306,9 @@ export function EvaluationWorkspace({
     minimumQualityScore?: number;
   } | null>(null);
 
-  const [marketCheckApiControls, setMarketCheckApiControls] = useState(() => {
-    if (typeof window === "undefined") {
-      return defaultMarketCheckApiControls;
-    }
-
-    try {
-      const stored = window.localStorage.getItem(
-        MARKETCHECK_API_CONTROLS_STORAGE_KEY
-      );
-
-      if (stored) {
-        return normalizeMarketCheckApiControls(JSON.parse(stored));
-      }
-    } catch {}
-
-    return defaultMarketCheckApiControls;
-  });
+  const [marketCheckApiControls, setMarketCheckApiControls] = useState(
+    defaultMarketCheckApiControls
+  );
 
   useEffect(() => {
     function syncMarketCheckApiControlsFromStorage() {
@@ -928,6 +915,16 @@ export function EvaluationWorkspace({
 
       setMarketCheckApiUsage(data.apiUsage || null);
 
+      if (data.apiUsage) {
+        window.localStorage.setItem(
+          MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
+          JSON.stringify({
+            ...data.apiUsage,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      }
+
       if (data.apiControls) {
       }
 
@@ -1108,6 +1105,16 @@ export function EvaluationWorkspace({
       if (!data.comps || data.comps.length === 0) {
         setComps([]);
         setMarketCheckApiUsage(data.apiUsage || null);
+
+      if (data.apiUsage) {
+        window.localStorage.setItem(
+          MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
+          JSON.stringify({
+            ...data.apiUsage,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      }
         setMarketCheckSearchMeta({
           loadedCount: 0,
           regionsChecked: data.search?.regionsChecked || [],
@@ -1122,6 +1129,16 @@ export function EvaluationWorkspace({
 
       setComps(data.comps);
       setMarketCheckApiUsage(data.apiUsage || null);
+
+      if (data.apiUsage) {
+        window.localStorage.setItem(
+          MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
+          JSON.stringify({
+            ...data.apiUsage,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      }
       setMarketCheckSearchMeta({
         loadedCount: data.comps.length,
         regionsChecked: data.search?.regionsChecked || [],
@@ -1804,106 +1821,6 @@ export function EvaluationWorkspace({
                           ? ` (${marketCheckSearchMeta.minimumQualityScore})`
                           : ""}
                         , so the top 3 available comps were included.
-                      </div>
-                    ) : null}
-
-                    {marketCheckApiUsage ? (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-700">
-                          <span>
-                            Cache{" "}
-                            <span className="font-bold text-slate-950">
-                              {marketCheckApiUsage.cacheHit ? "Hit" : "Miss"}
-                            </span>
-                          </span>
-
-                          <span>
-                            API calls{" "}
-                            <span className="font-bold text-slate-950">
-                              {marketCheckApiUsage.apiCallsMade ?? 0}
-                            </span>
-                            {" / "}
-                            <span className="font-bold text-slate-950">
-                              {marketCheckApiControls.maxApiCallsPerSearch}
-                            </span>
-                          </span>
-
-                          {typeof marketCheckApiUsage.usableCompCount === "number" ? (
-                            <span>
-                              Usable comps{" "}
-                              <span className="font-bold text-slate-950">
-                                {marketCheckApiUsage.usableCompCount}
-                              </span>
-                            </span>
-                          ) : null}
-
-                          {marketCheckApiUsage.failedStatus ? (
-                            <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
-                              Failed status {marketCheckApiUsage.failedStatus}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        {marketCheckApiUsage.stopReason ? (
-                          <div className="mt-2 text-sm font-semibold text-slate-700">
-                            {marketCheckApiUsage.stopReason}
-                          </div>
-                        ) : null}
-
-                        {marketCheckApiUsage.searchLog?.length ? (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-sm font-bold text-slate-700">
-                              Search log
-                            </summary>
-
-                            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
-                              <table className="min-w-[760px] w-full text-left text-xs">
-                                <thead className="bg-slate-50 uppercase text-slate-500">
-                                  <tr>
-                                    <th className="px-2 py-2">Attempt</th>
-                                    <th className="px-2 py-2">Region</th>
-                                    <th className="px-2 py-2">Status</th>
-                                    <th className="px-2 py-2">Found</th>
-                                    <th className="px-2 py-2">Returned</th>
-                                    <th className="px-2 py-2">Usable</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 bg-white">
-                                  {marketCheckApiUsage.searchLog.map((entry, index) => (
-                                    <tr key={`${entry.attemptName || "search"}-${entry.zip || index}`}>
-                                      <td className="px-2 py-2 font-semibold text-slate-700">
-                                        {entry.attemptName || "—"}
-                                      </td>
-                                      <td className="px-2 py-2 text-slate-600">
-                                        {entry.label || entry.zip || "—"}
-                                      </td>
-                                      <td className="px-2 py-2">
-                                        <span
-                                          className={`rounded-full px-2 py-1 font-bold ${
-                                            entry.ok
-                                              ? "bg-emerald-50 text-emerald-700"
-                                              : "bg-red-50 text-red-700"
-                                          }`}
-                                        >
-                                          {entry.status || "—"}
-                                        </span>
-                                      </td>
-                                      <td className="px-2 py-2 text-slate-600">
-                                        {entry.numFound ?? "—"}
-                                      </td>
-                                      <td className="px-2 py-2 text-slate-600">
-                                        {entry.listingCount ?? "—"}
-                                      </td>
-                                      <td className="px-2 py-2 text-slate-600">
-                                        {entry.usableComps ?? entry.cumulativeUsableComps ?? "—"}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </details>
-                        ) : null}
                       </div>
                     ) : null}
                   </div>

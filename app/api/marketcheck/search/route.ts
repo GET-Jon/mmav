@@ -929,14 +929,21 @@ export async function POST(request: Request) {
     async function runProgressiveRegionSearches({
       attemptName,
       attemptYear,
+      maxApiCallsOverride,
+      reserveOneCallWhenNoResults,
     }: {
       attemptName: string;
       attemptYear?: number;
+      maxApiCallsOverride?: number;
+      reserveOneCallWhenNoResults?: boolean;
     }) {
       const progressiveSearches: MarketCheckSearchResult[] = [];
 
       for (let regionIndex = 0; regionIndex < zips.length; regionIndex += 1) {
-        if (progressiveSearches.length >= apiControls.maxApiCallsPerSearch) {
+        if (
+          progressiveSearches.length >=
+          (maxApiCallsOverride ?? apiControls.maxApiCallsPerSearch)
+        ) {
           break;
         }
 
@@ -963,6 +970,17 @@ export async function POST(request: Request) {
 
         const summary = buildCompSummary(progressiveSearches);
         const searchedMinimumRegions = regionIndex + 1 >= MIN_INITIAL_REGIONS;
+        const effectiveApiCallCap =
+          maxApiCallsOverride ?? apiControls.maxApiCallsPerSearch;
+        const shouldReserveFallbackCall =
+          reserveOneCallWhenNoResults &&
+          effectiveApiCallCap > 1 &&
+          summary.rawCount === 0 &&
+          progressiveSearches.length >= effectiveApiCallCap - 1;
+
+        if (shouldReserveFallbackCall) {
+          break;
+        }
 
         if (
           searchedMinimumRegions &&
@@ -978,6 +996,7 @@ export async function POST(request: Request) {
     const exactSearches = await runProgressiveRegionSearches({
       attemptName: "exact-year-make-model",
       attemptYear: year,
+      reserveOneCallWhenNoResults: true,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
@@ -996,9 +1015,18 @@ export async function POST(request: Request) {
     const exactSummary = buildCompSummary(exactSearches);
 
     if (exactSummary.rawCount === 0) {
-      const fallbackSearches = await runProgressiveRegionSearches({
-        attemptName: "fallback-make-model",
-      });
+      const remainingApiCalls = Math.max(
+        0,
+        apiControls.maxApiCallsPerSearch - exactSearches.length
+      );
+
+      const fallbackSearches =
+        remainingApiCalls > 0
+          ? await runProgressiveRegionSearches({
+              attemptName: "fallback-make-model",
+              maxApiCallsOverride: remainingApiCalls,
+            })
+          : [];
 
       const failedFallbackSearch = fallbackSearches.find(
         (search) => !search.ok

@@ -1,17 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
+import { AccountSettingsCard } from "@/components/settings/account-settings-card";
 import { CompanyUserActions } from "@/components/settings/company-user-actions";
-import { modelTaxonomyFallbacks } from "@/lib/marketcheck/model-taxonomy";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
-type SettingsTab = "taxonomy" | "api" | "users" | "organization";
+type SettingsTab = "account" | "api" | "users" | "organization";
 
 type SettingsPageProps = {
   searchParams?: Promise<{
@@ -36,15 +37,15 @@ function normalizeTab(value: string | string[] | undefined): SettingsTab {
   const raw = Array.isArray(value) ? value[0] : value;
 
   if (
+    raw === "account" ||
     raw === "api" ||
     raw === "users" ||
-    raw === "organization" ||
-    raw === "taxonomy"
+    raw === "organization"
   ) {
     return raw;
   }
 
-  return "taxonomy";
+  return "account";
 }
 
 function tabClass(isActive: boolean) {
@@ -128,6 +129,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
   const user = await getCurrentUser();
 
+  if (!user) {
+    redirect("/login?next=/settings");
+  }
+
   let companyContext: Awaited<ReturnType<typeof loadSettingsContext>> | null =
     null;
   let loadError: string | null = null;
@@ -184,10 +189,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
             <div className="mb-5 flex flex-wrap gap-2">
               <Link
-                href="/settings?tab=taxonomy"
-                className={tabClass(activeTab === "taxonomy")}
+                href="/settings?tab=account"
+                className={tabClass(activeTab === "account")}
               >
-                Model Taxonomy
+                Account
               </Link>
 
               <Link
@@ -212,108 +217,19 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </Link>
             </div>
 
-            {activeTab === "taxonomy" ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                  <div>
-                    <h2 className="text-xl font-bold">
-                      MarketCheck Model Taxonomy
-                    </h2>
-                    <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                      These rules handle cases where MarketCheck groups a true
-                      performance model under a broader model family. The broader
-                      model is used only as a candidate retrieval pool. Returned
-                      listings must still pass strict include/reject filters
-                      before they can be used as comps.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                    View-only for now. Admin editing should be added after
-                    Supabase-backed audit history.
-                  </div>
-                </div>
-
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Make</th>
-                        <th className="px-4 py-3">User Model</th>
-                        <th className="px-4 py-3">Fallback Search</th>
-                        <th className="px-4 py-3">Must Include</th>
-                        <th className="px-4 py-3">Reject If Includes</th>
-                        <th className="px-4 py-3">Notes</th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
-                      {modelTaxonomyFallbacks.map((fallback) => (
-                        <tr
-                          key={fallback.id}
-                          className="align-top hover:bg-slate-50"
-                        >
-                          <td className="px-4 py-3 font-semibold">
-                            {fallback.make}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {fallback.requestedModels.map((model) => (
-                                <span
-                                  key={model}
-                                  className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
-                                >
-                                  {model}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-blue-700">
-                              {fallback.fallbackModel}
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              {fallback.fallbackLabel}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {fallback.mustInclude.map((term) => (
-                                <span
-                                  key={term}
-                                  className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700"
-                                >
-                                  {term}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {fallback.rejectIfIncludes.map((term) => (
-                                <span
-                                  key={term}
-                                  className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700"
-                                >
-                                  {term}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 text-slate-600">
-                            {fallback.notes}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+            {activeTab === "account" ? (
+              <AccountSettingsCard
+                initialName={
+                  typeof user.user_metadata?.full_name === "string"
+                    ? user.user_metadata.full_name
+                    : typeof user.user_metadata?.name === "string"
+                    ? user.user_metadata.name
+                    : ""
+                }
+                initialEmail={user.email || ""}
+                companyName={companyContext?.company.companyName || ""}
+                role={companyContext?.company.role || ""}
+              />
             ) : null}
 
             {activeTab === "api" ? (
