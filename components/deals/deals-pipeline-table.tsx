@@ -316,13 +316,15 @@ export function DealsPipelineTable({
                 </td>
 
                 <td className="px-4 py-3 font-semibold text-slate-700">
-                  {compactUserLabel(evaluation.created_by_email)}
+                  {compactUserLabel(
+                    evaluation.created_by_email || evaluation.updated_by_email
+                  )}
                 </td>
 
                 <td className="min-w-[140px] px-4 py-3">
                   <DealStatusSelect
                     evaluationId={evaluation.id}
-                    initialStatus={evaluation.status}
+                    status={evaluation.status}
                     onStatusChange={handleStatusChange}
                   />
                 </td>

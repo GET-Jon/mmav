@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const statusOptions = [
   { value: "watching", label: "Watching" },
@@ -12,6 +12,10 @@ const statusOptions = [
   { value: "purchased", label: "Purchased" },
   { value: "archived", label: "Archived" },
 ];
+
+function normalizeStatus(value?: string | null) {
+  return String(value || "watching").trim() || "watching";
+}
 
 function statusClass(status: string) {
   switch (status) {
@@ -33,21 +37,26 @@ function statusClass(status: string) {
 
 export function DealStatusSelect({
   evaluationId,
-  initialStatus,
+  status,
   onStatusChange,
 }: {
   evaluationId: string;
-  initialStatus?: string | null;
+  status?: string | null;
   onStatusChange?: (evaluationId: string, status: string) => void;
 }) {
-  const [status, setStatus] = useState(initialStatus || "watching");
+  const normalizedStatus = normalizeStatus(status);
+  const [localStatus, setLocalStatus] = useState(normalizedStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function updateStatus(nextStatus: string) {
-    const previousStatus = status;
+  useEffect(() => {
+    setLocalStatus(normalizedStatus);
+  }, [normalizedStatus]);
 
-    setStatus(nextStatus);
+  async function updateStatus(nextStatus: string) {
+    const previousStatus = localStatus;
+
+    setLocalStatus(nextStatus);
     setSaving(true);
     setError("");
 
@@ -71,7 +80,7 @@ export function DealStatusSelect({
 
       onStatusChange?.(evaluationId, nextStatus);
     } catch (updateError) {
-      setStatus(previousStatus);
+      setLocalStatus(previousStatus);
       setError(
         updateError instanceof Error
           ? updateError.message
@@ -85,11 +94,11 @@ export function DealStatusSelect({
   return (
     <div className="space-y-1">
       <select
-        value={status}
+        value={localStatus}
         disabled={saving}
         onChange={(event) => updateStatus(event.target.value)}
-        className={`w-full rounded-full border px-2 py-1 text-xs font-bold outline-none ${statusClass(
-          status
+        className={`w-full rounded-full border px-3 py-1.5 text-sm font-bold outline-none ${statusClass(
+          localStatus
         )}`}
       >
         {statusOptions.map((option) => (
@@ -99,7 +108,9 @@ export function DealStatusSelect({
         ))}
       </select>
 
-      {error ? <div className="text-xs font-semibold text-red-600">{error}</div> : null}
+      {error ? (
+        <div className="text-xs font-semibold text-red-600">{error}</div>
+      ) : null}
     </div>
   );
 }
