@@ -1179,7 +1179,19 @@ export function EvaluationWorkspace({
         return;
       }
 
-      setComps(data.comps);
+      const pulledComps = Array.isArray(data.comps) ? data.comps : [];
+      const hasIncludedComps = pulledComps.some(
+        (comp: MarketComp) => comp.included === true
+      );
+
+      const normalizedComps = pulledComps.map(
+        (comp: MarketComp, index: number) => ({
+          ...comp,
+          included: hasIncludedComps ? comp.included === true : index < 3,
+        })
+      );
+
+      setComps(normalizedComps);
       setMarketCheckApiUsage(data.apiUsage || null);
 
       if (data.apiUsage) {
@@ -1192,7 +1204,7 @@ export function EvaluationWorkspace({
         );
       }
       setMarketCheckSearchMeta({
-        loadedCount: data.comps.length,
+        loadedCount: normalizedComps.length,
         regionsChecked: data.search?.regionsChecked || [],
         lowConfidenceFallback: Boolean(data.lowConfidenceFallback),
         minimumQualityScore: data.minimumQualityScore,
@@ -1200,7 +1212,7 @@ export function EvaluationWorkspace({
       const regionsCheckedCount = data.search?.regionsChecked?.length || 0;
 
       setMarketCheckStatus(
-        `${data.comps.length} comps loaded${
+        `${normalizedComps.length} comps loaded${
           regionsCheckedCount ? ` · ${regionsCheckedCount} regions checked` : ""
         }${data.cache?.hit ? " from cache" : ""}`
       );
