@@ -91,11 +91,19 @@ export function calculateCompSummary({
   targetMileage: number;
   assumptions: Assumptions;
 }): CompSummary {
-  const validComps = comps.filter(
+  const includedComps = comps.filter((comp) => comp.included === true);
+
+  const qualityPassingComps = includedComps.filter(
     (comp) =>
-      comp.included &&
+      typeof comp.qualityScore !== "number" ||
       comp.qualityScore >= assumptions.compSettings.minimumQualityScore
   );
+
+  const validComps = qualityPassingComps.length
+    ? qualityPassingComps
+    : includedComps.length
+    ? includedComps.slice(0, 3)
+    : comps.slice(0, 3);
 
   const adjustedPrices = validComps.map((comp) =>
     calculateAdjustedCompPrice({
