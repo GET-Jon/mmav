@@ -46,6 +46,10 @@ const sortOptions = [
   { value: "mileage", label: "Lowest Mileage" },
 ];
 
+function normalizeStatus(value?: string | null) {
+  return String(value || "watching").trim().toLowerCase() || "watching";
+}
+
 function money(value: number | null) {
   if (value === null || value === undefined) {
     return "—";
@@ -72,6 +76,7 @@ function formatDate(value: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/New_York",
   }).format(new Date(value));
 }
 
@@ -112,7 +117,9 @@ export function DealsPipelineTable({
 }: {
   evaluations: SavedEvaluation[];
 }) {
-  const [tableEvaluations, setTableEvaluations] = useState(evaluations);
+  const [tableEvaluations, setTableEvaluations] = useState<SavedEvaluation[]>(
+    evaluations
+  );
   const [statusFilter, setStatusFilter] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
@@ -120,7 +127,7 @@ export function DealsPipelineTable({
 
   useEffect(() => {
     setTableEvaluations(evaluations);
-  }, [tableEvaluations]);
+  }, [evaluations]);
 
   function handleStatusChange(evaluationId: string, nextStatus: string) {
     setTableEvaluations((previous) =>
@@ -136,38 +143,38 @@ export function DealsPipelineTable({
     );
   }
 
-
   const userOptions = useMemo(() => {
     const users = new Map<string, string>();
 
     for (const evaluation of tableEvaluations) {
-      if (evaluation.created_by) {
-        users.set(
-          evaluation.created_by,
-          compactUserLabel(evaluation.created_by_email)
-        );
+      const userId = evaluation.created_by || evaluation.updated_by;
+      const label =
+        evaluation.created_by_email || evaluation.updated_by_email || null;
+
+      if (userId) {
+        users.set(userId, compactUserLabel(label));
       }
     }
 
     return Array.from(users.entries())
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [evaluations]);
+  }, [tableEvaluations]);
 
   const filteredEvaluations = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
 
     return tableEvaluations
       .filter((evaluation) => {
-        if (statusFilter !== "all") {
-          const currentStatus = evaluation.status || "watching";
+        const currentStatus = normalizeStatus(evaluation.status);
 
-          if (currentStatus !== statusFilter) {
-            return false;
-          }
+        if (statusFilter !== "all" && currentStatus !== statusFilter) {
+          return false;
         }
 
-        if (userFilter !== "all" && evaluation.created_by !== userFilter) {
+        const rowUserId = evaluation.created_by || evaluation.updated_by || "";
+
+        if (userFilter !== "all" && rowUserId !== userFilter) {
           return false;
         }
 
@@ -214,7 +221,7 @@ export function DealsPipelineTable({
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-  }, [evaluations, statusFilter, userFilter, sortBy, searchText]);
+  }, [tableEvaluations, statusFilter, userFilter, sortBy, searchText]);
 
   return (
     <div className="space-y-4">
