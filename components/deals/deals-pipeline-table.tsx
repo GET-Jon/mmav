@@ -21,6 +21,10 @@ type SavedEvaluation = {
   decision: string | null;
   risk_grade: string | null;
   auction_site?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_by_email?: string | null;
+  updated_by_email?: string | null;
 };
 
 const statusOptions = [
@@ -35,21 +39,9 @@ const statusOptions = [
   { value: "archived", label: "Archived" },
 ];
 
-const sourceOptions = [
-  "All sources",
-  "ACV Auctions",
-  "Manheim",
-  "Cars & Bids",
-  "Bring a Trailer",
-  "Facebook",
-  "Private Party",
-  "Other",
-];
-
 const sortOptions = [
   { value: "updated", label: "Recently Updated" },
   { value: "profit", label: "Highest Profit" },
-  { value: "maxSmart", label: "Highest Max Smart Bid" },
   { value: "currentBid", label: "Highest Current Bid" },
   { value: "mileage", label: "Lowest Mileage" },
 ];
@@ -95,15 +87,52 @@ function decisionClass(decision: string | null) {
   return "bg-emerald-100 text-emerald-700";
 }
 
+function compactUserLabel(emailOrName?: string | null) {
+  const clean = String(emailOrName || "").trim();
+
+  if (!clean) {
+    return "—";
+  }
+
+  const beforeAt = clean.includes("@") ? clean.split("@")[0] : clean;
+  const firstPart = beforeAt.split(/[._\-\s]+/).filter(Boolean)[0] || beforeAt;
+
+  if (!firstPart) {
+    return clean.slice(0, 5);
+  }
+
+  const normalized =
+    firstPart.charAt(0).toUpperCase() + firstPart.slice(1).toLowerCase();
+
+  return normalized.length <= 10 ? normalized : normalized.slice(0, 5);
+}
+
 export function DealsPipelineTable({
   evaluations,
 }: {
   evaluations: SavedEvaluation[];
 }) {
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sourceFilter, setSourceFilter] = useState("All sources");
+  const [userFilter, setUserFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
   const [searchText, setSearchText] = useState("");
+
+  const userOptions = useMemo(() => {
+    const users = new Map<string, string>();
+
+    for (const evaluation of evaluations) {
+      if (evaluation.created_by) {
+        users.set(
+          evaluation.created_by,
+          compactUserLabel(evaluation.created_by_email)
+        );
+      }
+    }
+
+    return Array.from(users.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [evaluations]);
 
   const filteredEvaluations = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
@@ -118,10 +147,8 @@ export function DealsPipelineTable({
           }
         }
 
-        if (sourceFilter !== "All sources") {
-          if ((evaluation.auction_site || "") !== sourceFilter) {
-            return false;
-          }
+        if (userFilter !== "all" && evaluation.created_by !== userFilter) {
+          return false;
         }
 
         if (normalizedSearch) {
@@ -131,6 +158,8 @@ export function DealsPipelineTable({
             evaluation.auction_site,
             evaluation.risk_grade,
             evaluation.decision,
+            evaluation.created_by_email,
+            evaluation.updated_by_email,
           ]
             .filter(Boolean)
             .join(" ")
@@ -150,24 +179,22 @@ export function DealsPipelineTable({
           );
         }
 
-        if (sortBy === "maxSmart") {
-          return (b.max_smart_bid || 0) - (a.max_smart_bid || 0);
-        }
-
         if (sortBy === "currentBid") {
           return (b.current_bid || 0) - (a.current_bid || 0);
         }
 
         if (sortBy === "mileage") {
-          return (a.mileage || Number.MAX_SAFE_INTEGER) -
-            (b.mileage || Number.MAX_SAFE_INTEGER);
+          return (
+            (a.mileage || Number.MAX_SAFE_INTEGER) -
+            (b.mileage || Number.MAX_SAFE_INTEGER)
+          );
         }
 
         return (
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
       });
-  }, [evaluations, statusFilter, sourceFilter, sortBy, searchText]);
+  }, [evaluations, statusFilter, userFilter, sortBy, searchText]);
 
   return (
     <div className="space-y-4">
@@ -180,7 +207,7 @@ export function DealsPipelineTable({
             <input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Vehicle, VIN, source..."
+              placeholder="Vehicle, VIN, user..."
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
             />
           </label>
@@ -204,16 +231,17 @@ export function DealsPipelineTable({
 
           <label className="block">
             <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Source
+              User
             </div>
             <select
-              value={sourceFilter}
-              onChange={(event) => setSourceFilter(event.target.value)}
+              value={userFilter}
+              onChange={(event) => setUserFilter(event.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
             >
-              {sourceOptions.map((source) => (
-                <option key={source} value={source}>
-                  {source}
+              <option value="all">All users</option>
+              {userOptions.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.label}
                 </option>
               ))}
             </select>
@@ -243,19 +271,17 @@ export function DealsPipelineTable({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1040px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th className="px-4 py-3">Saved</th>
+              <th className="px-4 py-3">By</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Vehicle</th>
-              <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3">VIN</th>
               <th className="px-4 py-3">Mileage</th>
               <th className="px-4 py-3">Current Bid</th>
               <th className="px-4 py-3">Target</th>
-              <th className="px-4 py-3">Max Smart</th>
               <th className="px-4 py-3">Profit</th>
               <th className="px-4 py-3">Risk</th>
               <th className="px-4 py-3">Decision</th>
@@ -269,14 +295,18 @@ export function DealsPipelineTable({
                   {formatDate(evaluation.updated_at)}
                 </td>
 
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 font-semibold text-slate-700">
+                  {compactUserLabel(evaluation.created_by_email)}
+                </td>
+
+                <td className="min-w-[140px] px-4 py-3">
                   <DealStatusSelect
                     evaluationId={evaluation.id}
                     initialStatus={evaluation.status}
                   />
                 </td>
 
-                <td className="px-4 py-3 font-semibold">
+                <td className="min-w-[220px] px-4 py-3 font-semibold">
                   <Link
                     href={`/deals/${evaluation.id}`}
                     className="text-blue-700 hover:underline"
@@ -285,23 +315,11 @@ export function DealsPipelineTable({
                   </Link>
                 </td>
 
-                <td className="px-4 py-3 text-slate-600">
-                  {evaluation.auction_site || "—"}
-                </td>
-
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                  {evaluation.vin || "—"}
-                </td>
-
                 <td className="px-4 py-3">{number(evaluation.mileage)}</td>
                 <td className="px-4 py-3">{money(evaluation.current_bid)}</td>
 
                 <td className="px-4 py-3">
                   {money(evaluation.target_resale_used)}
-                </td>
-
-                <td className="px-4 py-3 font-semibold text-blue-700">
-                  {money(evaluation.max_smart_bid)}
                 </td>
 
                 <td className="px-4 py-3 font-semibold">
@@ -324,7 +342,10 @@ export function DealsPipelineTable({
 
             {filteredEvaluations.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-slate-500" colSpan={12}>
+                <td
+                  className="px-4 py-8 text-center text-slate-500"
+                  colSpan={10}
+                >
                   No saved evaluations match these filters.
                 </td>
               </tr>

@@ -41,6 +41,12 @@ type LastApiUsage = {
   searchLog?: MarketCheckSearchLogRow[];
 };
 
+type ApiSettingsResponse = {
+  controls?: Partial<MarketCheckApiControls>;
+  source?: string;
+  error?: string;
+};
+
 function numberFromInput(value: string) {
   const parsed = Number(value);
 
@@ -65,7 +71,6 @@ function formatSavedAt(value?: string) {
   return date.toLocaleString();
 }
 
-
 function pickNumber(...values: Array<number | undefined>) {
   for (const value of values) {
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -76,38 +81,152 @@ function pickNumber(...values: Array<number | undefined>) {
   return 0;
 }
 
+function readLocalControls() {
+  try {
+    const stored = window.localStorage.getItem(
+      MARKETCHECK_API_CONTROLS_STORAGE_KEY
+    );
+
+    if (stored) {
+      return normalizeMarketCheckApiControls(JSON.parse(stored));
+    }
+  } catch {}
+
+  return defaultMarketCheckApiControls;
+}
+
+function writeLocalControls(controls: MarketCheckApiControls) {
+  try {
+    window.localStorage.setItem(
+      MARKETCHECK_API_CONTROLS_STORAGE_KEY,
+      JSON.stringify(controls)
+    );
+  } catch {}
+}
+
+function readLocalLastRun() {
+  try {
+    const storedLastRun = window.localStorage.getItem(
+      MARKETCHECK_LAST_API_USAGE_STORAGE_KEY
+    );
+
+    if (storedLastRun) {
+      return JSON.parse(storedLastRun) as LastApiUsage;
+    }
+  } catch {}
+
+  return null;
+}
+
 export function MarketCheckApiSettingsCard() {
   const [controls, setControls] = useState<MarketCheckApiControls>(
     defaultMarketCheckApiControls
   );
   const [lastApiUsage, setLastApiUsage] = useState<LastApiUsage | null>(null);
   const [status, setStatus] = useState("");
+  const [settingsSource, setSettingsSource] = useState<
+    "loading" | "database" | "local" | "defaults"
+  >("loading");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(
-        MARKETCHECK_API_CONTROLS_STORAGE_KEY
-      );
+    let cancelled = false;
 
-      if (stored) {
-        setControls(normalizeMarketCheckApiControls(JSON.parse(stored)));
+    async function loadSettings() {
+      await Promise.resolve();
+
+      const localControls = readLocalControls();
+      const localLastRun = readLocalLastRun();
+
+      if (!cancelled) {
+        setControls(localControls);
+        setLastApiUsage(localLastRun);
+        setSettingsSource("local");
       }
-    } catch {
-      setControls(defaultMarketCheckApiControls);
+
+      try {
+        const response = await fetch("/api/company/api-settings", {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        const data = (await response.json()) as ApiSettingsResponse;
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not load user API settings.");
+        }
+
+        const databaseControls = normalizeMarketCheckApiControls(data.controls);
+
+        writeLocalControls(databaseControls);
+
+        if (!cancelled) {
+          setControls(databaseControls);
+          setSettingsSource(data.source === "database" ? "database" : "defaults");
+          setStatus(
+            data.source === "database"
+              ? "Loaded company API settings."
+              : "Loaded safe defaults. Save once to create company API settings."
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSettingsSource("local");
+          setStatus(
+            error instanceof Error
+              ? `Using browser fallback. ${error.message}`
+              : "Using browser fallback. User API settings could not be loaded."
+          );
+        }
+      }
     }
 
-    try {
-      const storedLastRun = window.localStorage.getItem(
-        MARKETCHECK_LAST_API_USAGE_STORAGE_KEY
-      );
+    void loadSettings();
 
-      if (storedLastRun) {
-        setLastApiUsage(JSON.parse(storedLastRun));
-      }
-    } catch {
-      setLastApiUsage(null);
-    }
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  async function saveControls(nextControls: MarketCheckApiControls) {
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/company/api-settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(nextControls),
+      });
+
+      const data = (await response.json()) as ApiSettingsResponse;
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not save user API settings.");
+      }
+
+      const savedControls = normalizeMarketCheckApiControls(data.controls);
+
+      setControls(savedControls);
+      writeLocalControls(savedControls);
+      setSettingsSource("database");
+      setStatus("Saved user API settings.");
+    } catch (error) {
+      writeLocalControls(nextControls);
+      setSettingsSource("local");
+      setStatus(
+        error instanceof Error
+          ? `Saved for this browser only. ${error.message}`
+          : "Saved for this browser only. User API settings could not be updated."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function updateControls(next: Partial<MarketCheckApiControls>) {
     const normalized = normalizeMarketCheckApiControls({
@@ -116,24 +235,16 @@ export function MarketCheckApiSettingsCard() {
     });
 
     setControls(normalized);
-
-    window.localStorage.setItem(
-      MARKETCHECK_API_CONTROLS_STORAGE_KEY,
-      JSON.stringify(normalized)
-    );
-
-    setStatus("Saved for this browser.");
+    writeLocalControls(normalized);
+    setStatus("Saving user API settings...");
+    void saveControls(normalized);
   }
 
   function resetControls() {
     setControls(defaultMarketCheckApiControls);
-
-    window.localStorage.setItem(
-      MARKETCHECK_API_CONTROLS_STORAGE_KEY,
-      JSON.stringify(defaultMarketCheckApiControls)
-    );
-
-    setStatus("Reset to safe defaults.");
+    writeLocalControls(defaultMarketCheckApiControls);
+    setStatus("Saving safe defaults...");
+    void saveControls(defaultMarketCheckApiControls);
   }
 
   function clearLastRun() {
@@ -141,6 +252,15 @@ export function MarketCheckApiSettingsCard() {
     setLastApiUsage(null);
     setStatus("Last MarketCheck run cleared.");
   }
+
+  const sourceLabel =
+    settingsSource === "database"
+      ? "Company database"
+      : settingsSource === "defaults"
+      ? "Safe defaults"
+      : settingsSource === "loading"
+      ? "Loading"
+      : "Browser fallback";
 
   return (
     <div className="space-y-5">
@@ -157,15 +277,16 @@ export function MarketCheckApiSettingsCard() {
           <button
             type="button"
             onClick={resetControls}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+            disabled={saving}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Reset Safe Defaults
           </button>
         </div>
 
-        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-          These controls are stored locally in this browser for now. Company-level
-          database-backed API settings can be added next.
+        <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+          Source: {sourceLabel}. Changes are saved for your user profile,
+          with browser fallback retained for safety.
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -257,7 +378,8 @@ export function MarketCheckApiSettingsCard() {
           <div>
             <h2 className="text-xl font-bold">Last MarketCheck Run</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Browser-local audit trail for the most recent MarketCheck comp pull. This does not clear the active evaluator results.
+              Browser-local audit trail for the most recent MarketCheck comp
+              pull. Durable company usage history is the next v3 step.
             </p>
           </div>
 
@@ -303,7 +425,8 @@ export function MarketCheckApiSettingsCard() {
               <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800">
                 {lastApiUsage.stopReason}
                 <span className="ml-2 font-semibold text-slate-500">
-                  The API can return more usable comps than the stop threshold in a single call.
+                  The API can return more usable comps than the stop threshold
+                  in a single call.
                 </span>
               </div>
             ) : null}
@@ -323,7 +446,10 @@ export function MarketCheckApiSettingsCard() {
                   </thead>
                   <tbody>
                     {lastApiUsage.searchLog.map((row, index) => (
-                      <tr key={`${row.attemptName || row.label || "attempt"}-${index}`} className="border-t border-slate-100">
+                      <tr
+                        key={`${row.attemptName || row.label || "attempt"}-${index}`}
+                        className="border-t border-slate-100"
+                      >
                         <td className="px-3 py-3 font-bold text-slate-800">
                           {row.attemptName || row.label || "MarketCheck search"}
                         </td>

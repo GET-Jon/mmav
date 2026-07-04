@@ -24,6 +24,10 @@ type SavedEvaluation = {
   decision: string | null;
   risk_grade: string | null;
   auction_site: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_by_email?: string | null;
+  updated_by_email?: string | null;
 };
 
 async function getSavedEvaluations(userId: string) {
@@ -49,7 +53,9 @@ async function getSavedEvaluations(userId: string) {
       expected_gross_profit,
       decision,
       risk_grade,
-      auction_site
+      auction_site,
+      created_by,
+      updated_by
     `
     )
     .eq("company_id", company.companyId)
@@ -65,8 +71,40 @@ async function getSavedEvaluations(userId: string) {
     };
   }
 
+  const evaluations = (data || []) as SavedEvaluation[];
+  const userIds = Array.from(
+    new Set(
+      evaluations
+        .flatMap((evaluation) => [evaluation.created_by, evaluation.updated_by])
+        .filter(Boolean) as string[]
+    )
+  );
+
+  const userEmailById = new Map<string, string>();
+
+  if (userIds.length) {
+    const { data: usersData } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+
+    for (const authUser of usersData?.users || []) {
+      if (userIds.includes(authUser.id)) {
+        userEmailById.set(authUser.id, authUser.email || authUser.id);
+      }
+    }
+  }
+
   return {
-    evaluations: data as SavedEvaluation[],
+    evaluations: evaluations.map((evaluation) => ({
+      ...evaluation,
+      created_by_email: evaluation.created_by
+        ? userEmailById.get(evaluation.created_by) || "Unknown user"
+        : null,
+      updated_by_email: evaluation.updated_by
+        ? userEmailById.get(evaluation.updated_by) || "Unknown user"
+        : null,
+    })),
     error: null as string | null,
   };
 }

@@ -79,11 +79,7 @@ export function calculateAdjustedCompPrice({
     (mileageDelta / 1000) *
     assumptions.compSettings.mileageAdjustmentPerThousand;
 
-  const sourceDiscount = getSourceDiscount(comp.source, assumptions);
-
-  return roundToNearest(
-    (comp.askingPrice + mileageAdjustment) * (1 - sourceDiscount)
-  );
+  return roundToNearest(comp.askingPrice + mileageAdjustment);
 }
 
 export function calculateCompSummary({

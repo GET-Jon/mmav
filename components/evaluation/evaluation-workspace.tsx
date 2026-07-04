@@ -10,6 +10,7 @@ import {
   MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
   defaultMarketCheckApiControls,
   normalizeMarketCheckApiControls,
+  type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
@@ -306,38 +307,89 @@ export function EvaluationWorkspace({
     minimumQualityScore?: number;
   } | null>(null);
 
-  const [marketCheckApiControls, setMarketCheckApiControls] = useState(
+    const [marketCheckApiControls, setMarketCheckApiControls] = useState(
     defaultMarketCheckApiControls
   );
 
+  function readLocalMarketCheckApiControls() {
+    try {
+      const stored = window.localStorage.getItem(
+        MARKETCHECK_API_CONTROLS_STORAGE_KEY
+      );
+
+      if (stored) {
+        return normalizeMarketCheckApiControls(JSON.parse(stored));
+      }
+    } catch {}
+
+    return defaultMarketCheckApiControls;
+  }
+
+  function writeLocalMarketCheckApiControls(
+    controls: MarketCheckApiControls
+  ) {
+    try {
+      window.localStorage.setItem(
+        MARKETCHECK_API_CONTROLS_STORAGE_KEY,
+        JSON.stringify(controls)
+      );
+    } catch {}
+  }
+
   useEffect(() => {
-    function syncMarketCheckApiControlsFromStorage() {
+    let cancelled = false;
+
+    async function syncMarketCheckApiControls() {
+      await Promise.resolve();
+
+      const localControls = readLocalMarketCheckApiControls();
+
+      if (!cancelled) {
+        setMarketCheckApiControls(localControls);
+      }
+
       try {
-        const stored = window.localStorage.getItem(
-          MARKETCHECK_API_CONTROLS_STORAGE_KEY
-        );
+        const response = await fetch("/api/company/api-settings", {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
 
-        if (stored) {
-          setMarketCheckApiControls(
-            normalizeMarketCheckApiControls(JSON.parse(stored))
-          );
-          return;
+        const data = (await response.json()) as {
+          controls?: Partial<MarketCheckApiControls>;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not load company API settings.");
         }
-      } catch {}
 
-      setMarketCheckApiControls(defaultMarketCheckApiControls);
+        const databaseControls = normalizeMarketCheckApiControls(data.controls);
+
+        writeLocalMarketCheckApiControls(databaseControls);
+
+        if (!cancelled) {
+          setMarketCheckApiControls(databaseControls);
+        }
+      } catch {
+        if (!cancelled) {
+          setMarketCheckApiControls(localControls);
+        }
+      }
     }
 
-    syncMarketCheckApiControlsFromStorage();
+    void syncMarketCheckApiControls();
 
-    window.addEventListener("focus", syncMarketCheckApiControlsFromStorage);
-    window.addEventListener("pageshow", syncMarketCheckApiControlsFromStorage);
-    window.addEventListener("storage", syncMarketCheckApiControlsFromStorage);
+    window.addEventListener("focus", syncMarketCheckApiControls);
+    window.addEventListener("pageshow", syncMarketCheckApiControls);
+    window.addEventListener("storage", syncMarketCheckApiControls);
 
     return () => {
-      window.removeEventListener("focus", syncMarketCheckApiControlsFromStorage);
-      window.removeEventListener("pageshow", syncMarketCheckApiControlsFromStorage);
-      window.removeEventListener("storage", syncMarketCheckApiControlsFromStorage);
+      cancelled = true;
+      window.removeEventListener("focus", syncMarketCheckApiControls);
+      window.removeEventListener("pageshow", syncMarketCheckApiControls);
+      window.removeEventListener("storage", syncMarketCheckApiControls);
     };
   }, []);
 
@@ -1430,22 +1482,6 @@ export function EvaluationWorkspace({
                         />
                       </FormRow>
 
-                      <FormRow label="Auction Site">
-                        <select
-                          value={auctionSite}
-                          onChange={(event) => setAuctionSite(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                        >
-                          <option>ACV Auctions</option>
-                          <option>Manheim</option>
-                          <option>Cars & Bids</option>
-                          <option>Bring a Trailer</option>
-                          <option>Facebook</option>
-                          <option>Private Party</option>
-                          <option>Other</option>
-                        </select>
-                      </FormRow>
-
                       <FormRow label="Current Bid">
                         <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                           <span className="pl-3 text-sm text-slate-400">$</span>
@@ -1464,7 +1500,22 @@ export function EvaluationWorkspace({
                           />
                         </div>
                       </FormRow>
-                    </div>
+
+                      <FormRow label="Vehicle Source">
+                        <select
+                          value={auctionSite}
+                          onChange={(event) => setAuctionSite(event.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                        >
+                          <option>ACV Auctions</option>
+                          <option>Manheim</option>
+                          <option>Cars & Bids</option>
+                          <option>Bring a Trailer</option>
+                          <option>Facebook</option>
+                          <option>Private Party</option>
+                          <option>Other</option>
+                        </select>
+                      </FormRow>                    </div>
 
                     <div className="border-t border-slate-200 pt-5">
                       <div className="mb-4 flex items-center justify-between gap-3">
