@@ -34,9 +34,11 @@ function statusClass(status: string) {
 export function DealStatusSelect({
   evaluationId,
   initialStatus,
+  onStatusChange,
 }: {
   evaluationId: string;
   initialStatus?: string | null;
+  onStatusChange?: (evaluationId: string, status: string) => void;
 }) {
   const [status, setStatus] = useState(initialStatus || "watching");
   const [saving, setSaving] = useState(false);
@@ -66,6 +68,8 @@ export function DealStatusSelect({
       if (!response.ok) {
         throw new Error(data.error || "Status update failed.");
       }
+
+      onStatusChange?.(evaluationId, nextStatus);
     } catch (updateError) {
       setStatus(previousStatus);
       setError(

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DealStatusSelect } from "@/components/deals/deal-status-select";
 
 type SavedEvaluation = {
@@ -112,15 +112,35 @@ export function DealsPipelineTable({
 }: {
   evaluations: SavedEvaluation[];
 }) {
+  const [tableEvaluations, setTableEvaluations] = useState(evaluations);
   const [statusFilter, setStatusFilter] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
   const [searchText, setSearchText] = useState("");
 
+  useEffect(() => {
+    setTableEvaluations(evaluations);
+  }, [tableEvaluations]);
+
+  function handleStatusChange(evaluationId: string, nextStatus: string) {
+    setTableEvaluations((previous) =>
+      previous.map((evaluation) =>
+        evaluation.id === evaluationId
+          ? {
+              ...evaluation,
+              status: nextStatus,
+              updated_at: new Date().toISOString(),
+            }
+          : evaluation
+      )
+    );
+  }
+
+
   const userOptions = useMemo(() => {
     const users = new Map<string, string>();
 
-    for (const evaluation of evaluations) {
+    for (const evaluation of tableEvaluations) {
       if (evaluation.created_by) {
         users.set(
           evaluation.created_by,
@@ -137,7 +157,7 @@ export function DealsPipelineTable({
   const filteredEvaluations = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
 
-    return evaluations
+    return tableEvaluations
       .filter((evaluation) => {
         if (statusFilter !== "all") {
           const currentStatus = evaluation.status || "watching";
@@ -266,7 +286,7 @@ export function DealsPipelineTable({
         </div>
 
         <div className="mt-3 text-sm font-semibold text-slate-500">
-          Showing {filteredEvaluations.length} of {evaluations.length} saved
+          Showing {filteredEvaluations.length} of {tableEvaluations.length} saved
           evaluations
         </div>
       </div>
@@ -303,6 +323,7 @@ export function DealsPipelineTable({
                   <DealStatusSelect
                     evaluationId={evaluation.id}
                     initialStatus={evaluation.status}
+                    onStatusChange={handleStatusChange}
                   />
                 </td>
 
