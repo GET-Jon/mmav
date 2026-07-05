@@ -439,6 +439,8 @@ export function EvaluationWorkspace({
   );
 
   const [notes, setNotes] = useState(initialSavedPayload?.notes || "");
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState("");
 
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
     initialSavedPayload?.selectedConditions || initialSelectedConditions
@@ -1088,6 +1090,91 @@ export function EvaluationWorkspace({
           : comp
       )
     );
+  }
+
+  async function generateAiSummary() {
+    if (aiSummaryLoading) {
+      return;
+    }
+
+    setAiSummaryLoading(true);
+    setAiSummaryError("");
+
+    try {
+      const includedCompCount = comps.filter((comp) => comp.included).length;
+      const totalCompCount = comps.length;
+      const modeledCostAdders = valuation.totalCostAdders || 0;
+      const expectedGrossProfit =
+        finalTargetUsed > 0 && evaluation.currentBid > 0
+          ? finalTargetUsed - evaluation.currentBid - modeledCostAdders
+          : null;
+
+      const compConfidence =
+        totalCompCount === 0
+          ? "No comps available"
+          : includedCompCount === 0
+            ? "No included comps"
+            : includedCompCount < 3
+              ? "Low / limited comp set"
+              : "Usable comp set";
+
+      const response = await fetch("/api/evaluations/summary", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicleTitle,
+          vin: vin || decodedVehicle?.vin || null,
+          mileage: targetMileage || null,
+          auctionSite,
+          currentBid: evaluation.currentBid || null,
+
+          marketCompAverage: compSummary.averageAdjusted || null,
+          medianAdjusted:
+            (compSummary as { medianAdjusted?: number }).medianAdjusted || null,
+          finalRetailTarget: finalTargetUsed || null,
+          safeBid: valuation.safeBid || null,
+          maxSmartBid: valuation.maxSmartBid || null,
+          stretchBid: valuation.stretchBid || null,
+          expectedGrossProfit,
+
+          riskGrade: valuation.riskGrade,
+          decision: valuation.decision,
+          compConfidence,
+          includedCompCount,
+          totalCompCount,
+
+          selectedConditionRules: selectedConditions,
+          notes,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to generate AI summary.");
+      }
+
+      const summary =
+        typeof data?.summary === "string" ? data.summary.trim() : "";
+
+      if (!summary) {
+        throw new Error("AI summary was empty.");
+      }
+
+      setNotes((previous) =>
+        previous.trim() ? `${previous.trim()}\n\n${summary}` : summary
+      );
+    } catch (error) {
+      setAiSummaryError(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate AI summary."
+      );
+    } finally {
+      setAiSummaryLoading(false);
+    }
   }
 
   async function pullMarketCheckComps() {
@@ -1758,9 +1845,32 @@ export function EvaluationWorkspace({
                     onChange={(event) => setNotes(event.target.value)}
                     placeholder="Add auction notes, recon concerns, seller comments, or follow-up items..."
                   />
-                  <button className="mt-3 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
-                    Save Note
-                  </button>
+
+                  {aiSummaryError ? (
+                    <p className="mt-2 text-sm font-semibold text-red-600">
+                      {aiSummaryError}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={generateAiSummary}
+                      disabled={aiSummaryLoading}
+                      className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {aiSummaryLoading
+                        ? "Generating..."
+                        : "Generate AI Summary"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Save Note
+                    </button>
+                  </div>
                 </SectionCard>
               </div>
 
