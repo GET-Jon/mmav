@@ -25,6 +25,14 @@ type SavedEvaluation = {
   updated_by?: string | null;
   created_by_email?: string | null;
   updated_by_email?: string | null;
+  created_by_label?: string | null;
+  updated_by_label?: string | null;
+};
+
+type CompanyUserOption = {
+  id: string;
+  email: string | null;
+  label: string;
 };
 
 const statusOptions = [
@@ -114,8 +122,10 @@ function compactUserLabel(emailOrName?: string | null) {
 
 export function DealsPipelineTable({
   evaluations,
+  companyUsers,
 }: {
   evaluations: SavedEvaluation[];
+  companyUsers: CompanyUserOption[];
 }) {
   const [tableEvaluations, setTableEvaluations] = useState<SavedEvaluation[]>(
     evaluations
@@ -144,22 +154,8 @@ export function DealsPipelineTable({
   }
 
   const userOptions = useMemo(() => {
-    const users = new Map<string, string>();
-
-    for (const evaluation of tableEvaluations) {
-      const userId = evaluation.created_by || evaluation.updated_by;
-      const label =
-        evaluation.created_by_email || evaluation.updated_by_email || null;
-
-      if (userId) {
-        users.set(userId, compactUserLabel(label));
-      }
-    }
-
-    return Array.from(users.entries())
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [tableEvaluations]);
+    return [...companyUsers].sort((a, b) => a.label.localeCompare(b.label));
+  }, [companyUsers]);
 
   const filteredEvaluations = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
@@ -323,9 +319,11 @@ export function DealsPipelineTable({
                 </td>
 
                 <td className="px-4 py-3 font-semibold text-slate-700">
-                  {compactUserLabel(
-                    evaluation.created_by_email || evaluation.updated_by_email
-                  )}
+                  {evaluation.created_by_label ||
+                    evaluation.updated_by_label ||
+                    compactUserLabel(
+                      evaluation.created_by_email || evaluation.updated_by_email
+                    )}
                 </td>
 
                 <td className="min-w-[140px] px-4 py-3">
