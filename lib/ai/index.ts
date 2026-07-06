@@ -7,10 +7,13 @@ function getAiClient(): AiTextClient {
   const model = process.env.AI_MODEL ?? "gemini-2.5-flash";
 
   if (provider === "google") {
-    const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
+    const apiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_AI_API_KEY;
 
     if (!apiKey) {
-      throw new Error("Missing GOOGLE_AI_API_KEY.");
+      throw new Error("Missing Gemini API key. Set GEMINI_API_KEY or GOOGLE_API_KEY.");
     }
 
     return new GoogleAiTextClient({ apiKey, model });
