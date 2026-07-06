@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { defaultAssumptions } from "@/lib/assumptions";
 import type { MarketComp } from "@/types/comps";
+import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
+import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 
 type MarketCheckListing = Record<string, any>;
 
@@ -67,6 +69,89 @@ function normalize(value: unknown) {
     .toLowerCase();
 }
 
+function normalizeFuelType(value: unknown) {
+  const normalized = normalize(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (
+    normalized.includes("plug in hybrid") ||
+    normalized.includes("plug-in hybrid") ||
+    normalized.includes("phev")
+  ) {
+    return "plug-in hybrid";
+  }
+
+  if (
+    normalized.includes("electric") ||
+    normalized === "ev" ||
+    normalized.includes("battery")
+  ) {
+    return "electric";
+  }
+
+  if (normalized.includes("hybrid") || normalized.includes("hev")) {
+    return "hybrid";
+  }
+
+  if (normalized.includes("diesel") || normalized.includes("tdi")) {
+    return "diesel";
+  }
+
+  if (
+    normalized.includes("gasoline") ||
+    normalized.includes("gas") ||
+    normalized.includes("petrol")
+  ) {
+    return "gasoline";
+  }
+
+  return normalized;
+}
+
+function getListingFuelType(listing: MarketCheckListing) {
+  const build = listing.build || {};
+
+  return normalizeFuelType(
+    build.fuel_type ||
+      build.fuelType ||
+      build.fuel ||
+      listing.fuel_type ||
+      listing.fuelType ||
+      listing.fuel ||
+      listing.engine?.fuel_type ||
+      listing.engine?.fuelType ||
+      listing.engine?.fuel
+  );
+}
+
+function fuelTypesMatch({
+  targetFuelType,
+  listing,
+}: {
+  targetFuelType: string;
+  listing: MarketCheckListing;
+}) {
+  const normalizedTargetFuelType = normalizeFuelType(targetFuelType);
+
+  if (!normalizedTargetFuelType) {
+    return true;
+  }
+
+  const listingFuelType = getListingFuelType(listing);
+
+  if (!listingFuelType) {
+    return false;
+  }
+
+  return listingFuelType === normalizedTargetFuelType;
+}
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -88,6 +173,7 @@ function makeStableSearchKey({
   make,
   model,
   preferredTrim,
+  targetFuelType,
   targetMileage,
   zips,
   radius,
@@ -97,6 +183,7 @@ function makeStableSearchKey({
   make: string;
   model: string;
   preferredTrim: string;
+  targetFuelType: string;
   targetMileage: number;
   zips: string[];
   radius: number;
@@ -107,12 +194,13 @@ function makeStableSearchKey({
     make: normalize(make),
     model: normalize(model),
     trim: normalize(preferredTrim),
+    fuelType: normalizeFuelType(targetFuelType),
     targetMileage,
     zips: [...zips].map((zip) => String(zip).trim()).filter(Boolean),
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-low-confidence-v5-api-meter",
+    cacheVersion: "progressive-regions-low-confidence-v6-fuel-match",
   });
 }
 
@@ -235,6 +323,7 @@ function mapListingToComp({
   searchModel,
   targetMileage,
   preferredTrim,
+  targetFuelType,
 }: {
   listing: MarketCheckListing;
   index: number;
@@ -243,8 +332,19 @@ function mapListingToComp({
   searchModel: string;
   targetMileage: number;
   preferredTrim: string;
+  targetFuelType: string;
 }): MarketComp | null {
   const build = listing.build || {};
+
+  if (
+    targetFuelType &&
+    !fuelTypesMatch({
+      targetFuelType,
+      listing,
+    })
+  ) {
+    return null;
+  }
 
   const askingPrice = toNumber(
     listing.price ?? listing.list_price ?? listing.msrp
@@ -641,6 +741,13 @@ export async function POST(request: Request) {
     const make = String(body.make || "").trim();
     const model = String(body.model || "").trim();
     const preferredTrim = String(body.trim || "").trim();
+    const targetFuelType = String(
+      body.fuelType ||
+        body.targetFuelType ||
+        body.decodedVehicle?.fuelType ||
+        body.vehicle?.fuelType ||
+        ""
+    ).trim();
     const targetMileage = toNumber(
       body.targetMileage ?? body.mileage ?? body.odometer,
       0
@@ -772,6 +879,7 @@ export async function POST(request: Request) {
       make,
       model,
       preferredTrim,
+      targetFuelType,
       targetMileage,
       zips,
       radius,
@@ -863,6 +971,7 @@ export async function POST(request: Request) {
             searchModel: model,
             targetMileage,
             preferredTrim,
+            targetFuelType,
           })
       );
 
@@ -929,11 +1038,13 @@ export async function POST(request: Request) {
     async function runProgressiveRegionSearches({
       attemptName,
       attemptYear,
+      attemptModel,
       maxApiCallsOverride,
       reserveOneCallWhenNoResults,
     }: {
       attemptName: string;
       attemptYear?: number;
+      attemptModel?: string;
       maxApiCallsOverride?: number;
       reserveOneCallWhenNoResults?: boolean;
     }) {
@@ -953,7 +1064,7 @@ export async function POST(request: Request) {
           apiKey: marketCheckApiKey,
           year: attemptYear,
           make,
-          model,
+          model: attemptModel ?? model,
           zip,
           radius,
           rows,
@@ -1015,35 +1126,115 @@ export async function POST(request: Request) {
     const exactSummary = buildCompSummary(exactSearches);
 
     if (exactSummary.rawCount === 0) {
-      const remainingApiCalls = Math.max(
-        0,
-        apiControls.maxApiCallsPerSearch - exactSearches.length
-      );
+      const modelAliases = findMarketCheckModelAliases({ make, model });
 
-      const fallbackSearches =
-        remainingApiCalls > 0
-          ? await runProgressiveRegionSearches({
-              attemptName: "fallback-make-model",
-              maxApiCallsOverride: remainingApiCalls,
-            })
-          : [];
+      for (const aliasModel of modelAliases) {
+        const remainingAliasApiCalls = Math.max(
+          0,
+          apiControls.maxApiCallsPerSearch - searches.length
+        );
 
-      const failedFallbackSearch = fallbackSearches.find(
-        (search) => !search.ok
-      );
+        if (remainingAliasApiCalls <= 0) {
+          break;
+        }
 
-      if (failedFallbackSearch) {
-        return buildFailedMarketCheckResponse({
-          failedSearch: failedFallbackSearch,
-          searches: searches.length
-            ? [...searches, ...fallbackSearches]
-            : fallbackSearches,
-          orderedRegions,
-          apiControls,
+        const aliasSearches = await runProgressiveRegionSearches({
+          attemptName: `fallback-model-alias-${aliasModel}`,
+          attemptModel: aliasModel,
+          maxApiCallsOverride: remainingAliasApiCalls,
         });
+
+        const failedAliasSearch = aliasSearches.find(
+          (search) => !search.ok
+        );
+
+        if (failedAliasSearch) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: failedAliasSearch,
+            searches: [...searches, ...aliasSearches],
+            orderedRegions,
+            apiControls,
+          });
+        }
+
+        searches = [...searches, ...aliasSearches];
+
+        const aliasSummary = buildCompSummary(searches);
+
+        if (aliasSummary.rawCount > 0) {
+          break;
+        }
       }
 
-      searches = [...exactSearches, ...fallbackSearches];
+      const aliasSummary = buildCompSummary(searches);
+
+      if (aliasSummary.rawCount === 0) {
+        const taxonomyFallback = findModelTaxonomyFallback({ make, model });
+
+        if (taxonomyFallback) {
+          const remainingTaxonomyApiCalls = Math.max(
+            0,
+            apiControls.maxApiCallsPerSearch - searches.length
+          );
+
+          if (remainingTaxonomyApiCalls > 0) {
+            const taxonomySearches = await runProgressiveRegionSearches({
+              attemptName: `fallback-taxonomy-${taxonomyFallback.fallbackModel}`,
+              attemptModel: taxonomyFallback.fallbackModel,
+              maxApiCallsOverride: remainingTaxonomyApiCalls,
+            });
+
+            const failedTaxonomySearch = taxonomySearches.find(
+              (search) => !search.ok
+            );
+
+            if (failedTaxonomySearch) {
+              return buildFailedMarketCheckResponse({
+                failedSearch: failedTaxonomySearch,
+                searches: [...searches, ...taxonomySearches],
+                orderedRegions,
+                apiControls,
+              });
+            }
+
+            searches = [...searches, ...taxonomySearches];
+          }
+        }
+      }
+
+      const aliasAndTaxonomySummary = buildCompSummary(searches);
+
+      if (aliasAndTaxonomySummary.rawCount === 0) {
+        const remainingApiCalls = Math.max(
+          0,
+          apiControls.maxApiCallsPerSearch - searches.length
+        );
+
+        const fallbackSearches =
+          remainingApiCalls > 0
+            ? await runProgressiveRegionSearches({
+                attemptName: "fallback-make-model",
+                maxApiCallsOverride: remainingApiCalls,
+              })
+            : [];
+
+        const failedFallbackSearch = fallbackSearches.find(
+          (search) => !search.ok
+        );
+
+        if (failedFallbackSearch) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: failedFallbackSearch,
+            searches: searches.length
+              ? [...searches, ...fallbackSearches]
+              : fallbackSearches,
+            orderedRegions,
+            apiControls,
+          });
+        }
+
+        searches = [...searches, ...fallbackSearches];
+      }
     }
 
     const {
@@ -1114,6 +1305,7 @@ export async function POST(request: Request) {
         make,
         model,
         preferredTrim,
+        targetFuelType,
         targetMileage,
         zips,
           regions: orderedRegions,

@@ -37,11 +37,24 @@ function cleanStringArray(value: unknown) {
     .slice(0, 20);
 }
 
+function cleanThesisMode(value: unknown) {
+  if (
+    value === "financial" ||
+    value === "enthusiast" ||
+    value === "balanced"
+  ) {
+    return value;
+  }
+
+  return "balanced";
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
     const input: EvaluationSummaryInput = {
+      thesisMode: cleanThesisMode(body.thesisMode),
       vehicleTitle: cleanString(body.vehicleTitle),
       vin: cleanString(body.vin),
       mileage: cleanNumber(body.mileage),

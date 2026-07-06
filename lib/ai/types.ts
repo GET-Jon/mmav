@@ -1,5 +1,7 @@
 export type AiProvider = "google" | "openai";
 
+export type EvaluationThesisMode = "financial" | "enthusiast" | "balanced";
+
 export type GenerateTextInput = {
   system: string;
   prompt: string;
@@ -18,6 +20,7 @@ export type AiTextClient = {
 };
 
 export type EvaluationSummaryInput = {
+  thesisMode?: EvaluationThesisMode;
   vehicleTitle?: string | null;
   vin?: string | null;
   mileage?: number | null;

@@ -240,6 +240,8 @@ function StaticField({ label, value }: { label: string; value: string }) {
   );
 }
 
+type ThesisMode = "financial" | "enthusiast" | "balanced";
+
 type SavedEvaluationPayload = {
   vin?: string;
   auctionSite?: string;
@@ -439,7 +441,7 @@ export function EvaluationWorkspace({
   );
 
   const [notes, setNotes] = useState(initialSavedPayload?.notes || "");
-  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryLoadingMode, setAiSummaryLoadingMode] = useState<ThesisMode | null>(null);
   const [aiSummaryError, setAiSummaryError] = useState("");
 
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
@@ -1092,12 +1094,12 @@ export function EvaluationWorkspace({
     );
   }
 
-  async function generateAiSummary() {
-    if (aiSummaryLoading) {
+  async function generateAiSummary(thesisMode: ThesisMode) {
+    if (aiSummaryLoadingMode) {
       return;
     }
 
-    setAiSummaryLoading(true);
+    setAiSummaryLoadingMode(thesisMode);
     setAiSummaryError("");
 
     try {
@@ -1124,6 +1126,7 @@ export function EvaluationWorkspace({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          thesisMode,
           vehicleTitle,
           vin: vin || decodedVehicle?.vin || null,
           mileage: targetMileage || null,
@@ -1164,7 +1167,7 @@ export function EvaluationWorkspace({
       }
 
       setNotes((previous) =>
-        previous.trim() ? `${previous.trim()}\n\n${summary}` : summary
+        previous.trim() ? `${summary}\n\n${previous.trim()}` : summary
       );
     } catch (error) {
       setAiSummaryError(
@@ -1173,7 +1176,7 @@ export function EvaluationWorkspace({
           : "Failed to generate AI summary."
       );
     } finally {
-      setAiSummaryLoading(false);
+      setAiSummaryLoadingMode(null);
     }
   }
 
@@ -1214,6 +1217,7 @@ export function EvaluationWorkspace({
           make,
           model,
           trim: vehicleTrim,
+          fuelType: decodedVehicle?.fuelType || null,
           targetMileage,
           regions: activeAssumptions.regionalMarkets
             .filter((market) => market.enabled)
@@ -1838,9 +1842,9 @@ export function EvaluationWorkspace({
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Deal Notes">
+                <SectionCard title="AI Deal Thesis">
                   <textarea
-                    className="h-28 w-full rounded-xl border border-slate-200 p-3 text-sm"
+                    className="h-72 w-full resize-none rounded-xl border border-slate-200 p-4 text-sm leading-6 lg:h-96"
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
                     placeholder="Add auction notes, recon concerns, seller comments, or follow-up items..."
@@ -1852,23 +1856,27 @@ export function EvaluationWorkspace({
                     </p>
                   ) : null}
 
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="mt-4 grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={generateAiSummary}
-                      disabled={aiSummaryLoading}
-                      className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                      onClick={() => generateAiSummary("financial")}
+                      disabled={Boolean(aiSummaryLoadingMode)}
+                      className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
-                      {aiSummaryLoading
+                      {aiSummaryLoadingMode === "financial"
                         ? "Generating..."
-                        : "Generate AI Summary"}
+                        : "Financial"}
                     </button>
 
                     <button
                       type="button"
-                      className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+                      onClick={() => generateAiSummary("enthusiast")}
+                      disabled={Boolean(aiSummaryLoadingMode)}
+                      className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
-                      Save Note
+                      {aiSummaryLoadingMode === "enthusiast"
+                        ? "Generating..."
+                        : "Enthusiast"}
                     </button>
                   </div>
                 </SectionCard>

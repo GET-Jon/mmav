@@ -1,4 +1,4 @@
-import { buildEvaluationSummaryPrompt, EVALUATION_SUMMARY_SYSTEM_PROMPT } from "./prompts/evaluation-summary";
+import { buildEvaluationSummaryPrompt, getEvaluationSummarySystemPrompt } from "./prompts/evaluation-summary";
 import { GoogleAiTextClient } from "./providers/google";
 import type { AiProvider, AiTextClient, EvaluationSummaryInput } from "./types";
 
@@ -27,10 +27,10 @@ export async function generateEvaluationSummary(input: EvaluationSummaryInput) {
   const client = getAiClient();
 
   const result = await client.generateText({
-    system: EVALUATION_SUMMARY_SYSTEM_PROMPT,
+    system: getEvaluationSummarySystemPrompt(input.thesisMode || "balanced"),
     prompt: buildEvaluationSummaryPrompt(input),
     temperature: 0.2,
-    maxOutputTokens: 220,
+    maxOutputTokens: 500,
   });
 
   return result.text;

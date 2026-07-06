@@ -25,7 +25,10 @@ export class GoogleAiTextClient implements AiTextClient {
       config: {
         systemInstruction: input.system,
         temperature: input.temperature ?? 0.2,
-        maxOutputTokens: input.maxOutputTokens ?? 220,
+        maxOutputTokens: input.maxOutputTokens ?? 500,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
       },
     });
 
