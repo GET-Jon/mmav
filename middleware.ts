@@ -23,8 +23,17 @@ export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const pathname = request.nextUrl.pathname;
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    return response;
+    if (isPublicPath(pathname)) {
+      return response;
+    }
+
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+    return NextResponse.redirect(loginUrl);
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -51,8 +60,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const pathname = request.nextUrl.pathname;
 
   if (!user && !isPublicPath(pathname)) {
     const loginUrl = request.nextUrl.clone();
