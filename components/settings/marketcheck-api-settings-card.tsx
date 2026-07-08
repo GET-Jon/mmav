@@ -431,6 +431,135 @@ export function MarketCheckApiSettingsCard() {
               </div>
             ) : null}
 
+            {(lastApiUsage as any).filterDiagnostics ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="text-base font-bold text-slate-950">
+                  Comp Filtering Diagnostics
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Explains why returned MarketCheck listings did or did not become usable comps.
+                </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                  <div className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Returned
+                    </div>
+                    <div className="mt-1 text-lg font-black text-slate-950">
+                      {(lastApiUsage as any).filterDiagnostics.returnedListings ?? 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Mapped
+                    </div>
+                    <div className="mt-1 text-lg font-black text-slate-950">
+                      {(lastApiUsage as any).filterDiagnostics.mappedListings ?? 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Usable
+                    </div>
+                    <div className="mt-1 text-lg font-black text-emerald-700">
+                      {(lastApiUsage as any).filterDiagnostics.usableListings ?? 0}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 px-3 py-3">
+                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      Rejected
+                    </div>
+                    <div className="mt-1 text-lg font-black text-red-700">
+                      {(lastApiUsage as any).filterDiagnostics.rejectedListings ?? 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-2 gap-0 divide-x divide-slate-200 text-sm md:grid-cols-4">
+                    <div className="px-3 py-3">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Fuel mismatch
+                      </div>
+                      <div className="mt-1 font-black text-slate-950">
+                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.fuelMismatch ?? 0}
+                      </div>
+                    </div>
+
+                    <div className="px-3 py-3">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Missing price/mileage
+                      </div>
+                      <div className="mt-1 font-black text-slate-950">
+                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.missingPriceOrMileage ?? 0}
+                      </div>
+                    </div>
+
+                    <div className="px-3 py-3">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Quality below threshold
+                      </div>
+                      <div className="mt-1 font-black text-slate-950">
+                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.qualityBelowThreshold ?? 0}
+                      </div>
+                    </div>
+
+                    <div className="px-3 py-3">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Other
+                      </div>
+                      <div className="mt-1 font-black text-slate-950">
+                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.other ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {(lastApiUsage as any).filterDiagnostics.sampleRejectedListings?.length ? (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                    <div className="bg-slate-50 px-3 py-3 text-xs font-black uppercase tracking-wide text-slate-500">
+                      Sample rejected listings
+                    </div>
+
+                    <div className="divide-y divide-slate-100">
+                      {(lastApiUsage as any).filterDiagnostics.sampleRejectedListings.map(
+                        (listing: any, index: number) => (
+                          <div key={`${listing.title || "listing"}-${index}`} className="px-3 py-3 text-sm">
+                            <div className="font-bold text-slate-950">
+                              {listing.title || "Untitled listing"}
+                            </div>
+                            <div className="mt-1 text-slate-600">
+                              {[listing.year, listing.make, listing.model, listing.trim]
+                                .filter(Boolean)
+                                .join(" ")}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
+                              <span>Fuel: {listing.fuelType || "—"}</span>
+                              <span>Price: {listing.price ? `$${Number(listing.price).toLocaleString()}` : "—"}</span>
+                              <span>Mileage: {listing.mileage ? Number(listing.mileage).toLocaleString() : "—"}</span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(listing.rejectedReasons || []).map((reason: string) => (
+                                <span
+                                  key={reason}
+                                  className="rounded-full bg-red-50 px-2 py-1 text-xs font-bold text-red-700"
+                                >
+                                  {reason}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {lastApiUsage.searchLog?.length ? (
               <div className="overflow-hidden rounded-xl border border-slate-200">
                 <table className="w-full text-left text-sm">

@@ -430,6 +430,9 @@ export function EvaluationWorkspace({
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
+  const [quickEvalOpen, setQuickEvalOpen] = useState(!initialSavedEvaluationId);
+  const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
+  const [bidLogicOpen, setBidLogicOpen] = useState(false);
 
   const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(
     initialSavedEvaluationId
@@ -754,6 +757,23 @@ export function EvaluationWorkspace({
   const vehicleBodyClass =
     decodedVehicle?.bodyClass || manualVehicle.bodyClass || "";
 
+  const simplifiedVehicleBodyClass = (() => {
+    const normalized = String(vehicleBodyClass || "").toLowerCase();
+
+    if (!normalized.trim()) return "";
+    if (normalized.includes("sport utility") || normalized.includes("suv")) return "SUV";
+    if (normalized.includes("multipurpose vehicle") || normalized.includes("mpv")) return "MPV";
+    if (normalized.includes("sedan")) return "Sedan";
+    if (normalized.includes("coupe")) return "Coupe";
+    if (normalized.includes("convertible")) return "Convertible";
+    if (normalized.includes("hatchback")) return "Hatchback";
+    if (normalized.includes("wagon")) return "Wagon";
+    if (normalized.includes("pickup") || normalized.includes("truck")) return "Truck";
+    if (normalized.includes("van")) return "Van";
+
+    return vehicleBodyClass;
+  })();
+
   const vehicleTitle =
     [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
       .filter(Boolean)
@@ -952,7 +972,9 @@ export function EvaluationWorkspace({
       reason: profileMatch.reason,
     });
   }
-  async function decodeVinFromBasics() {
+  async function decodeVinFromBasics(vinOverride?: string) {
+    const vinToDecode = (vinOverride ?? vin).trim().toUpperCase();
+
     setVinDecodeLoading(true);
     setVinDecodeError("");
 
@@ -963,7 +985,7 @@ export function EvaluationWorkspace({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          vin,
+          vin: vinToDecode,
         }),
       });
 
@@ -1024,8 +1046,9 @@ export function EvaluationWorkspace({
 
     const baseEvaluation: ValuationInput = {
       ...initialEvaluation,
-      currentBid: 0,
-      targetResaleUsed: 0,
+      currentBid: valuationInput.currentBid,
+      targetResaleUsed: valuationInput.targetResaleUsed,
+      targetProfit: valuationInput.targetProfit,
       hasAvoidFlag: false,
       costs: {
         ...initialEvaluation.costs,
@@ -1042,7 +1065,7 @@ export function EvaluationWorkspace({
         : baseEvaluation
     );
 
-    setTargetMileage(0);
+    setTargetMileage((previous) => previous);
     setFinalTargetOverride(null);
     setComps([]);
     setSelectedConditions([]);
@@ -1416,6 +1439,24 @@ export function EvaluationWorkspace({
       ? "text-amber-700"
       : "text-emerald-700";
 
+  const suggestedBid =
+    "safeBid" in valuation && typeof valuation.safeBid === "number"
+      ? valuation.safeBid
+      : valuation.maxSmartBid;
+
+  const hasQuickEvalBasics = vin.trim().length >= 17;
+
+  function startQuickEvaluation() {
+    const vinToDecode = vin.trim().toUpperCase();
+
+    setVin(vinToDecode);
+    setQuickEvalOpen(false);
+
+    if (vinToDecode.length >= 17) {
+      decodeVinFromBasics(vinToDecode);
+    }
+  }
+
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
     auctionSite || null,
@@ -1425,6 +1466,289 @@ export function EvaluationWorkspace({
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
+      {quickEvalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 px-6 py-5">
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-950">
+                  Quick Start Evaluation
+                </h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  Enter a VIN to start. Mileage and current bid can be added now or later.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setQuickEvalOpen(false)}
+                className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close quick evaluation"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 pb-5">
+              <FormRow label="VIN">
+                <input
+                  value={vin}
+                  onChange={(event) => setVin(event.target.value.toUpperCase())}
+                  placeholder="e.g. 5UXCR6C00L9U123456"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                />
+              </FormRow>
+
+              {vinDecodeError ? (
+                <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                  {vinDecodeError}
+                </div>
+              ) : null}
+
+              <FormRow label="Mileage">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(targetMileage)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => setTargetMileage(toNumber(event.target.value))}
+                    placeholder="e.g. 68,450"
+                    className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                  />
+                  <span className="pr-3 text-sm font-semibold text-slate-400">mi</span>
+                </div>
+              </FormRow>
+
+              <FormRow label="Current Bid">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <span className="pl-3 text-sm text-slate-400">$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(valuationInput.currentBid)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) =>
+                      updateEvaluationField("currentBid", toNumber(event.target.value))
+                    }
+                    placeholder="e.g. 16,250"
+                    className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+              </FormRow>
+
+              <FormRow label="Vehicle Source">
+                <select
+                  value={auctionSite}
+                  onChange={(event) => setAuctionSite(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                >
+                  <option>ACV Auctions</option>
+                  <option>Manheim</option>
+                  <option>Cars & Bids</option>
+                  <option>Bring a Trailer</option>
+                  <option>Facebook</option>
+                  <option>Private Party</option>
+                  <option>Other</option>
+                </select>
+              </FormRow>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setQuickEvalOpen(false)}
+                className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={startQuickEvaluation}
+                disabled={!hasQuickEvalBasics}
+                className="rounded-xl bg-slate-950 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                Start Evaluation
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {vehicleDetailsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-950">
+                  Vehicle Details
+                </h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  Full decoded identity and applied vehicle profile.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setVehicleDetailsOpen(false)}
+                className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close vehicle details"
+              >
+                ✕
+              </button>
+            </div>
+
+            <VinDecodeCard
+              decoded={decodedVehicle}
+              manualVehicle={manualVehicle}
+              onManualVehicleChange={updateManualVehicleField}
+              appliedVehicleProfile={appliedVehicleProfile}
+              onReapplyVehicleProfile={reapplyVehicleProfile}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {bidLogicOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 px-6 py-5">
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-950">
+                  Adjust Bid Logic
+                </h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  Tune the key assumptions that drive the suggested bid.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setBidLogicOpen(false)}
+                className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close bid logic"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 pb-5">
+              <FormRow label="Mileage">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formatNumberInput(targetMileage)}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => setTargetMileage(toNumber(event.target.value))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                />
+              </FormRow>
+
+              <FormRow label="Current Bid">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <span className="pl-3 text-sm text-slate-400">$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(valuationInput.currentBid)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) =>
+                      updateEvaluationField("currentBid", toNumber(event.target.value))
+                    }
+                    className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+              </FormRow>
+
+              <FormRow label="Vehicle Source">
+                <select
+                  value={auctionSite}
+                  onChange={(event) => setAuctionSite(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                >
+                  <option>ACV Auctions</option>
+                  <option>Manheim</option>
+                  <option>Cars & Bids</option>
+                  <option>Bring a Trailer</option>
+                  <option>Facebook</option>
+                  <option>Private Party</option>
+                  <option>Other</option>
+                </select>
+              </FormRow>
+
+              <FormRow label="Final Retail Target">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <span className="pl-3 text-sm text-slate-400">$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(finalTargetOverride ?? targetResaleUsed)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) =>
+                      setFinalTargetOverride(toNumber(event.target.value))
+                    }
+                    className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+              </FormRow>
+
+              <FormRow label="Target Profit">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <span className="pl-3 text-sm text-slate-400">$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(valuationInput.targetProfit)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) =>
+                      updateEvaluationField("targetProfit", toNumber(event.target.value))
+                    }
+                    className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+              </FormRow>
+
+              <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Suggested Bid
+                  </div>
+                  <div className="mt-1 text-lg font-black text-emerald-700">
+                    {suggestedBid > 0 ? money(suggestedBid) : "No Bid"}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Expected Gross
+                  </div>
+                  <div
+                    className={`mt-1 text-lg font-black ${
+                      valuation.expectedGrossProfit >= 0
+                        ? "text-emerald-700"
+                        : "text-red-700"
+                    }`}
+                  >
+                    {money(valuation.expectedGrossProfit)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setBidLogicOpen(false)}
+                className="rounded-xl bg-slate-950 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex min-h-screen">
         <AppSidebar active="evaluator" userEmail={userEmail} />
 
@@ -1455,6 +1779,14 @@ export function EvaluationWorkspace({
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
+                  onClick={() => setQuickEvalOpen(true)}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+                >
+                  ⚡ New Quick Eval
+                </button>
+
+                <button
+                  type="button"
                   onClick={saveEvaluation}
                   disabled={saveLoading}
                   className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
@@ -1475,233 +1807,306 @@ export function EvaluationWorkspace({
               </div>
             </div>
 
-            <section className={`mb-5 rounded-2xl border px-5 py-4 shadow-sm ${decisionBannerTone}`}>
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-                <div className="shrink-0 xl:w-60">
-                  <div className={`text-3xl font-black leading-none tracking-tight ${decisionTextTone}`}>
-                    {valuation.decision}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-3 py-1 text-sm font-bold ${decisionBadgeTone}`}>
-                      {valuation.riskGrade} risk
-                    </span>
-
-                    <span className="text-sm font-bold text-slate-600">
-                      Current bid {money(valuationInput.currentBid)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="hidden h-16 w-px shrink-0 bg-emerald-200/70 xl:block" />
-
-                <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    {
-                      label: "All-in cost",
-                      value: money(valuation.allInCost),
-                      tone: "text-slate-950",
-                    },
-                    {
-                      label: "Gross profit",
-                      value: money(valuation.expectedGrossProfit),
-                      tone:
-                        valuation.expectedGrossProfit >= 0
-                          ? "text-emerald-700"
-                          : "text-red-700",
-                    },
-                    {
-                      label: "Max smart bid",
-                      value: money(valuation.maxSmartBid),
-                      tone: "text-blue-700",
-                    },
-                    {
-                      label: "Stretch bid",
-                      value: money(valuation.stretchBid),
-                      tone: "text-purple-700",
-                    },
-                  ].map((metric) => (
-                    <div
-                      key={metric.label}
-                      className="rounded-xl border border-slate-200/70 bg-white/85 px-4 py-3 shadow-sm"
-                    >
-                      <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                        {metric.label}
+            <section className="mb-5 space-y-5">
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                        Vehicle Snapshot
                       </div>
-                      <div className={`mt-1 text-lg font-black leading-tight ${metric.tone}`}>
-                        {metric.value}
+                      <div className="mt-3 text-xl font-black tracking-tight text-slate-950">
+                        {vehicleTitle}
                       </div>
                     </div>
-                  ))}
+
+                    <div className="flex h-16 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
+                      <div className="h-2 w-12 rounded-full bg-slate-300" />
+                      <div className="mt-2 h-5 w-16 rounded-lg border-2 border-slate-300" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-semibold text-slate-600">
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      {targetMileage ? `${formatNumberInput(targetMileage)} mi` : "Mileage pending"}
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      {decodedVehicle?.fuelType || "Fuel pending"}
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      {simplifiedVehicleBodyClass || "Body pending"}
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      {auctionSite || "Source pending"}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 truncate rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                    {vin ? `VIN ${vin}` : "VIN pending"}
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuickEvalOpen(true)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+                    >
+                      Edit Basics
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setVehicleDetailsOpen(true)}
+                      className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
+                    >
+                      Details
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                        Market Read
+                      </div>
+                      <div className="mt-3 text-sm font-bold text-slate-500">
+                        Adjusted Market Avg
+                      </div>
+                      <div className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+                        {comps.length ? money(compSummary.averageAdjusted) : "Pending"}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">
+                        {comps.length ? "Comp set found" : "Pull comps to score market"}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={pullMarketCheckComps}
+                        disabled={marketCheckLoading}
+                        className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-black text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      >
+                        {marketCheckLoading ? "Pulling..." : "Pull Comps"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Comps
+                      </div>
+                      <div className="mt-1 text-base font-black text-slate-950">
+                        {comps.length || "—"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Confidence
+                      </div>
+                      <div className="mt-1 text-base font-black text-slate-950">
+                        {comps.length >= 10 ? "Good" : comps.length >= 5 ? "Fair" : comps.length > 0 ? "Thin" : "Pending"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Fuel match
+                      </div>
+                      <div className="mt-1 text-base font-black text-slate-950">
+                        {decodedVehicle?.fuelType ? "Enforced" : "Unavailable"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Timing
+                      </div>
+                      <div className="mt-1 text-base font-black text-slate-950">
+                        {marketTimingSpeedSignal}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      Deal Scores
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                          <span className="text-slate-600">Profitability</span>
+                          <span className="text-slate-950">
+                            {valuation.expectedGrossProfit >= valuationInput.targetProfit
+                              ? "82 Strong"
+                              : valuation.expectedGrossProfit > 0
+                              ? "64 Selective"
+                              : "38 Weak"}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full bg-emerald-600"
+                            style={{
+                              width:
+                                valuation.expectedGrossProfit >= valuationInput.targetProfit
+                                  ? "82%"
+                                  : valuation.expectedGrossProfit > 0
+                                  ? "64%"
+                                  : "38%",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                          <span className="text-slate-600">Dealer Fit</span>
+                          <span className="text-slate-950">
+                            {appliedVehicleProfile ? "76 Good Fit" : "62 Selective Fit"}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full bg-blue-600"
+                            style={{ width: appliedVehicleProfile ? "76%" : "62%" }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl border p-5 shadow-sm ${decisionBannerTone}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                        Decision
+                      </div>
+                      <div className={`mt-3 text-4xl font-black tracking-tight ${decisionTextTone}`}>
+                        {valuation.decision}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-black ${decisionBadgeTone}`}>
+                          {valuation.riskGrade} risk
+                        </span>
+                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-slate-700">
+                          Current bid {money(valuationInput.currentBid)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Suggested Bid
+                      </div>
+                      <div className="mt-2 text-3xl font-black text-emerald-700">
+                        {suggestedBid > 0 ? money(suggestedBid) : "No Bid"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-white/85 px-3 py-3 shadow-sm">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Expected Sale
+                      </div>
+                      <div className="mt-1 text-lg font-black text-slate-950">
+                        {money(finalTargetUsed)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white/85 px-3 py-3 shadow-sm">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Expected Gross
+                      </div>
+                      <div
+                        className={`mt-1 text-lg font-black ${
+                          valuation.expectedGrossProfit >= 0
+                            ? "text-emerald-700"
+                            : "text-red-700"
+                        }`}
+                      >
+                        {money(valuation.expectedGrossProfit)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl bg-white/75 px-3 py-2 text-xs font-bold leading-5 text-slate-700">
+                    <span className="font-black text-slate-950">Why this call:</span>{" "}
+                    {valuation.expectedGrossProfit >= valuationInput.targetProfit
+                      ? "Meets target profit with manageable risk."
+                      : valuation.expectedGrossProfit > 0
+                      ? "Some spread exists, but the bid needs discipline."
+                      : "Insufficient spread after costs, risk, and target profit."}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setBidLogicOpen(true)}
+                    className="mt-4 w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-sm font-black text-slate-700 shadow-sm hover:bg-white"
+                  >
+                    Adjust Bid Logic
+                  </button>
                 </div>
               </div>
+
+
             </section>
 
             <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_1fr]">
-                <SectionCard title="Vehicle & Bid">
-                  <div className="space-y-5">
-                    <div className="space-y-4">
-                      <FormRow label="VIN">
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <input
-                              value={vin}
-                              onChange={(event) =>
-                                setVin(event.target.value.toUpperCase())
-                              }
-                              placeholder="Enter VIN"
-                              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={decodeVinFromBasics}
-                              disabled={vinDecodeLoading || vin.trim().length < 17}
-                              className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
-                            >
-                              {vinDecodeLoading ? "Decoding..." : "Decode"}
-                            </button>
-                          </div>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_.8fr_1.15fr]">
+                <SectionCard
+                  title="AI Deal Thesis"
+                  action={
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                      Uses current evaluator data only
+                    </span>
+                  }
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => generateAiSummary("financial")}
+                      disabled={Boolean(aiSummaryLoadingMode)}
+                      className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {aiSummaryLoadingMode === "financial"
+                        ? "Generating..."
+                        : "Financial"}
+                    </button>
 
-                          {vinDecodeError ? (
-                            <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-                              {vinDecodeError}
-                            </div>
-                          ) : null}
-                        </div>
-                      </FormRow>
-
-                      <FormRow label="Mileage">
-                        <input
-                          ref={mileageInputRef}
-                          type="text"
-                          inputMode="numeric"
-                          value={formatNumberInput(targetMileage)}
-                          onFocus={(event) => event.currentTarget.select()}
-                          onChange={(event) =>
-                            setTargetMileage(toNumber(event.target.value))
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                        />
-                      </FormRow>
-
-                      <FormRow label="Current Bid">
-                        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                          <span className="pl-3 text-sm text-slate-400">$</span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={formatNumberInput(valuationInput.currentBid)}
-                            onFocus={(event) => event.currentTarget.select()}
-                            onChange={(event) =>
-                              updateEvaluationField(
-                                "currentBid",
-                                toNumber(event.target.value)
-                              )
-                            }
-                            className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
-                          />
-                        </div>
-                      </FormRow>
-
-                      <FormRow label="Vehicle Source">
-                        <select
-                          value={auctionSite}
-                          onChange={(event) => setAuctionSite(event.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                        >
-                          <option>ACV Auctions</option>
-                          <option>Manheim</option>
-                          <option>Cars & Bids</option>
-                          <option>Bring a Trailer</option>
-                          <option>Facebook</option>
-                          <option>Private Party</option>
-                          <option>Other</option>
-                        </select>
-                      </FormRow>                    </div>
-
-                    <div className="border-t border-slate-200 pt-5">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <h3 className="text-base font-bold text-slate-950">
-                            Market Pricing
-                          </h3>
-
-                          {marketCheckStatus ? (
-                            <div className="mt-1 text-xs font-semibold text-slate-500">
-                              {marketCheckStatus}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={pullMarketCheckComps}
-                          disabled={marketCheckLoading}
-                          className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
-                        >
-                          {marketCheckLoading ? "Pulling..." : "Pull Comps"}
-                        </button>
-                      </div>
-
-                      <div className="space-y-4">
-                        <FormRow label="Market Comp Avg">
-                          <div className="rounded-xl bg-slate-50 px-3 py-2 text-right text-sm font-bold text-slate-900">
-                            {money(compSummary.averageAdjusted)}
-                          </div>
-                        </FormRow>
-
-                        <FormRow label="Final Retail Target">
-                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <span className="pl-3 text-sm text-slate-400">$</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={formatNumberInput(
-                                finalTargetOverride ?? targetResaleUsed
-                              )}
-                              onFocus={(event) => event.currentTarget.select()}
-                              onChange={(event) =>
-                                setFinalTargetOverride(toNumber(event.target.value))
-                              }
-                              className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
-                            />
-                          </div>
-                        </FormRow>
-
-                        <FormRow label="Target Profit">
-                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <span className="pl-3 text-sm text-slate-400">$</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={formatNumberInput(valuationInput.targetProfit)}
-                              onFocus={(event) => event.currentTarget.select()}
-                              onChange={(event) =>
-                                updateEvaluationField(
-                                  "targetProfit",
-                                  toNumber(event.target.value)
-                                )
-                              }
-                              className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
-                            />
-                          </div>
-                        </FormRow>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => generateAiSummary("enthusiast")}
+                      disabled={Boolean(aiSummaryLoadingMode)}
+                      className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {aiSummaryLoadingMode === "enthusiast"
+                        ? "Generating..."
+                        : "Enthusiast"}
+                    </button>
                   </div>
-                  </SectionCard>
 
-                <VinDecodeCard
-                  decoded={decodedVehicle}
-                  manualVehicle={manualVehicle}
-                  onManualVehicleChange={updateManualVehicleField}
-                  appliedVehicleProfile={appliedVehicleProfile}
-                  onReapplyVehicleProfile={reapplyVehicleProfile}
-                />
-              </div>
+                  {aiSummaryError ? (
+                    <p className="mt-3 text-sm font-semibold text-red-600">
+                      {aiSummaryError}
+                    </p>
+                  ) : null}
 
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1.15fr_.9fr]">
+                  <textarea
+                    className="mt-4 h-64 w-full resize-none rounded-xl border border-slate-200 p-4 text-sm leading-6"
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Generate a thesis or add auction notes, recon concerns, seller comments, or follow-up items..."
+                  />
+                </SectionCard>
+
                 <SectionCard title="Condition Checklist">
                     <div className="space-y-4 text-sm">
                       {Object.entries(conditionGroups).map(([category, rules]) => (
@@ -1842,44 +2247,6 @@ export function EvaluationWorkspace({
                   </div>
                 </SectionCard>
 
-                <SectionCard title="AI Deal Thesis">
-                  <textarea
-                    className="h-72 w-full resize-none rounded-xl border border-slate-200 p-4 text-sm leading-6 lg:h-96"
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    placeholder="Add auction notes, recon concerns, seller comments, or follow-up items..."
-                  />
-
-                  {aiSummaryError ? (
-                    <p className="mt-2 text-sm font-semibold text-red-600">
-                      {aiSummaryError}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => generateAiSummary("financial")}
-                      disabled={Boolean(aiSummaryLoadingMode)}
-                      className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                    >
-                      {aiSummaryLoadingMode === "financial"
-                        ? "Generating..."
-                        : "Financial"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => generateAiSummary("enthusiast")}
-                      disabled={Boolean(aiSummaryLoadingMode)}
-                      className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                    >
-                      {aiSummaryLoadingMode === "enthusiast"
-                        ? "Generating..."
-                        : "Enthusiast"}
-                    </button>
-                  </div>
-                </SectionCard>
               </div>
 
               <div id="market-comps" className="scroll-mt-6">

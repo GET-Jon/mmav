@@ -106,7 +106,12 @@ function normalizeFuelType(value: unknown) {
   if (
     normalized.includes("gasoline") ||
     normalized.includes("gas") ||
-    normalized.includes("petrol")
+    normalized.includes("petrol") ||
+    normalized.includes("unleaded") ||
+    normalized.includes("regular fuel") ||
+    normalized.includes("premium fuel") ||
+    normalized === "regular" ||
+    normalized === "premium"
   ) {
     return "gasoline";
   }
@@ -200,7 +205,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-low-confidence-v6-fuel-match",
+    cacheVersion: "progressive-regions-low-confidence-v7-fuel-normalization",
   });
 }
 
@@ -938,7 +943,7 @@ export async function POST(request: Request) {
     const MIN_INITIAL_REGIONS = Math.min(apiControls.minInitialRegions, zips.length);
 
     function buildCompSummary(currentSearches: MarketCheckSearchResult[]) {
-      const allListings = currentSearches.flatMap((search) => {
+      const allListings = currentSearches.flatMap((search): MarketCheckListing[] => {
         const region = orderedRegions.find(
           (orderedRegion: { zip: string }) => orderedRegion.zip === search.zip
         );
@@ -977,6 +982,68 @@ export async function POST(request: Request) {
 
       const mappedNullCount = mapped.filter((comp) => !comp).length;
 
+      const minimumQualityScore =
+        defaultAssumptions.compSettings.minimumQualityScore;
+
+      const listingDiagnostics = allListings.map((listing: MarketCheckListing, index) => {
+        const build = listing.build || {};
+        const askingPrice = toNumber(
+          listing.price ?? listing.list_price ?? listing.msrp
+        );
+        const mileage = toNumber(
+          listing.miles ?? listing.mileage ?? listing.odometer
+        );
+
+        const rejectedReasons: string[] = [];
+
+        if (
+          targetFuelType &&
+          !fuelTypesMatch({
+            targetFuelType,
+            listing,
+          })
+        ) {
+          rejectedReasons.push("fuel mismatch");
+        }
+
+        if (!askingPrice || !mileage) {
+          rejectedReasons.push("missing price or mileage");
+        }
+
+        const mappedComp = mapped[index];
+
+        if (
+          mappedComp &&
+          mappedComp.qualityScore < minimumQualityScore
+        ) {
+          rejectedReasons.push("quality below threshold");
+        }
+
+        return {
+          title: String(
+            listing.heading ||
+              listing.title ||
+              listing.vdp_url ||
+              listing.vin ||
+              "Untitled listing"
+          ),
+          year: build.year ?? listing.year ?? "",
+          make: build.make ?? listing.make ?? "",
+          model: build.model ?? listing.model ?? "",
+          trim: build.trim ?? listing.trim ?? "",
+          fuelType:
+            getListingFuelType(listing) ||
+            build.fuel_type ||
+            build.fuel ||
+            listing.fuel_type ||
+            listing.fuel ||
+            "",
+          price: askingPrice,
+          mileage,
+          rejectedReasons,
+        };
+      });
+
       const deduped = mapped
         .filter(Boolean)
         .filter((comp) => {
@@ -1006,9 +1073,6 @@ export async function POST(request: Request) {
         );
       });
 
-      const minimumQualityScore =
-        defaultAssumptions.compSettings.minimumQualityScore;
-
       const scoredComps = rankedComps.map((comp, index) => ({
         ...comp,
         included: index < 6 && comp.qualityScore >= minimumQualityScore,
@@ -1025,6 +1089,42 @@ export async function POST(request: Request) {
           }))
         : scoredComps;
 
+      const usableListings = comps.filter(
+        (comp) => comp.qualityScore >= minimumQualityScore
+      ).length;
+
+      const rejectionCounts = listingDiagnostics.reduce(
+        (counts, listing) => {
+          if (!listing.rejectedReasons.length) {
+            return counts;
+          }
+
+          for (const reason of listing.rejectedReasons) {
+            if (reason === "fuel mismatch") {
+              counts.fuelMismatch += 1;
+            } else if (reason === "missing price or mileage") {
+              counts.missingPriceOrMileage += 1;
+            } else if (reason === "quality below threshold") {
+              counts.qualityBelowThreshold += 1;
+            } else {
+              counts.other += 1;
+            }
+          }
+
+          return counts;
+        },
+        {
+          fuelMismatch: 0,
+          missingPriceOrMileage: 0,
+          qualityBelowThreshold: 0,
+          other: 0,
+        }
+      );
+
+      const sampleRejectedListings = listingDiagnostics
+        .filter((listing) => listing.rejectedReasons.length)
+        .slice(0, 3);
+
       return {
         allListings,
         rawCount,
@@ -1032,6 +1132,14 @@ export async function POST(request: Request) {
         comps,
         lowConfidenceFallback,
         minimumQualityScore,
+        filterDiagnostics: {
+          returnedListings: allListings.length,
+          mappedListings: mapped.length - mappedNullCount,
+          usableListings,
+          rejectedListings: Math.max(0, allListings.length - usableListings),
+          rejectionCounts,
+          sampleRejectedListings,
+        },
       };
     }
 
@@ -1244,6 +1352,7 @@ export async function POST(request: Request) {
       comps,
       lowConfidenceFallback,
       minimumQualityScore,
+      filterDiagnostics,
     } = buildCompSummary(searches);
 
     const searchLog = searches.map((search, index) => {
@@ -1331,6 +1440,7 @@ export async function POST(request: Request) {
         stopReason,
         usableCompCount,
         searchLog,
+        filterDiagnostics,
         marketTiming,
         marketTimingDebug,
       },
