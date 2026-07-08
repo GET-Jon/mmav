@@ -1444,6 +1444,43 @@ export function EvaluationWorkspace({
       ? valuation.safeBid
       : valuation.maxSmartBid;
 
+  const targetProfitForScore = Math.max(valuationInput.targetProfit || 0, 1);
+  const profitRatio = valuation.expectedGrossProfit / targetProfitForScore;
+
+  const profitabilityScore =
+    valuation.expectedGrossProfit <= 0
+      ? 30
+      : profitRatio >= 1.5
+      ? 95
+      : profitRatio >= 1.25
+      ? 90
+      : profitRatio >= 1
+      ? 82
+      : profitRatio >= 0.75
+      ? 68
+      : profitRatio >= 0.5
+      ? 55
+      : 42;
+
+  const profitabilityLabel =
+    profitabilityScore >= 90
+      ? "Excellent"
+      : profitabilityScore >= 82
+      ? "Strong"
+      : profitabilityScore >= 68
+      ? "Workable"
+      : profitabilityScore >= 55
+      ? "Thin"
+      : profitabilityScore >= 42
+      ? "Weak"
+      : "Avoid";
+
+  const profitabilityWidth = `${profitabilityScore}%`;
+
+  const dealerFitScore = appliedVehicleProfile ? 76 : 62;
+  const dealerFitLabel = appliedVehicleProfile ? "Good Fit" : "Selective Fit";
+  const dealerFitWidth = `${dealerFitScore}%`;
+
   const hasQuickEvalBasics = vin.trim().length >= 17;
 
   function startQuickEvaluation() {
@@ -1942,11 +1979,7 @@ export function EvaluationWorkspace({
                         <div className="flex items-center justify-between gap-3 text-xs font-bold">
                           <span className="text-slate-600">Profitability</span>
                           <span className="text-slate-950">
-                            {valuation.expectedGrossProfit >= valuationInput.targetProfit
-                              ? "82 Strong"
-                              : valuation.expectedGrossProfit > 0
-                              ? "64 Selective"
-                              : "38 Weak"}
+                            {profitabilityScore} {profitabilityLabel}
                           </span>
                         </div>
                         <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -1954,11 +1987,7 @@ export function EvaluationWorkspace({
                             className="h-full rounded-full bg-emerald-600"
                             style={{
                               width:
-                                valuation.expectedGrossProfit >= valuationInput.targetProfit
-                                  ? "82%"
-                                  : valuation.expectedGrossProfit > 0
-                                  ? "64%"
-                                  : "38%",
+                                profitabilityWidth,
                             }}
                           />
                         </div>
@@ -1968,13 +1997,13 @@ export function EvaluationWorkspace({
                         <div className="flex items-center justify-between gap-3 text-xs font-bold">
                           <span className="text-slate-600">Dealer Fit</span>
                           <span className="text-slate-950">
-                            {appliedVehicleProfile ? "76 Good Fit" : "62 Selective Fit"}
+                            {dealerFitScore} {dealerFitLabel}
                           </span>
                         </div>
                         <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
                           <div
                             className="h-full rounded-full bg-blue-600"
-                            style={{ width: appliedVehicleProfile ? "76%" : "62%" }}
+                            style={{ width: dealerFitWidth }}
                           />
                         </div>
                       </div>
