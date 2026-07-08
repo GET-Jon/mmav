@@ -230,7 +230,7 @@ export default async function DealsPage() {
     loadError =
       error instanceof Error
         ? error.message
-        : "Saved Searches failed to load.";
+        : "Deal Pipeline failed to load.";
   }
 
   return (
@@ -242,7 +242,7 @@ export default async function DealsPage() {
           <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
             <div>
               <div className="text-sm font-black uppercase tracking-wide text-slate-500">
-                Saved Searches
+                Deal Pipeline
               </div>
             </div>
 
@@ -253,7 +253,7 @@ export default async function DealsPage() {
             <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">
-                  Saved Searches
+                  Deal Pipeline
                 </h1>
                 <p className="mt-1 text-slate-600">
                   Track watched vehicles, bids, passes, wins, losses, and
@@ -268,7 +268,7 @@ export default async function DealsPage() {
 
             {loadError ? (
               <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                Saved Searches could not load: {loadError}
+                Deal Pipeline could not load: {loadError}
               </div>
             ) : null}
 

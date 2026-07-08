@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { AccountStatus } from "@/components/auth/account-status";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
@@ -137,7 +136,7 @@ function SectionCard({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.055),0_16px_40px_rgba(15,23,42,0.035)]">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h2 className="text-base font-bold text-slate-950">{title}</h2>
         {action}
@@ -233,7 +232,7 @@ function StaticField({ label, value }: { label: string; value: string }) {
       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </div>
-      <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900">
+      <div className="rounded-xl bg-slate-50/80 px-3 py-2 text-sm font-semibold text-slate-900">
         {value}
       </div>
     </div>
@@ -650,7 +649,7 @@ export function EvaluationWorkspace({
         targetMileage,
         assumptions: activeAssumptions,
       }),
-    [comps, targetMileage]
+    [comps, targetMileage, activeAssumptions]
   );
 
   const marketTimingAverageDealerDays =
@@ -747,7 +746,7 @@ export function EvaluationWorkspace({
 
   const valuation = useMemo(
     () => calculateValuation(valuationInput, activeAssumptions),
-    [valuationInput]
+    [valuationInput, activeAssumptions]
   );
 
   const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
@@ -1427,10 +1426,10 @@ export function EvaluationWorkspace({
 
   const decisionBannerTone =
     valuation.decision === "Pass"
-      ? "border-red-200 bg-red-50 text-red-950"
+      ? "border-red-200/80 bg-red-50/70 text-red-950"
       : valuation.decision === "Watch / Stretch Only"
-      ? "border-amber-200 bg-amber-50 text-amber-950"
-      : "border-emerald-200 bg-emerald-50 text-emerald-950";
+      ? "border-amber-200/80 bg-amber-50/70 text-amber-950"
+      : "border-emerald-200/80 bg-emerald-50/70 text-emerald-950";
 
   const decisionTextTone =
     valuation.decision === "Pass"
@@ -1481,6 +1480,13 @@ export function EvaluationWorkspace({
   const dealerFitLabel = appliedVehicleProfile ? "Good Fit" : "Selective Fit";
   const dealerFitWidth = `${dealerFitScore}%`;
 
+  const suggestedBidDisplay =
+    valuationInput.currentBid <= 0
+      ? "Enter bid to see range"
+      : suggestedBid > 0
+      ? money(suggestedBid)
+      : "No Bid";
+
   const hasQuickEvalBasics = vin.trim().length >= 17;
 
   function startQuickEvaluation() {
@@ -1502,13 +1508,13 @@ export function EvaluationWorkspace({
   ].filter(Boolean);
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
+    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
       {quickEvalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 px-6 py-5">
               <div>
-                <h2 className="text-xl font-black tracking-tight text-slate-950">
+                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
                   Quick Start Evaluation
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
@@ -1618,7 +1624,7 @@ export function EvaluationWorkspace({
           <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-black tracking-tight text-slate-950">
+                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
                   Vehicle Details
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
@@ -1652,7 +1658,7 @@ export function EvaluationWorkspace({
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 px-6 py-5">
               <div>
-                <h2 className="text-xl font-black tracking-tight text-slate-950">
+                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
                   Adjust Bid Logic
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
@@ -1748,16 +1754,16 @@ export function EvaluationWorkspace({
 
               <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
                 <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                     Suggested Bid
                   </div>
-                  <div className="mt-1 text-lg font-black text-emerald-700">
-                    {suggestedBid > 0 ? money(suggestedBid) : "No Bid"}
+                  <div className="mt-1 text-[20px] font-extrabold tracking-[-0.025em] text-emerald-700">
+                    {suggestedBidDisplay}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                     Expected Gross
                   </div>
                   <div
@@ -1790,20 +1796,10 @@ export function EvaluationWorkspace({
         <AppSidebar active="evaluator" userEmail={userEmail} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
-            <div>
-              <div className="text-sm font-black uppercase tracking-wide text-slate-500">
-                Evaluator
-              </div>
-            </div>
-
-            <AccountStatus userEmail={userEmail} />
-          </header>
-
           <div className="flex-1 p-6">
             <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
               <div>
-                <div className="text-3xl font-bold tracking-tight">
+                <div className="text-[30px] font-extrabold tracking-[-0.035em]">
                   {vehicleTitle}
                 </div>
                 <div className="mt-2 text-sm font-medium text-slate-500">
@@ -1844,15 +1840,15 @@ export function EvaluationWorkspace({
               </div>
             </div>
 
-            <section className="mb-5 space-y-5">
+            <section className="mb-5 space-y-4">
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.055),0_16px_40px_rgba(15,23,42,0.035)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                         Vehicle Snapshot
                       </div>
-                      <div className="mt-3 text-xl font-black tracking-tight text-slate-950">
+                      <div className="mt-3 text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
                         {vehicleTitle}
                       </div>
                     </div>
@@ -1864,21 +1860,21 @@ export function EvaluationWorkspace({
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-semibold text-slate-600">
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       {targetMileage ? `${formatNumberInput(targetMileage)} mi` : "Mileage pending"}
                     </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       {decodedVehicle?.fuelType || "Fuel pending"}
                     </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       {simplifiedVehicleBodyClass || "Body pending"}
                     </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       {auctionSite || "Source pending"}
                     </div>
                   </div>
 
-                  <div className="mt-3 truncate rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                  <div className="mt-3 truncate rounded-xl bg-slate-50/80 px-3 py-2 text-xs font-bold text-slate-500">
                     {vin ? `VIN ${vin}` : "VIN pending"}
                   </div>
 
@@ -1901,22 +1897,22 @@ export function EvaluationWorkspace({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.055),0_16px_40px_rgba(15,23,42,0.035)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                         Market Read
                       </div>
                       <div className="mt-3 text-sm font-bold text-slate-500">
                         Adjusted Market Avg
                       </div>
-                      <div className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+                      <div className="mt-1 text-[30px] font-extrabold tracking-[-0.035em] text-slate-950">
                         {comps.length ? money(compSummary.averageAdjusted) : "Pending"}
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-2">
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-700">
                         {comps.length ? "Comp set found" : "Pull comps to score market"}
                       </span>
 
@@ -1924,7 +1920,7 @@ export function EvaluationWorkspace({
                         type="button"
                         onClick={pullMarketCheckComps}
                         disabled={marketCheckLoading}
-                        className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-black text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                        className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                       >
                         {marketCheckLoading ? "Pulling..." : "Pull Comps"}
                       </button>
@@ -1932,44 +1928,44 @@ export function EvaluationWorkspace({
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Comps
                       </div>
-                      <div className="mt-1 text-base font-black text-slate-950">
+                      <div className="mt-1 text-[17px] font-extrabold tracking-[-0.02em] text-slate-950">
                         {comps.length || "—"}
                       </div>
                     </div>
 
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Confidence
                       </div>
-                      <div className="mt-1 text-base font-black text-slate-950">
+                      <div className="mt-1 text-[17px] font-extrabold tracking-[-0.02em] text-slate-950">
                         {comps.length >= 10 ? "Good" : comps.length >= 5 ? "Fair" : comps.length > 0 ? "Thin" : "Pending"}
                       </div>
                     </div>
 
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Fuel match
                       </div>
-                      <div className="mt-1 text-base font-black text-slate-950">
+                      <div className="mt-1 text-[17px] font-extrabold tracking-[-0.02em] text-slate-950">
                         {decodedVehicle?.fuelType ? "Enforced" : "Unavailable"}
                       </div>
                     </div>
 
-                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="rounded-xl bg-slate-50/80 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Timing
                       </div>
-                      <div className="mt-1 text-base font-black text-slate-950">
+                      <div className="mt-1 text-[17px] font-extrabold tracking-[-0.02em] text-slate-950">
                         {marketTimingSpeedSignal}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                  <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                     <div className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-500">
                       Deal Scores
                     </div>
@@ -2014,43 +2010,43 @@ export function EvaluationWorkspace({
                 <div className={`rounded-2xl border p-5 shadow-sm ${decisionBannerTone}`}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-black uppercase tracking-wide text-slate-500">
+                      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                         Decision
                       </div>
-                      <div className={`mt-3 text-4xl font-black tracking-tight ${decisionTextTone}`}>
+                      <div className={`mt-3 text-[38px] font-extrabold leading-[0.98] tracking-[-0.045em] ${decisionTextTone}`}>
                         {valuation.decision}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <span className={`rounded-full px-3 py-1 text-xs font-black ${decisionBadgeTone}`}>
+                        <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${decisionBadgeTone}`}>
                           {valuation.riskGrade} risk
                         </span>
-                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-slate-700">
+                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-extrabold text-slate-700">
                           Current bid {money(valuationInput.currentBid)}
                         </span>
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                      <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                         Suggested Bid
                       </div>
-                      <div className="mt-2 text-3xl font-black text-emerald-700">
-                        {suggestedBid > 0 ? money(suggestedBid) : "No Bid"}
+                      <div className="mt-2 max-w-[170px] text-[25px] font-extrabold leading-[1.05] tracking-[-0.035em] text-emerald-700">
+                        {suggestedBidDisplay}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-white/85 px-3 py-3 shadow-sm">
+                    <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Expected Sale
                       </div>
-                      <div className="mt-1 text-lg font-black text-slate-950">
+                      <div className="mt-1 text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
                         {money(finalTargetUsed)}
                       </div>
                     </div>
 
-                    <div className="rounded-xl bg-white/85 px-3 py-3 shadow-sm">
+                    <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Expected Gross
                       </div>
@@ -2078,7 +2074,7 @@ export function EvaluationWorkspace({
                   <button
                     type="button"
                     onClick={() => setBidLogicOpen(true)}
-                    className="mt-4 w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-sm font-black text-slate-700 shadow-sm hover:bg-white"
+                    className="mt-4 w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-white"
                   >
                     Adjust Bid Logic
                   </button>
@@ -2088,7 +2084,7 @@ export function EvaluationWorkspace({
 
             </section>
 
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_.8fr_1.15fr]">
                 <SectionCard
                   title="AI Deal Thesis"
@@ -2185,7 +2181,7 @@ export function EvaluationWorkspace({
                             Condition Points
                           </div>
                           <div className="font-bold">
-                            {conditionTotals.riskPoints} / 300
+                            {conditionTotals.riskPoints} / {activeAssumptions.bidSettings.avoidRiskThreshold}
                           </div>
                         </div>
                       </div>
@@ -2251,7 +2247,7 @@ export function EvaluationWorkspace({
                           i
                         </span>
                       </div>
-                      <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-emerald-700">
+                      <div className="rounded-xl bg-slate-50/80 px-3 py-2 text-sm font-bold text-emerald-700">
                         {money(valuationInput.costs.conditionRiskAdd)}
                       </div>
                     </div>
@@ -2268,7 +2264,7 @@ export function EvaluationWorkspace({
                         <div>
                           <p className="text-sm text-slate-500">Total Risk Points</p>
                           <p className="mt-1 text-base font-bold text-slate-950">
-                            {valuationInput.totalRiskPoints} / 300
+                            {valuationInput.totalRiskPoints} / {activeAssumptions.bidSettings.avoidRiskThreshold}
                           </p>
                         </div>
                       </div>
