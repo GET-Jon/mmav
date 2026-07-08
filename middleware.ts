@@ -14,6 +14,12 @@ export async function middleware(request: NextRequest) {
     request,
   });
 
+  const authDisabled = process.env.DISABLE_AUTH === "true";
+
+  if (authDisabled) {
+    return response;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
