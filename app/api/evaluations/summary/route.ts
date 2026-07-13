@@ -75,6 +75,13 @@ export async function POST(request: Request) {
       includedCompCount: cleanNumber(body.includedCompCount),
       totalCompCount: cleanNumber(body.totalCompCount),
 
+      dealerFitScore: cleanNumber(body.dealerFitScore),
+      dealerFitLabel: cleanString(body.dealerFitLabel),
+      dealerFitCategory: cleanString(body.dealerFitCategory),
+      dealerFitGeneration: cleanString(body.dealerFitGeneration),
+      dealerFitReasons: cleanStringArray(body.dealerFitReasons),
+      dealerFitCautions: cleanStringArray(body.dealerFitCautions),
+
       selectedConditionRules: cleanStringArray(body.selectedConditionRules),
       notes: cleanString(body.notes),
     };

@@ -130,6 +130,14 @@ export function buildEvaluationSummaryPrompt(input: EvaluationSummaryInput) {
     ? input.selectedConditionRules.filter(Boolean)
     : [];
 
+  const dealerFitReasons = Array.isArray(input.dealerFitReasons)
+    ? input.dealerFitReasons.filter(Boolean)
+    : [];
+
+  const dealerFitCautions = Array.isArray(input.dealerFitCautions)
+    ? input.dealerFitCautions.filter(Boolean)
+    : [];
+
   const thesisMode = input.thesisMode || "balanced";
 
   const lines = [
@@ -151,6 +159,16 @@ export function buildEvaluationSummaryPrompt(input: EvaluationSummaryInput) {
     line("Comp Confidence", input.compConfidence),
     line("Included Comp Count", input.includedCompCount),
     line("Total Comp Count", input.totalCompCount),
+    line("Dealer Fit Score", input.dealerFitScore),
+    line("Dealer Fit Label", input.dealerFitLabel),
+    line("Dealer Fit Category", input.dealerFitCategory),
+    line("Dealer Fit Generation", input.dealerFitGeneration),
+    dealerFitReasons.length
+      ? line("Dealer Fit Reasons", dealerFitReasons.join("; "))
+      : null,
+    dealerFitCautions.length
+      ? line("Dealer Fit Cautions", dealerFitCautions.join("; "))
+      : null,
     selectedConditionRules.length
       ? line("Selected Risk / Condition Rules", selectedConditionRules.join("; "))
       : null,

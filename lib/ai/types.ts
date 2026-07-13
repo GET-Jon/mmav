@@ -41,6 +41,13 @@ export type EvaluationSummaryInput = {
   includedCompCount?: number | null;
   totalCompCount?: number | null;
 
+  dealerFitScore?: number | null;
+  dealerFitLabel?: string | null;
+  dealerFitCategory?: string | null;
+  dealerFitGeneration?: string | null;
+  dealerFitReasons?: string[];
+  dealerFitCautions?: string[];
+
   selectedConditionRules?: string[];
   notes?: string | null;
 };
