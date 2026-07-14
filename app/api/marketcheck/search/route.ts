@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { defaultAssumptions } from "@/lib/assumptions";
 import type { MarketComp } from "@/types/comps";
 import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
+import { findGenerationCompRule, isInGenerationCompRange } from "@/lib/marketcheck/generation-comps";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 
 type MarketCheckListing = Record<string, any>;
@@ -205,7 +206,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-low-confidence-v7-fuel-normalization",
+    cacheVersion: "progressive-regions-low-confidence-v8-generation-comps",
   });
 }
 
@@ -854,6 +855,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const generationCompRule = findGenerationCompRule({
+      year,
+      make,
+      model,
+      trim: preferredTrim,
+    });
+
     if (!apiControls.liveLookupEnabled) {
       return NextResponse.json({
         error: "Live MarketCheck lookup is currently disabled by API controls.",
@@ -874,6 +882,7 @@ export async function POST(request: Request) {
           regions: orderedRegions,
           radius,
           rows,
+          generationFilter: generationCompRule,
         },
         comps: [],
       });
@@ -936,6 +945,7 @@ export async function POST(request: Request) {
         targetMileage,
         radius,
         rows,
+        generationFilter: generationCompRule,
       },
     });
 
@@ -1014,6 +1024,17 @@ export async function POST(request: Request) {
 
         if (
           mappedComp &&
+          generationCompRule &&
+          !isInGenerationCompRange({
+            year: mappedComp.year,
+            generationRule: generationCompRule,
+          })
+        ) {
+          rejectedReasons.push("generation mismatch");
+        }
+
+        if (
+          mappedComp &&
           mappedComp.qualityScore < minimumQualityScore
         ) {
           rejectedReasons.push("quality below threshold");
@@ -1044,7 +1065,18 @@ export async function POST(request: Request) {
         };
       });
 
-      const deduped = mapped
+      const generationFiltered = mapped.filter((comp) => {
+        if (!comp || !generationCompRule) {
+          return true;
+        }
+
+        return isInGenerationCompRange({
+          year: comp.year,
+          generationRule: generationCompRule,
+        });
+      });
+
+      const deduped = generationFiltered
         .filter(Boolean)
         .filter((comp) => {
           const typedComp = comp as MarketComp;
@@ -1106,6 +1138,8 @@ export async function POST(request: Request) {
               counts.missingPriceOrMileage += 1;
             } else if (reason === "quality below threshold") {
               counts.qualityBelowThreshold += 1;
+            } else if (reason === "generation mismatch") {
+              counts.generationMismatch += 1;
             } else {
               counts.other += 1;
             }
@@ -1117,6 +1151,7 @@ export async function POST(request: Request) {
           fuelMismatch: 0,
           missingPriceOrMileage: 0,
           qualityBelowThreshold: 0,
+          generationMismatch: 0,
           other: 0,
         }
       );
@@ -1139,6 +1174,7 @@ export async function POST(request: Request) {
           rejectedListings: Math.max(0, allListings.length - usableListings),
           rejectionCounts,
           sampleRejectedListings,
+          generationFilter: generationCompRule,
         },
       };
     }
@@ -1213,8 +1249,10 @@ export async function POST(request: Request) {
     }
 
     const exactSearches = await runProgressiveRegionSearches({
-      attemptName: "exact-year-make-model",
-      attemptYear: year,
+      attemptName: generationCompRule
+        ? `generation-aware-make-model-${generationCompRule.generation}`
+        : "exact-year-make-model",
+      attemptYear: generationCompRule ? undefined : year,
       reserveOneCallWhenNoResults: true,
     });
 
@@ -1427,6 +1465,7 @@ export async function POST(request: Request) {
           }),
         radius,
         rows,
+        generationFilter: generationCompRule,
       },
       rawCount,
       totalListingsReturned: allListings.length,

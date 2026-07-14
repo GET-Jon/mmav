@@ -15,12 +15,14 @@ import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
+import { calculateDealerFit } from "@/lib/dealer-fit";
 import { calculateValuation } from "@/lib/valuation";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
 
 const draftStorageKey = "mmav:evaluationDraft:v1";
+const quickEvalSeenStorageKey = "mmav:quickEvalSeen:v1";
 
 const initialTargetMileage = 0;
 
@@ -429,13 +431,33 @@ export function EvaluationWorkspace({
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
-  const [quickEvalOpen, setQuickEvalOpen] = useState(!initialSavedEvaluationId);
+  const [quickEvalOpen, setQuickEvalOpen] = useState(false);
+  const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
 
   const [savedEvaluationId, setSavedEvaluationId] = useState<string | null>(
     initialSavedEvaluationId
   );
+
+  useEffect(() => {
+    if (initialSavedEvaluationId) {
+      return;
+    }
+
+    try {
+      const hasSeenQuickEval =
+        window.sessionStorage.getItem(quickEvalSeenStorageKey) === "true";
+
+      if (!hasSeenQuickEval) {
+        setQuickEvalOpen(true);
+        window.sessionStorage.setItem(quickEvalSeenStorageKey, "true");
+      }
+    } catch {
+      setQuickEvalOpen(true);
+    }
+  }, [initialSavedEvaluationId]);
+
 
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState(
@@ -1170,6 +1192,13 @@ export function EvaluationWorkspace({
           includedCompCount,
           totalCompCount,
 
+          dealerFitScore: dealerFitResult.score,
+          dealerFitLabel: dealerFitResult.label,
+          dealerFitCategory: dealerFitResult.category,
+          dealerFitGeneration: dealerFitResult.generation,
+          dealerFitReasons: dealerFitResult.reasons,
+          dealerFitCautions: dealerFitResult.cautions,
+
           selectedConditionRules: selectedConditions,
           notes,
         }),
@@ -1476,9 +1505,59 @@ export function EvaluationWorkspace({
 
   const profitabilityWidth = `${profitabilityScore}%`;
 
-  const dealerFitScore = appliedVehicleProfile ? 76 : 62;
-  const dealerFitLabel = appliedVehicleProfile ? "Good Fit" : "Selective Fit";
+  const dealerFitResult = useMemo(
+    () =>
+      calculateDealerFit({
+        vehicle: {
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          bodyClass: simplifiedVehicleBodyClass || vehicleBodyClass,
+          fuelType: decodedVehicle?.fuelType || null,
+          driveType: decodedVehicle?.driveType || null,
+          transmission: null,
+          mileage: targetMileage,
+          notes: notes || null,
+        },
+        financial: {
+          expectedGrossProfit: valuation.expectedGrossProfit,
+          targetProfit: valuationInput.targetProfit,
+          finalRetailTarget: finalTargetUsed,
+          currentBid: valuationInput.currentBid,
+          compConfidence: compSummary.confidence,
+          includedCompCount: compSummary.includedCount,
+          riskGrade: valuation.riskGrade,
+          decision: valuation.decision,
+        },
+      }),
+    [
+      vehicleYear,
+      vehicleMake,
+      vehicleModel,
+      vehicleTrim,
+      simplifiedVehicleBodyClass,
+      vehicleBodyClass,
+      decodedVehicle?.fuelType,
+      decodedVehicle?.driveType,
+      targetMileage,
+      valuationInput.targetProfit,
+      valuationInput.currentBid,
+      notes,
+      valuation.expectedGrossProfit,
+      valuation.riskGrade,
+      valuation.decision,
+      finalTargetUsed,
+      compSummary.confidence,
+      compSummary.includedCount,
+    ]
+  );
+
+  const dealerFitScore = dealerFitResult.score;
+  const dealerFitLabel = dealerFitResult.label;
   const dealerFitWidth = `${dealerFitScore}%`;
+  const dealerFitReason =
+    dealerFitResult.reasons[0] || "Dealer fit will improve as vehicle details are added.";
 
   const suggestedBidDisplay =
     valuationInput.currentBid <= 0
@@ -1487,9 +1566,30 @@ export function EvaluationWorkspace({
       ? money(suggestedBid)
       : "No Bid";
 
-  const hasQuickEvalBasics = vin.trim().length >= 17;
+  const hasManualQuickEvalBasics =
+    String(manualVehicle.year || "").trim().length > 0 &&
+    manualVehicle.make.trim().length > 0 &&
+    manualVehicle.model.trim().length > 0;
+
+  const hasQuickEvalBasics =
+    quickEvalMode === "vin" ? vin.trim().length >= 17 : hasManualQuickEvalBasics;
 
   function startQuickEvaluation() {
+    if (quickEvalMode === "manual") {
+      setDecodedVehicle(null);
+      setVin("");
+      setManualVehicle((previous) => ({
+        ...previous,
+        year: String(previous.year || "").trim(),
+        make: previous.make.trim(),
+        model: previous.model.trim(),
+        trim: previous.trim.trim(),
+        bodyClass: previous.bodyClass.trim(),
+      }));
+      setQuickEvalOpen(false);
+      return;
+    }
+
     const vinToDecode = vin.trim().toUpperCase();
 
     setVin(vinToDecode);
@@ -1533,20 +1633,125 @@ export function EvaluationWorkspace({
             </div>
 
             <div className="space-y-4 px-6 pb-5">
-              <FormRow label="VIN">
-                <input
-                  value={vin}
-                  onChange={(event) => setVin(event.target.value.toUpperCase())}
-                  placeholder="e.g. 5UXCR6C00L9U123456"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                />
-              </FormRow>
+              <div className="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setQuickEvalMode("vin")}
+                  className={`rounded-lg px-3 py-2 text-sm font-black transition ${
+                    quickEvalMode === "vin"
+                      ? "bg-white text-slate-950 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  VIN Lookup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickEvalMode("manual")}
+                  className={`rounded-lg px-3 py-2 text-sm font-black transition ${
+                    quickEvalMode === "manual"
+                      ? "bg-white text-slate-950 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Manual Vehicle
+                </button>
+              </div>
 
-              {vinDecodeError ? (
-                <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-                  {vinDecodeError}
+              {quickEvalMode === "vin" ? (
+                <>
+                  <FormRow label="VIN">
+                    <input
+                      value={vin}
+                      onChange={(event) => setVin(event.target.value.toUpperCase())}
+                      placeholder="e.g. 5UXCR6C00L9U123456"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                    />
+                  </FormRow>
+
+                  {vinDecodeError ? (
+                    <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                      {vinDecodeError}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormRow label="Year">
+                      <input
+                        value={manualVehicle.year}
+                        onChange={(event) =>
+                          setManualVehicle((previous) => ({
+                            ...previous,
+                            year: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 2003"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                      />
+                    </FormRow>
+
+                    <FormRow label="Make">
+                      <input
+                        value={manualVehicle.make}
+                        onChange={(event) =>
+                          setManualVehicle((previous) => ({
+                            ...previous,
+                            make: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. BMW"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                      />
+                    </FormRow>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormRow label="Model">
+                      <input
+                        value={manualVehicle.model}
+                        onChange={(event) =>
+                          setManualVehicle((previous) => ({
+                            ...previous,
+                            model: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. M3"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                      />
+                    </FormRow>
+
+                    <FormRow label="Trim">
+                      <input
+                        value={manualVehicle.trim}
+                        onChange={(event) =>
+                          setManualVehicle((previous) => ({
+                            ...previous,
+                            trim: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Competition, 3.0i, G550"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                      />
+                    </FormRow>
+                  </div>
+
+                  <FormRow label="Body Style">
+                    <input
+                      value={manualVehicle.bodyClass}
+                      onChange={(event) =>
+                        setManualVehicle((previous) => ({
+                          ...previous,
+                          bodyClass: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Coupe, Sedan, Convertible, SUV"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                    />
+                  </FormRow>
                 </div>
-              ) : null}
+              )}
 
               <FormRow label="Mileage">
                 <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -2001,6 +2206,10 @@ export function EvaluationWorkspace({
                             className="h-full rounded-full bg-blue-600"
                             style={{ width: dealerFitWidth }}
                           />
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium leading-snug text-slate-500">
+                          {dealerFitResult.generation ? `${dealerFitResult.generation}: ` : ""}
+                          {dealerFitReason}
                         </div>
                       </div>
                     </div>

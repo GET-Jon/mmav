@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
@@ -158,20 +157,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         <AppSidebar active="settings" userEmail={user?.email} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
-            <div>
-              <div className="text-sm font-black uppercase tracking-wide text-slate-500">
-                Settings
-              </div>
-            </div>
-
-            <AccountStatus
-              userEmail={user?.email}
-              roleLabel={company?.role || "Buyer"}
-              companyLabel={company?.companyName || "Mindful Motor Co."}
-            />
-          </header>
-
           <div className="flex-1 p-6">
             <div className="mb-6">
               <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
