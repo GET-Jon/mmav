@@ -1,4 +1,3 @@
-import { AccountStatus } from "@/components/auth/account-status";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { DealsPipelineTable } from "@/components/deals/deals-pipeline-table";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -239,16 +238,6 @@ export default async function DealsPage() {
         <AppSidebar active="saved" userEmail={user?.email} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
-            <div>
-              <div className="text-sm font-black uppercase tracking-wide text-slate-500">
-                Deal Pipeline
-              </div>
-            </div>
-
-            <AccountStatus userEmail={user?.email} />
-          </header>
-
           <div className="flex-1 p-6">
             <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
               <div>
