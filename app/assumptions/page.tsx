@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
-import { AppSidebar } from "@/components/navigation/app-sidebar";
+import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -53,26 +53,22 @@ export default async function AssumptionsPage() {
   const { assumptions, source } = await loadAssumptions();
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="flex min-h-screen">
-        <AppSidebar active="assumptions" userEmail={user?.email} />
+    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      <AppTopNav active="rules" userEmail={user?.email} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 p-6">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold tracking-tight">
-                Assumptions
-              </h1>
-              <p className="mt-2 max-w-3xl text-slate-600">
-                These settings control bidding logic, fee tiers, risk rules, and
-                comp adjustments. Saved changes are stored in Supabase and can
-                be updated without editing code.
-              </p>
-            </div>
-
-            <AssumptionsTabs assumptions={assumptions} />
-          </div>
+      <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
+        <div className="mb-6">
+          <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">
+            Assumptions
+          </h1>
+          <p className="mt-2 max-w-3xl text-slate-600">
+            These settings control bidding logic, fee tiers, risk rules, and
+            comp adjustments. Saved changes are stored in Supabase and can be
+            updated without editing code.
+          </p>
         </div>
+
+        <AssumptionsTabs assumptions={assumptions} />
       </div>
     </main>
   );

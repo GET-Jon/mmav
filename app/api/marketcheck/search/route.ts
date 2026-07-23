@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { defaultAssumptions } from "@/lib/assumptions";
 import type { MarketComp } from "@/types/comps";
 import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
-import { findGenerationCompRule, isInGenerationCompRange } from "@/lib/marketcheck/generation-comps";
+import {
+  findGenerationCompRule,
+  isInGenerationCompRange,
+} from "@/lib/marketcheck/generation-comps";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 
 type MarketCheckListing = Record<string, any>;
@@ -132,7 +135,7 @@ function getListingFuelType(listing: MarketCheckListing) {
       listing.fuel ||
       listing.engine?.fuel_type ||
       listing.engine?.fuelType ||
-      listing.engine?.fuel
+      listing.engine?.fuel,
   );
 }
 
@@ -287,7 +290,9 @@ function calculateQualityScore({
   const build = listing.build || {};
 
   const distance = toNumber(listing.dist ?? listing.distance);
-  const mileage = toNumber(listing.miles ?? listing.mileage ?? listing.odometer);
+  const mileage = toNumber(
+    listing.miles ?? listing.mileage ?? listing.odometer,
+  );
   const year = toNumber(build.year ?? listing.year, searchYear);
   const listingTrim = String(build.trim || listing.trim || "");
 
@@ -319,6 +324,30 @@ function calculateQualityScore({
   }
 
   return Math.max(40, Math.min(100, score));
+}
+
+function getListingImageUrl(listing: MarketCheckListing) {
+  const media = listing.media || {};
+
+  const cachedPhotos = Array.isArray(media.photo_links_cached)
+    ? media.photo_links_cached
+    : [];
+
+  const originalPhotos = Array.isArray(media.photo_links)
+    ? media.photo_links
+    : [];
+
+  const fallbackPhotos = [
+    listing.photo_url,
+    listing.image_url,
+    listing.primary_photo,
+  ];
+
+  const imageUrl = [...cachedPhotos, ...originalPhotos, ...fallbackPhotos].find(
+    (value) => typeof value === "string" && /^https?:\/\//i.test(value.trim()),
+  );
+
+  return imageUrl ? imageUrl.trim() : null;
 }
 
 function mapListingToComp({
@@ -353,11 +382,11 @@ function mapListingToComp({
   }
 
   const askingPrice = toNumber(
-    listing.price ?? listing.list_price ?? listing.msrp
+    listing.price ?? listing.list_price ?? listing.msrp,
   );
 
   const mileage = toNumber(
-    listing.miles ?? listing.mileage ?? listing.odometer
+    listing.miles ?? listing.mileage ?? listing.odometer,
   );
 
   if (!askingPrice || !mileage) {
@@ -385,6 +414,7 @@ function mapListingToComp({
       targetMileage,
       preferredTrim,
     }),
+    imageUrl: getListingImageUrl(listing),
   };
 }
 
@@ -418,6 +448,7 @@ async function searchMarketCheck({
     zip,
     radius: String(radius),
     rows: String(rows),
+    photo_links_cached: "true",
     stats: "dom,d om_180,dom_active,dos_active".replace("d om", "dom"),
   });
 
@@ -481,7 +512,9 @@ async function searchMarketCheck({
       rows,
     },
     numFound: toNumber(payload?.num_found),
-    listingCount: Array.isArray(payload?.listings) ? payload.listings.length : 0,
+    listingCount: Array.isArray(payload?.listings)
+      ? payload.listings.length
+      : 0,
     payload,
   };
 }
@@ -548,7 +581,7 @@ function buildFailedMarketCheckResponse({
 }) {
   const searchLog = searches.map((search) => {
     const region = orderedRegions.find(
-      (orderedRegion) => orderedRegion.zip === search.zip
+      (orderedRegion) => orderedRegion.zip === search.zip,
     );
 
     return {
@@ -603,7 +636,7 @@ function buildFailedMarketCheckResponse({
               "Retry-After": failedSearch.retryAfter,
             }
           : undefined,
-      }
+      },
     );
   }
 
@@ -620,10 +653,9 @@ function buildFailedMarketCheckResponse({
     },
     {
       status: failedSearch.status,
-    }
+    },
   );
 }
-
 
 function getStatNumber(value: unknown) {
   if (typeof value === "number") {
@@ -641,7 +673,7 @@ function getStatNumber(value: unknown) {
       record.average ??
       record.mean ??
       record.median ??
-      record.value
+      record.value,
   );
 }
 
@@ -672,13 +704,13 @@ function averagePositive(values: number[]) {
 
   return Math.round(
     positiveValues.reduce((sum, value) => sum + value, 0) /
-      positiveValues.length
+      positiveValues.length,
   );
 }
 
 function getMarketTimingStats(searches: MarketCheckSearchResult[]) {
   const dealerDaysBySearch = searches.map((search) =>
-    getPayloadStat(search.payload, ["dos_active", "dos", "days_on_site"])
+    getPayloadStat(search.payload, ["dos_active", "dos", "days_on_site"]),
   );
 
   const marketDaysBySearch = searches.map((search) =>
@@ -687,7 +719,7 @@ function getMarketTimingStats(searches: MarketCheckSearchResult[]) {
       "dom_180",
       "dom",
       "days_on_market",
-    ])
+    ]),
   );
 
   return {
@@ -695,7 +727,6 @@ function getMarketTimingStats(searches: MarketCheckSearchResult[]) {
     averageMarketDays: averagePositive(marketDaysBySearch),
   };
 }
-
 
 function getMarketTimingDebug(searches: MarketCheckSearchResult[]) {
   const firstPayload = searches[0]?.payload || {};
@@ -705,10 +736,11 @@ function getMarketTimingDebug(searches: MarketCheckSearchResult[]) {
     : null;
 
   const listingKeys = firstListing ? Object.keys(firstListing) : [];
-  const timingListingKeys = listingKeys.filter((key) =>
-    key.toLowerCase().includes("dom") ||
-    key.toLowerCase().includes("dos") ||
-    key.toLowerCase().includes("day")
+  const timingListingKeys = listingKeys.filter(
+    (key) =>
+      key.toLowerCase().includes("dom") ||
+      key.toLowerCase().includes("dos") ||
+      key.toLowerCase().includes("day"),
   );
 
   const statsKeys =
@@ -735,7 +767,7 @@ export async function POST(request: Request) {
         },
         {
           status: 500,
-        }
+        },
       );
     }
 
@@ -752,11 +784,11 @@ export async function POST(request: Request) {
         body.targetFuelType ||
         body.decodedVehicle?.fuelType ||
         body.vehicle?.fuelType ||
-        ""
+        "",
     ).trim();
     const targetMileage = toNumber(
       body.targetMileage ?? body.mileage ?? body.odometer,
-      0
+      0,
     );
     const radius = Math.min(toNumber(body.radius, 100), 100);
     const rows = Math.min(toNumber(body.rows, 10), 25);
@@ -774,30 +806,30 @@ export async function POST(request: Request) {
         Math.min(
           toNumber(
             body.maxApiCallsPerSearch,
-            MARKETCHECK_API_CONTROLS.maxApiCallsPerSearch
+            MARKETCHECK_API_CONTROLS.maxApiCallsPerSearch,
           ),
-          10
-        )
+          10,
+        ),
       ),
       minUsableCompsToStop: Math.max(
         1,
         Math.min(
           toNumber(
             body.minUsableCompsToStop,
-            MARKETCHECK_API_CONTROLS.minUsableCompsToStop
+            MARKETCHECK_API_CONTROLS.minUsableCompsToStop,
           ),
-          50
-        )
+          50,
+        ),
       ),
       minInitialRegions: Math.max(
         1,
         Math.min(
           toNumber(
             body.minInitialRegions,
-            MARKETCHECK_API_CONTROLS.minInitialRegions
+            MARKETCHECK_API_CONTROLS.minInitialRegions,
           ),
-          10
-        )
+          10,
+        ),
       ),
     };
 
@@ -809,7 +841,10 @@ export async function POST(request: Request) {
             order: toNumber(region.order, index + 1),
             enabled: region.enabled !== false,
           }))
-          .filter((region: { zip: string; enabled: boolean }) => region.zip && region.enabled)
+          .filter(
+            (region: { zip: string; enabled: boolean }) =>
+              region.zip && region.enabled,
+          )
       : [];
 
     const legacyRequestedRegions = Array.isArray(body.zips)
@@ -836,11 +871,9 @@ export async function POST(request: Request) {
       requestedRegions.length
         ? requestedRegions
         : legacyRequestedRegions.length
-        ? legacyRequestedRegions
-        : defaultRegions
-    ).sort(
-      (a: { order: number }, b: { order: number }) => a.order - b.order
-    );
+          ? legacyRequestedRegions
+          : defaultRegions
+    ).sort((a: { order: number }, b: { order: number }) => a.order - b.order);
 
     const zips = orderedRegions.map((region: { zip: string }) => region.zip);
 
@@ -851,7 +884,7 @@ export async function POST(request: Request) {
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -869,7 +902,8 @@ export async function POST(request: Request) {
         apiUsage: {
           apiCallsMade: 0,
           cacheHit: false,
-          stopReason: "Live lookup disabled before any MarketCheck API request was made.",
+          stopReason:
+            "Live lookup disabled before any MarketCheck API request was made.",
           searchLog: [],
         },
         search: {
@@ -920,7 +954,8 @@ export async function POST(request: Request) {
           ...(cached.payload.apiUsage || {}),
           cacheHit: true,
           apiCallsMade: 0,
-          stopReason: "Returned cached MarketCheck response. No live API call was made.",
+          stopReason:
+            "Returned cached MarketCheck response. No live API call was made.",
         },
         cache: {
           hit: true,
@@ -950,28 +985,34 @@ export async function POST(request: Request) {
     });
 
     const MIN_USABLE_COMPS = apiControls.minUsableCompsToStop;
-    const MIN_INITIAL_REGIONS = Math.min(apiControls.minInitialRegions, zips.length);
+    const MIN_INITIAL_REGIONS = Math.min(
+      apiControls.minInitialRegions,
+      zips.length,
+    );
 
     function buildCompSummary(currentSearches: MarketCheckSearchResult[]) {
-      const allListings = currentSearches.flatMap((search): MarketCheckListing[] => {
-        const region = orderedRegions.find(
-          (orderedRegion: { zip: string }) => orderedRegion.zip === search.zip
-        );
+      const allListings = currentSearches.flatMap(
+        (search): MarketCheckListing[] => {
+          const region = orderedRegions.find(
+            (orderedRegion: { zip: string }) =>
+              orderedRegion.zip === search.zip,
+          );
 
-        const listings = Array.isArray(search.payload.listings)
-          ? search.payload.listings
-          : [];
+          const listings = Array.isArray(search.payload.listings)
+            ? search.payload.listings
+            : [];
 
-        return listings.map((listing: MarketCheckListing) => ({
-          ...listing,
-          __searchZip: search.zip,
-          __searchRegion: region?.market || "",
-        }));
-      });
+          return listings.map((listing: MarketCheckListing) => ({
+            ...listing,
+            __searchZip: search.zip,
+            __searchRegion: region?.market || "",
+          }));
+        },
+      );
 
       const rawCount = currentSearches.reduce(
         (sum, search) => sum + search.numFound,
-        0
+        0,
       );
 
       const seen = new Set<string>();
@@ -987,7 +1028,7 @@ export async function POST(request: Request) {
             targetMileage,
             preferredTrim,
             targetFuelType,
-          })
+          }),
       );
 
       const mappedNullCount = mapped.filter((comp) => !comp).length;
@@ -995,75 +1036,74 @@ export async function POST(request: Request) {
       const minimumQualityScore =
         defaultAssumptions.compSettings.minimumQualityScore;
 
-      const listingDiagnostics = allListings.map((listing: MarketCheckListing, index) => {
-        const build = listing.build || {};
-        const askingPrice = toNumber(
-          listing.price ?? listing.list_price ?? listing.msrp
-        );
-        const mileage = toNumber(
-          listing.miles ?? listing.mileage ?? listing.odometer
-        );
+      const listingDiagnostics = allListings.map(
+        (listing: MarketCheckListing, index) => {
+          const build = listing.build || {};
+          const askingPrice = toNumber(
+            listing.price ?? listing.list_price ?? listing.msrp,
+          );
+          const mileage = toNumber(
+            listing.miles ?? listing.mileage ?? listing.odometer,
+          );
 
-        const rejectedReasons: string[] = [];
+          const rejectedReasons: string[] = [];
 
-        if (
-          targetFuelType &&
-          !fuelTypesMatch({
-            targetFuelType,
-            listing,
-          })
-        ) {
-          rejectedReasons.push("fuel mismatch");
-        }
+          if (
+            targetFuelType &&
+            !fuelTypesMatch({
+              targetFuelType,
+              listing,
+            })
+          ) {
+            rejectedReasons.push("fuel mismatch");
+          }
 
-        if (!askingPrice || !mileage) {
-          rejectedReasons.push("missing price or mileage");
-        }
+          if (!askingPrice || !mileage) {
+            rejectedReasons.push("missing price or mileage");
+          }
 
-        const mappedComp = mapped[index];
+          const mappedComp = mapped[index];
 
-        if (
-          mappedComp &&
-          generationCompRule &&
-          !isInGenerationCompRange({
-            year: mappedComp.year,
-            generationRule: generationCompRule,
-          })
-        ) {
-          rejectedReasons.push("generation mismatch");
-        }
+          if (
+            mappedComp &&
+            generationCompRule &&
+            !isInGenerationCompRange({
+              year: mappedComp.year,
+              generationRule: generationCompRule,
+            })
+          ) {
+            rejectedReasons.push("generation mismatch");
+          }
 
-        if (
-          mappedComp &&
-          mappedComp.qualityScore < minimumQualityScore
-        ) {
-          rejectedReasons.push("quality below threshold");
-        }
+          if (mappedComp && mappedComp.qualityScore < minimumQualityScore) {
+            rejectedReasons.push("quality below threshold");
+          }
 
-        return {
-          title: String(
-            listing.heading ||
-              listing.title ||
-              listing.vdp_url ||
-              listing.vin ||
-              "Untitled listing"
-          ),
-          year: build.year ?? listing.year ?? "",
-          make: build.make ?? listing.make ?? "",
-          model: build.model ?? listing.model ?? "",
-          trim: build.trim ?? listing.trim ?? "",
-          fuelType:
-            getListingFuelType(listing) ||
-            build.fuel_type ||
-            build.fuel ||
-            listing.fuel_type ||
-            listing.fuel ||
-            "",
-          price: askingPrice,
-          mileage,
-          rejectedReasons,
-        };
-      });
+          return {
+            title: String(
+              listing.heading ||
+                listing.title ||
+                listing.vdp_url ||
+                listing.vin ||
+                "Untitled listing",
+            ),
+            year: build.year ?? listing.year ?? "",
+            make: build.make ?? listing.make ?? "",
+            model: build.model ?? listing.model ?? "",
+            trim: build.trim ?? listing.trim ?? "",
+            fuelType:
+              getListingFuelType(listing) ||
+              build.fuel_type ||
+              build.fuel ||
+              listing.fuel_type ||
+              listing.fuel ||
+              "",
+            price: askingPrice,
+            mileage,
+            rejectedReasons,
+          };
+        },
+      );
 
       const generationFiltered = mapped.filter((comp) => {
         if (!comp || !generationCompRule) {
@@ -1076,19 +1116,17 @@ export async function POST(request: Request) {
         });
       });
 
-      const deduped = generationFiltered
-        .filter(Boolean)
-        .filter((comp) => {
-          const typedComp = comp as MarketComp;
-          const key = typedComp.id;
+      const deduped = generationFiltered.filter(Boolean).filter((comp) => {
+        const typedComp = comp as MarketComp;
+        const key = typedComp.id;
 
-          if (seen.has(key)) {
-            return false;
-          }
+        if (seen.has(key)) {
+          return false;
+        }
 
-          seen.add(key);
-          return true;
-        }) as MarketComp[];
+        seen.add(key);
+        return true;
+      }) as MarketComp[];
 
       const rankedComps = deduped.sort((a, b) => {
         if (b.qualityScore !== a.qualityScore) {
@@ -1122,7 +1160,7 @@ export async function POST(request: Request) {
         : scoredComps;
 
       const usableListings = comps.filter(
-        (comp) => comp.qualityScore >= minimumQualityScore
+        (comp) => comp.qualityScore >= minimumQualityScore,
       ).length;
 
       const rejectionCounts = listingDiagnostics.reduce(
@@ -1153,7 +1191,7 @@ export async function POST(request: Request) {
           qualityBelowThreshold: 0,
           generationMismatch: 0,
           other: 0,
-        }
+        },
       );
 
       const sampleRejectedListings = listingDiagnostics
@@ -1277,7 +1315,7 @@ export async function POST(request: Request) {
       for (const aliasModel of modelAliases) {
         const remainingAliasApiCalls = Math.max(
           0,
-          apiControls.maxApiCallsPerSearch - searches.length
+          apiControls.maxApiCallsPerSearch - searches.length,
         );
 
         if (remainingAliasApiCalls <= 0) {
@@ -1290,9 +1328,7 @@ export async function POST(request: Request) {
           maxApiCallsOverride: remainingAliasApiCalls,
         });
 
-        const failedAliasSearch = aliasSearches.find(
-          (search) => !search.ok
-        );
+        const failedAliasSearch = aliasSearches.find((search) => !search.ok);
 
         if (failedAliasSearch) {
           return buildFailedMarketCheckResponse({
@@ -1320,7 +1356,7 @@ export async function POST(request: Request) {
         if (taxonomyFallback) {
           const remainingTaxonomyApiCalls = Math.max(
             0,
-            apiControls.maxApiCallsPerSearch - searches.length
+            apiControls.maxApiCallsPerSearch - searches.length,
           );
 
           if (remainingTaxonomyApiCalls > 0) {
@@ -1331,7 +1367,7 @@ export async function POST(request: Request) {
             });
 
             const failedTaxonomySearch = taxonomySearches.find(
-              (search) => !search.ok
+              (search) => !search.ok,
             );
 
             if (failedTaxonomySearch) {
@@ -1353,7 +1389,7 @@ export async function POST(request: Request) {
       if (aliasAndTaxonomySummary.rawCount === 0) {
         const remainingApiCalls = Math.max(
           0,
-          apiControls.maxApiCallsPerSearch - searches.length
+          apiControls.maxApiCallsPerSearch - searches.length,
         );
 
         const fallbackSearches =
@@ -1365,7 +1401,7 @@ export async function POST(request: Request) {
             : [];
 
         const failedFallbackSearch = fallbackSearches.find(
-          (search) => !search.ok
+          (search) => !search.ok,
         );
 
         if (failedFallbackSearch) {
@@ -1396,18 +1432,18 @@ export async function POST(request: Request) {
     const searchLog = searches.map((search, index) => {
       const region = orderedRegions.find(
         (orderedRegion: { zip: string; market?: string }) =>
-          orderedRegion.zip === search.zip
+          orderedRegion.zip === search.zip,
       );
 
       const individualSummary = buildCompSummary([search]);
       const cumulativeSummary = buildCompSummary(searches.slice(0, index + 1));
 
       const usableComps = individualSummary.comps.filter(
-        (comp) => comp.qualityScore >= minimumQualityScore
+        (comp) => comp.qualityScore >= minimumQualityScore,
       ).length;
 
       const cumulativeUsableComps = cumulativeSummary.comps.filter(
-        (comp) => comp.qualityScore >= minimumQualityScore
+        (comp) => comp.qualityScore >= minimumQualityScore,
       ).length;
 
       return {
@@ -1427,21 +1463,20 @@ export async function POST(request: Request) {
     });
 
     const usableCompCount = comps.filter(
-      (comp) => comp.qualityScore >= minimumQualityScore
+      (comp) => comp.qualityScore >= minimumQualityScore,
     ).length;
 
     const hitApiCallCap = searches.length >= apiControls.maxApiCallsPerSearch;
 
-    const stopReason =
-      searches.some((search) => !search.ok)
-        ? "Stopped because a MarketCheck request failed."
-        : hitApiCallCap && usableCompCount < MIN_USABLE_COMPS
+    const stopReason = searches.some((search) => !search.ok)
+      ? "Stopped because a MarketCheck request failed."
+      : hitApiCallCap && usableCompCount < MIN_USABLE_COMPS
         ? `Stopped after reaching the API-call cap of ${apiControls.maxApiCallsPerSearch}.`
         : rawCount === 0
-        ? "Checked configured regions and no MarketCheck listings were returned."
-        : usableCompCount >= MIN_USABLE_COMPS
-        ? `Stopped after finding ${usableCompCount} usable comps.`
-        : "Checked all required configured regions for this search.";
+          ? "Checked configured regions and no MarketCheck listings were returned."
+          : usableCompCount >= MIN_USABLE_COMPS
+            ? `Stopped after finding ${usableCompCount} usable comps.`
+            : "Checked all required configured regions for this search.";
 
     const marketTiming = getMarketTimingStats(searches);
     const marketTimingDebug = getMarketTimingDebug(searches);
@@ -1455,14 +1490,15 @@ export async function POST(request: Request) {
         targetFuelType,
         targetMileage,
         zips,
-          regions: orderedRegions,
-          regionsChecked: searches.map((search) => {
-            const region = orderedRegions.find(
-              (orderedRegion: { zip: string; market?: string }) => orderedRegion.zip === search.zip
-            );
+        regions: orderedRegions,
+        regionsChecked: searches.map((search) => {
+          const region = orderedRegions.find(
+            (orderedRegion: { zip: string; market?: string }) =>
+              orderedRegion.zip === search.zip,
+          );
 
-            return region ? `${region.market} (${region.zip})` : search.zip;
-          }),
+          return region ? `${region.market} (${region.zip})` : search.zip;
+        }),
         radius,
         rows,
         generationFilter: generationCompRule,
@@ -1526,7 +1562,7 @@ export async function POST(request: Request) {
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }
