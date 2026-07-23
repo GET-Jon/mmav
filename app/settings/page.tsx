@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AppSidebar } from "@/components/navigation/app-sidebar";
+import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
@@ -113,7 +113,7 @@ async function loadSettingsContext(userId: string) {
         email: data?.user?.email || "Unknown user",
         lastSignInAt: data?.user?.last_sign_in_at || null,
       };
-    })
+    }),
   );
 
   return {
@@ -122,7 +122,9 @@ async function loadSettingsContext(userId: string) {
   };
 }
 
-export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+export default async function SettingsPage({
+  searchParams,
+}: SettingsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeTab = normalizeTab(resolvedSearchParams.tab);
 
@@ -152,230 +154,224 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const canManageUsers = company?.role === "company_admin";
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="flex min-h-screen">
-        <AppSidebar active="settings" userEmail={user?.email} />
+    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      <AppTopNav active="settings" userEmail={user?.email} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 p-6">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-              <p className="mt-1 text-slate-600">
-                Review operational rules, company users, and organization
-                configuration.
+      <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
+        <div className="mb-6">
+          <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">
+            Settings
+          </h1>
+          <p className="mt-1 text-slate-600">
+            Review operational rules, company users, and organization
+            configuration.
+          </p>
+        </div>
+
+        {loadError ? (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            Settings could not load: {loadError}
+          </div>
+        ) : null}
+
+        <div className="mb-5 flex flex-wrap gap-2">
+          <Link
+            href="/settings?tab=account"
+            className={tabClass(activeTab === "account")}
+          >
+            Account
+          </Link>
+
+          <Link
+            href="/settings?tab=api"
+            className={tabClass(activeTab === "api")}
+          >
+            API Usage
+          </Link>
+
+          <Link
+            href="/settings?tab=users"
+            className={tabClass(activeTab === "users")}
+          >
+            Users
+          </Link>
+
+          <Link
+            href="/settings?tab=organization"
+            className={tabClass(activeTab === "organization")}
+          >
+            Organization
+          </Link>
+        </div>
+
+        {activeTab === "account" ? (
+          <AccountSettingsCard
+            initialName={
+              typeof user.user_metadata?.full_name === "string"
+                ? user.user_metadata.full_name
+                : typeof user.user_metadata?.name === "string"
+                  ? user.user_metadata.name
+                  : ""
+            }
+            initialEmail={user.email || ""}
+            companyName={companyContext?.company.companyName || ""}
+            role={companyContext?.company.role || ""}
+          />
+        ) : null}
+
+        {activeTab === "api" ? <MarketCheckApiSettingsCard /> : null}
+
+        {activeTab === "users" ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
+              <div>
+                <h2 className="text-xl font-bold">Company Users</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                  Users attached to {company?.companyName || "this company"}.
+                  Add users, adjust roles, and disable access for users who
+                  should no longer see this company workspace.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                User invites are now available for company admins. Email
+                delivery/password setup can be refined next.
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <CompanyUserInviteForm canManageUsers={canManageUsers} />
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Added</th>
+                    <th className="px-4 py-3">Last Sign In</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {members.length ? (
+                    members.map((member) => (
+                      <tr key={member.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-950">
+                            {member.email}
+                          </div>
+                          <div className="mt-1 font-mono text-xs text-slate-400">
+                            {member.user_id}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${roleTone(
+                              member.role,
+                            )}`}
+                          >
+                            {formatRole(member.role)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                            {member.status || "active"}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatDate(member.created_at)}
+                        </td>
+
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatDate(member.lastSignInAt)}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <CompanyUserActions
+                            membershipId={member.id}
+                            currentRole={member.role || "user"}
+                            currentStatus={member.status || "active"}
+                            canManageUsers={canManageUsers}
+                            isCurrentUser={member.user_id === user?.id}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
+                      >
+                        No company users found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "organization" ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5">
+              <h2 className="text-xl font-bold">Organization</h2>
+              <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                Current company context resolved from the logged-in user's
+                active company membership.
               </p>
             </div>
 
-            {loadError ? (
-              <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                Settings could not load: {loadError}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Company
+                </div>
+                <div className="mt-2 text-lg font-black">
+                  {company?.companyName || "—"}
+                </div>
               </div>
-            ) : null}
 
-            <div className="mb-5 flex flex-wrap gap-2">
-              <Link
-                href="/settings?tab=account"
-                className={tabClass(activeTab === "account")}
-              >
-                Account
-              </Link>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Slug
+                </div>
+                <div className="mt-2 font-mono text-sm font-bold">
+                  {company?.companySlug || "—"}
+                </div>
+              </div>
 
-              <Link
-                href="/settings?tab=api"
-                className={tabClass(activeTab === "api")}
-              >
-                API Usage
-              </Link>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Your Role
+                </div>
+                <div className="mt-2 text-lg font-black">
+                  {company?.role || "—"}
+                </div>
+              </div>
 
-              <Link
-                href="/settings?tab=users"
-                className={tabClass(activeTab === "users")}
-              >
-                Users
-              </Link>
-
-              <Link
-                href="/settings?tab=organization"
-                className={tabClass(activeTab === "organization")}
-              >
-                Organization
-              </Link>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Members
+                </div>
+                <div className="mt-2 text-lg font-black">{members.length}</div>
+              </div>
             </div>
 
-            {activeTab === "account" ? (
-              <AccountSettingsCard
-                initialName={
-                  typeof user.user_metadata?.full_name === "string"
-                    ? user.user_metadata.full_name
-                    : typeof user.user_metadata?.name === "string"
-                    ? user.user_metadata.name
-                    : ""
-                }
-                initialEmail={user.email || ""}
-                companyName={companyContext?.company.companyName || ""}
-                role={companyContext?.company.role || ""}
-              />
-            ) : null}
-
-            {activeTab === "api" ? (
-              <MarketCheckApiSettingsCard />
-            ) : null}
-
-            {activeTab === "users" ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                  <div>
-                    <h2 className="text-xl font-bold">Company Users</h2>
-                    <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                      Users attached to {company?.companyName || "this company"}.
-                      Add users, adjust roles, and disable access for users who
-                      should no longer see this company workspace.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                    User invites are now available for company admins. Email
-                    delivery/password setup can be refined next.
-                  </div>
-                </div>
-
-                <div className="mb-5">
-                  <CompanyUserInviteForm canManageUsers={canManageUsers} />
-                </div>
-
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">User</th>
-                        <th className="px-4 py-3">Role</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Added</th>
-                        <th className="px-4 py-3">Last Sign In</th>
-                        <th className="px-4 py-3">Actions</th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
-                      {members.length ? (
-                        members.map((member) => (
-                          <tr key={member.id} className="hover:bg-slate-50">
-                            <td className="px-4 py-3">
-                              <div className="font-bold text-slate-950">
-                                {member.email}
-                              </div>
-                              <div className="mt-1 font-mono text-xs text-slate-400">
-                                {member.user_id}
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-bold ${roleTone(
-                                  member.role
-                                )}`}
-                              >
-                                {formatRole(member.role)}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                                {member.status || "active"}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-3 text-slate-600">
-                              {formatDate(member.created_at)}
-                            </td>
-
-                            <td className="px-4 py-3 text-slate-600">
-                              {formatDate(member.lastSignInAt)}
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <CompanyUserActions
-                                membershipId={member.id}
-                                currentRole={member.role || "user"}
-                                currentStatus={member.status || "active"}
-                                canManageUsers={canManageUsers}
-                                isCurrentUser={member.user_id === user?.id}
-                              />
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
-                          >
-                            No company users found.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ) : null}
-
-            {activeTab === "organization" ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-5">
-                  <h2 className="text-xl font-bold">Organization</h2>
-                  <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                    Current company context resolved from the logged-in user's
-                    active company membership.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Company
-                    </div>
-                    <div className="mt-2 text-lg font-black">
-                      {company?.companyName || "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Slug
-                    </div>
-                    <div className="mt-2 font-mono text-sm font-bold">
-                      {company?.companySlug || "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Your Role
-                    </div>
-                    <div className="mt-2 text-lg font-black">
-                      {company?.role || "—"}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Members
-                    </div>
-                    <div className="mt-2 text-lg font-black">
-                      {members.length}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                  Editing company name, slug, API limits, and user roles should
-                  be added after invite/user-management actions are wired.
-                </div>
-              </section>
-            ) : null}
-          </div>
-        </div>
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              Editing company name, slug, API limits, and user roles should be
+              added after invite/user-management actions are wired.
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );

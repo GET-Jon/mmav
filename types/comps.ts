@@ -11,6 +11,7 @@ export type MarketComp = {
   mileage: number;
   askingPrice: number;
   qualityScore: number;
+  imageUrl?: string | null;
   dealerDays?: number | null;
   marketDays?: number | null;
 };

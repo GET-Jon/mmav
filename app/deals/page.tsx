@@ -1,4 +1,4 @@
-import { AppSidebar } from "@/components/navigation/app-sidebar";
+import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { DealsPipelineTable } from "@/components/deals/deals-pipeline-table";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -85,7 +85,6 @@ function getUserDisplayLabel(user: {
   return compactUserLabelFromEmail(user.email);
 }
 
-
 async function getSavedEvaluations(userId: string) {
   const supabase = createSupabaseAdminClient();
   const company = await getCurrentCompanyForUser(supabase, userId);
@@ -106,9 +105,11 @@ async function getSavedEvaluations(userId: string) {
   }
 
   const companyUserIds = Array.from(
-    new Set(((members || []) as Array<{ user_id: string | null }>).map(
-      (member) => member.user_id
-    ).filter(Boolean) as string[])
+    new Set(
+      ((members || []) as Array<{ user_id: string | null }>)
+        .map((member) => member.user_id)
+        .filter(Boolean) as string[],
+    ),
   );
 
   const { data, error } = await supabase
@@ -133,7 +134,7 @@ async function getSavedEvaluations(userId: string) {
       auction_site,
       created_by,
       updated_by
-    `
+    `,
     )
     .eq("company_id", company.companyId)
     .order("updated_at", {
@@ -154,7 +155,9 @@ async function getSavedEvaluations(userId: string) {
     .flatMap((evaluation) => [evaluation.created_by, evaluation.updated_by])
     .filter(Boolean) as string[];
 
-  const userIds = Array.from(new Set([...companyUserIds, ...evaluationUserIds]));
+  const userIds = Array.from(
+    new Set([...companyUserIds, ...evaluationUserIds]),
+  );
 
   const userEmailById = new Map<string, string>();
   const userLabelById = new Map<string, string>();
@@ -227,46 +230,39 @@ export default async function DealsPage() {
     loadError = result.error;
   } catch (error) {
     loadError =
-      error instanceof Error
-        ? error.message
-        : "Deal Pipeline failed to load.";
+      error instanceof Error ? error.message : "Deal Pipeline failed to load.";
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="flex min-h-screen">
-        <AppSidebar active="saved" userEmail={user?.email} />
+    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      <AppTopNav active="pipeline" userEmail={user?.email} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 p-6">
-            <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">
-                  Deal Pipeline
-                </h1>
-                <p className="mt-1 text-slate-600">
-                  Track watched vehicles, bids, passes, wins, losses, and
-                  purchases.
-                </p>
-              </div>
+      <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
+        <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">
+              Deal Pipeline
+            </h1>
+            <p className="mt-1 text-slate-600">
+              Track watched vehicles, bids, passes, wins, losses, and purchases.
+            </p>
+          </div>
 
-              <div className="rounded-xl bg-white px-4 py-3 text-sm font-semibold shadow-sm">
-                {evaluations.length} saved evaluations
-              </div>
-            </div>
-
-            {loadError ? (
-              <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                Deal Pipeline could not load: {loadError}
-              </div>
-            ) : null}
-
-            <DealsPipelineTable
-              evaluations={evaluations}
-              companyUsers={companyUsers}
-            />
+          <div className="rounded-xl bg-white px-4 py-3 text-sm font-semibold shadow-sm">
+            {evaluations.length} saved evaluations
           </div>
         </div>
+
+        {loadError ? (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            Deal Pipeline could not load: {loadError}
+          </div>
+        ) : null}
+
+        <DealsPipelineTable
+          evaluations={evaluations}
+          companyUsers={companyUsers}
+        />
       </div>
     </main>
   );
