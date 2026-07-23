@@ -44,66 +44,77 @@ export function MarketCompsTable({
     () => [
       {
         accessorKey: "included",
-        header: "Include",
+        header: "",
         cell: ({ row }) => (
           <input
             type="checkbox"
             checked={row.original.included}
             onChange={() => onToggleIncluded(row.original.id)}
+            aria-label={`Include ${row.original.year} ${row.original.model}`}
+            className="h-4 w-4 rounded border-slate-300 accent-blue-700"
           />
         ),
-        enableSorting: true,
+        enableSorting: false,
       },
       {
-        accessorKey: "source",
-        header: "Source",
+        id: "vehicle",
+        header: "Vehicle",
+        accessorFn: (row) =>
+          [row.year, row.model, row.trim].filter(Boolean).join(" "),
         cell: ({ row }) => (
-          <span className="font-medium text-slate-900">
-            {row.original.source}
-          </span>
+          <div className="min-w-[155px]">
+            <div className="font-bold text-slate-950">
+              {[row.original.year, row.original.model]
+                .filter(Boolean)
+                .join(" ")}
+            </div>
+
+            <div className="mt-0.5 truncate text-xs font-medium text-slate-500">
+              {row.original.trim || "Trim unavailable"}
+            </div>
+          </div>
         ),
       },
       {
-        accessorKey: "region",
-        header: "Region",
-        cell: ({ row }) => {
-          const region = row.original.region;
+        id: "source",
+        header: "Source",
+        accessorFn: (row) => row.source,
+        cell: ({ row }) => (
+          <div className="min-w-[105px]">
+            <div className="font-semibold text-slate-900">
+              {row.original.source}
+            </div>
 
-          return (
-            <span className="text-slate-700">
-              {region || "—"}
-            </span>
-          );
-        },
-      },
-      {
-        accessorKey: "distance",
-        header: "Distance",
-        cell: ({ row }) => `${row.original.distance} mi`,
-      },
-      {
-        accessorKey: "year",
-        header: "Year",
-      },
-      {
-        accessorKey: "model",
-        header: "Model",
-      },
-      {
-        accessorKey: "trim",
-        header: "Trim",
-      },
-      {
-        accessorKey: "mileage",
-        header: "Mileage",
-        cell: ({ row }) => formatNumber(row.original.mileage),
+            <div className="mt-0.5 text-xs text-slate-500">
+              {row.original.region || "Region unavailable"}
+            </div>
+          </div>
+        ),
       },
       {
         accessorKey: "askingPrice",
         header: "Asking",
         cell: ({ row }) => (
-          <span className="font-semibold">
+          <span className="whitespace-nowrap font-bold text-slate-950">
             {formatMoney(row.original.askingPrice)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "mileage",
+        header: "Mileage",
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap">
+            {formatNumber(row.original.mileage)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "distance",
+        header: "Distance",
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap">
+            {formatNumber(row.original.distance)} mi
           </span>
         ),
       },
@@ -124,7 +135,7 @@ export function MarketCompsTable({
           });
 
           return (
-            <span className="font-semibold text-blue-700">
+            <span className="whitespace-nowrap font-extrabold text-blue-700">
               {formatMoney(adjusted)}
             </span>
           );
@@ -135,55 +146,80 @@ export function MarketCompsTable({
         header: "Score",
         cell: ({ row }) => {
           const score = row.original.qualityScore;
-          const color =
+
+          const tone =
             score >= 70
               ? "bg-emerald-100 text-emerald-700"
               : score >= 60
-              ? "bg-amber-100 text-amber-700"
-              : "bg-red-100 text-red-700";
+                ? "bg-amber-100 text-amber-700"
+                : "bg-red-100 text-red-700";
 
           return (
-            <span className={`rounded-full px-2 py-1 text-xs font-bold ${color}`}>
+            <span
+              className={`inline-flex min-w-9 justify-center rounded-full px-2 py-1 text-xs font-black ${tone}`}
+            >
               {score}
             </span>
           );
         },
       },
     ],
-    [assumptions, onToggleIncluded, targetMileage]
+    [assumptions, onToggleIncluded, targetMileage],
   );
 
   const table = useReactTable({
     data: comps,
     columns,
-    state: {
-      sorting,
-    },
+    state: { sorting },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
 
+  if (!comps.length) {
+    return (
+      <div className="flex min-h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center">
+        <div>
+          <div className="text-sm font-extrabold text-slate-800">
+            No comparable vehicles loaded
+          </div>
+
+          <div className="mt-1 text-sm text-slate-500">
+            Run the evaluation to search for a usable comp set.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200">
+      <table className="min-w-[850px] w-full text-left text-sm">
+        <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
                 const sorted = header.column.getIsSorted();
+                const canSort = header.column.getCanSort();
 
                 return (
                   <th
                     key={header.id}
-                    className="cursor-pointer select-none px-3 py-3"
-                    onClick={header.column.getToggleSortingHandler()}
+                    className={`whitespace-nowrap px-3 py-3 ${
+                      canSort ? "cursor-pointer select-none" : ""
+                    }`}
+                    onClick={
+                      canSort
+                        ? header.column.getToggleSortingHandler()
+                        : undefined
+                    }
                   >
                     <div className="flex items-center gap-1">
                       {flexRender(
                         header.column.columnDef.header,
-                        header.getContext()
+                        header.getContext(),
                       )}
+
                       <span className="text-slate-400">
                         {sorted === "asc" ? "↑" : sorted === "desc" ? "↓" : ""}
                       </span>
@@ -199,7 +235,11 @@ export function MarketCompsTable({
           {table.getRowModel().rows.map((row) => (
             <tr
               key={row.id}
-              className={!row.original.included ? "bg-slate-50 text-slate-400" : ""}
+              className={
+                row.original.included
+                  ? "transition hover:bg-slate-50/80"
+                  : "bg-slate-50/70 text-slate-400"
+              }
             >
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id} className="px-3 py-3">
