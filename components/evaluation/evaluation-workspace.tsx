@@ -2538,7 +2538,7 @@ export function EvaluationWorkspace({
                   Condition &amp; Profitability
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500">
-                  Judge severity by category. MMAV proposes a reserve that you
+                  Judge severity by category. Lot Logic proposes a reserve that you
                   can adjust for this specific vehicle.
                 </p>
               </div>

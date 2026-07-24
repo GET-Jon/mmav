@@ -62,7 +62,7 @@ function LoginForm() {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-950">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-6">
-          <div className="text-2xl font-black">MMAV Login</div>
+          <div className="text-2xl font-black">Lot Logic Login</div>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Sign in to access the auction evaluator and saved deal pipeline.
           </p>
