@@ -143,3 +143,28 @@ export type MindfulIntelligenceMatch = {
 
   source: MindfulIntelligenceSource;
 };
+
+
+export type MindfulIntelligenceVehicleInput = {
+  year?: number | string | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+
+  generation?: string | null;
+  chassisCode?: string | null;
+  engine?: string | null;
+  transmission?: string | null;
+  drivetrain?: string | null;
+
+  bodyStyle?: string | null;
+  fuelType?: string | null;
+
+  notes?: string | null;
+};
+
+export type MindfulIntelligenceMatchOptions = {
+  includeDrafts?: boolean;
+  includeArchived?: boolean;
+  limit?: number;
+};
