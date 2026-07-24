@@ -51,3 +51,10 @@ export type EvaluationSummaryInput = {
   selectedConditionRules?: string[];
   notes?: string | null;
 };
+
+export type {
+  EvaluationDecisionBrief,
+  EvaluationDecisionBriefInput,
+  EvaluationEvidenceBasis,
+  EvaluationRecommendation,
+} from "./decision-brief-types";
