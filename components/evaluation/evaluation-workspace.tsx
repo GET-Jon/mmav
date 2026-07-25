@@ -16,6 +16,7 @@ import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
+import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
 import { calculateValuation } from "@/lib/valuation";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
@@ -1970,6 +1971,41 @@ export function EvaluationWorkspace({
     ],
   );
 
+  const mindfulIntelligencePreview = useMemo(
+    () =>
+      findPrimaryMindfulIntelligenceMatch(
+        {
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          generation: dealerFitResult.generation,
+          chassisCode: dealerFitResult.generation,
+          engine: null,
+          transmission: null,
+          drivetrain: decodedVehicle?.driveType || null,
+          bodyStyle: simplifiedVehicleBodyClass || vehicleBodyClass,
+          fuelType: decodedVehicle?.fuelType || null,
+          notes: notes || null,
+        },
+        {
+          includeDrafts: true,
+        },
+      ),
+    [
+      vehicleYear,
+      vehicleMake,
+      vehicleModel,
+      vehicleTrim,
+      dealerFitResult.generation,
+      decodedVehicle?.driveType,
+      decodedVehicle?.fuelType,
+      simplifiedVehicleBodyClass,
+      vehicleBodyClass,
+      notes,
+    ],
+  );
+
   const dealerFitScore = dealerFitResult.score;
 
   const profitabilityScoreDisplay = hasEvaluationData ? profitabilityScore : 0;
@@ -3465,6 +3501,66 @@ export function EvaluationWorkspace({
               >
                 View Scoring details →
               </button>
+
+              {mindfulIntelligencePreview ? (
+                <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-violet-600">
+                        Mindful Intelligence Preview
+                      </div>
+
+                      <div className="mt-1 text-sm font-black text-slate-950">
+                        {mindfulIntelligencePreview.title}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700 shadow-sm">
+                        {mindfulIntelligencePreview.verdict.replaceAll("_", " ")}
+                      </span>
+
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold capitalize text-slate-600 shadow-sm">
+                        {mindfulIntelligencePreview.confidence} confidence
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-700">
+                    {mindfulIntelligencePreview.rationale}
+                  </p>
+
+                  {mindfulIntelligencePreview.verificationItems.length ? (
+                    <div className="mt-3 border-t border-violet-200 pt-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">
+                        Priority checks
+                      </div>
+
+                      <ul className="mt-2 space-y-1.5">
+                        {mindfulIntelligencePreview.verificationItems
+                          .slice(0, 3)
+                          .map((item) => (
+                            <li
+                              key={item}
+                              className="flex gap-2 text-xs font-semibold leading-4 text-slate-700"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500"
+                              />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3 text-[10px] font-semibold text-violet-700">
+                    Read-only draft knowledge. This does not affect the current
+                    score, valuation, bid guidance, or AI thesis.
+                  </div>
+                </div>
+              ) : null}
             </article>
           </section>
 
