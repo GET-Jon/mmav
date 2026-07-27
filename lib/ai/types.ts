@@ -48,6 +48,19 @@ export type EvaluationSummaryInput = {
   dealerFitReasons?: string[];
   dealerFitCautions?: string[];
 
+  mindfulIntelligenceMatched?: boolean;
+  mindfulIntelligenceTitle?: string | null;
+  mindfulIntelligenceMatchLevel?: string | null;
+  mindfulIntelligenceConfidence?: string | null;
+  mindfulIntelligenceVerdict?: string | null;
+  mindfulIntelligenceRationale?: string | null;
+  mindfulIntelligenceOpportunityTypes?: string[];
+  mindfulIntelligenceStrengths?: string[];
+  mindfulIntelligenceLimitations?: string[];
+  mindfulIntelligenceKnownIssues?: string[];
+  mindfulIntelligenceVerificationItems?: string[];
+  mindfulIntelligenceSourceSection?: string | null;
+
   selectedConditionRules?: string[];
   notes?: string | null;
 };

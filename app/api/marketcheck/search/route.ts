@@ -415,6 +415,159 @@ function mapListingToComp({
       preferredTrim,
     }),
     imageUrl: getListingImageUrl(listing),
+
+    dealerDays:
+      toNumber(
+        listing.dom_active ??
+          listing.dom_180 ??
+          listing.dom ??
+          listing.days_on_market,
+      ) || null,
+
+    marketDays:
+      toNumber(
+        listing.dos_active ??
+          listing.days_on_site ??
+          listing.market_days,
+      ) || null,
+
+    marketCheckDetails: {
+      vin: String(listing.vin || "") || null,
+      heading:
+        String(listing.heading || listing.title || "") || null,
+      listingUrl:
+        String(
+          listing.vdp_url ||
+            listing.listing_url ||
+            listing.url ||
+            "",
+        ) || null,
+      sellerType:
+        String(
+          listing.seller_type ||
+            listing.inventory_type ||
+            listing.dealer?.type ||
+            "",
+        ) || null,
+      dealerName:
+        String(
+          listing.dealer?.name ||
+            listing.dealer_name ||
+            listing.seller_name ||
+            "",
+        ) || null,
+      dealerPhone:
+        String(
+          listing.dealer?.phone ||
+            listing.dealer_phone ||
+            listing.phone ||
+            "",
+        ) || null,
+      dealerWebsite:
+        String(
+          listing.dealer?.website ||
+            listing.dealer_website ||
+            "",
+        ) || null,
+      city:
+        String(
+          listing.dealer?.city ||
+            listing.city ||
+            listing.location?.city ||
+            "",
+        ) || null,
+      state:
+        String(
+          listing.dealer?.state ||
+            listing.state ||
+            listing.location?.state ||
+            "",
+        ) || null,
+      zip:
+        String(
+          listing.dealer?.zip ||
+            listing.zip ||
+            listing.location?.zip ||
+            "",
+        ) || null,
+      exteriorColor:
+        String(
+          build.exterior_color ||
+            listing.exterior_color ||
+            listing.exteriorColor ||
+            "",
+        ) || null,
+      interiorColor:
+        String(
+          build.interior_color ||
+            listing.interior_color ||
+            listing.interiorColor ||
+            "",
+        ) || null,
+      bodyType:
+        String(
+          build.body_type ||
+            build.body_style ||
+            listing.body_type ||
+            listing.body_style ||
+            "",
+        ) || null,
+      drivetrain:
+        String(
+          build.drivetrain ||
+            build.drive_type ||
+            listing.drivetrain ||
+            listing.drive_type ||
+            "",
+        ) || null,
+      transmission:
+        String(
+          build.transmission ||
+            listing.transmission ||
+            "",
+        ) || null,
+      fuelType:
+        String(
+          build.fuel_type ||
+            build.fuel ||
+            listing.fuel_type ||
+            listing.fuel ||
+            "",
+        ) || null,
+      engine:
+        String(
+          build.engine ||
+            build.engine_description ||
+            listing.engine_description ||
+            listing.engine?.description ||
+            "",
+        ) || null,
+      doors:
+        toNumber(build.doors ?? listing.doors) || null,
+      cylinders:
+        toNumber(
+          build.cylinders ??
+            listing.cylinders ??
+            listing.engine?.cylinders,
+        ) || null,
+      listingDate:
+        String(
+          listing.first_seen_at_date ||
+            listing.listing_date ||
+            listing.first_seen_at ||
+            "",
+        ) || null,
+      lastSeenDate:
+        String(
+          listing.last_seen_at_date ||
+            listing.last_seen_at ||
+            "",
+        ) || null,
+
+      // Preserve the complete MarketCheck object for the raw-data section
+      // of the internal details modal.
+      raw: listing as Record<string, unknown>,
+    },
   };
 }
 

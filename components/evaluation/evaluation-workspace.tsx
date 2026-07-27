@@ -1408,6 +1408,31 @@ export function EvaluationWorkspace({
           dealerFitReasons: dealerFitResult.reasons,
           dealerFitCautions: dealerFitResult.cautions,
 
+          mindfulIntelligenceMatched:
+            Boolean(mindfulIntelligencePreview),
+          mindfulIntelligenceTitle:
+            mindfulIntelligencePreview?.title || null,
+          mindfulIntelligenceMatchLevel:
+            mindfulIntelligencePreview?.matchLevel || null,
+          mindfulIntelligenceConfidence:
+            mindfulIntelligencePreview?.confidence || null,
+          mindfulIntelligenceVerdict:
+            mindfulIntelligencePreview?.verdict || null,
+          mindfulIntelligenceRationale:
+            mindfulIntelligencePreview?.rationale || null,
+          mindfulIntelligenceOpportunityTypes:
+            mindfulIntelligencePreview?.opportunityTypes || [],
+          mindfulIntelligenceStrengths:
+            mindfulIntelligencePreview?.strengths || [],
+          mindfulIntelligenceLimitations:
+            mindfulIntelligencePreview?.limitations || [],
+          mindfulIntelligenceKnownIssues:
+            mindfulIntelligencePreview?.knownIssues || [],
+          mindfulIntelligenceVerificationItems:
+            mindfulIntelligencePreview?.verificationItems || [],
+          mindfulIntelligenceSourceSection:
+            mindfulIntelligencePreview?.source.sectionTitle || null,
+
           selectedConditionRules: selectedConditions,
           notes,
         }),
@@ -2017,6 +2042,35 @@ export function EvaluationWorkspace({
     dealerFitResult.reasons[0] ||
     "Dealer fit will improve as vehicle details are added.";
 
+  const mindfulIntelligenceDisplay = mindfulIntelligencePreview || {
+    title: vehicleTitle || "Current vehicle",
+    verdict:
+      dealerFitResult.score >= 75
+        ? "strong_fit"
+        : dealerFitResult.score >= 55
+          ? "conditional_fit"
+          : "limited_fit",
+    confidence:
+      dealerFitResult.reasons.length >= 2 ? "medium" : "low",
+    matchLevel: "general",
+    rationale:
+      dealerFitReason ||
+      "This vehicle does not yet have a dedicated Mindful Intelligence profile, so the current read is based on its broader category, market position, and dealer-fit characteristics.",
+    opportunityTypes: [],
+    strengths: dealerFitResult.reasons,
+    limitations: dealerFitResult.cautions,
+    knownIssues: [],
+    verificationItems: Array.from(
+      new Set([
+        ...dealerFitResult.cautions,
+        ...selectedConditions,
+      ]),
+    ),
+    source: {
+      sectionTitle: "Lot Logic evaluator and dealer-fit rules",
+    },
+  };
+
   const suggestedBidDisplay =
     valuationInput.currentBid <= 0
       ? "Enter bid to see range"
@@ -2062,6 +2116,11 @@ export function EvaluationWorkspace({
       : hasManualQuickEvalBasics;
 
   function startQuickEvaluation() {
+    setNotes("");
+    setAiSummaryError("");
+    setAiSummaryLoadingMode(null);
+    setActiveThesisMode("financial");
+
     if (quickEvalMode === "manual") {
       setDecodedVehicle(null);
       setVin("");
@@ -3502,69 +3561,227 @@ export function EvaluationWorkspace({
                 View Scoring details →
               </button>
 
-              {mindfulIntelligencePreview ? (
-                <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+            </article>
+          </section>
+
+          <section className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(350px,.85fr)]">
+              <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+                <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-violet-600">
-                        Mindful Intelligence Preview
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-[9px] font-black uppercase tracking-[0.14em] text-violet-600">
+                          Mindful Intelligence
+                        </div>
+
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">
+                          {mindfulIntelligencePreview
+                            ? "Profile match"
+                            : "General Mindful read"}
+                        </span>
                       </div>
 
-                      <div className="mt-1 text-sm font-black text-slate-950">
-                        {mindfulIntelligencePreview.title}
-                      </div>
+                      <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-slate-950">
+                        {mindfulIntelligenceDisplay.title}
+                      </h2>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700 shadow-sm">
-                        {mindfulIntelligencePreview.verdict.replaceAll("_", " ")}
+                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700">
+                        {mindfulIntelligenceDisplay.verdict.replaceAll("_", " ")}
                       </span>
 
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold capitalize text-slate-600 shadow-sm">
-                        {mindfulIntelligencePreview.confidence} confidence
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
+                        {mindfulIntelligenceDisplay.confidence} confidence
+                      </span>
+
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-500">
+                        {mindfulIntelligenceDisplay.matchLevel.replaceAll("_", " ")} match
                       </span>
                     </div>
                   </div>
+                </div>
 
-                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-700">
-                    {mindfulIntelligencePreview.rationale}
-                  </p>
+                <div className="grid gap-6 px-5 py-5 2xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,.7fr)]">
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                      Mindful perspective
+                    </div>
 
-                  {mindfulIntelligencePreview.verificationItems.length ? (
-                    <div className="mt-3 border-t border-violet-200 pt-3">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">
-                        Priority checks
+                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
+                      {mindfulIntelligenceDisplay.rationale}
+                    </p>
+
+                    <div className="mt-4">
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                        Opportunity type
                       </div>
 
-                      <ul className="mt-2 space-y-1.5">
-                        {mindfulIntelligencePreview.verificationItems
-                          .slice(0, 3)
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {mindfulIntelligenceDisplay.opportunityTypes.length ? (
+                          mindfulIntelligenceDisplay.opportunityTypes.map(
+                            (type) => (
+                              <span
+                                key={type}
+                                className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black capitalize text-slate-700"
+                              >
+                                {type.replaceAll("_", " ")}
+                              </span>
+                            ),
+                          )
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-700">
+                            {dealerFitResult.category || "General acquisition"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {mindfulIntelligenceDisplay.strengths.length ? (
+                      <div className="mt-5">
+                        <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                          Why it fits
+                        </div>
+
+                        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {mindfulIntelligenceDisplay.strengths
+                            .slice(0, 4)
+                            .map((item) => (
+                              <li
+                                key={item}
+                                className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                                />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
+                      Priority checks
+                    </div>
+
+                    {mindfulIntelligenceDisplay.verificationItems.length ? (
+                      <ul className="mt-3 space-y-2.5">
+                        {mindfulIntelligenceDisplay.verificationItems
+                          .slice(0, 5)
                           .map((item) => (
                             <li
                               key={item}
-                              className="flex gap-2 text-xs font-semibold leading-4 text-slate-700"
+                              className="flex gap-2.5 text-xs font-semibold leading-5 text-slate-700"
                             >
                               <span
                                 aria-hidden="true"
-                                className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500"
+                                className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500"
                               />
                               <span>{item}</span>
                             </li>
                           ))}
                       </ul>
-                    </div>
-                  ) : null}
+                    ) : (
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
+                        No vehicle-specific verification items are currently
+                        attached to this profile.
+                      </p>
+                    )}
 
-                  <div className="mt-3 text-[10px] font-semibold text-violet-700">
-                    Read-only draft knowledge. This does not affect the current
-                    score, valuation, bid guidance, or AI thesis.
+                    <div className="mt-4 border-t border-violet-200 pt-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                        Source
+                      </div>
+
+                      <div className="mt-1 text-xs font-bold text-slate-700">
+                        {mindfulIntelligenceDisplay.source.sectionTitle}
+                      </div>
+
+                      <div className="mt-2 text-[10px] font-semibold leading-4 text-violet-700">
+                        {mindfulIntelligencePreview
+                          ? "Matched company knowledge informs the AI thesis but does not alter valuation, bid guidance, or the current dealer-fit score."
+                          : "No dedicated company profile was found. This general read uses current vehicle data and dealer-fit rules and does not alter valuation or bid guidance."}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              ) : null}
-            </article>
-          </section>
+              </div>
 
-          <section className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(330px,.85fr)]">
+            <SectionCard
+              title="AI Deal Thesis"
+              action={
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+                  Uses evaluator data + Mindful Intelligence
+                </span>
+              }
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveThesisMode("financial");
+                    void generateAiSummary("financial");
+                  }}
+                  disabled={Boolean(aiSummaryLoadingMode)}
+                  className={`rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    activeThesisMode === "financial"
+                      ? "bg-blue-700 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {aiSummaryLoadingMode === "financial"
+                    ? "Generating..."
+                    : "Financial"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveThesisMode("enthusiast");
+                    void generateAiSummary("enthusiast");
+                  }}
+                  disabled={Boolean(aiSummaryLoadingMode)}
+                  className={`rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    activeThesisMode === "enthusiast"
+                      ? "bg-slate-950 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {aiSummaryLoadingMode === "enthusiast"
+                    ? "Generating..."
+                    : "Enthusiast"}
+                </button>
+              </div>
+
+              {aiSummaryError ? (
+                <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                  {aiSummaryError}
+                </div>
+              ) : null}
+
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Generate a financial or enthusiast thesis using the current evaluator data."
+                className="mt-4 min-h-[265px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white"
+              />
+
+              <div className="mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-400">
+                <span>
+                  {activeThesisMode === "financial"
+                    ? "Financial thesis"
+                    : "Enthusiast thesis"}
+                </span>
+                <span>{notes.trim().length} characters</span>
+              </div>
+            </SectionCard>
+            </section>
+
+          <section className="mt-4">
             <SectionCard
               title="Comparable Vehicles"
               action={
@@ -3643,74 +3860,7 @@ export function EvaluationWorkspace({
               </div>
             </SectionCard>
 
-            <SectionCard
-              title="AI Deal Thesis"
-              action={
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
-                  Uses current evaluator data only
-                </span>
-              }
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveThesisMode("financial");
-                    void generateAiSummary("financial");
-                  }}
-                  disabled={Boolean(aiSummaryLoadingMode)}
-                  className={`rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    activeThesisMode === "financial"
-                      ? "bg-blue-700 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {aiSummaryLoadingMode === "financial"
-                    ? "Generating..."
-                    : "Financial"}
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveThesisMode("enthusiast");
-                    void generateAiSummary("enthusiast");
-                  }}
-                  disabled={Boolean(aiSummaryLoadingMode)}
-                  className={`rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    activeThesisMode === "enthusiast"
-                      ? "bg-slate-950 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {aiSummaryLoadingMode === "enthusiast"
-                    ? "Generating..."
-                    : "Enthusiast"}
-                </button>
-              </div>
-
-              {aiSummaryError ? (
-                <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                  {aiSummaryError}
-                </div>
-              ) : null}
-
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Generate a financial or enthusiast thesis using the current evaluator data."
-                className="mt-4 min-h-[265px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white"
-              />
-
-              <div className="mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-400">
-                <span>
-                  {activeThesisMode === "financial"
-                    ? "Financial thesis"
-                    : "Enthusiast thesis"}
-                </span>
-                <span>{notes.trim().length} characters</span>
-              </div>
-            </SectionCard>
           </section>
 
           <div className="mt-4 flex justify-end">
