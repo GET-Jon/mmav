@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { PurchaseConfirmationModal } from "@/components/mindful-inventory/purchase-confirmation-modal";
 
@@ -57,10 +57,6 @@ export function DealStatusSelect({
   const [error, setError] = useState("");
   const [purchaseModalOpen, setPurchaseModalOpen] =
     useState(false);
-
-  useEffect(() => {
-    setLocalStatus(normalizedStatus);
-  }, [normalizedStatus]);
 
   const closePurchaseModal = useCallback(() => {
     if (saving) {

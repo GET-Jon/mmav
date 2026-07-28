@@ -84,6 +84,10 @@ export type InventoryVehicleView = {
   mileage: number | null;
   imageUrl: string | null;
   purchaseDate: string | null;
+  purchasePrice: number;
+  buyerFees: number;
+  transportCost: number;
+  otherAcquisitionCost: number;
   stage: InventoryVehicleStage;
   currentLocation: string | null;
   titleStatus: InventoryTitleStatus;
@@ -278,6 +282,12 @@ export async function getInventoryDashboardData(
       mileage: vehicle.mileage,
       imageUrl: vehicle.image_url,
       purchaseDate: vehicle.purchase_date,
+      purchasePrice: toNumber(vehicle.purchase_price),
+      buyerFees: toNumber(vehicle.buyer_fees),
+      transportCost: toNumber(vehicle.transport_cost),
+      otherAcquisitionCost: toNumber(
+        vehicle.other_acquisition_cost,
+      ),
       stage: vehicle.stage,
       currentLocation: vehicle.current_location,
       titleStatus: vehicle.title_status,

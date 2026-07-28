@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DealStatusSelect } from "@/components/deals/deal-status-select";
 
 type SavedEvaluation = {
@@ -134,10 +134,6 @@ export function DealsPipelineTable({
   const [userFilter, setUserFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
   const [searchText, setSearchText] = useState("");
-
-  useEffect(() => {
-    setTableEvaluations(evaluations);
-  }, [evaluations]);
 
   function handleStatusChange(evaluationId: string, nextStatus: string) {
     setTableEvaluations((previous) =>

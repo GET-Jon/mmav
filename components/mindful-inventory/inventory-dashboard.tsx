@@ -1,3 +1,9 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { InventoryVehicleDrawer } from "@/components/mindful-inventory/inventory-vehicle-drawer";
 import type {
   InventoryDashboardData,
   InventoryVehicleView,
@@ -117,6 +123,10 @@ export function InventoryDashboard({
   data,
 }: InventoryDashboardProps) {
   const { vehicles, summary } = data;
+  const router = useRouter();
+
+  const [selectedVehicle, setSelectedVehicle] =
+    useState<InventoryVehicleView | null>(null);
 
   return (
     <>
@@ -209,7 +219,19 @@ export function InventoryDashboard({
                     return (
                       <tr
                         key={vehicle.id}
-                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                        tabIndex={0}
+                        role="button"
+                        onClick={() => setSelectedVehicle(vehicle)}
+                        onKeyDown={(event) => {
+                          if (
+                            event.key === "Enter" ||
+                            event.key === " "
+                          ) {
+                            event.preventDefault();
+                            setSelectedVehicle(vehicle);
+                          }
+                        }}
+                        className="cursor-pointer border-b border-slate-100 outline-none last:border-0 hover:bg-slate-50/70 focus:bg-slate-50"
                       >
                         <td className="px-4 py-4">
                           <div className="font-extrabold text-slate-950">
@@ -278,6 +300,15 @@ export function InventoryDashboard({
           </div>
         )}
       </div>
+
+      <InventoryVehicleDrawer
+        vehicle={selectedVehicle}
+        onClose={() => setSelectedVehicle(null)}
+        onSaved={() => {
+          setSelectedVehicle(null);
+          router.refresh();
+        }}
+      />
     </>
   );
 }

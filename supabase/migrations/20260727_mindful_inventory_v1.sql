@@ -444,3 +444,15 @@ with check (
       and public.is_company_member(vehicle.company_id)
   )
 );
+
+grant select, insert, update, delete
+on table public.mindful_inventory_work_items
+to service_role;
+
+grant select, insert
+on table public.mindful_inventory_activity
+to service_role;
+
+grant select, insert, update, delete
+on table public.mindful_inventory_vehicles
+to service_role;
