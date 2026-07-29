@@ -4,7 +4,12 @@ import Link from "next/link";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
 
-export type AppTopNavPage = "evaluator" | "pipeline" | "rules" | "settings";
+export type AppTopNavPage =
+  | "evaluator"
+  | "pipeline"
+  | "inventory"
+  | "rules"
+  | "settings";
 
 type AppTopNavProps = {
   active: AppTopNavPage;
@@ -58,6 +63,13 @@ export function AppTopNav({
 
           <Link href="/deals" className={navClass(active === "pipeline")}>
             Pipeline
+          </Link>
+
+          <Link
+            href="/mindful/inventory"
+            className={navClass(active === "inventory")}
+          >
+            Inventory
           </Link>
 
           <Link href="/assumptions" className={navClass(active === "rules")}>

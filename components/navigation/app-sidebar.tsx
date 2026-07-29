@@ -44,7 +44,7 @@ export function AppSidebar({ active = "evaluator", userEmail = null }: AppSideba
         <img
           src="/brand/lot-logic-logo.svg"
           alt="Lot Logic by Mindful Motor Co."
-          className="h-16 w-auto object-contain drop-shadow-sm"
+          className="h-auto w-full max-w-[210px] object-contain drop-shadow-sm"
         />
       </div>
 

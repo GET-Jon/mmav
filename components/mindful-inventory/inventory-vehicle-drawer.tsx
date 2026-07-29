@@ -106,6 +106,9 @@ function InventoryVehicleDrawerContent({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "work-plan"
+  >("overview");
 
   useEffect(() => {
     if (!vehicle) {
@@ -198,7 +201,7 @@ function InventoryVehicleDrawerContent({
         }
       }}
     >
-      <aside className="ml-auto flex h-full w-full max-w-2xl flex-col bg-[#f7f8fb] shadow-2xl">
+      <aside className="ml-auto flex h-full w-full max-w-[700px] flex-col bg-[#f7f8fb] shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
@@ -227,7 +230,52 @@ function InventoryVehicleDrawerContent({
           </button>
         </div>
 
+        <div className="border-b border-slate-200 bg-white px-6">
+          <div
+            className="flex gap-6"
+            role="tablist"
+            aria-label="Inventory vehicle sections"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "overview"}
+              onClick={() => setActiveTab("overview")}
+              className={[
+                "border-b-2 px-1 py-3 text-sm font-extrabold transition",
+                activeTab === "overview"
+                  ? "border-slate-950 text-slate-950"
+                  : "border-transparent text-slate-500 hover:text-slate-800",
+              ].join(" ")}
+            >
+              Overview
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "work-plan"}
+              onClick={() => setActiveTab("work-plan")}
+              className={[
+                "border-b-2 px-1 py-3 text-sm font-extrabold transition",
+                activeTab === "work-plan"
+                  ? "border-slate-950 text-slate-950"
+                  : "border-transparent text-slate-500 hover:text-slate-800",
+              ].join(" ")}
+            >
+              Work Plan
+              {vehicle.workItems.length > 0 ? (
+                <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-600">
+                  {vehicle.workItems.length}
+                </span>
+              ) : null}
+            </button>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === "overview" ? (
+            <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-base font-black text-slate-950">
               Financial overview
@@ -506,12 +554,6 @@ function InventoryVehicleDrawerContent({
             </label>
           </section>
 
-          <InventoryWorkItems
-            vehicleId={vehicle.id}
-            workItems={vehicle.workItems}
-            onChanged={onSaved}
-          />
-
           {vehicle.sourceEvaluationId ? (
             <section className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
               Imported as a one-time snapshot from Lot Logic.
@@ -525,27 +567,37 @@ function InventoryVehicleDrawerContent({
               {error}
             </div>
           ) : null}
+            </>
+          ) : (
+            <InventoryWorkItems
+              vehicleId={vehicle.id}
+              workItems={vehicle.workItems}
+              onChanged={onSaved}
+            />
+          )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onClose}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            Cancel
-          </button>
+        {activeTab === "overview" ? (
+          <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onClose}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
 
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void saveVehicle()}
-            className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? "Saving..." : "Save Vehicle"}
-          </button>
-        </div>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void saveVehicle()}
+              className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save Vehicle"}
+            </button>
+          </div>
+        ) : null}
       </aside>
     </div>
   );

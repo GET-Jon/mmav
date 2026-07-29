@@ -125,6 +125,38 @@ export function InventoryWorkItems({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
+  const activeItems = workItems.filter(
+    (item) =>
+      item.status !== "complete" &&
+      item.status !== "cancelled",
+  );
+
+  const completedItems = workItems.filter(
+    (item) => item.status === "complete",
+  );
+
+  const outstandingEstimatedSpend = activeItems.reduce(
+    (total, item) =>
+      total + (item.actualCost ?? item.estimatedCost),
+    0,
+  );
+
+  const completedSpend = completedItems.reduce(
+    (total, item) =>
+      total + (item.actualCost ?? item.estimatedCost),
+    0,
+  );
+
+  const scheduledItems = activeItems
+    .filter((item) => item.scheduledDate)
+    .sort((a, b) =>
+      String(a.scheduledDate).localeCompare(
+        String(b.scheduledDate),
+      ),
+    );
+
+  const nextScheduledItem = scheduledItems[0] ?? null;
+
   useEffect(() => {
     if (!modalOpen) {
       return;
@@ -286,7 +318,7 @@ export function InventoryWorkItems({
 
   return (
     <>
-      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-base font-black text-slate-950">
@@ -307,6 +339,67 @@ export function InventoryWorkItems({
             Add Work Item
           </button>
         </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl bg-slate-50 px-4 py-3">
+            <div className="text-xs font-bold text-slate-500">
+              Open items
+            </div>
+            <div className="mt-1 text-xl font-black text-slate-950">
+              {activeItems.length}
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-4 py-3">
+            <div className="text-xs font-bold text-slate-500">
+              Completed
+            </div>
+            <div className="mt-1 text-xl font-black text-slate-950">
+              {completedItems.length}
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-4 py-3">
+            <div className="text-xs font-bold text-slate-500">
+              Remaining spend
+            </div>
+            <div className="mt-1 text-xl font-black text-slate-950">
+              {money(outstandingEstimatedSpend)}
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-4 py-3">
+            <div className="text-xs font-bold text-slate-500">
+              Completed spend
+            </div>
+            <div className="mt-1 text-xl font-black text-slate-950">
+              {money(completedSpend)}
+            </div>
+          </div>
+        </div>
+
+        {nextScheduledItem ? (
+          <div className="mt-4 flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">
+                Next scheduled
+              </div>
+              <div className="mt-1 text-sm font-extrabold text-slate-950">
+                {nextScheduledItem.description}
+              </div>
+            </div>
+
+            <div className="text-sm font-bold text-slate-600">
+              {new Date(
+                `${nextScheduledItem.scheduledDate}T12:00:00`,
+              ).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {workItems.length === 0 ? (
           <button

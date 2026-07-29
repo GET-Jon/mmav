@@ -49,7 +49,7 @@ export default async function MindfulInventoryPage() {
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
       <AppTopNav
-        active="pipeline"
+        active="inventory"
         userEmail={access.userEmail}
       />
 
