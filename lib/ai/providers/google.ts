@@ -1,17 +1,15 @@
 import { GoogleGenAI } from "@google/genai";
-import type { AiTextClient, GenerateTextInput, GenerateTextResult } from "../types";
+import type {
+  AiTextClient,
+  GenerateTextInput,
+  GenerateTextResult,
+} from "../types";
 
 export class GoogleAiTextClient implements AiTextClient {
   private readonly apiKey: string;
   private readonly model: string;
 
-  constructor({
-    apiKey,
-    model,
-  }: {
-    apiKey: string;
-    model: string;
-  }) {
+  constructor({ apiKey, model }: { apiKey: string; model: string }) {
     this.apiKey = apiKey;
     this.model = model;
   }
@@ -26,6 +24,7 @@ export class GoogleAiTextClient implements AiTextClient {
         systemInstruction: input.system,
         temperature: input.temperature ?? 0.2,
         maxOutputTokens: input.maxOutputTokens ?? 500,
+        responseMimeType: input.responseMimeType,
         thinkingConfig: {
           thinkingBudget: 0,
         },

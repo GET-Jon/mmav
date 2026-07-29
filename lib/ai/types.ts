@@ -7,6 +7,7 @@ export type GenerateTextInput = {
   prompt: string;
   temperature?: number;
   maxOutputTokens?: number;
+  responseMimeType?: "text/plain" | "application/json";
 };
 
 export type GenerateTextResult = {
