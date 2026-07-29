@@ -61,7 +61,7 @@ function getGoogleClient() {
 
   return new GoogleAiTextClient({
     apiKey,
-    model: process.env.AI_MODEL ?? "gemini-2.5-flash",
+    model: process.env.AI_MODEL ?? "gemini-3.1-flash-lite",
   });
 }
 
