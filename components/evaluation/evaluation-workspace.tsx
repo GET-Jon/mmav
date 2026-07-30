@@ -271,15 +271,18 @@ function ScoreRing({
   label,
   score,
   tone,
+  isEmpty = false,
 }: {
   label: string;
   score: number;
   tone: "green" | "blue";
+  isEmpty?: boolean;
 }) {
   const normalizedScore = Math.max(0, Math.min(100, score));
 
-  const ringColor =
-    normalizedScore < 40
+  const ringColor = isEmpty
+    ? "#cbd5e1"
+    : normalizedScore < 40
       ? "#dc2626"
       : normalizedScore < 65
         ? "#d97706"
@@ -301,11 +304,13 @@ function ScoreRing({
       >
         <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-white shadow-inner">
           <div>
-            <div className="text-[25px] font-black leading-none tracking-[-0.04em] text-slate-950">
-              {normalizedScore}
+            <div className={`text-[25px] font-black leading-none tracking-[-0.04em] ${
+              isEmpty ? "text-slate-400" : "text-slate-950"
+            }`}>
+              {isEmpty ? "—" : normalizedScore}
             </div>
             <div className="mt-1 text-[10px] font-bold text-slate-400">
-              /100
+              {isEmpty ? "Not calculated" : "/100"}
             </div>
           </div>
         </div>
@@ -2300,22 +2305,31 @@ export function EvaluationWorkspace({
     return compWithImage?.imageUrl?.trim() || "";
   }, [comps]);
 
-  const decisionBadgeTone =
-    valuation.decision === "Pass"
+  const hasEvaluationData = Boolean(
+    (vehicleYear && vehicleMake && vehicleModel) ||
+    valuationInput.currentBid > 0 ||
+    comps.length > 0,
+  );
+
+  const decisionBadgeTone = !hasEvaluationData
+    ? "bg-slate-100 text-slate-600"
+    : valuation.decision === "Pass"
       ? "bg-red-100 text-red-700"
       : valuation.decision === "Watch / Stretch Only"
         ? "bg-amber-100 text-amber-700"
         : "bg-emerald-100 text-emerald-700";
 
-  const decisionBannerTone =
-    valuation.decision === "Pass"
+  const decisionBannerTone = !hasEvaluationData
+    ? "border-slate-200 bg-white text-slate-950"
+    : valuation.decision === "Pass"
       ? "border-red-200/80 bg-red-50/70 text-red-950"
       : valuation.decision === "Watch / Stretch Only"
         ? "border-amber-200/80 bg-amber-50/70 text-amber-950"
         : "border-emerald-200/80 bg-emerald-50/70 text-emerald-950";
 
-  const decisionTextTone =
-    valuation.decision === "Pass"
+  const decisionTextTone = !hasEvaluationData
+    ? "text-slate-400"
+    : valuation.decision === "Pass"
       ? "text-red-700"
       : valuation.decision === "Watch / Stretch Only"
         ? "text-amber-700"
@@ -2328,12 +2342,6 @@ export function EvaluationWorkspace({
 
   const targetProfitForScore = Math.max(valuationInput.targetProfit || 0, 1);
   const profitRatio = valuation.expectedGrossProfit / targetProfitForScore;
-
-  const hasEvaluationData = Boolean(
-    (vehicleYear && vehicleMake && vehicleModel) ||
-    valuationInput.currentBid > 0 ||
-    comps.length > 0,
-  );
 
   const profitabilityScore =
     valuation.expectedGrossProfit <= 0
@@ -2484,9 +2492,10 @@ export function EvaluationWorkspace({
     },
   };
 
-  const suggestedBidDisplay =
-    valuationInput.currentBid <= 0
-      ? "Enter bid to see range"
+  const suggestedBidDisplay = !hasEvaluationData
+    ? "—"
+    : valuationInput.currentBid <= 0
+      ? "Enter bid to calculate"
       : suggestedBid > 0
         ? money(suggestedBid)
         : "No Bid";
@@ -2559,8 +2568,9 @@ export function EvaluationWorkspace({
     }
   }
 
-  const lotLogicLabel =
-    valuation.decision === "Pass"
+  const lotLogicLabel = !hasEvaluationData
+    ? "AWAITING EVALUATION"
+    : valuation.decision === "Pass"
       ? "PASS"
       : valuation.decision === "Watch / Stretch Only"
         ? "WATCH CLOSELY"
@@ -2573,7 +2583,7 @@ export function EvaluationWorkspace({
             ? ` (${compSummary.includedCount} included)`
             : ""
         }`
-      : "Pending";
+      : "—";
 
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
@@ -3820,7 +3830,9 @@ export function EvaluationWorkspace({
                         : "text-red-700"
                     }`}
                   >
-                    {money(valuation.expectedGrossProfit)}
+                    {hasEvaluationData
+                      ? money(valuation.expectedGrossProfit)
+                      : "—"}
                   </div>
                 </div>
               </div>
@@ -4179,17 +4191,17 @@ export function EvaluationWorkspace({
 
               <dl className="mt-5 space-y-2.5 text-sm">
                 {[
-                  ["VIN", vin || "Pending"],
+                  ["VIN", vin || "—"],
                   [
                     "Mileage",
                     targetMileage
                       ? `${formatNumberInput(targetMileage)} mi`
-                      : "Pending",
+                      : "—",
                   ],
-                  ["Drivetrain", decodedVehicle?.driveType || "Pending"],
-                  ["Body Style", simplifiedVehicleBodyClass || "Pending"],
-                  ["Trim", vehicleTrim || "Pending"],
-                  ["Source", auctionSite || "Pending"],
+                  ["Drivetrain", decodedVehicle?.driveType || "—"],
+                  ["Body Style", simplifiedVehicleBodyClass || "—"],
+                  ["Trim", vehicleTrim || "—"],
+                  ["Source", auctionSite || "—"],
                 ].map(([label, value]) => (
                   <div key={label} className="grid grid-cols-[105px_1fr] gap-3">
                     <dt className="font-semibold text-slate-500">{label}</dt>
@@ -4218,7 +4230,7 @@ export function EvaluationWorkspace({
                 <span
                   className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-black ${decisionBadgeTone}`}
                 >
-                  ✓ {lotLogicLabel}
+                  {hasEvaluationData ? "✓ " : ""}{lotLogicLabel}
                 </span>
               </div>
 
@@ -4229,7 +4241,11 @@ export function EvaluationWorkspace({
                   </div>
 
                   <div
-                    className={`mt-2 text-[25px] font-black tracking-[-0.04em] ${decisionTextTone}`}
+                    className={`mt-2 font-black tracking-[-0.04em] ${decisionTextTone} ${
+                      valuationInput.currentBid <= 0 && hasEvaluationData
+                        ? "text-sm"
+                        : "text-[25px]"
+                    }`}
                   >
                     {suggestedBidDisplay}
                   </div>
@@ -4241,7 +4257,9 @@ export function EvaluationWorkspace({
                   </div>
 
                   <div className="mt-2 text-[25px] font-black tracking-[-0.04em] text-slate-950">
-                    {finalTargetUsed > 0 ? money(finalTargetUsed) : "Pending"}
+                    {hasEvaluationData && finalTargetUsed > 0
+                      ? money(finalTargetUsed)
+                      : "—"}
                   </div>
                 </div>
 
@@ -4279,7 +4297,7 @@ export function EvaluationWorkspace({
               <button
                 type="button"
                 onClick={saveEvaluation}
-                disabled={saveLoading}
+                disabled={saveLoading || !hasEvaluationData}
                 className={`mt-5 w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
                   valuation.decision === "Pass"
                     ? "bg-red-700 hover:bg-red-800"
@@ -4298,13 +4316,16 @@ export function EvaluationWorkspace({
               <button
                 type="button"
                 onClick={openConditionProfitability}
-                className="mt-2 w-full rounded-xl border border-current/15 bg-white/75 px-4 py-2.5 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-white"
+                disabled={!hasEvaluationData}
+                className="mt-2 w-full rounded-xl border border-current/15 bg-white/75 px-4 py-2.5 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
               >
-                Condition &amp; Profitability
+                View Cost &amp; Profit Breakdown
               </button>
 
               <div className="mt-2 text-center text-[10px] font-semibold text-slate-500">
-                Based on market data, condition, reconditioning, and risk.
+                {hasEvaluationData
+                  ? "Based on market data, visible costs, condition, and dealer fit."
+                  : "Enter vehicle details and run an evaluation to calculate the bid, sale value, and projected profit."}
               </div>
 
               {saveStatus ? (
@@ -4336,7 +4357,7 @@ export function EvaluationWorkspace({
                   <dd className="text-right font-black text-slate-950">
                     {comps.length
                       ? money(compSummary.averageAdjusted)
-                      : "Pending"}
+                      : "—"}
                   </dd>
                 </div>
 
@@ -4345,7 +4366,7 @@ export function EvaluationWorkspace({
                     Adj. Retail Value:
                   </dt>
                   <dd className="text-right font-black text-emerald-700">
-                    {finalTargetUsed > 0 ? money(finalTargetUsed) : "Pending"}
+                    {hasEvaluationData && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}
                   </dd>
                 </div>
               </dl>
@@ -4355,21 +4376,24 @@ export function EvaluationWorkspace({
                   label="Profitability Score"
                   score={profitabilityScoreDisplay}
                   tone="green"
+                  isEmpty={!hasEvaluationData}
                 />
 
                 <ScoreRing
                   label="Dealer-Fit Score"
                   score={dealerFitScoreDisplay}
                   tone="blue"
+                  isEmpty={!hasEvaluationData}
                 />
               </div>
 
               <button
                 type="button"
                 onClick={() => setBidLogicOpen(true)}
-                className="mx-auto mt-4 block text-xs font-extrabold text-blue-700 hover:text-blue-900"
+                disabled={!hasEvaluationData}
+                className="mx-auto mt-4 block text-xs font-extrabold text-blue-700 hover:text-blue-900 disabled:cursor-not-allowed disabled:text-slate-400"
               >
-                View Scoring details →
+                View Scoring Details →
               </button>
             </article>
           </section>
@@ -4384,38 +4408,50 @@ export function EvaluationWorkspace({
                         Mindful Intelligence
                       </div>
 
-                      <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">
-                        {mindfulIntelligencePreview
-                          ? "Profile match"
-                          : "General Mindful read"}
-                      </span>
+                      {hasEvaluationData ? (
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">
+                          {mindfulIntelligencePreview
+                            ? "Profile match"
+                            : "General Mindful read"}
+                        </span>
+                      ) : null}
                     </div>
 
                     <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-slate-950">
-                      {mindfulIntelligenceDisplay.title}
+                      {hasEvaluationData
+                        ? mindfulIntelligenceDisplay.title
+                        : "Available after evaluation"}
                     </h2>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700">
-                      {mindfulIntelligenceDisplay.verdict.replaceAll("_", " ")}
-                    </span>
+                  {hasEvaluationData ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700">
+                        {mindfulIntelligenceDisplay.verdict.replaceAll("_", " ")}
+                      </span>
 
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
-                      {mindfulIntelligenceDisplay.confidence} confidence
-                    </span>
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
+                        {mindfulIntelligenceDisplay.confidence} confidence
+                      </span>
 
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-500">
-                      {mindfulIntelligenceDisplay.matchLevel.replaceAll(
-                        "_",
-                        " ",
-                      )}{" "}
-                      match
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-500">
+                        {mindfulIntelligenceDisplay.matchLevel.replaceAll(
+                          "_",
+                          " ",
+                        )}{" "}
+                        match
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Awaiting evaluation
                     </span>
-                  </div>
+                  )}
                 </div>
               </div>
 
+              {hasEvaluationData ? (
+                <>
               <div className="border-b border-violet-100 px-5">
                 <div
                   className="flex gap-6"
@@ -4653,6 +4689,21 @@ export function EvaluationWorkspace({
                   </div>
                 </div>
               ) : null}
+                </>
+              ) : (
+                <div className="px-5 py-8">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-7 text-center">
+                    <div className="text-sm font-bold text-slate-700">
+                      Mindful perspective, deal thesis, and priority checks will
+                      appear here after the vehicle and market data are evaluated.
+                    </div>
+
+                    <div className="mt-2 text-xs font-semibold text-slate-500">
+                      Run an evaluation to generate vehicle-specific guidance.
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <SectionCard
