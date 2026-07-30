@@ -9,7 +9,10 @@ function getAiClient(): AiTextClient {
   const provider = (
     process.env.AI_PROVIDER ?? "google"
   ).toLowerCase() as AiProvider;
-  const model = process.env.AI_MODEL ?? "gemini-3.1-flash-lite";
+  const model = (process.env.AI_MODEL ?? "gemini-3.1-flash-lite")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^models\//, "");
 
   if (provider === "google") {
     const apiKey =

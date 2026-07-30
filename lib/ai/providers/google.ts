@@ -15,6 +15,8 @@ export class GoogleAiTextClient implements AiTextClient {
   }
 
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
+    console.info("[AI] Generating with model:", JSON.stringify(this.model));
+
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
 
     const response = await ai.models.generateContent({
