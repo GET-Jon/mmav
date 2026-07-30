@@ -415,6 +415,13 @@ type SavedEvaluationPayload = {
   selectedConditions?: string[];
   conditionAssessments?: ConditionAssessments;
   conditionAssessmentsTouched?: boolean;
+  conditionSourceText?: string;
+  conditionAnalysis?: ConditionAnalysis | null;
+  originalConditionAnalysis?: ConditionAnalysis | null;
+  conditionPlanningEstimateOverride?: number | null;
+  conditionReadyDaysLowOverride?: number | null;
+  conditionReadyDaysHighOverride?: number | null;
+  conditionAnalysisApplied?: boolean;
   notes?: string;
 };
 
@@ -616,24 +623,45 @@ export function EvaluationWorkspace({
   const [conditionModalTab, setConditionModalTab] = useState<"ai" | "manual">(
     "ai",
   );
-  const [conditionSourceText, setConditionSourceText] = useState("");
+  const [conditionSourceText, setConditionSourceText] = useState(
+    initialSavedPayload?.conditionSourceText || "",
+  );
   const [conditionAnalysis, setConditionAnalysis] =
-    useState<ConditionAnalysis | null>(null);
+    useState<ConditionAnalysis | null>(
+      initialSavedPayload?.conditionAnalysis || null,
+    );
   const [originalConditionAnalysis, setOriginalConditionAnalysis] =
-    useState<ConditionAnalysis | null>(null);
+    useState<ConditionAnalysis | null>(
+      initialSavedPayload?.originalConditionAnalysis ||
+        initialSavedPayload?.conditionAnalysis ||
+        null,
+    );
   const [
     conditionPlanningEstimateOverride,
     setConditionPlanningEstimateOverride,
-  ] = useState<number | null>(null);
+  ] = useState<number | null>(
+    typeof initialSavedPayload?.conditionPlanningEstimateOverride === "number"
+      ? initialSavedPayload.conditionPlanningEstimateOverride
+      : null,
+  );
   const [conditionReadyDaysLowOverride, setConditionReadyDaysLowOverride] =
-    useState<number | null>(null);
+    useState<number | null>(
+      typeof initialSavedPayload?.conditionReadyDaysLowOverride === "number"
+        ? initialSavedPayload.conditionReadyDaysLowOverride
+        : null,
+    );
   const [conditionReadyDaysHighOverride, setConditionReadyDaysHighOverride] =
-    useState<number | null>(null);
+    useState<number | null>(
+      typeof initialSavedPayload?.conditionReadyDaysHighOverride === "number"
+        ? initialSavedPayload.conditionReadyDaysHighOverride
+        : null,
+    );
   const [conditionAnalysisLoading, setConditionAnalysisLoading] =
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
-  const [conditionAnalysisApplied, setConditionAnalysisApplied] =
-    useState(false);
+  const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
+    Boolean(initialSavedPayload?.conditionAnalysisApplied),
+  );
   const [conditionAssessments, setConditionAssessments] =
     useState<ConditionAssessments>(
       initialSavedPayload?.conditionAssessments || initialConditionAssessments,
@@ -815,6 +843,47 @@ export function EvaluationWorkspace({
         setConditionAssessmentsTouched(draft.conditionAssessmentsTouched);
       }
 
+      if (typeof draft.conditionSourceText === "string") {
+        setConditionSourceText(draft.conditionSourceText);
+      }
+
+      if (draft.conditionAnalysis) {
+        setConditionAnalysis(draft.conditionAnalysis);
+      }
+
+      if (draft.originalConditionAnalysis) {
+        setOriginalConditionAnalysis(draft.originalConditionAnalysis);
+      } else if (draft.conditionAnalysis) {
+        setOriginalConditionAnalysis(draft.conditionAnalysis);
+      }
+
+      if (
+        typeof draft.conditionPlanningEstimateOverride === "number" ||
+        draft.conditionPlanningEstimateOverride === null
+      ) {
+        setConditionPlanningEstimateOverride(
+          draft.conditionPlanningEstimateOverride,
+        );
+      }
+
+      if (
+        typeof draft.conditionReadyDaysLowOverride === "number" ||
+        draft.conditionReadyDaysLowOverride === null
+      ) {
+        setConditionReadyDaysLowOverride(draft.conditionReadyDaysLowOverride);
+      }
+
+      if (
+        typeof draft.conditionReadyDaysHighOverride === "number" ||
+        draft.conditionReadyDaysHighOverride === null
+      ) {
+        setConditionReadyDaysHighOverride(draft.conditionReadyDaysHighOverride);
+      }
+
+      if (typeof draft.conditionAnalysisApplied === "boolean") {
+        setConditionAnalysisApplied(draft.conditionAnalysisApplied);
+      }
+
       if (typeof draft.notes === "string") {
         setNotes(draft.notes);
       }
@@ -849,6 +918,13 @@ export function EvaluationWorkspace({
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
+          conditionSourceText,
+          conditionAnalysis,
+          originalConditionAnalysis,
+          conditionPlanningEstimateOverride,
+          conditionReadyDaysLowOverride,
+          conditionReadyDaysHighOverride,
+          conditionAnalysisApplied,
           notes,
           marketCheckStatus,
           marketCheckSearchMeta,
@@ -870,6 +946,13 @@ export function EvaluationWorkspace({
     selectedConditions,
     conditionAssessments,
     conditionAssessmentsTouched,
+    conditionSourceText,
+    conditionAnalysis,
+    originalConditionAnalysis,
+    conditionPlanningEstimateOverride,
+    conditionReadyDaysLowOverride,
+    conditionReadyDaysHighOverride,
+    conditionAnalysisApplied,
     notes,
     marketCheckStatus,
     marketCheckSearchMeta,
@@ -966,16 +1049,20 @@ export function EvaluationWorkspace({
       hasAvoidFlag: Boolean(evaluation.hasAvoidFlag),
       costs: {
         ...evaluation.costs,
+
+        // Fixed detailing and ordinary sale preparation remain separate.
+        detailAdmin: evaluation.costs.detailAdmin,
+
+        // Only actual identified condition issues populate these buckets.
         recon: conditionAssessmentsTouched
           ? conditionAssessments.mechanical.reserve
-          : evaluation.costs.recon,
-        detailAdmin: conditionAssessmentsTouched
+          : 0,
+        conditionRiskAdd: conditionAssessmentsTouched
           ? conditionAssessments.cosmetic.reserve
-          : evaluation.costs.detailAdmin,
+          : 0,
         titleHistoryRiskAdd: conditionAssessmentsTouched
           ? conditionAssessments.history.reserve
-          : evaluation.costs.titleHistoryRiskAdd,
-        conditionRiskAdd: 0,
+          : 0,
       },
     };
   }, [
@@ -1078,17 +1165,28 @@ export function EvaluationWorkspace({
   ): ValuationInput {
     return {
       ...previous,
-      targetProfit: Math.max(
-        costDefault.targetProfit,
-        assumptions.bidSettings.minimumTargetProfit || 0,
-      ),
+      // The user's selected desired profit is authoritative.
+      // Vehicle profiles must not silently increase it.
+      targetProfit: previous.targetProfit,
       costs: {
         ...previous.costs,
+
+        // Baseline acquisition and sale-preparation costs.
         auctionFee: costDefault.auctionFee,
         transport: costDefault.transport,
-        recon: costDefault.recon,
         detailAdmin: costDefault.detailAdmin,
-        generalRiskReserve: costDefault.riskReserve,
+
+        // Do not create speculative repair costs from a vehicle profile.
+        // Reconditioning costs must come from actual AI/manual condition issues.
+        recon: 0,
+
+        // Small transparent contingency for incidental undisclosed needs.
+        generalRiskReserve: 500,
+
+        // These remain zero unless supported by an actual identified issue.
+        brandRiskAdd: 0,
+        titleHistoryRiskAdd: 0,
+        conditionRiskAdd: 0,
       },
     };
   }
@@ -1780,17 +1878,7 @@ export function EvaluationWorkspace({
 
   function openConditionAnalysis() {
     if (!conditionAssessmentsTouched) {
-      setConditionAssessments({
-        mechanical: assessmentFromReserve("mechanical", evaluation.costs.recon),
-        cosmetic: assessmentFromReserve(
-          "cosmetic",
-          evaluation.costs.detailAdmin,
-        ),
-        history: assessmentFromReserve(
-          "history",
-          evaluation.costs.titleHistoryRiskAdd,
-        ),
-      });
+      setConditionAssessments(initialConditionAssessments);
     }
 
     setConditionModalTab("ai");
@@ -2013,17 +2101,7 @@ export function EvaluationWorkspace({
 
   function openConditionProfitability() {
     if (!conditionAssessmentsTouched) {
-      setConditionAssessments({
-        mechanical: assessmentFromReserve("mechanical", evaluation.costs.recon),
-        cosmetic: assessmentFromReserve(
-          "cosmetic",
-          evaluation.costs.detailAdmin,
-        ),
-        history: assessmentFromReserve(
-          "history",
-          evaluation.costs.titleHistoryRiskAdd,
-        ),
-      });
+      setConditionAssessments(initialConditionAssessments);
     }
 
     setConditionProfitabilityOpen(true);
@@ -2092,6 +2170,13 @@ export function EvaluationWorkspace({
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
+          conditionSourceText,
+          conditionAnalysis,
+          originalConditionAnalysis,
+          conditionPlanningEstimateOverride,
+          conditionReadyDaysLowOverride,
+          conditionReadyDaysHighOverride,
+          conditionAnalysisApplied,
           notes,
           auctionUrl: "",
           auctionEndsAt: null,
@@ -2116,27 +2201,20 @@ export function EvaluationWorkspace({
     }
   }
 
-  function clearLocalDraft() {
-    try {
-      window.localStorage.removeItem(draftStorageKey);
-    } catch (error) {
-      console.error("Failed to clear local evaluator draft:", error);
-    }
+  function resetPreviousEvaluationResults() {
+    // Prevent stale search state from carrying into another vehicle.
+    marketCheckInFlightRef.current = false;
 
-    setVin("");
-    setAuctionSite("ACV Auctions");
-    setFinalTargetOverride(null);
-    setDecodedVehicle(null);
-    setManualVehicle(initialManualVehicle);
-    setVehicleThumbnailUrl("");
-    setVehicleThumbnailError("");
-    setVehicleThumbnailLoading(false);
-    setTargetMileage(initialTargetMileage);
-    setEvaluation(initialEvaluation);
     setComps(initialComps);
+    setMarketCheckStatus("");
+    setMarketCheckSearchMeta(null);
+    setMarketCheckApiUsage(null);
+    setMarketCheckLoading(false);
+
     setSelectedConditions(initialSelectedConditions);
     setConditionAssessments(initialConditionAssessments);
     setConditionAssessmentsTouched(false);
+
     setConditionProfitabilityOpen(false);
     setConditionModalTab("ai");
     setConditionSourceText("");
@@ -2148,13 +2226,61 @@ export function EvaluationWorkspace({
     setConditionAnalysisError("");
     setConditionAnalysisLoading(false);
     setConditionAnalysisApplied(false);
-    setMarketCheckStatus("");
-    setMarketCheckSearchMeta(null);
-    setMarketCheckApiUsage(null);
+
+    setNotes("");
+    setAiSummaryLoadingMode(null);
+    setAiSummaryError("");
+    setActiveThesisMode("financial");
+    setActiveMindfulIntelligenceTab("perspective");
+
+    setVehicleThumbnailUrl("");
+    setVehicleThumbnailError("");
+    setVehicleThumbnailLoading(false);
+    setVinDecodeError("");
+    setVinDecodeLoading(false);
+
+    setVehicleDetailsOpen(false);
+    setBidLogicOpen(false);
+    setMethodologyOpen(false);
+    setMethodologySaving(false);
+    setMethodologyStatus("");
+
+    setAppliedVehicleProfile(null);
+    setFinalTargetOverride(null);
+
     setSavedEvaluationId(null);
     setSaveStatus("");
-    setNotes("");
-    setAppliedVehicleProfile(null);
+    setSaveLoading(false);
+
+    // Reset calculated valuation data while retaining inputs entered for
+    // the vehicle that is about to be evaluated.
+    setEvaluation((previous) => ({
+      ...initialEvaluation,
+      currentBid: previous.currentBid,
+      targetProfit: previous.targetProfit,
+      targetResaleUsed: 0,
+      costs: {
+        ...initialEvaluation.costs,
+      },
+    }));
+  }
+
+  function clearLocalDraft() {
+    try {
+      window.localStorage.removeItem(draftStorageKey);
+    } catch (error) {
+      console.error("Failed to clear local evaluator draft:", error);
+    }
+
+    resetPreviousEvaluationResults();
+
+    setVin("");
+    setAuctionSite("ACV Auctions");
+    setDecodedVehicle(null);
+    setManualVehicle(initialManualVehicle);
+    setTargetMileage(initialTargetMileage);
+    setEvaluation(initialEvaluation);
+    setQuickEvalMode("vin");
   }
 
   const representativeCompImage = useMemo(() => {
@@ -3897,14 +4023,6 @@ export function EvaluationWorkspace({
               <button
                 type="button"
                 onClick={async () => {
-                  setComps([]);
-                  setMarketCheckSearchMeta(null);
-                  setMarketCheckApiUsage(null);
-                  setMarketCheckStatus("");
-                  setVinDecodeError("");
-                  setVehicleThumbnailUrl("");
-                  setVehicleThumbnailError("");
-
                   if (quickEvalMode === "manual") {
                     const manualOverride = {
                       year: String(manualVehicle.year || "").trim(),
@@ -3924,6 +4042,8 @@ export function EvaluationWorkspace({
                       );
                       return;
                     }
+
+                    resetPreviousEvaluationResults();
 
                     setDecodedVehicle(null);
                     setVin("");
@@ -3950,6 +4070,8 @@ export function EvaluationWorkspace({
                     await pullMarketCheckComps(manualOverride);
                     return;
                   }
+
+                  resetPreviousEvaluationResults();
 
                   const newlyDecodedVehicle = await decodeVinFromBasics();
 
@@ -4125,7 +4247,7 @@ export function EvaluationWorkspace({
 
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Profit at Current Bid
+                    Projected Profit
                   </div>
 
                   <div

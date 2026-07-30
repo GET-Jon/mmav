@@ -27,9 +27,12 @@ export function calculateTotalCostAdders(input: ValuationInput) {
 export function calculateRiskGrade(
   totalRiskPoints: number,
   hasAvoidFlag: boolean,
-  assumptions: Assumptions
+  assumptions: Assumptions,
 ): RiskGrade {
-  if (hasAvoidFlag || totalRiskPoints >= assumptions.bidSettings.avoidRiskThreshold) {
+  if (
+    hasAvoidFlag ||
+    totalRiskPoints >= assumptions.bidSettings.avoidRiskThreshold
+  ) {
     return "High/Avoid";
   }
 
@@ -78,7 +81,7 @@ export function calculateDecision({
 
 export function calculateValuation(
   input: ValuationInput,
-  assumptions: Assumptions
+  assumptions: Assumptions,
 ): ValuationOutput {
   const totalCostAdders = calculateTotalCostAdders(input);
   const allInCost = input.currentBid + totalCostAdders;
@@ -87,27 +90,22 @@ export function calculateValuation(
   const riskGrade = calculateRiskGrade(
     input.totalRiskPoints,
     Boolean(input.hasAvoidFlag),
-    assumptions
+    assumptions,
   );
 
-  const highRiskProfitAdd =
-    riskGrade === "High" || riskGrade === "High/Avoid"
-      ? assumptions.bidSettings.highRiskProfitAdd
-      : 0;
-
+  // Transparent bid ceiling:
+  // selected sale value
+  // minus explicit costs
+  // minus the user's selected target profit.
   const maxSmartBidRaw =
-    input.targetResaleUsed -
-    input.targetProfit -
-    highRiskProfitAdd -
-    totalCostAdders;
+    input.targetResaleUsed - input.targetProfit - totalCostAdders;
 
   const maxSmartBid = roundToNearest(maxSmartBidRaw);
-  const safeBid = roundToNearest(
-    maxSmartBid * (1 - assumptions.bidSettings.safeBidDiscount)
-  );
-  const stretchBid = roundToNearest(
-    maxSmartBid * (1 + assumptions.bidSettings.stretchBidPremium)
-  );
+
+  // Retain these fields temporarily for UI/type compatibility.
+  // They no longer introduce separate hidden bid cushions.
+  const safeBid = maxSmartBid;
+  const stretchBid = maxSmartBid;
 
   const decision = calculateDecision({
     currentBid: input.currentBid,
