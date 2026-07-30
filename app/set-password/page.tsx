@@ -61,7 +61,7 @@ function SetPasswordForm() {
         <div className="mb-6">
           <div className="text-2xl font-black">Set Your Password</div>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Create a password for your MMAV account. You can still use magic
+            Create a password for your Lot Logic account. You can still use magic
             link login later if preferred.
           </p>
         </div>

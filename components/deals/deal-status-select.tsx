@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+
+import { PurchaseConfirmationModal } from "@/components/mindful-inventory/purchase-confirmation-modal";
 
 const statusOptions = [
   { value: "watching", label: "Watching" },
@@ -42,18 +44,30 @@ export function DealStatusSelect({
 }: {
   evaluationId: string;
   status?: string | null;
-  onStatusChange?: (evaluationId: string, status: string) => void;
+  onStatusChange?: (
+    evaluationId: string,
+    status: string,
+  ) => void;
 }) {
   const normalizedStatus = normalizeStatus(status);
-  const [localStatus, setLocalStatus] = useState(normalizedStatus);
+
+  const [localStatus, setLocalStatus] =
+    useState(normalizedStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [purchaseModalOpen, setPurchaseModalOpen] =
+    useState(false);
 
-  useEffect(() => {
-    setLocalStatus(normalizedStatus);
-  }, [normalizedStatus]);
+  const closePurchaseModal = useCallback(() => {
+    if (saving) {
+      return;
+    }
 
-  async function updateStatus(nextStatus: string) {
+    setPurchaseModalOpen(false);
+    setError("");
+  }, [saving]);
+
+  async function updateStandardStatus(nextStatus: string) {
     const previousStatus = localStatus;
 
     setLocalStatus(nextStatus);
@@ -61,21 +75,26 @@ export function DealStatusSelect({
     setError("");
 
     try {
-      const response = await fetch("/api/evaluations/status", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "/api/evaluations/status",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: evaluationId,
+            status: nextStatus,
+          }),
         },
-        body: JSON.stringify({
-          id: evaluationId,
-          status: nextStatus,
-        }),
-      });
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Status update failed.");
+        throw new Error(
+          data.error || "Status update failed.",
+        );
       }
 
       onStatusChange?.(evaluationId, nextStatus);
@@ -84,33 +103,111 @@ export function DealStatusSelect({
       setError(
         updateError instanceof Error
           ? updateError.message
-          : "Status update failed."
+          : "Status update failed.",
       );
     } finally {
       setSaving(false);
     }
   }
 
-  return (
-    <div className="space-y-1">
-      <select
-        value={localStatus}
-        disabled={saving}
-        onChange={(event) => updateStatus(event.target.value)}
-        className={`w-full rounded-full border px-3 py-1.5 text-sm font-bold outline-none ${statusClass(
-          localStatus
-        )}`}
-      >
-        {statusOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+  async function confirmPurchaseAndImport() {
+    setSaving(true);
+    setError("");
 
-      {error ? (
-        <div className="text-xs font-semibold text-red-600">{error}</div>
-      ) : null}
-    </div>
+    try {
+      const response = await fetch(
+        "/api/mindful/inventory/import-evaluation",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            evaluationId,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Failed to add vehicle to Inventory.",
+        );
+      }
+
+      setLocalStatus("purchased");
+      setPurchaseModalOpen(false);
+      onStatusChange?.(evaluationId, "purchased");
+    } catch (purchaseError) {
+      setError(
+        purchaseError instanceof Error
+          ? purchaseError.message
+          : "Failed to add vehicle to Inventory.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleSelection(nextStatus: string) {
+    setError("");
+
+    if (
+      nextStatus === "purchased" &&
+      localStatus !== "purchased"
+    ) {
+      setPurchaseModalOpen(true);
+      return;
+    }
+
+    if (nextStatus === localStatus) {
+      return;
+    }
+
+    void updateStandardStatus(nextStatus);
+  }
+
+  return (
+    <>
+      <div className="space-y-1">
+        <select
+          value={localStatus}
+          disabled={saving}
+          onChange={(event) =>
+            handleSelection(event.target.value)
+          }
+          className={`w-full rounded-full border px-3 py-1.5 text-sm font-bold outline-none ${statusClass(
+            localStatus,
+          )}`}
+        >
+          {statusOptions.map((option) => (
+            <option
+              key={option.value}
+              value={option.value}
+            >
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        {error && !purchaseModalOpen ? (
+          <div className="text-xs font-semibold text-red-600">
+            {error}
+          </div>
+        ) : null}
+      </div>
+
+      <PurchaseConfirmationModal
+        open={purchaseModalOpen}
+        saving={saving}
+        error={purchaseModalOpen ? error : ""}
+        onCancel={closePurchaseModal}
+        onConfirm={() => {
+          void confirmPurchaseAndImport();
+        }}
+      />
+    </>
   );
 }

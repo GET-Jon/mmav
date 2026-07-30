@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MMAV | Mindful Motor Co.",
-  description: "Mindful Motors auction valuation cockpit.",
+  title: "Lot Logic | Mindful Motor Co.",
+  description: "Vehicle acquisition intelligence for Mindful Motor Co.",
 };
 
 export default function RootLayout({

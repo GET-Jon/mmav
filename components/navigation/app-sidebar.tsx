@@ -42,9 +42,9 @@ export function AppSidebar({ active = "evaluator", userEmail = null }: AppSideba
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 bg-[#070b18] p-5 text-white lg:flex lg:flex-col">
       <div className="mb-9 flex items-center justify-center">
         <img
-          src="/mindful-badge-sm.png"
-          alt="Mindful Motors"
-          className="h-16 w-auto object-contain drop-shadow-sm"
+          src="/brand/lot-logic-logo.svg"
+          alt="Lot Logic by Mindful Motor Co."
+          className="h-auto w-full max-w-[210px] object-contain drop-shadow-sm"
         />
       </div>
 

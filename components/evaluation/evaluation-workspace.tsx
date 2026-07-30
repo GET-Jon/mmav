@@ -16,10 +16,15 @@ import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
+import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
 import { calculateValuation } from "@/lib/valuation";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
+import type {
+  ConditionAnalysis,
+  ConditionAnalysisIssue,
+} from "@/lib/ai/condition-analysis-types";
 
 const draftStorageKey = "mmav:evaluationDraft:v1";
 
@@ -410,6 +415,13 @@ type SavedEvaluationPayload = {
   selectedConditions?: string[];
   conditionAssessments?: ConditionAssessments;
   conditionAssessmentsTouched?: boolean;
+  conditionSourceText?: string;
+  conditionAnalysis?: ConditionAnalysis | null;
+  originalConditionAnalysis?: ConditionAnalysis | null;
+  conditionPlanningEstimateOverride?: number | null;
+  conditionReadyDaysLowOverride?: number | null;
+  conditionReadyDaysHighOverride?: number | null;
+  conditionAnalysisApplied?: boolean;
   notes?: string;
 };
 
@@ -608,6 +620,48 @@ export function EvaluationWorkspace({
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
   const [conditionProfitabilityOpen, setConditionProfitabilityOpen] =
     useState(false);
+  const [conditionModalTab, setConditionModalTab] = useState<"ai" | "manual">(
+    "ai",
+  );
+  const [conditionSourceText, setConditionSourceText] = useState(
+    initialSavedPayload?.conditionSourceText || "",
+  );
+  const [conditionAnalysis, setConditionAnalysis] =
+    useState<ConditionAnalysis | null>(
+      initialSavedPayload?.conditionAnalysis || null,
+    );
+  const [originalConditionAnalysis, setOriginalConditionAnalysis] =
+    useState<ConditionAnalysis | null>(
+      initialSavedPayload?.originalConditionAnalysis ||
+        initialSavedPayload?.conditionAnalysis ||
+        null,
+    );
+  const [
+    conditionPlanningEstimateOverride,
+    setConditionPlanningEstimateOverride,
+  ] = useState<number | null>(
+    typeof initialSavedPayload?.conditionPlanningEstimateOverride === "number"
+      ? initialSavedPayload.conditionPlanningEstimateOverride
+      : null,
+  );
+  const [conditionReadyDaysLowOverride, setConditionReadyDaysLowOverride] =
+    useState<number | null>(
+      typeof initialSavedPayload?.conditionReadyDaysLowOverride === "number"
+        ? initialSavedPayload.conditionReadyDaysLowOverride
+        : null,
+    );
+  const [conditionReadyDaysHighOverride, setConditionReadyDaysHighOverride] =
+    useState<number | null>(
+      typeof initialSavedPayload?.conditionReadyDaysHighOverride === "number"
+        ? initialSavedPayload.conditionReadyDaysHighOverride
+        : null,
+    );
+  const [conditionAnalysisLoading, setConditionAnalysisLoading] =
+    useState(false);
+  const [conditionAnalysisError, setConditionAnalysisError] = useState("");
+  const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
+    Boolean(initialSavedPayload?.conditionAnalysisApplied),
+  );
   const [conditionAssessments, setConditionAssessments] =
     useState<ConditionAssessments>(
       initialSavedPayload?.conditionAssessments || initialConditionAssessments,
@@ -640,6 +694,8 @@ export function EvaluationWorkspace({
   const [activeThesisMode, setActiveThesisMode] = useState<
     "financial" | "enthusiast"
   >("financial");
+  const [activeMindfulIntelligenceTab, setActiveMindfulIntelligenceTab] =
+    useState<"perspective" | "thesis" | "checks">("perspective");
   const [aiSummaryError, setAiSummaryError] = useState("");
 
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
@@ -787,6 +843,47 @@ export function EvaluationWorkspace({
         setConditionAssessmentsTouched(draft.conditionAssessmentsTouched);
       }
 
+      if (typeof draft.conditionSourceText === "string") {
+        setConditionSourceText(draft.conditionSourceText);
+      }
+
+      if (draft.conditionAnalysis) {
+        setConditionAnalysis(draft.conditionAnalysis);
+      }
+
+      if (draft.originalConditionAnalysis) {
+        setOriginalConditionAnalysis(draft.originalConditionAnalysis);
+      } else if (draft.conditionAnalysis) {
+        setOriginalConditionAnalysis(draft.conditionAnalysis);
+      }
+
+      if (
+        typeof draft.conditionPlanningEstimateOverride === "number" ||
+        draft.conditionPlanningEstimateOverride === null
+      ) {
+        setConditionPlanningEstimateOverride(
+          draft.conditionPlanningEstimateOverride,
+        );
+      }
+
+      if (
+        typeof draft.conditionReadyDaysLowOverride === "number" ||
+        draft.conditionReadyDaysLowOverride === null
+      ) {
+        setConditionReadyDaysLowOverride(draft.conditionReadyDaysLowOverride);
+      }
+
+      if (
+        typeof draft.conditionReadyDaysHighOverride === "number" ||
+        draft.conditionReadyDaysHighOverride === null
+      ) {
+        setConditionReadyDaysHighOverride(draft.conditionReadyDaysHighOverride);
+      }
+
+      if (typeof draft.conditionAnalysisApplied === "boolean") {
+        setConditionAnalysisApplied(draft.conditionAnalysisApplied);
+      }
+
       if (typeof draft.notes === "string") {
         setNotes(draft.notes);
       }
@@ -821,6 +918,13 @@ export function EvaluationWorkspace({
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
+          conditionSourceText,
+          conditionAnalysis,
+          originalConditionAnalysis,
+          conditionPlanningEstimateOverride,
+          conditionReadyDaysLowOverride,
+          conditionReadyDaysHighOverride,
+          conditionAnalysisApplied,
           notes,
           marketCheckStatus,
           marketCheckSearchMeta,
@@ -842,6 +946,13 @@ export function EvaluationWorkspace({
     selectedConditions,
     conditionAssessments,
     conditionAssessmentsTouched,
+    conditionSourceText,
+    conditionAnalysis,
+    originalConditionAnalysis,
+    conditionPlanningEstimateOverride,
+    conditionReadyDaysLowOverride,
+    conditionReadyDaysHighOverride,
+    conditionAnalysisApplied,
     notes,
     marketCheckStatus,
     marketCheckSearchMeta,
@@ -938,16 +1049,20 @@ export function EvaluationWorkspace({
       hasAvoidFlag: Boolean(evaluation.hasAvoidFlag),
       costs: {
         ...evaluation.costs,
+
+        // Fixed detailing and ordinary sale preparation remain separate.
+        detailAdmin: evaluation.costs.detailAdmin,
+
+        // Only actual identified condition issues populate these buckets.
         recon: conditionAssessmentsTouched
           ? conditionAssessments.mechanical.reserve
-          : evaluation.costs.recon,
-        detailAdmin: conditionAssessmentsTouched
+          : 0,
+        conditionRiskAdd: conditionAssessmentsTouched
           ? conditionAssessments.cosmetic.reserve
-          : evaluation.costs.detailAdmin,
+          : 0,
         titleHistoryRiskAdd: conditionAssessmentsTouched
           ? conditionAssessments.history.reserve
-          : evaluation.costs.titleHistoryRiskAdd,
-        conditionRiskAdd: 0,
+          : 0,
       },
     };
   }, [
@@ -1050,17 +1165,28 @@ export function EvaluationWorkspace({
   ): ValuationInput {
     return {
       ...previous,
-      targetProfit: Math.max(
-        costDefault.targetProfit,
-        assumptions.bidSettings.minimumTargetProfit || 0,
-      ),
+      // The user's selected desired profit is authoritative.
+      // Vehicle profiles must not silently increase it.
+      targetProfit: previous.targetProfit,
       costs: {
         ...previous.costs,
+
+        // Baseline acquisition and sale-preparation costs.
         auctionFee: costDefault.auctionFee,
         transport: costDefault.transport,
-        recon: costDefault.recon,
         detailAdmin: costDefault.detailAdmin,
-        generalRiskReserve: costDefault.riskReserve,
+
+        // Do not create speculative repair costs from a vehicle profile.
+        // Reconditioning costs must come from actual AI/manual condition issues.
+        recon: 0,
+
+        // Small transparent contingency for incidental undisclosed needs.
+        generalRiskReserve: 500,
+
+        // These remain zero unless supported by an actual identified issue.
+        brandRiskAdd: 0,
+        titleHistoryRiskAdd: 0,
+        conditionRiskAdd: 0,
       },
     };
   }
@@ -1208,7 +1334,22 @@ export function EvaluationWorkspace({
         }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+
+      if (!contentType.includes("application/json")) {
+        if (response.redirected || response.url.includes("/login")) {
+          throw new Error(
+            "Your session has expired or this development URL requires a new login.",
+          );
+        }
+
+        throw new Error(
+          `VIN decode returned an unexpected ${response.status} response.`,
+        );
+      }
+
+      const data = JSON.parse(responseText);
 
       setMarketCheckApiUsage(data.apiUsage || null);
 
@@ -1407,6 +1548,29 @@ export function EvaluationWorkspace({
           dealerFitReasons: dealerFitResult.reasons,
           dealerFitCautions: dealerFitResult.cautions,
 
+          mindfulIntelligenceMatched: Boolean(mindfulIntelligencePreview),
+          mindfulIntelligenceTitle: mindfulIntelligencePreview?.title || null,
+          mindfulIntelligenceMatchLevel:
+            mindfulIntelligencePreview?.matchLevel || null,
+          mindfulIntelligenceConfidence:
+            mindfulIntelligencePreview?.confidence || null,
+          mindfulIntelligenceVerdict:
+            mindfulIntelligencePreview?.verdict || null,
+          mindfulIntelligenceRationale:
+            mindfulIntelligencePreview?.rationale || null,
+          mindfulIntelligenceOpportunityTypes:
+            mindfulIntelligencePreview?.opportunityTypes || [],
+          mindfulIntelligenceStrengths:
+            mindfulIntelligencePreview?.strengths || [],
+          mindfulIntelligenceLimitations:
+            mindfulIntelligencePreview?.limitations || [],
+          mindfulIntelligenceKnownIssues:
+            mindfulIntelligencePreview?.knownIssues || [],
+          mindfulIntelligenceVerificationItems:
+            mindfulIntelligencePreview?.verificationItems || [],
+          mindfulIntelligenceSourceSection:
+            mindfulIntelligencePreview?.source.sectionTitle || null,
+
           selectedConditionRules: selectedConditions,
           notes,
         }),
@@ -1525,6 +1689,14 @@ export function EvaluationWorkspace({
     }
 
     marketCheckInFlightRef.current = true;
+
+    // Clear results from the previous vehicle before beginning a new search.
+    // This prevents stale comps and comp-derived values from appearing to
+    // apply to the newly evaluated vehicle.
+    setComps([]);
+    setMarketCheckSearchMeta(null);
+    setMarketCheckApiUsage(null);
+
     setMarketCheckLoading(true);
     setMarketCheckStatus(
       marketCheckApiControls.liveLookupEnabled
@@ -1704,19 +1876,232 @@ export function EvaluationWorkspace({
     }
   }
 
+  function openConditionAnalysis() {
+    if (!conditionAssessmentsTouched) {
+      setConditionAssessments(initialConditionAssessments);
+    }
+
+    setConditionModalTab("ai");
+    setConditionAnalysisError("");
+    setConditionProfitabilityOpen(true);
+  }
+
+  function getEffectiveConditionPlanningEstimate() {
+    if (!conditionAnalysis) {
+      return 0;
+    }
+
+    return (
+      conditionPlanningEstimateOverride ?? conditionAnalysis.planningEstimate
+    );
+  }
+
+  function getEffectiveConditionReadyDaysLow() {
+    if (!conditionAnalysis) {
+      return 0;
+    }
+
+    return (
+      conditionReadyDaysLowOverride ?? conditionAnalysis.estimatedReadyDaysLow
+    );
+  }
+
+  function getEffectiveConditionReadyDaysHigh() {
+    if (!conditionAnalysis) {
+      return 0;
+    }
+
+    const low = getEffectiveConditionReadyDaysLow();
+    const requestedHigh =
+      conditionReadyDaysHighOverride ??
+      conditionAnalysis.estimatedReadyDaysHigh;
+
+    return Math.max(low, requestedHigh);
+  }
+
+  function resetConditionEstimateOverrides() {
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
+  }
+
+  function recalculateConditionAnalysis(
+    analysis: ConditionAnalysis,
+    issues: ConditionAnalysisIssue[],
+  ): ConditionAnalysis {
+    const includedIssues = issues.filter((issue) => issue.includeInValuation);
+
+    return {
+      ...analysis,
+      issues,
+      estimatedCostLow: includedIssues.reduce(
+        (sum, issue) => sum + issue.estimatedCostLow,
+        0,
+      ),
+      estimatedCostHigh: includedIssues.reduce(
+        (sum, issue) => sum + issue.estimatedCostHigh,
+        0,
+      ),
+      planningEstimate: includedIssues.reduce(
+        (sum, issue) => sum + issue.planningEstimate,
+        0,
+      ),
+    };
+  }
+
+  function toggleConditionAnalysisIssue(issueId: string) {
+    setConditionAnalysis((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const issues = previous.issues.map((issue) =>
+        issue.id === issueId
+          ? {
+              ...issue,
+              includeInValuation: !issue.includeInValuation,
+            }
+          : issue,
+      );
+
+      return recalculateConditionAnalysis(previous, issues);
+    });
+
+    setConditionAnalysisApplied(false);
+  }
+
+  async function analyzeConditionInformation() {
+    const rawIssueText = conditionSourceText.trim();
+
+    if (!rawIssueText) {
+      setConditionAnalysisError(
+        "Paste auction announcements, seller disclosures, or condition notes first.",
+      );
+      return;
+    }
+
+    setConditionAnalysisLoading(true);
+    setConditionAnalysisError("");
+    setConditionAnalysisApplied(false);
+
+    try {
+      const response = await fetch("/api/evaluations/condition-analysis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicle: {
+            year: vehicleYear || null,
+            make: vehicleMake || null,
+            model: vehicleModel || null,
+            trim: vehicleTrim || null,
+            mileage: targetMileage || null,
+            vin: vin || null,
+            location: null,
+          },
+          auctionSite,
+          sourceType: "auction_or_seller_condition_text",
+          rawIssueText,
+        }),
+      });
+
+      const data = (await response.json()) as {
+        analysis?: ConditionAnalysis;
+        error?: string;
+      };
+
+      if (!response.ok || !data.analysis) {
+        throw new Error(data.error || "Condition analysis failed.");
+      }
+
+      setConditionAnalysis(data.analysis);
+      setOriginalConditionAnalysis(
+        JSON.parse(JSON.stringify(data.analysis)) as ConditionAnalysis,
+      );
+      setConditionPlanningEstimateOverride(null);
+      setConditionReadyDaysLowOverride(null);
+      setConditionReadyDaysHighOverride(null);
+    } catch (error) {
+      setConditionAnalysisError(
+        error instanceof Error ? error.message : "Condition analysis failed.",
+      );
+    } finally {
+      setConditionAnalysisLoading(false);
+    }
+  }
+
+  function applyConditionAnalysis() {
+    if (!conditionAnalysis) {
+      return;
+    }
+
+    const includedIssues = conditionAnalysis.issues.filter(
+      (issue) => issue.includeInValuation,
+    );
+
+    const baseMechanicalReserve = includedIssues
+      .filter((issue) => issue.category === "mechanical")
+      .reduce((sum, issue) => sum + issue.planningEstimate, 0);
+
+    const baseCosmeticReserve = includedIssues
+      .filter(
+        (issue) =>
+          issue.category === "cosmetic" ||
+          issue.category === "wear" ||
+          issue.category === "transportation" ||
+          issue.category === "other",
+      )
+      .reduce((sum, issue) => sum + issue.planningEstimate, 0);
+
+    const baseHistoryReserve = includedIssues
+      .filter(
+        (issue) =>
+          issue.category === "history" ||
+          issue.category === "structural" ||
+          issue.category === "title",
+      )
+      .reduce((sum, issue) => sum + issue.planningEstimate, 0);
+
+    const basePlanningTotal =
+      baseMechanicalReserve + baseCosmeticReserve + baseHistoryReserve;
+
+    const effectivePlanningEstimate = Math.max(
+      0,
+      getEffectiveConditionPlanningEstimate(),
+    );
+
+    const scale =
+      basePlanningTotal > 0 ? effectivePlanningEstimate / basePlanningTotal : 0;
+
+    const mechanicalReserve =
+      basePlanningTotal > 0 ? Math.round(baseMechanicalReserve * scale) : 0;
+
+    const historyReserve =
+      basePlanningTotal > 0 ? Math.round(baseHistoryReserve * scale) : 0;
+
+    const cosmeticReserve =
+      basePlanningTotal > 0
+        ? Math.max(
+            0,
+            effectivePlanningEstimate - mechanicalReserve - historyReserve,
+          )
+        : effectivePlanningEstimate;
+
+    setConditionAssessments({
+      mechanical: assessmentFromReserve("mechanical", mechanicalReserve),
+      cosmetic: assessmentFromReserve("cosmetic", cosmeticReserve),
+      history: assessmentFromReserve("history", historyReserve),
+    });
+
+    setConditionAssessmentsTouched(true);
+    setConditionAnalysisApplied(true);
+  }
+
   function openConditionProfitability() {
     if (!conditionAssessmentsTouched) {
-      setConditionAssessments({
-        mechanical: assessmentFromReserve("mechanical", evaluation.costs.recon),
-        cosmetic: assessmentFromReserve(
-          "cosmetic",
-          evaluation.costs.detailAdmin,
-        ),
-        history: assessmentFromReserve(
-          "history",
-          evaluation.costs.titleHistoryRiskAdd,
-        ),
-      });
+      setConditionAssessments(initialConditionAssessments);
     }
 
     setConditionProfitabilityOpen(true);
@@ -1785,6 +2170,13 @@ export function EvaluationWorkspace({
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
+          conditionSourceText,
+          conditionAnalysis,
+          originalConditionAnalysis,
+          conditionPlanningEstimateOverride,
+          conditionReadyDaysLowOverride,
+          conditionReadyDaysHighOverride,
+          conditionAnalysisApplied,
           notes,
           auctionUrl: "",
           auctionEndsAt: null,
@@ -1809,6 +2201,70 @@ export function EvaluationWorkspace({
     }
   }
 
+  function resetPreviousEvaluationResults() {
+    // Prevent stale search state from carrying into another vehicle.
+    marketCheckInFlightRef.current = false;
+
+    setComps(initialComps);
+    setMarketCheckStatus("");
+    setMarketCheckSearchMeta(null);
+    setMarketCheckApiUsage(null);
+    setMarketCheckLoading(false);
+
+    setSelectedConditions(initialSelectedConditions);
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+
+    setConditionProfitabilityOpen(false);
+    setConditionModalTab("ai");
+    setConditionSourceText("");
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisError("");
+    setConditionAnalysisLoading(false);
+    setConditionAnalysisApplied(false);
+
+    setNotes("");
+    setAiSummaryLoadingMode(null);
+    setAiSummaryError("");
+    setActiveThesisMode("financial");
+    setActiveMindfulIntelligenceTab("perspective");
+
+    setVehicleThumbnailUrl("");
+    setVehicleThumbnailError("");
+    setVehicleThumbnailLoading(false);
+    setVinDecodeError("");
+    setVinDecodeLoading(false);
+
+    setVehicleDetailsOpen(false);
+    setBidLogicOpen(false);
+    setMethodologyOpen(false);
+    setMethodologySaving(false);
+    setMethodologyStatus("");
+
+    setAppliedVehicleProfile(null);
+    setFinalTargetOverride(null);
+
+    setSavedEvaluationId(null);
+    setSaveStatus("");
+    setSaveLoading(false);
+
+    // Reset calculated valuation data while retaining inputs entered for
+    // the vehicle that is about to be evaluated.
+    setEvaluation((previous) => ({
+      ...initialEvaluation,
+      currentBid: previous.currentBid,
+      targetProfit: previous.targetProfit,
+      targetResaleUsed: 0,
+      costs: {
+        ...initialEvaluation.costs,
+      },
+    }));
+  }
+
   function clearLocalDraft() {
     try {
       window.localStorage.removeItem(draftStorageKey);
@@ -1816,28 +2272,15 @@ export function EvaluationWorkspace({
       console.error("Failed to clear local evaluator draft:", error);
     }
 
+    resetPreviousEvaluationResults();
+
     setVin("");
     setAuctionSite("ACV Auctions");
-    setFinalTargetOverride(null);
     setDecodedVehicle(null);
     setManualVehicle(initialManualVehicle);
-    setVehicleThumbnailUrl("");
-    setVehicleThumbnailError("");
-    setVehicleThumbnailLoading(false);
     setTargetMileage(initialTargetMileage);
     setEvaluation(initialEvaluation);
-    setComps(initialComps);
-    setSelectedConditions(initialSelectedConditions);
-    setConditionAssessments(initialConditionAssessments);
-    setConditionAssessmentsTouched(false);
-    setConditionProfitabilityOpen(false);
-    setMarketCheckStatus("");
-    setMarketCheckSearchMeta(null);
-    setMarketCheckApiUsage(null);
-    setSavedEvaluationId(null);
-    setSaveStatus("");
-    setNotes("");
-    setAppliedVehicleProfile(null);
+    setQuickEvalMode("vin");
   }
 
   const representativeCompImage = useMemo(() => {
@@ -1970,6 +2413,41 @@ export function EvaluationWorkspace({
     ],
   );
 
+  const mindfulIntelligencePreview = useMemo(
+    () =>
+      findPrimaryMindfulIntelligenceMatch(
+        {
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          generation: dealerFitResult.generation,
+          chassisCode: dealerFitResult.generation,
+          engine: null,
+          transmission: null,
+          drivetrain: decodedVehicle?.driveType || null,
+          bodyStyle: simplifiedVehicleBodyClass || vehicleBodyClass,
+          fuelType: decodedVehicle?.fuelType || null,
+          notes: notes || null,
+        },
+        {
+          includeDrafts: true,
+        },
+      ),
+    [
+      vehicleYear,
+      vehicleMake,
+      vehicleModel,
+      vehicleTrim,
+      dealerFitResult.generation,
+      decodedVehicle?.driveType,
+      decodedVehicle?.fuelType,
+      simplifiedVehicleBodyClass,
+      vehicleBodyClass,
+      notes,
+    ],
+  );
+
   const dealerFitScore = dealerFitResult.score;
 
   const profitabilityScoreDisplay = hasEvaluationData ? profitabilityScore : 0;
@@ -1980,6 +2458,31 @@ export function EvaluationWorkspace({
   const dealerFitReason =
     dealerFitResult.reasons[0] ||
     "Dealer fit will improve as vehicle details are added.";
+
+  const mindfulIntelligenceDisplay = mindfulIntelligencePreview || {
+    title: vehicleTitle || "Current vehicle",
+    verdict:
+      dealerFitResult.score >= 75
+        ? "strong_fit"
+        : dealerFitResult.score >= 55
+          ? "conditional_fit"
+          : "limited_fit",
+    confidence: dealerFitResult.reasons.length >= 2 ? "medium" : "low",
+    matchLevel: "general",
+    rationale:
+      dealerFitReason ||
+      "This vehicle does not yet have a dedicated Mindful Intelligence profile, so the current read is based on its broader category, market position, and dealer-fit characteristics.",
+    opportunityTypes: [],
+    strengths: dealerFitResult.reasons,
+    limitations: dealerFitResult.cautions,
+    knownIssues: [],
+    verificationItems: Array.from(
+      new Set([...dealerFitResult.cautions, ...selectedConditions]),
+    ),
+    source: {
+      sectionTitle: "Lot Logic evaluator and dealer-fit rules",
+    },
+  };
 
   const suggestedBidDisplay =
     valuationInput.currentBid <= 0
@@ -2026,6 +2529,11 @@ export function EvaluationWorkspace({
       : hasManualQuickEvalBasics;
 
   function startQuickEvaluation() {
+    setNotes("");
+    setAiSummaryError("");
+    setAiSummaryLoadingMode(null);
+    setActiveThesisMode("financial");
+
     if (quickEvalMode === "manual") {
       setDecodedVehicle(null);
       setVin("");
@@ -2531,15 +3039,15 @@ export function EvaluationWorkspace({
 
       {conditionProfitabilityOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
-                  Condition &amp; Profitability
+                  Condition &amp; Reconditioning
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500">
-                  Judge severity by category. MMAV proposes a reserve that you
-                  can adjust for this specific vehicle.
+                  Analyze auction or seller disclosures, then review the
+                  proposed reserve before applying it to the valuation.
                 </p>
               </div>
 
@@ -2547,200 +3055,602 @@ export function EvaluationWorkspace({
                 type="button"
                 onClick={() => setConditionProfitabilityOpen(false)}
                 className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                aria-label="Close condition and profitability"
+                aria-label="Close condition and reconditioning"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-5 p-6">
-              <section>
-                <h3 className="text-sm font-black uppercase tracking-[0.08em] text-slate-500">
-                  Transaction Costs
-                </h3>
-
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <CurrencyInput
-                    label="Auction Fee"
-                    value={valuationInput.costs.auctionFee}
-                    onChange={(value) => updateCost("auctionFee", value)}
-                  />
-
-                  <CurrencyInput
-                    label="Transport"
-                    value={valuationInput.costs.transport}
-                    onChange={(value) => updateCost("transport", value)}
-                  />
-                </div>
-              </section>
-
-              <section className="space-y-3 border-t border-slate-200 pt-5">
-                {conditionAssessmentDefinitions.map((definition) => {
-                  const assessment = conditionAssessments[definition.key];
-
-                  const severityTone =
-                    assessment.severity === "severe"
-                      ? "bg-red-100 text-red-700"
-                      : assessment.severity === "moderate"
-                        ? "bg-amber-100 text-amber-700"
-                        : assessment.severity === "minor"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-100 text-slate-600";
-
-                  return (
-                    <div
-                      key={definition.key}
-                      className="rounded-2xl border border-slate-200 p-4"
-                    >
-                      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                        <div className="max-w-xl">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-black text-slate-950">
-                              {definition.title}
-                            </h3>
-
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${severityTone}`}
-                            >
-                              {assessment.severity}
-                            </span>
-                          </div>
-
-                          <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
-                            {definition.description}
-                          </p>
-                        </div>
-
-                        <div className="w-full md:w-[170px]">
-                          <div className="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
-                            Estimated Reserve
-                          </div>
-
-                          <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <span className="pl-3 text-sm text-slate-400">
-                              $
-                            </span>
-
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={formatNumberInput(assessment.reserve)}
-                              onFocus={(event) => event.currentTarget.select()}
-                              onChange={(event) =>
-                                updateConditionReserve(
-                                  definition.key,
-                                  toNumber(event.target.value),
-                                )
-                              }
-                              className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2 text-right text-sm font-bold outline-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-4 gap-2">
-                        {(
-                          [
-                            "none",
-                            "minor",
-                            "moderate",
-                            "severe",
-                          ] as ConditionSeverity[]
-                        ).map((severity) => {
-                          const selected = assessment.severity === severity;
-
-                          const selectedTone =
-                            severity === "severe"
-                              ? "border-red-600 bg-red-600 text-white"
-                              : severity === "moderate"
-                                ? "border-amber-500 bg-amber-500 text-white"
-                                : severity === "minor"
-                                  ? "border-emerald-600 bg-emerald-600 text-white"
-                                  : "border-slate-500 bg-slate-600 text-white";
-
-                          return (
-                            <button
-                              key={severity}
-                              type="button"
-                              onClick={() =>
-                                updateConditionSeverity(
-                                  definition.key,
-                                  severity,
-                                )
-                              }
-                              className={`rounded-xl border px-2 py-2 text-xs font-black capitalize transition ${
-                                selected
-                                  ? selectedTone
-                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                              }`}
-                            >
-                              {severity}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-2 text-right text-[10px] font-bold text-slate-400">
-                        {assessment.riskPoints} risk points
-                      </div>
-                    </div>
-                  );
-                })}
-              </section>
-
-              <section className="grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl bg-slate-50 px-4 py-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
-                    Condition Reserve
-                  </div>
-                  <div className="mt-1 text-lg font-black text-slate-950">
-                    {money(conditionTotals.reserveAdd)}
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 px-4 py-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
-                    Total Risk
-                  </div>
-                  <div className="mt-1 text-lg font-black text-slate-950">
-                    {conditionTotals.riskPoints} / 30
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-emerald-50 px-4 py-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.08em] text-emerald-700">
-                    Max Smart Bid
-                  </div>
-                  <div className="mt-1 text-lg font-black text-emerald-700">
-                    {suggestedBidDisplay}
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-blue-50 px-4 py-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">
-                    Profit at Current Bid
-                  </div>
-                  <div
-                    className={`mt-1 text-lg font-black ${
-                      valuation.expectedGrossProfit >= 0
-                        ? "text-blue-800"
-                        : "text-red-700"
+            <div className="border-b border-slate-200 px-6">
+              <div className="flex gap-6" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={conditionModalTab === "ai"}
+                  onClick={() => setConditionModalTab("ai")}
+                  className={`relative py-3 text-sm font-black ${
+                    conditionModalTab === "ai"
+                      ? "text-violet-700"
+                      : "text-slate-400 hover:text-slate-700"
+                  }`}
+                >
+                  AI Analysis
+                  <span
+                    className={`absolute inset-x-0 bottom-0 h-0.5 ${
+                      conditionModalTab === "ai"
+                        ? "bg-violet-600"
+                        : "bg-transparent"
                     }`}
-                  >
-                    {money(valuation.expectedGrossProfit)}
-                  </div>
-                </div>
-              </section>
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={conditionModalTab === "manual"}
+                  onClick={() => setConditionModalTab("manual")}
+                  className={`relative py-3 text-sm font-black ${
+                    conditionModalTab === "manual"
+                      ? "text-violet-700"
+                      : "text-slate-400 hover:text-slate-700"
+                  }`}
+                >
+                  Manual Assessment
+                  <span
+                    className={`absolute inset-x-0 bottom-0 h-0.5 ${
+                      conditionModalTab === "manual"
+                        ? "bg-violet-600"
+                        : "bg-transparent"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
-            <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-slate-50 px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setConditionProfitabilityOpen(false)}
-                className="rounded-xl bg-slate-950 px-5 py-2 text-sm font-bold text-white hover:bg-slate-800"
-              >
-                Apply &amp; Close
-              </button>
+            <div className="flex-1 overflow-y-auto">
+              {conditionModalTab === "ai" ? (
+                <div className="space-y-5 p-6">
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-black text-slate-950">
+                          Paste known condition information
+                        </h3>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                          Auction announcements, seller disclosures, condition
+                          report notes, warning lights, body damage, title
+                          concerns, or transportation issues.
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-slate-500">
+                        {vehicleTitle}
+                      </span>
+                    </div>
+
+                    <textarea
+                      value={conditionSourceText}
+                      onChange={(event) => {
+                        setConditionSourceText(event.target.value);
+                        setConditionAnalysisApplied(false);
+                      }}
+                      placeholder="Paste the auction or seller condition information here..."
+                      className="mt-4 min-h-[190px] w-full resize-y rounded-2xl border border-slate-200 bg-white p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-violet-300"
+                    />
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {conditionSourceText.trim().length.toLocaleString()}{" "}
+                        characters
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => void analyzeConditionInformation()}
+                        disabled={
+                          conditionAnalysisLoading ||
+                          !conditionSourceText.trim()
+                        }
+                        className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {conditionAnalysisLoading
+                          ? "Analyzing..."
+                          : conditionAnalysis
+                            ? "Analyze Again"
+                            : "Analyze Condition"}
+                      </button>
+                    </div>
+
+                    {conditionAnalysisError ? (
+                      <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                        {conditionAnalysisError}
+                      </div>
+                    ) : null}
+                  </section>
+
+                  {conditionAnalysis ? (
+                    <>
+                      <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-black text-slate-950">
+                              Planning assumptions
+                            </h3>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              Adjust the working estimate used for this purchase
+                              decision. The original AI estimate remains
+                              available below.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={resetConditionEstimateOverrides}
+                            disabled={
+                              conditionPlanningEstimateOverride === null &&
+                              conditionReadyDaysLowOverride === null &&
+                              conditionReadyDaysHighOverride === null
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Reset to AI Estimates
+                          </button>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                          <div className="rounded-xl bg-white px-4 py-3">
+                            <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                              Overall Risk
+                            </div>
+                            <div className="mt-1 text-base font-black capitalize text-slate-950">
+                              {conditionAnalysis.overallRisk}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl bg-white px-4 py-3">
+                            <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                              AI Cost Range
+                            </div>
+                            <div className="mt-1 text-sm font-black text-slate-950">
+                              {money(conditionAnalysis.estimatedCostLow)}–
+                              {money(conditionAnalysis.estimatedCostHigh)}
+                            </div>
+                          </div>
+
+                          <label className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                            <div className="text-[9px] font-black uppercase tracking-[0.08em] text-violet-600">
+                              Planning Estimate
+                            </div>
+
+                            <div className="mt-2 flex items-center rounded-lg border border-violet-200 bg-white">
+                              <span className="pl-3 text-sm text-slate-400">
+                                $
+                              </span>
+
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={formatNumberInput(
+                                  getEffectiveConditionPlanningEstimate(),
+                                )}
+                                onFocus={(event) =>
+                                  event.currentTarget.select()
+                                }
+                                onChange={(event) => {
+                                  setConditionPlanningEstimateOverride(
+                                    Math.max(0, toNumber(event.target.value)),
+                                  );
+                                  setConditionAnalysisApplied(false);
+                                }}
+                                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-right text-sm font-black text-violet-800 outline-none"
+                              />
+                            </div>
+
+                            <div className="mt-1 text-[9px] font-bold text-violet-600">
+                              AI:{" "}
+                              {money(
+                                originalConditionAnalysis?.planningEstimate ??
+                                  conditionAnalysis.planningEstimate,
+                              )}
+                            </div>
+                          </label>
+
+                          <label className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                            <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                              Ready Days — Low
+                            </div>
+
+                            <input
+                              type="number"
+                              min="0"
+                              value={getEffectiveConditionReadyDaysLow()}
+                              onChange={(event) => {
+                                setConditionReadyDaysLowOverride(
+                                  Math.max(0, Number(event.target.value) || 0),
+                                );
+                                setConditionAnalysisApplied(false);
+                              }}
+                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-right text-sm font-black text-slate-800 outline-none focus:border-violet-300"
+                            />
+
+                            <div className="mt-1 text-[9px] font-bold text-slate-400">
+                              AI:{" "}
+                              {originalConditionAnalysis?.estimatedReadyDaysLow ??
+                                conditionAnalysis.estimatedReadyDaysLow}
+                            </div>
+                          </label>
+
+                          <label className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                            <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                              Ready Days — High
+                            </div>
+
+                            <input
+                              type="number"
+                              min={getEffectiveConditionReadyDaysLow()}
+                              value={getEffectiveConditionReadyDaysHigh()}
+                              onChange={(event) => {
+                                setConditionReadyDaysHighOverride(
+                                  Math.max(
+                                    getEffectiveConditionReadyDaysLow(),
+                                    Number(event.target.value) || 0,
+                                  ),
+                                );
+                                setConditionAnalysisApplied(false);
+                              }}
+                              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-right text-sm font-black text-slate-800 outline-none focus:border-violet-300"
+                            />
+
+                            <div className="mt-1 text-[9px] font-bold text-slate-400">
+                              AI:{" "}
+                              {originalConditionAnalysis?.estimatedReadyDaysHigh ??
+                                conditionAnalysis.estimatedReadyDaysHigh}
+                            </div>
+                          </label>
+                        </div>
+
+                        {conditionPlanningEstimateOverride !== null ||
+                        conditionReadyDaysLowOverride !== null ||
+                        conditionReadyDaysHighOverride !== null ? (
+                          <div className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+                            User-adjusted planning assumptions. The original AI
+                            values have been preserved.
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <section className="rounded-2xl border border-slate-200 p-5">
+                        <h3 className="font-black text-slate-950">
+                          Condition interpretation
+                        </h3>
+                        <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                          {conditionAnalysis.summary}
+                        </p>
+                      </section>
+
+                      <section>
+                        <div className="flex items-center justify-between gap-4">
+                          <h3 className="text-sm font-black uppercase tracking-[0.08em] text-slate-500">
+                            Proposed Issues
+                          </h3>
+                          <span className="text-xs font-bold text-slate-400">
+                            {
+                              conditionAnalysis.issues.filter(
+                                (issue) => issue.includeInValuation,
+                              ).length
+                            }{" "}
+                            included
+                          </span>
+                        </div>
+
+                        <div className="mt-3 space-y-3">
+                          {conditionAnalysis.issues.map((issue) => (
+                            <div
+                              key={issue.id}
+                              className={`rounded-2xl border p-4 ${
+                                issue.includeInValuation
+                                  ? "border-violet-200 bg-violet-50/30"
+                                  : "border-slate-200 bg-slate-50 opacity-70"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={issue.includeInValuation}
+                                  onChange={() =>
+                                    toggleConditionAnalysisIssue(issue.id)
+                                  }
+                                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                                  aria-label={`Include ${issue.description} in valuation`}
+                                />
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h4 className="font-black text-slate-950">
+                                      {issue.description}
+                                    </h4>
+
+                                    <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-500">
+                                      {issue.category.replaceAll("_", " ")}
+                                    </span>
+
+                                    <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-500">
+                                      {issue.certainty.replaceAll("_", " ")}
+                                    </span>
+
+                                    <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-500">
+                                      {issue.confidence} confidence
+                                    </span>
+                                  </div>
+
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                                    <div>
+                                      <div className="text-[9px] font-black uppercase text-slate-400">
+                                        Range
+                                      </div>
+                                      <div className="mt-1 text-xs font-bold text-slate-700">
+                                        {money(issue.estimatedCostLow)}–
+                                        {money(issue.estimatedCostHigh)}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <div className="text-[9px] font-black uppercase text-slate-400">
+                                        Planning
+                                      </div>
+                                      <div className="mt-1 text-xs font-black text-violet-700">
+                                        {money(issue.planningEstimate)}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <div className="text-[9px] font-black uppercase text-slate-400">
+                                        Severity
+                                      </div>
+                                      <div className="mt-1 text-xs font-bold capitalize text-slate-700">
+                                        {issue.severity}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <div className="text-[9px] font-black uppercase text-slate-400">
+                                        Duration
+                                      </div>
+                                      <div className="mt-1 text-xs font-bold text-slate-700">
+                                        {issue.estimatedDurationDays} days
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-3 text-[11px] font-semibold leading-5 text-slate-500">
+                                    Source: {issue.sourceText}
+                                  </div>
+
+                                  {issue.assumptions.length ? (
+                                    <div className="mt-2 text-[11px] font-semibold leading-5 text-amber-700">
+                                      Assumptions:{" "}
+                                      {issue.assumptions.join("; ")}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      {conditionAnalysis.recommendedInspections.length ||
+                      conditionAnalysis.missingInformation.length ||
+                      conditionAnalysis.warnings.length ? (
+                        <section className="grid gap-4 lg:grid-cols-3">
+                          <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">
+                              Recommended Inspections
+                            </h3>
+                            <ul className="mt-3 space-y-2">
+                              {conditionAnalysis.recommendedInspections.map(
+                                (item) => (
+                                  <li
+                                    key={item}
+                                    className="text-xs font-semibold leading-5 text-slate-700"
+                                  >
+                                    • {item}
+                                  </li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+
+                          <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-amber-700">
+                              Missing Information
+                            </h3>
+                            <ul className="mt-3 space-y-2">
+                              {conditionAnalysis.missingInformation.map(
+                                (item) => (
+                                  <li
+                                    key={item}
+                                    className="text-xs font-semibold leading-5 text-slate-700"
+                                  >
+                                    • {item}
+                                  </li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+
+                          <div className="rounded-2xl border border-red-100 bg-red-50/50 p-4">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-red-700">
+                              Warnings
+                            </h3>
+                            <ul className="mt-3 space-y-2">
+                              {conditionAnalysis.warnings.map((item) => (
+                                <li
+                                  key={item}
+                                  className="text-xs font-semibold leading-5 text-slate-700"
+                                >
+                                  • {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </section>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-5 p-6">
+                  <section>
+                    <h3 className="text-sm font-black uppercase tracking-[0.08em] text-slate-500">
+                      Transaction Costs
+                    </h3>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <CurrencyInput
+                        label="Auction Fee"
+                        value={valuationInput.costs.auctionFee}
+                        onChange={(value) => updateCost("auctionFee", value)}
+                      />
+
+                      <CurrencyInput
+                        label="Transport"
+                        value={valuationInput.costs.transport}
+                        onChange={(value) => updateCost("transport", value)}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="space-y-3 border-t border-slate-200 pt-5">
+                    {conditionAssessmentDefinitions.map((definition) => {
+                      const assessment = conditionAssessments[definition.key];
+
+                      return (
+                        <div
+                          key={definition.key}
+                          className="rounded-2xl border border-slate-200 p-4"
+                        >
+                          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                            <div className="max-w-xl">
+                              <h3 className="font-black text-slate-950">
+                                {definition.title}
+                              </h3>
+                              <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
+                                {definition.description}
+                              </p>
+                            </div>
+
+                            <div className="w-full md:w-[170px]">
+                              <div className="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
+                                Estimated Reserve
+                              </div>
+                              <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                                <span className="pl-3 text-sm text-slate-400">
+                                  $
+                                </span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={formatNumberInput(assessment.reserve)}
+                                  onFocus={(event) =>
+                                    event.currentTarget.select()
+                                  }
+                                  onChange={(event) =>
+                                    updateConditionReserve(
+                                      definition.key,
+                                      toNumber(event.target.value),
+                                    )
+                                  }
+                                  className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2 text-right text-sm font-bold outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-4 gap-2">
+                            {(
+                              [
+                                "none",
+                                "minor",
+                                "moderate",
+                                "severe",
+                              ] as ConditionSeverity[]
+                            ).map((severity) => {
+                              const selected = assessment.severity === severity;
+
+                              return (
+                                <button
+                                  key={severity}
+                                  type="button"
+                                  onClick={() =>
+                                    updateConditionSeverity(
+                                      definition.key,
+                                      severity,
+                                    )
+                                  }
+                                  className={`rounded-xl border px-2 py-2 text-xs font-black capitalize ${
+                                    selected
+                                      ? "border-violet-600 bg-violet-600 text-white"
+                                      : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {severity}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="mt-2 text-right text-[10px] font-bold text-slate-400">
+                            {assessment.riskPoints} risk points
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </section>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+              <div className="text-xs font-bold text-slate-500">
+                {conditionAnalysisApplied
+                  ? "AI planning estimate applied to the evaluation."
+                  : conditionAnalysis
+                    ? "Review the proposed issues before applying."
+                    : "No AI condition analysis has been applied."}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConditionProfitabilityOpen(false)}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Close
+                </button>
+
+                {conditionModalTab === "ai" && conditionAnalysis ? (
+                  <button
+                    type="button"
+                    onClick={applyConditionAnalysis}
+                    className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800"
+                  >
+                    {conditionAnalysisApplied
+                      ? "Applied to Evaluation"
+                      : "Apply to Evaluation"}
+                  </button>
+                ) : null}
+
+                {conditionModalTab === "manual" ? (
+                  <button
+                    type="button"
+                    onClick={() => setConditionProfitabilityOpen(false)}
+                    className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800"
+                  >
+                    Apply &amp; Close
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -3113,14 +4023,6 @@ export function EvaluationWorkspace({
               <button
                 type="button"
                 onClick={async () => {
-                  setComps([]);
-                  setMarketCheckSearchMeta(null);
-                  setMarketCheckApiUsage(null);
-                  setMarketCheckStatus("");
-                  setVinDecodeError("");
-                  setVehicleThumbnailUrl("");
-                  setVehicleThumbnailError("");
-
                   if (quickEvalMode === "manual") {
                     const manualOverride = {
                       year: String(manualVehicle.year || "").trim(),
@@ -3140,6 +4042,8 @@ export function EvaluationWorkspace({
                       );
                       return;
                     }
+
+                    resetPreviousEvaluationResults();
 
                     setDecodedVehicle(null);
                     setVin("");
@@ -3166,6 +4070,8 @@ export function EvaluationWorkspace({
                     await pullMarketCheckComps(manualOverride);
                     return;
                   }
+
+                  resetPreviousEvaluationResults();
 
                   const newlyDecodedVehicle = await decodeVinFromBasics();
 
@@ -3341,7 +4247,7 @@ export function EvaluationWorkspace({
 
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Profit at Current Bid
+                    Projected Profit
                   </div>
 
                   <div
@@ -3468,7 +4374,384 @@ export function EvaluationWorkspace({
             </article>
           </section>
 
-          <section className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(330px,.85fr)]">
+          <section className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(350px,.85fr)]">
+            <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+              <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-violet-600">
+                        Mindful Intelligence
+                      </div>
+
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">
+                        {mindfulIntelligencePreview
+                          ? "Profile match"
+                          : "General Mindful read"}
+                      </span>
+                    </div>
+
+                    <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-slate-950">
+                      {mindfulIntelligenceDisplay.title}
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700">
+                      {mindfulIntelligenceDisplay.verdict.replaceAll("_", " ")}
+                    </span>
+
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
+                      {mindfulIntelligenceDisplay.confidence} confidence
+                    </span>
+
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-500">
+                      {mindfulIntelligenceDisplay.matchLevel.replaceAll(
+                        "_",
+                        " ",
+                      )}{" "}
+                      match
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-b border-violet-100 px-5">
+                <div
+                  className="flex gap-6"
+                  role="tablist"
+                  aria-label="Mindful Intelligence sections"
+                >
+                  {[
+                    {
+                      id: "perspective" as const,
+                      label: "Perspective",
+                    },
+                    {
+                      id: "thesis" as const,
+                      label: "Deal Thesis",
+                    },
+                    {
+                      id: "checks" as const,
+                      label: "Checks",
+                    },
+                  ].map((tab) => {
+                    const isActive = activeMindfulIntelligenceTab === tab.id;
+
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveMindfulIntelligenceTab(tab.id)}
+                        className={`relative py-3 text-xs font-black transition ${
+                          isActive
+                            ? "text-violet-700"
+                            : "text-slate-400 hover:text-slate-700"
+                        }`}
+                      >
+                        {tab.label}
+
+                        <span
+                          aria-hidden="true"
+                          className={`absolute inset-x-0 bottom-0 h-0.5 rounded-full transition ${
+                            isActive ? "bg-violet-600" : "bg-transparent"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {activeMindfulIntelligenceTab === "perspective" ? (
+                <div className="px-5 py-5">
+                  <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                    Mindful perspective
+                  </div>
+
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
+                    {mindfulIntelligenceDisplay.rationale}
+                  </p>
+
+                  <div className="mt-5">
+                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                      Opportunity type
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {mindfulIntelligenceDisplay.opportunityTypes.length ? (
+                        mindfulIntelligenceDisplay.opportunityTypes.map(
+                          (type) => (
+                            <span
+                              key={type}
+                              className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black capitalize text-slate-700"
+                            >
+                              {type.replaceAll("_", " ")}
+                            </span>
+                          ),
+                        )
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-700">
+                          {dealerFitResult.category || "General acquisition"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {mindfulIntelligenceDisplay.strengths.length ? (
+                    <div className="mt-5">
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                        Why it fits
+                      </div>
+
+                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {mindfulIntelligenceDisplay.strengths
+                          .slice(0, 6)
+                          .map((item) => (
+                            <li
+                              key={item}
+                              className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                              />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {activeMindfulIntelligenceTab === "thesis" ? (
+                <div className="px-5 py-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
+                        AI Deal Thesis
+                      </div>
+
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        Uses evaluator data and Mindful Intelligence context.
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveThesisMode("financial");
+                          void generateAiSummary("financial");
+                        }}
+                        disabled={Boolean(aiSummaryLoadingMode)}
+                        className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          activeThesisMode === "financial"
+                            ? "bg-blue-700 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {aiSummaryLoadingMode === "financial"
+                          ? "Generating..."
+                          : "Financial"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveThesisMode("enthusiast");
+                          void generateAiSummary("enthusiast");
+                        }}
+                        disabled={Boolean(aiSummaryLoadingMode)}
+                        className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          activeThesisMode === "enthusiast"
+                            ? "bg-slate-950 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {aiSummaryLoadingMode === "enthusiast"
+                          ? "Generating..."
+                          : "Enthusiast"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {aiSummaryError ? (
+                    <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                      {aiSummaryError}
+                    </div>
+                  ) : null}
+
+                  <textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Generate a financial or enthusiast thesis using the current evaluator data."
+                    className="mt-4 min-h-[220px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-violet-300 focus:bg-white"
+                  />
+
+                  <div className="mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-400">
+                    <span>
+                      {activeThesisMode === "financial"
+                        ? "Financial thesis"
+                        : "Enthusiast thesis"}
+                    </span>
+
+                    <span>{notes.trim().length} characters</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeMindfulIntelligenceTab === "checks" ? (
+                <div className="px-5 py-5">
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
+                      Priority checks
+                    </div>
+
+                    {mindfulIntelligenceDisplay.verificationItems.length ? (
+                      <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                        {mindfulIntelligenceDisplay.verificationItems
+                          .slice(0, 8)
+                          .map((item) => (
+                            <li
+                              key={item}
+                              className="flex gap-2.5 text-xs font-semibold leading-5 text-slate-700"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500"
+                              />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs font-semibold text-slate-500">
+                        No vehicle-specific verification items are currently
+                        attached to this profile.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+                      Source
+                    </div>
+
+                    <div className="mt-1 text-xs font-bold text-slate-700">
+                      {mindfulIntelligenceDisplay.source.sectionTitle}
+                    </div>
+
+                    <div className="mt-2 text-[10px] font-semibold leading-4 text-violet-700">
+                      {mindfulIntelligencePreview
+                        ? "Matched company knowledge informs the AI thesis but does not alter valuation, bid guidance, or the current dealer-fit score."
+                        : "No dedicated company profile was found. This general read uses current vehicle data and dealer-fit rules and does not alter valuation or bid guidance."}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <SectionCard
+              title="Condition & Reconditioning"
+              action={
+                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">
+                  Pre-purchase analysis
+                </span>
+              }
+            >
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-5">
+                <div className="text-sm font-black text-slate-900">
+                  Add known auction or seller issues
+                </div>
+
+                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                  Paste condition-report notes, auction announcements, seller
+                  disclosures, mechanical concerns, cosmetic damage, or title
+                  and transportation issues.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={openConditionAnalysis}
+                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white hover:bg-slate-800"
+                >
+                  Add Condition Information
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {conditionAssessmentDefinitions.map((definition) => {
+                  const assessment = conditionAssessments[definition.key];
+
+                  return (
+                    <div
+                      key={definition.key}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center"
+                    >
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                        {definition.key === "history"
+                          ? "History"
+                          : definition.key}
+                      </div>
+                      <div className="mt-1 text-xs font-black capitalize text-slate-700">
+                        {assessment.severity}
+                      </div>
+                      <div className="mt-1 text-[10px] font-semibold text-slate-500">
+                        {money(assessment.reserve)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {conditionAnalysis ? (
+                <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-violet-600">
+                        AI Planning Estimate
+                      </div>
+                      <div className="mt-1 text-xl font-black text-violet-800">
+                        {money(getEffectiveConditionPlanningEstimate())}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                        Range
+                      </div>
+                      <div className="mt-1 text-xs font-bold text-slate-700">
+                        {money(conditionAnalysis.estimatedCostLow)}–
+                        {money(conditionAnalysis.estimatedCostHigh)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-slate-500">
+                    <span>
+                      {conditionAnalysis.issues.length} issues ·{" "}
+                      {conditionAnalysis.overallRisk} risk
+                    </span>
+                    <span>
+                      {getEffectiveConditionReadyDaysLow()}–
+                      {getEffectiveConditionReadyDaysHigh()} days ·{" "}
+                      {conditionAnalysisApplied ? "Applied" : "Not applied"}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-800">
+                  No AI condition analysis has been generated for this vehicle.
+                </div>
+              )}
+            </SectionCard>
+          </section>
+
+          <section className="mt-4">
             <SectionCard
               title="Comparable Vehicles"
               action={
@@ -3544,75 +4827,6 @@ export function EvaluationWorkspace({
                 Values are adjusted using the active mileage, market, and
                 company-assumption rules. Toggle individual comps to include or
                 exclude them from the valuation.
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="AI Deal Thesis"
-              action={
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
-                  Uses current evaluator data only
-                </span>
-              }
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveThesisMode("financial");
-                    void generateAiSummary("financial");
-                  }}
-                  disabled={Boolean(aiSummaryLoadingMode)}
-                  className={`rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    activeThesisMode === "financial"
-                      ? "bg-blue-700 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {aiSummaryLoadingMode === "financial"
-                    ? "Generating..."
-                    : "Financial"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveThesisMode("enthusiast");
-                    void generateAiSummary("enthusiast");
-                  }}
-                  disabled={Boolean(aiSummaryLoadingMode)}
-                  className={`rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    activeThesisMode === "enthusiast"
-                      ? "bg-slate-950 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {aiSummaryLoadingMode === "enthusiast"
-                    ? "Generating..."
-                    : "Enthusiast"}
-                </button>
-              </div>
-
-              {aiSummaryError ? (
-                <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                  {aiSummaryError}
-                </div>
-              ) : null}
-
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Generate a financial or enthusiast thesis using the current evaluator data."
-                className="mt-4 min-h-[265px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-blue-300 focus:bg-white"
-              />
-
-              <div className="mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-400">
-                <span>
-                  {activeThesisMode === "financial"
-                    ? "Financial thesis"
-                    : "Enthusiast thesis"}
-                </span>
-                <span>{notes.trim().length} characters</span>
               </div>
             </SectionCard>
           </section>

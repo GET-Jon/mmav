@@ -30,6 +30,32 @@ type MarketCheckSearchLogRow = {
   cumulativeUsableComps?: number;
 };
 
+type RejectedMarketCheckListing = {
+  title?: string;
+  year?: number | string | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+  fuelType?: string | null;
+  price?: number | string | null;
+  mileage?: number | string | null;
+  rejectedReasons?: string[];
+};
+
+type MarketCheckFilterDiagnostics = {
+  returnedListings?: number;
+  mappedListings?: number;
+  usableListings?: number;
+  rejectedListings?: number;
+  rejectionCounts?: {
+    fuelMismatch?: number;
+    missingPriceOrMileage?: number;
+    qualityBelowThreshold?: number;
+    other?: number;
+  };
+  sampleRejectedListings?: RejectedMarketCheckListing[];
+};
+
 type LastApiUsage = {
   apiCallsMade?: number;
   cacheHit?: boolean;
@@ -39,6 +65,7 @@ type LastApiUsage = {
   retryAfter?: string | null;
   savedAt?: string;
   searchLog?: MarketCheckSearchLogRow[];
+  filterDiagnostics?: MarketCheckFilterDiagnostics;
 };
 
 type ApiSettingsResponse = {
@@ -431,7 +458,7 @@ export function MarketCheckApiSettingsCard() {
               </div>
             ) : null}
 
-            {(lastApiUsage as any).filterDiagnostics ? (
+            {lastApiUsage.filterDiagnostics ? (
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="text-base font-bold text-slate-950">
                   Comp Filtering Diagnostics
@@ -446,7 +473,7 @@ export function MarketCheckApiSettingsCard() {
                       Returned
                     </div>
                     <div className="mt-1 text-lg font-black text-slate-950">
-                      {(lastApiUsage as any).filterDiagnostics.returnedListings ?? 0}
+                      {lastApiUsage.filterDiagnostics.returnedListings ?? 0}
                     </div>
                   </div>
 
@@ -455,7 +482,7 @@ export function MarketCheckApiSettingsCard() {
                       Mapped
                     </div>
                     <div className="mt-1 text-lg font-black text-slate-950">
-                      {(lastApiUsage as any).filterDiagnostics.mappedListings ?? 0}
+                      {lastApiUsage.filterDiagnostics.mappedListings ?? 0}
                     </div>
                   </div>
 
@@ -464,7 +491,7 @@ export function MarketCheckApiSettingsCard() {
                       Usable
                     </div>
                     <div className="mt-1 text-lg font-black text-emerald-700">
-                      {(lastApiUsage as any).filterDiagnostics.usableListings ?? 0}
+                      {lastApiUsage.filterDiagnostics.usableListings ?? 0}
                     </div>
                   </div>
 
@@ -473,7 +500,7 @@ export function MarketCheckApiSettingsCard() {
                       Rejected
                     </div>
                     <div className="mt-1 text-lg font-black text-red-700">
-                      {(lastApiUsage as any).filterDiagnostics.rejectedListings ?? 0}
+                      {lastApiUsage.filterDiagnostics.rejectedListings ?? 0}
                     </div>
                   </div>
                 </div>
@@ -485,7 +512,7 @@ export function MarketCheckApiSettingsCard() {
                         Fuel mismatch
                       </div>
                       <div className="mt-1 font-black text-slate-950">
-                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.fuelMismatch ?? 0}
+                        {lastApiUsage.filterDiagnostics.rejectionCounts?.fuelMismatch ?? 0}
                       </div>
                     </div>
 
@@ -494,7 +521,7 @@ export function MarketCheckApiSettingsCard() {
                         Missing price/mileage
                       </div>
                       <div className="mt-1 font-black text-slate-950">
-                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.missingPriceOrMileage ?? 0}
+                        {lastApiUsage.filterDiagnostics.rejectionCounts?.missingPriceOrMileage ?? 0}
                       </div>
                     </div>
 
@@ -503,7 +530,7 @@ export function MarketCheckApiSettingsCard() {
                         Quality below threshold
                       </div>
                       <div className="mt-1 font-black text-slate-950">
-                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.qualityBelowThreshold ?? 0}
+                        {lastApiUsage.filterDiagnostics.rejectionCounts?.qualityBelowThreshold ?? 0}
                       </div>
                     </div>
 
@@ -512,21 +539,21 @@ export function MarketCheckApiSettingsCard() {
                         Other
                       </div>
                       <div className="mt-1 font-black text-slate-950">
-                        {(lastApiUsage as any).filterDiagnostics.rejectionCounts?.other ?? 0}
+                        {lastApiUsage.filterDiagnostics.rejectionCounts?.other ?? 0}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {(lastApiUsage as any).filterDiagnostics.sampleRejectedListings?.length ? (
+                {lastApiUsage.filterDiagnostics.sampleRejectedListings?.length ? (
                   <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
                     <div className="bg-slate-50 px-3 py-3 text-xs font-black uppercase tracking-wide text-slate-500">
                       Sample rejected listings
                     </div>
 
                     <div className="divide-y divide-slate-100">
-                      {(lastApiUsage as any).filterDiagnostics.sampleRejectedListings.map(
-                        (listing: any, index: number) => (
+                      {lastApiUsage.filterDiagnostics.sampleRejectedListings.map(
+                        (listing: RejectedMarketCheckListing, index: number) => (
                           <div key={`${listing.title || "listing"}-${index}`} className="px-3 py-3 text-sm">
                             <div className="font-bold text-slate-950">
                               {listing.title || "Untitled listing"}

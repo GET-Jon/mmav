@@ -82,6 +82,31 @@ export async function POST(request: Request) {
       dealerFitReasons: cleanStringArray(body.dealerFitReasons),
       dealerFitCautions: cleanStringArray(body.dealerFitCautions),
 
+      mindfulIntelligenceMatched:
+        body.mindfulIntelligenceMatched === true,
+      mindfulIntelligenceTitle:
+        cleanString(body.mindfulIntelligenceTitle),
+      mindfulIntelligenceMatchLevel:
+        cleanString(body.mindfulIntelligenceMatchLevel),
+      mindfulIntelligenceConfidence:
+        cleanString(body.mindfulIntelligenceConfidence),
+      mindfulIntelligenceVerdict:
+        cleanString(body.mindfulIntelligenceVerdict),
+      mindfulIntelligenceRationale:
+        cleanString(body.mindfulIntelligenceRationale),
+      mindfulIntelligenceOpportunityTypes:
+        cleanStringArray(body.mindfulIntelligenceOpportunityTypes),
+      mindfulIntelligenceStrengths:
+        cleanStringArray(body.mindfulIntelligenceStrengths),
+      mindfulIntelligenceLimitations:
+        cleanStringArray(body.mindfulIntelligenceLimitations),
+      mindfulIntelligenceKnownIssues:
+        cleanStringArray(body.mindfulIntelligenceKnownIssues),
+      mindfulIntelligenceVerificationItems:
+        cleanStringArray(body.mindfulIntelligenceVerificationItems),
+      mindfulIntelligenceSourceSection:
+        cleanString(body.mindfulIntelligenceSourceSection),
+
       selectedConditionRules: cleanStringArray(body.selectedConditionRules),
       notes: cleanString(body.notes),
     };

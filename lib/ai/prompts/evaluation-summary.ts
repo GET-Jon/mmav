@@ -92,7 +92,12 @@ Keep it compact and dealer-oriented.`,
 export function getEvaluationSummarySystemPrompt(
   thesisMode: EvaluationThesisMode = "balanced"
 ) {
-  return MODE_PROMPTS[thesisMode] || MODE_PROMPTS.balanced;
+  const modePrompt =
+    MODE_PROMPTS[thesisMode] || MODE_PROMPTS.balanced;
+
+  return `${modePrompt}
+
+${BASE_RULES}`;
 }
 
 function formatCurrency(value?: number | null) {
@@ -138,6 +143,36 @@ export function buildEvaluationSummaryPrompt(input: EvaluationSummaryInput) {
     ? input.dealerFitCautions.filter(Boolean)
     : [];
 
+  const mindfulOpportunityTypes = Array.isArray(
+    input.mindfulIntelligenceOpportunityTypes,
+  )
+    ? input.mindfulIntelligenceOpportunityTypes.filter(Boolean)
+    : [];
+
+  const mindfulStrengths = Array.isArray(
+    input.mindfulIntelligenceStrengths,
+  )
+    ? input.mindfulIntelligenceStrengths.filter(Boolean)
+    : [];
+
+  const mindfulLimitations = Array.isArray(
+    input.mindfulIntelligenceLimitations,
+  )
+    ? input.mindfulIntelligenceLimitations.filter(Boolean)
+    : [];
+
+  const mindfulKnownIssues = Array.isArray(
+    input.mindfulIntelligenceKnownIssues,
+  )
+    ? input.mindfulIntelligenceKnownIssues.filter(Boolean)
+    : [];
+
+  const mindfulVerificationItems = Array.isArray(
+    input.mindfulIntelligenceVerificationItems,
+  )
+    ? input.mindfulIntelligenceVerificationItems.filter(Boolean)
+    : [];
+
   const thesisMode = input.thesisMode || "balanced";
 
   const lines = [
@@ -169,6 +204,66 @@ export function buildEvaluationSummaryPrompt(input: EvaluationSummaryInput) {
     dealerFitCautions.length
       ? line("Dealer Fit Cautions", dealerFitCautions.join("; "))
       : null,
+
+    line(
+      "Mindful Intelligence Match",
+      input.mindfulIntelligenceMatched ? "Yes" : "No",
+    ),
+    line(
+      "Mindful Intelligence Profile",
+      input.mindfulIntelligenceTitle,
+    ),
+    line(
+      "Mindful Intelligence Match Level",
+      input.mindfulIntelligenceMatchLevel,
+    ),
+    line(
+      "Mindful Intelligence Confidence",
+      input.mindfulIntelligenceConfidence,
+    ),
+    line(
+      "Mindful Intelligence Verdict",
+      input.mindfulIntelligenceVerdict,
+    ),
+    line(
+      "Mindful Intelligence Rationale",
+      input.mindfulIntelligenceRationale,
+    ),
+    mindfulOpportunityTypes.length
+      ? line(
+          "Mindful Intelligence Opportunity Types",
+          mindfulOpportunityTypes.join("; "),
+        )
+      : null,
+    mindfulStrengths.length
+      ? line(
+          "Mindful Intelligence Strengths",
+          mindfulStrengths.join("; "),
+        )
+      : null,
+    mindfulLimitations.length
+      ? line(
+          "Mindful Intelligence Limitations",
+          mindfulLimitations.join("; "),
+        )
+      : null,
+    mindfulKnownIssues.length
+      ? line(
+          "Mindful Intelligence Known Issues",
+          mindfulKnownIssues.join("; "),
+        )
+      : null,
+    mindfulVerificationItems.length
+      ? line(
+          "Mindful Intelligence Verification Items",
+          mindfulVerificationItems.join("; "),
+        )
+      : null,
+    line(
+      "Mindful Intelligence Source Section",
+      input.mindfulIntelligenceSourceSection,
+    ),
+
     selectedConditionRules.length
       ? line("Selected Risk / Condition Rules", selectedConditionRules.join("; "))
       : null,
@@ -180,6 +275,15 @@ export function buildEvaluationSummaryPrompt(input: EvaluationSummaryInput) {
 Do not produce a generic valuation summary.
 
 Requested thesis mode: ${thesisMode}
+
+Mindful Intelligence instructions:
+- Mindful Intelligence is company-authored internal knowledge and should materially inform the fit analysis when a match is provided.
+- Treat the internal verdict, rationale, preferred opportunity types, limitations, and verification items as Mindful Motor Co.'s proprietary perspective.
+- Do not describe a known issue as a confirmed defect on this specific vehicle.
+- Phrase model concerns as checks, exposures, or conditions that must be verified.
+- If the company knowledge conflicts with a generic enthusiast assumption, prioritize the company-authored perspective.
+- Clearly connect the internal vehicle knowledge to the current economics and market evidence.
+- Do not merely repeat the internal rationale verbatim.
 
 Output requirements:
 - One paragraph only.
