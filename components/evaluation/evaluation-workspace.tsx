@@ -297,24 +297,35 @@ function ScoreRing({
       <div
         className="relative grid h-[86px] w-[86px] place-items-center rounded-full"
         style={{
-          background: `conic-gradient(${ringColor} ${
-            normalizedScore * 3.6
-          }deg, #e2e8f0 0deg)`,
+          background: isEmpty
+            ? "#e2e8f0"
+            : `conic-gradient(${ringColor} ${
+                normalizedScore * 3.6
+              }deg, #e2e8f0 0deg)`,
         }}
       >
-        <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-white shadow-inner">
+        <div className="grid h-[70px] w-[70px] place-items-center rounded-full bg-white shadow-inner">
           <div>
             <div className={`text-[25px] font-black leading-none tracking-[-0.04em] ${
               isEmpty ? "text-slate-400" : "text-slate-950"
             }`}>
               {isEmpty ? "—" : normalizedScore}
             </div>
-            <div className="mt-1 text-[10px] font-bold text-slate-400">
-              {isEmpty ? "Not calculated" : "/100"}
-            </div>
+
+            {!isEmpty ? (
+              <div className="mt-1 text-[10px] font-bold text-slate-400">
+                /100
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
+
+      {isEmpty ? (
+        <div className="mt-2 text-[10px] font-bold text-slate-400">
+          Not calculated
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2577,13 +2588,7 @@ export function EvaluationWorkspace({
         : "WORTH PURSUING";
 
   const compConfidenceDisplay =
-    comps.length > 0
-      ? `${compSummary.confidence}${
-          compSummary.includedCount
-            ? ` (${compSummary.includedCount} included)`
-            : ""
-        }`
-      : "—";
+    comps.length > 0 ? compSummary.confidence : "—";
 
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
@@ -3772,21 +3777,28 @@ export function EvaluationWorkspace({
                 </select>
               </FormRow>
 
-              <FormRow label="Final Retail Target">
-                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <span className="pl-3 text-sm text-slate-400">$</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={formatNumberInput(
-                      finalTargetOverride ?? targetResaleUsed,
-                    )}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onChange={(event) =>
-                      setFinalTargetOverride(toNumber(event.target.value))
-                    }
-                    className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
-                  />
+              <FormRow label="Sale Value Used">
+                <div>
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <span className="pl-3 text-sm text-slate-400">$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={formatNumberInput(
+                        finalTargetOverride ?? targetResaleUsed,
+                      )}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onChange={(event) =>
+                        setFinalTargetOverride(toNumber(event.target.value))
+                      }
+                      className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                    />
+                  </div>
+
+                  <p className="mt-1.5 text-right text-[10px] font-semibold leading-4 text-slate-400">
+                    Defaults to the Fast-Sale Value. Enter a different amount to
+                    override it.
+                  </p>
                 </div>
               </FormRow>
 
@@ -4214,7 +4226,7 @@ export function EvaluationWorkspace({
             </article>
 
             <article
-              className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}
+              className={`flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
@@ -4253,7 +4265,7 @@ export function EvaluationWorkspace({
 
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Expected Sale
+                    Sale Value Used
                   </div>
 
                   <div className="mt-2 text-[25px] font-black tracking-[-0.04em] text-slate-950">
@@ -4294,45 +4306,38 @@ export function EvaluationWorkspace({
                 </div>
               ) : null}
 
-              <button
-                type="button"
-                onClick={saveEvaluation}
-                disabled={saveLoading || !hasEvaluationData}
-                className={`mt-5 w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
-                  valuation.decision === "Pass"
-                    ? "bg-red-700 hover:bg-red-800"
-                    : valuation.decision === "Watch / Stretch Only"
-                      ? "bg-amber-600 hover:bg-amber-700"
-                      : "bg-emerald-700 hover:bg-emerald-800"
-                }`}
-              >
-                {saveLoading
-                  ? "Saving..."
-                  : savedEvaluationId
-                    ? "Update Evaluation"
-                    : "▣ Save Evaluation"}
-              </button>
+              <div className="mt-auto pt-8">
+                <button
+                  type="button"
+                  onClick={saveEvaluation}
+                  disabled={saveLoading || !hasEvaluationData}
+                  className={`w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
+                    valuation.decision === "Pass"
+                      ? "bg-red-700 hover:bg-red-800"
+                      : valuation.decision === "Watch / Stretch Only"
+                        ? "bg-amber-600 hover:bg-amber-700"
+                        : "bg-emerald-700 hover:bg-emerald-800"
+                  }`}
+                >
+                  {saveLoading
+                    ? "Saving..."
+                    : savedEvaluationId
+                      ? "Update Evaluation"
+                      : "▣ Save Evaluation"}
+                </button>
 
-              <button
-                type="button"
-                onClick={openConditionProfitability}
-                disabled={!hasEvaluationData}
-                className="mt-2 w-full rounded-xl border border-current/15 bg-white/75 px-4 py-2.5 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-              >
-                View Cost &amp; Profit Breakdown
-              </button>
-
-              <div className="mt-2 text-center text-[10px] font-semibold text-slate-500">
-                {hasEvaluationData
-                  ? "Based on market data, visible costs, condition, and dealer fit."
-                  : "Enter vehicle details and run an evaluation to calculate the bid, sale value, and projected profit."}
-              </div>
-
-              {saveStatus ? (
-                <div className="mt-2 text-center text-xs font-bold text-slate-600">
-                  {saveStatus}
+                <div className="mt-2 text-center text-[10px] font-semibold text-slate-500">
+                  {hasEvaluationData
+                    ? "Based on market data, visible costs, condition, and dealer fit."
+                    : "Enter vehicle details and run an evaluation to calculate the bid, sale value, and projected profit."}
                 </div>
-              ) : null}
+
+                {saveStatus ? (
+                  <div className="mt-2 text-center text-xs font-bold text-slate-600">
+                    {saveStatus}
+                  </div>
+                ) : null}
+              </div>
             </article>
 
             <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
@@ -4343,30 +4348,62 @@ export function EvaluationWorkspace({
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Comp Confidence:
+                    Comp Confidence
                   </dt>
-                  <dd className="text-right font-black text-emerald-700">
+                  <dd
+                    className={`text-right font-black ${
+                      comps.length ? "text-slate-900" : "text-slate-400"
+                    }`}
+                  >
                     {compConfidenceDisplay}
                   </dd>
                 </div>
 
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Comp Average:
+                    Included Comps
                   </dt>
-                  <dd className="text-right font-black text-slate-950">
+                  <dd
+                    className={`text-right font-black ${
+                      comps.length ? "text-slate-900" : "text-slate-400"
+                    }`}
+                  >
+                    {comps.length ? compSummary.includedCount : "—"}
+                  </dd>
+                </div>
+
+                <div className="flex justify-between gap-4">
+                  <dt className="font-semibold text-slate-500">
+                    Median Adjusted Value
+                  </dt>
+                  <dd
+                    className={`text-right font-black ${
+                      comps.length ? "text-slate-950" : "text-slate-400"
+                    }`}
+                  >
                     {comps.length
-                      ? money(compSummary.averageAdjusted)
+                      ? money(
+                          (compSummary as { medianAdjusted?: number })
+                            .medianAdjusted || compSummary.averageAdjusted,
+                        )
                       : "—"}
                   </dd>
                 </div>
 
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Adj. Retail Value:
+                    Fast-Sale Value
                   </dt>
-                  <dd className="text-right font-black text-emerald-700">
-                    {hasEvaluationData && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}
+                  <dd
+                    className={`text-right font-black ${
+                      hasEvaluationData && compSummary.fastSaleTarget > 0
+                        ? "text-slate-950"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {hasEvaluationData && compSummary.fastSaleTarget > 0
+                      ? money(compSummary.fastSaleTarget)
+                      : "—"}
                   </dd>
                 </div>
               </dl>
