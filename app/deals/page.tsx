@@ -137,6 +137,7 @@ async function getSavedEvaluations(userId: string) {
     `,
     )
     .eq("company_id", company.companyId)
+    .neq("status", "draft")
     .order("updated_at", {
       ascending: false,
     })
