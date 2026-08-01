@@ -2322,30 +2322,6 @@ export function EvaluationWorkspace({
     comps.length > 0,
   );
 
-  const decisionBadgeTone = !hasEvaluationData
-    ? "bg-slate-100 text-slate-600"
-    : valuation.decision === "Pass"
-      ? "bg-red-100 text-red-700"
-      : valuation.decision === "Watch / Stretch Only"
-        ? "bg-amber-100 text-amber-700"
-        : "bg-emerald-100 text-emerald-700";
-
-  const decisionBannerTone = !hasEvaluationData
-    ? "border-slate-200 bg-white text-slate-950"
-    : valuation.decision === "Pass"
-      ? "border-red-200/80 bg-red-50/70 text-red-950"
-      : valuation.decision === "Watch / Stretch Only"
-        ? "border-amber-200/80 bg-amber-50/70 text-amber-950"
-        : "border-emerald-200/80 bg-emerald-50/70 text-emerald-950";
-
-  const decisionTextTone = !hasEvaluationData
-    ? "text-slate-400"
-    : valuation.decision === "Pass"
-      ? "text-red-700"
-      : valuation.decision === "Watch / Stretch Only"
-        ? "text-amber-700"
-        : "text-emerald-700";
-
   const suggestedBid =
     "safeBid" in valuation && typeof valuation.safeBid === "number"
       ? valuation.safeBid
@@ -2503,6 +2479,16 @@ export function EvaluationWorkspace({
     },
   };
 
+  const mindfulOpportunityLabel =
+    mindfulIntelligenceDisplay.opportunityTypes[0]?.replaceAll("_", " ") ||
+    dealerFitResult.category ||
+    "General acquisition";
+
+  const mindfulOpportunityTone =
+    mindfulOpportunityLabel.toLowerCase() === "avoid"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : "border-slate-200 bg-white text-slate-600";
+
   const suggestedBidDisplay = !hasEvaluationData
     ? "—"
     : valuationInput.currentBid <= 0
@@ -2579,13 +2565,87 @@ export function EvaluationWorkspace({
     }
   }
 
+  const hasSevereCondition = Object.values(conditionAssessments).some(
+    (assessment) => assessment.severity === "severe",
+  );
+
+  const hasHighConditionRisk =
+    String(conditionAnalysis?.overallRisk || "").toLowerCase() === "high";
+
+  const hasLowCompConfidence =
+    comps.length > 0 &&
+    String(compSummary.confidence || "").toLowerCase() === "low";
+
+  const hasLimitedDealerFit = dealerFitResult.score < 55;
+
+  const requiresReview =
+    hasEvaluationData &&
+    valuation.decision !== "Pass" &&
+    valuation.decision !== "Watch / Stretch Only" &&
+    (hasLowCompConfidence ||
+      hasLimitedDealerFit ||
+      hasSevereCondition ||
+      hasHighConditionRisk);
+
+  const reviewReasons = [
+    hasLowCompConfidence ? "low comp confidence" : null,
+    hasLimitedDealerFit ? "limited dealer fit" : null,
+    hasSevereCondition || hasHighConditionRisk
+      ? "significant condition concerns"
+      : null,
+  ].filter((reason): reason is string => Boolean(reason));
+
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
     : valuation.decision === "Pass"
       ? "PASS"
       : valuation.decision === "Watch / Stretch Only"
         ? "WATCH CLOSELY"
-        : "WORTH PURSUING";
+        : requiresReview
+          ? "REVIEW REQUIRED"
+          : "WORTH PURSUING";
+
+  const presentationDecision =
+    !hasEvaluationData
+      ? "awaiting"
+      : valuation.decision === "Pass"
+        ? "pass"
+        : valuation.decision === "Watch / Stretch Only"
+          ? "watch"
+          : requiresReview
+            ? "review"
+            : "pursue";
+
+  const decisionBadgeTone =
+    presentationDecision === "pass"
+      ? "bg-red-100 text-red-700"
+      : presentationDecision === "watch" ||
+          presentationDecision === "review"
+        ? "bg-amber-100 text-amber-700"
+        : presentationDecision === "pursue"
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-slate-100 text-slate-600";
+
+  const decisionBannerTone =
+    presentationDecision === "pass"
+      ? "border-red-200/80 bg-red-50/60 text-red-950"
+      : presentationDecision === "watch" ||
+          presentationDecision === "review"
+        ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
+        : "border-slate-200 bg-white text-slate-950";
+
+  const decisionTextTone =
+    presentationDecision === "pass"
+      ? "text-red-700"
+      : presentationDecision === "watch" ||
+          presentationDecision === "review"
+        ? "text-amber-700"
+        : presentationDecision === "pursue"
+          ? "text-emerald-700"
+          : "text-slate-400";
+
+  const lotLogicIcon =
+    presentationDecision === "pursue" ? "✓ " : "";
 
   const compConfidenceDisplay =
     comps.length > 0 ? compSummary.confidence : "—";
@@ -3874,12 +3934,12 @@ export function EvaluationWorkspace({
           }}
         />
 
-        <div className="mx-auto max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
-          <section className="mb-5 rounded-[18px] border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <div className="grid items-end gap-3 lg:grid-cols-[170px_minmax(360px,1fr)_135px_135px_165px]">
+        <div className="mx-auto max-w-[1380px] px-4 py-4 sm:px-5 lg:px-7">
+          <section className="mb-4 rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <div className="grid items-end gap-2.5 lg:grid-cols-[170px_minmax(360px,1fr)_135px_135px_165px]">
               <div>
                 <div className="text-sm font-black text-slate-950">
-                  Quick Eval
+                  New Evaluation
                 </div>
 
                 <div className="mt-2 flex flex-nowrap gap-4 text-xs font-extrabold">
@@ -4120,11 +4180,11 @@ export function EvaluationWorkspace({
                     ? vin.trim().length < 17
                     : !hasManualQuickEvalBasics)
                 }
-                className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
               >
                 {vinDecodeLoading || marketCheckLoading
                   ? "Evaluating..."
-                  : "▶ Run Evaluation"}
+                  : "Run Evaluation"}
               </button>
             </div>
 
@@ -4183,14 +4243,20 @@ export function EvaluationWorkspace({
                 </div>
 
                 <div className="min-w-0">
-                  <div className="text-lg font-black leading-tight tracking-[-0.025em] text-blue-700">
-                    {vehicleTitle}
+                  <div
+                    className={`text-lg font-black leading-tight tracking-[-0.025em] ${
+                      hasEvaluationData ? "text-blue-700" : "text-slate-700"
+                    }`}
+                  >
+                    {hasEvaluationData ? vehicleTitle : "Awaiting vehicle"}
                   </div>
 
-                  <div className="mt-1 text-xs font-semibold text-slate-500">
-                    {[simplifiedVehicleBodyClass, decodedVehicle?.fuelType]
-                      .filter(Boolean)
-                      .join(" • ") || "Vehicle details pending"}
+                  <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                    {hasEvaluationData
+                      ? [simplifiedVehicleBodyClass, decodedVehicle?.fuelType]
+                          .filter(Boolean)
+                          .join(" • ") || "Vehicle details available"
+                      : "Enter a VIN or use Manual Entry to populate vehicle details."}
                   </div>
                 </div>
               </div>
@@ -4201,28 +4267,38 @@ export function EvaluationWorkspace({
                 </div>
               ) : null}
 
-              <dl className="mt-5 space-y-2.5 text-sm">
-                {[
-                  ["VIN", vin || "—"],
-                  [
-                    "Mileage",
-                    targetMileage
-                      ? `${formatNumberInput(targetMileage)} mi`
-                      : "—",
-                  ],
-                  ["Drivetrain", decodedVehicle?.driveType || "—"],
-                  ["Body Style", simplifiedVehicleBodyClass || "—"],
-                  ["Trim", vehicleTrim || "—"],
-                  ["Source", auctionSite || "—"],
-                ].map(([label, value]) => (
-                  <div key={label} className="grid grid-cols-[105px_1fr] gap-3">
-                    <dt className="font-semibold text-slate-500">{label}</dt>
-                    <dd className="truncate text-right font-bold text-slate-900">
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              {hasEvaluationData ? (
+                <dl className="mt-5 space-y-2.5 text-sm">
+                  {[
+                    ["VIN", vin || "—"],
+                    [
+                      "Mileage",
+                      targetMileage
+                        ? `${formatNumberInput(targetMileage)} mi`
+                        : "—",
+                    ],
+                    ["Drivetrain", decodedVehicle?.driveType || "—"],
+                    ["Body Style", simplifiedVehicleBodyClass || "—"],
+                    ["Trim", vehicleTrim || "—"],
+                    ["Source", auctionSite || "—"],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="grid grid-cols-[105px_1fr] gap-3"
+                    >
+                      <dt className="font-semibold text-slate-500">{label}</dt>
+                      <dd className="truncate text-right font-bold text-slate-900">
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-xs font-semibold leading-5 text-slate-500">
+                  Vehicle specifications, mileage, trim, and source will appear
+                  here after the evaluation begins.
+                </div>
+              )}
             </article>
 
             <article
@@ -4242,7 +4318,7 @@ export function EvaluationWorkspace({
                 <span
                   className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-black ${decisionBadgeTone}`}
                 >
-                  {hasEvaluationData ? "✓ " : ""}{lotLogicLabel}
+                  {lotLogicIcon}{lotLogicLabel}
                 </span>
               </div>
 
@@ -4287,10 +4363,18 @@ export function EvaluationWorkspace({
                         : "text-red-700"
                     }`}
                   >
-                    {money(valuation.expectedGrossProfit)}
+                    {hasEvaluationData
+                      ? money(valuation.expectedGrossProfit)
+                      : "—"}
                   </div>
                 </div>
               </div>
+
+              {presentationDecision === "review" && reviewReasons.length ? (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-2.5 text-center text-xs font-bold leading-5 text-amber-800">
+                  Review required: {reviewReasons.join(", ")}.
+                </div>
+              ) : null}
 
               {currentBidPosition ? (
                 <div
@@ -4312,9 +4396,10 @@ export function EvaluationWorkspace({
                   onClick={saveEvaluation}
                   disabled={saveLoading || !hasEvaluationData}
                   className={`w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
-                    valuation.decision === "Pass"
+                    presentationDecision === "pass"
                       ? "bg-red-700 hover:bg-red-800"
-                      : valuation.decision === "Watch / Stretch Only"
+                      : presentationDecision === "watch" ||
+                          presentationDecision === "review"
                         ? "bg-amber-600 hover:bg-amber-700"
                         : "bg-emerald-700 hover:bg-emerald-800"
                   }`}
@@ -4435,48 +4520,51 @@ export function EvaluationWorkspace({
             </article>
           </section>
 
-          <section className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(350px,.85fr)]">
-            <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+          <section className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(350px,.85fr)]">
+            <div className="h-full overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
               <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-violet-600">
-                        Mindful Intelligence
-                      </div>
-
-                      {hasEvaluationData ? (
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">
-                          {mindfulIntelligencePreview
-                            ? "Profile match"
-                            : "General Mindful read"}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-slate-950">
-                      {hasEvaluationData
-                        ? mindfulIntelligenceDisplay.title
-                        : "Available after evaluation"}
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-black tracking-[-0.02em] text-slate-950">
+                      Mindful Intelligence
                     </h2>
+
+                    {hasEvaluationData ? (
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-500">
+                          {mindfulIntelligenceDisplay.title} ·{" "}
+                          {mindfulIntelligencePreview
+                            ? "Matched Mindful profile"
+                            : "General dealer-fit profile"}
+                        </span>
+
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize ${mindfulOpportunityTone}`}
+                        >
+                          {mindfulOpportunityLabel}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs font-semibold text-slate-500">
+                        Available after evaluation
+                      </div>
+                    )}
                   </div>
 
                   {hasEvaluationData ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-violet-700">
-                        {mindfulIntelligenceDisplay.verdict.replaceAll("_", " ")}
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black text-violet-700">
+                        Mindful Fit:{" "}
+                        {mindfulIntelligenceDisplay.verdict === "strong_fit"
+                          ? "Strong"
+                          : mindfulIntelligenceDisplay.verdict ===
+                              "conditional_fit"
+                            ? "Selective"
+                            : "Limited"}
                       </span>
 
                       <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
                         {mindfulIntelligenceDisplay.confidence} confidence
-                      </span>
-
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-500">
-                        {mindfulIntelligenceDisplay.matchLevel.replaceAll(
-                          "_",
-                          " ",
-                        )}{" "}
-                        match
                       </span>
                     </div>
                   ) : (
@@ -4547,31 +4635,6 @@ export function EvaluationWorkspace({
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
                     {mindfulIntelligenceDisplay.rationale}
                   </p>
-
-                  <div className="mt-5">
-                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                      Opportunity type
-                    </div>
-
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {mindfulIntelligenceDisplay.opportunityTypes.length ? (
-                        mindfulIntelligenceDisplay.opportunityTypes.map(
-                          (type) => (
-                            <span
-                              key={type}
-                              className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black capitalize text-slate-700"
-                            >
-                              {type.replaceAll("_", " ")}
-                            </span>
-                          ),
-                        )
-                      ) : (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-700">
-                          {dealerFitResult.category || "General acquisition"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
 
                   {mindfulIntelligenceDisplay.strengths.length ? (
                     <div className="mt-5">
@@ -4746,8 +4809,16 @@ export function EvaluationWorkspace({
             <SectionCard
               title="Condition & Reconditioning"
               action={
-                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">
-                  Pre-purchase analysis
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                    hasEvaluationData
+                      ? "bg-amber-50 text-amber-700"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {hasEvaluationData
+                    ? "Pre-purchase analysis"
+                    : "Awaiting vehicle"}
                 </span>
               }
             >
@@ -4765,36 +4836,44 @@ export function EvaluationWorkspace({
                 <button
                   type="button"
                   onClick={openConditionAnalysis}
-                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white hover:bg-slate-800"
+                  disabled={!hasEvaluationData}
+                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
                 >
                   Add Condition Information
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {conditionAssessmentDefinitions.map((definition) => {
-                  const assessment = conditionAssessments[definition.key];
+              {hasEvaluationData ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {conditionAssessmentDefinitions.map((definition) => {
+                    const assessment = conditionAssessments[definition.key];
 
-                  return (
-                    <div
-                      key={definition.key}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center"
-                    >
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                        {definition.key === "history"
-                          ? "History"
-                          : definition.key}
+                    return (
+                      <div
+                        key={definition.key}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center"
+                      >
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
+                          {definition.key === "history"
+                            ? "History"
+                            : definition.key}
+                        </div>
+                        <div className="mt-1 text-xs font-black capitalize text-slate-700">
+                          {assessment.severity}
+                        </div>
+                        <div className="mt-1 text-[10px] font-semibold text-slate-500">
+                          {money(assessment.reserve)}
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs font-black capitalize text-slate-700">
-                        {assessment.severity}
-                      </div>
-                      <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                        {money(assessment.reserve)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-center text-xs font-semibold leading-5 text-slate-500">
+                  Mechanical, cosmetic, and history-related costs will appear
+                  here after the vehicle is entered.
+                </div>
+              )}
 
               {conditionAnalysis ? (
                 <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3">
@@ -4831,9 +4910,13 @@ export function EvaluationWorkspace({
                     </span>
                   </div>
                 </div>
-              ) : (
+              ) : hasEvaluationData ? (
                 <div className="mt-4 rounded-xl bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-800">
                   No AI condition analysis has been generated for this vehicle.
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-xs font-semibold leading-5 text-slate-500">
+                  Add a vehicle to begin condition analysis.
                 </div>
               )}
             </SectionCard>
