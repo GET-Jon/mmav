@@ -5,6 +5,7 @@ import {
   findGenerationCompRule,
   isInGenerationCompRange,
 } from "@/lib/marketcheck/generation-comps";
+import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 
 type MarketCheckListing = Record<string, any>;
 
@@ -1532,11 +1533,16 @@ export async function POST(request: Request) {
       return progressiveSearches;
     }
 
+    const taxonomyRetrieval = findModelTaxonomyFallback({ make, model });
+
     const exactSearches = await runProgressiveRegionSearches({
-      attemptName: generationCompRule
-        ? `generation-aware-make-model-${generationCompRule.generation}`
-        : "exact-year-make-model",
+      attemptName: taxonomyRetrieval
+        ? `taxonomy-retrieval-${model}-via-${taxonomyRetrieval.fallbackModel}`
+        : generationCompRule
+          ? `generation-aware-make-model-${generationCompRule.generation}`
+          : "exact-year-make-model",
       attemptYear: generationCompRule ? undefined : year,
+      attemptModel: taxonomyRetrieval?.fallbackModel,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
