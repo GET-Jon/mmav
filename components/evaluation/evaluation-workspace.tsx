@@ -491,6 +491,8 @@ export function EvaluationWorkspace({
   const [marketCheckSearchMeta, setMarketCheckSearchMeta] = useState<{
     loadedCount: number;
     regionsChecked: string[];
+    searchedZips: string[];
+    searchStage: "initial" | "expanded" | "metro";
     lowConfidenceFallback: boolean;
     minimumQualityScore?: number;
   } | null>(null);
@@ -905,7 +907,15 @@ export function EvaluationWorkspace({
       }
 
       setMarketCheckStatus(draft.marketCheckStatus || "");
-      setMarketCheckSearchMeta(draft.marketCheckSearchMeta || null);
+      setMarketCheckSearchMeta(
+        draft.marketCheckSearchMeta
+          ? {
+              ...draft.marketCheckSearchMeta,
+              searchedZips: draft.marketCheckSearchMeta.searchedZips || [],
+              searchStage: draft.marketCheckSearchMeta.searchStage || "initial",
+            }
+          : null,
+      );
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
     } catch (error) {
       console.error("Failed to load local evaluator draft:", error);
@@ -1683,6 +1693,16 @@ export function EvaluationWorkspace({
 
   async function pullMarketCheckComps(
     vehicleOverride?: VinDecodeResult | MarketCheckVehicleOverride | null,
+    options?: {
+      searchStage?: "initial" | "expanded" | "metro";
+      regions?: Array<{
+        market: string;
+        zip: string;
+        order: number;
+        enabled: boolean;
+      }>;
+      mergeResults?: boolean;
+    },
   ) {
     if (marketCheckInFlightRef.current || marketCheckLoading) {
       setMarketCheckStatus("MarketCheck search already in progress.");
@@ -1706,12 +1726,13 @@ export function EvaluationWorkspace({
 
     marketCheckInFlightRef.current = true;
 
-    // Clear results from the previous vehicle before beginning a new search.
-    // This prevents stale comps and comp-derived values from appearing to
-    // apply to the newly evaluated vehicle.
-    setComps([]);
-    setMarketCheckSearchMeta(null);
-    setMarketCheckApiUsage(null);
+    // Initial searches replace the prior vehicle's MarketCheck state.
+    // Expansion searches preserve existing comps and merge new geography.
+    if (!options?.mergeResults) {
+      setComps([]);
+      setMarketCheckSearchMeta(null);
+      setMarketCheckApiUsage(null);
+    }
 
     setMarketCheckLoading(true);
     setMarketCheckStatus(
@@ -1733,24 +1754,34 @@ export function EvaluationWorkspace({
           trim,
           fuelType,
           targetMileage,
-          regions: activeAssumptions.regionalMarkets
-            .filter((market) => market.enabled)
-            .map((market, index) => ({
-              market: market.market,
-              zip: market.zip,
-              order:
-                typeof market.order === "number" &&
-                Number.isFinite(market.order)
-                  ? market.order
-                  : index + 1,
-              enabled: market.enabled,
-            })),
+          regions:
+            options?.regions ||
+            activeAssumptions.regionalMarkets
+              .filter((market) => market.enabled)
+              .map((market, index) => ({
+                market: market.market,
+                zip: market.zip,
+                order:
+                  typeof market.order === "number" &&
+                  Number.isFinite(market.order)
+                    ? market.order
+                    : index + 1,
+                enabled: market.enabled,
+              })),
           radius: 100,
           rows: 10,
           liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
-          maxApiCallsPerSearch: marketCheckApiControls.maxApiCallsPerSearch,
+          maxApiCallsPerSearch:
+            options?.searchStage === "expanded" ||
+            options?.searchStage === "metro"
+              ? 3
+              : marketCheckApiControls.maxApiCallsPerSearch,
           minUsableCompsToStop: marketCheckApiControls.minUsableCompsToStop,
-          minInitialRegions: marketCheckApiControls.minInitialRegions,
+          minInitialRegions:
+            options?.searchStage === "expanded" ||
+            options?.searchStage === "metro"
+              ? 3
+              : marketCheckApiControls.minInitialRegions,
         }),
       });
 
@@ -1761,7 +1792,10 @@ export function EvaluationWorkspace({
       }
 
       if (!data.comps || data.comps.length === 0) {
-        setComps([]);
+        if (!options?.mergeResults) {
+          setComps([]);
+        }
+
         setMarketCheckApiUsage(data.apiUsage || null);
 
         if (data.apiUsage) {
@@ -1773,12 +1807,33 @@ export function EvaluationWorkspace({
             }),
           );
         }
+
+        const previousRegionsChecked = options?.mergeResults
+          ? marketCheckSearchMeta?.regionsChecked || []
+          : [];
+        const previousSearchedZips = options?.mergeResults
+          ? marketCheckSearchMeta?.searchedZips || []
+          : [];
+
         setMarketCheckSearchMeta({
-          loadedCount: 0,
-          regionsChecked: data.search?.regionsChecked || [],
+          loadedCount: options?.mergeResults ? comps.length : 0,
+          regionsChecked: Array.from(
+            new Set([
+              ...previousRegionsChecked,
+              ...(data.search?.regionsChecked || []),
+            ]),
+          ),
+          searchedZips: Array.from(
+            new Set([
+              ...previousSearchedZips,
+              ...(data.search?.searchedZips || []),
+            ]),
+          ),
+          searchStage: options?.searchStage || "initial",
           lowConfidenceFallback: false,
           minimumQualityScore: data.minimumQualityScore,
         });
+
         setMarketCheckStatus(
           data.apiUsage?.stopReason || data.error || "No comps found",
         );
@@ -1797,7 +1852,17 @@ export function EvaluationWorkspace({
         }),
       );
 
-      setComps(normalizedComps);
+      const mergedComps = options?.mergeResults
+        ? [
+            ...comps,
+            ...normalizedComps.filter(
+              (newComp: MarketComp) =>
+                !comps.some((existingComp) => existingComp.id === newComp.id),
+            ),
+          ]
+        : normalizedComps;
+
+      setComps(mergedComps);
       setMarketCheckApiUsage(data.apiUsage || null);
 
       if (data.apiUsage) {
@@ -1809,17 +1874,41 @@ export function EvaluationWorkspace({
           }),
         );
       }
+
+      const previousRegionsChecked = options?.mergeResults
+        ? marketCheckSearchMeta?.regionsChecked || []
+        : [];
+      const previousSearchedZips = options?.mergeResults
+        ? marketCheckSearchMeta?.searchedZips || []
+        : [];
+
+      const combinedRegionsChecked = Array.from(
+        new Set([
+          ...previousRegionsChecked,
+          ...(data.search?.regionsChecked || []),
+        ]),
+      );
+      const combinedSearchedZips = Array.from(
+        new Set([
+          ...previousSearchedZips,
+          ...(data.search?.searchedZips || []),
+        ]),
+      );
+
       setMarketCheckSearchMeta({
-        loadedCount: normalizedComps.length,
-        regionsChecked: data.search?.regionsChecked || [],
+        loadedCount: mergedComps.length,
+        regionsChecked: combinedRegionsChecked,
+        searchedZips: combinedSearchedZips,
+        searchStage: options?.searchStage || "initial",
         lowConfidenceFallback: Boolean(data.lowConfidenceFallback),
         minimumQualityScore: data.minimumQualityScore,
       });
-      const regionsCheckedCount = data.search?.regionsChecked?.length || 0;
 
       setMarketCheckStatus(
-        `${normalizedComps.length} comps loaded${
-          regionsCheckedCount ? ` · ${regionsCheckedCount} regions checked` : ""
+        `${mergedComps.length} comps loaded${
+          combinedRegionsChecked.length
+            ? ` · ${combinedRegionsChecked.length} regions checked`
+            : ""
         }${data.cache?.hit ? " from cache" : ""}`,
       );
     } catch (error) {
@@ -1830,6 +1919,76 @@ export function EvaluationWorkspace({
       marketCheckInFlightRef.current = false;
       setMarketCheckLoading(false);
     }
+  }
+
+  async function expandMarketCheckSearch() {
+    const searchedZips = new Set(marketCheckSearchMeta?.searchedZips || []);
+
+    const nextRegions = activeAssumptions.regionalMarkets
+      .filter((market) => market.enabled)
+      .map((market, index) => ({
+        market: market.market,
+        zip: market.zip,
+        order:
+          typeof market.order === "number" && Number.isFinite(market.order)
+            ? market.order
+            : index + 1,
+        enabled: market.enabled,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .filter((market) => !searchedZips.has(market.zip))
+      .slice(0, 3);
+
+    if (nextRegions.length === 0) {
+      setMarketCheckStatus(
+        "All configured regions have already been searched. Major metropolitan search is available next.",
+      );
+      return;
+    }
+
+    await pullMarketCheckComps(null, {
+      searchStage: "expanded",
+      regions: nextRegions,
+      mergeResults: true,
+    });
+  }
+
+  async function searchMajorMetropolitanAreas() {
+    const searchedZips = new Set(marketCheckSearchMeta?.searchedZips || []);
+
+    const metroRegions = [
+      {
+        market: "Los Angeles",
+        zip: "90012",
+        order: 1,
+        enabled: true,
+      },
+      {
+        market: "Miami",
+        zip: "33130",
+        order: 2,
+        enabled: true,
+      },
+      {
+        market: "Atlanta",
+        zip: "30303",
+        order: 3,
+        enabled: true,
+      },
+    ].filter((market) => !searchedZips.has(market.zip));
+
+    if (metroRegions.length === 0) {
+      setMarketCheckStatus(
+        "Major metropolitan areas have already been searched for this vehicle.",
+      );
+      return;
+    }
+
+    await pullMarketCheckComps(null, {
+      searchStage: "metro",
+      regions: metroRegions,
+      mergeResults: true,
+    });
   }
 
   function openMethodology() {
@@ -2956,7 +3115,10 @@ export function EvaluationWorkspace({
 
                   <label className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                      Max API Calls
+                      Initial API Calls
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                      Controls the automatic first search. Manual expansion searches up to 3 additional regions separately.
                     </div>
                     <input
                       type="number"
@@ -4930,6 +5092,37 @@ export function EvaluationWorkspace({
                   <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
                     {compSummary.includedCount} Usable Comps
                   </span>
+
+                  {marketCheckSearchMeta &&
+                  marketCheckSearchMeta.loadedCount === 0 &&
+                  marketCheckSearchMeta.searchStage !== "metro" &&
+                  !marketCheckLoading ? (
+                    marketCheckSearchMeta.searchStage === "expanded" ||
+                    !activeAssumptions.regionalMarkets
+                      .filter((market) => market.enabled)
+                      .some(
+                        (market) =>
+                          !marketCheckSearchMeta.searchedZips.includes(
+                            market.zip,
+                          ),
+                      ) ? (
+                      <button
+                        type="button"
+                        onClick={searchMajorMetropolitanAreas}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
+                      >
+                        Major Metropolitan Areas
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={expandMarketCheckSearch}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
+                      >
+                        Expand Search
+                      </button>
+                    )
+                  ) : null}
 
                   <button
                     type="button"
