@@ -45,7 +45,7 @@ alter table public.mindful_inventory_car_plans
   add constraint mindful_inventory_car_plans_current_version_fk
   foreign key (current_approved_version_id)
   references public.mindful_inventory_car_plan_versions(id)
-  on delete restrict;
+  on delete set null;
 
 create index mindful_inventory_car_plan_versions_plan_idx
   on public.mindful_inventory_car_plan_versions(car_plan_id, version_number desc);
@@ -143,6 +143,9 @@ begin
   if old.status = 'approved' then
     raise exception 'Approved Car Plan versions are immutable.';
   end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
   return new;
 end;
 $$;
@@ -164,6 +167,9 @@ begin
       and version.status = 'approved'
   ) then
     raise exception 'Items in an approved Car Plan version are immutable.';
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
   end if;
   return new;
 end;
