@@ -1468,12 +1468,14 @@ export async function POST(request: Request) {
       attemptName,
       attemptYear,
       attemptModel,
+      attemptRows,
       maxApiCallsOverride,
       reserveOneCallWhenNoResults,
     }: {
       attemptName: string;
       attemptYear?: number;
       attemptModel?: string;
+      attemptRows?: number;
       maxApiCallsOverride?: number;
       reserveOneCallWhenNoResults?: boolean;
     }) {
@@ -1496,7 +1498,7 @@ export async function POST(request: Request) {
           model: attemptModel ?? model,
           zip,
           radius,
-          rows,
+          rows: attemptRows ?? rows,
           attemptName,
           searchKey,
           reason,
@@ -1543,6 +1545,7 @@ export async function POST(request: Request) {
           : "exact-year-make-model",
       attemptYear: generationCompRule ? undefined : year,
       attemptModel: taxonomyRetrieval?.fallbackModel,
+      attemptRows: taxonomyRetrieval ? 25 : undefined,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
