@@ -340,7 +340,10 @@ export function MarketCheckApiSettingsCard() {
 
           <label className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-              Max API Calls
+              Initial API Calls
+            </div>
+            <div className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+              Controls the automatic first search. Manual expansion searches up to 3 additional regions separately.
             </div>
             <input
               type="number"

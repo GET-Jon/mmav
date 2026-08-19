@@ -167,8 +167,13 @@ export function findModelTaxonomyFallback({
       return false;
     }
 
-    return fallback.requestedModels.some(
-      (requestedModel) => normalizeText(requestedModel) === normalizedModel
-    );
+    return fallback.requestedModels.some((requestedModel) => {
+      const normalizedRequestedModel = normalizeText(requestedModel);
+
+      return (
+        normalizedModel === normalizedRequestedModel ||
+        normalizedModel.startsWith(`${normalizedRequestedModel} `)
+      );
+    });
   });
 }

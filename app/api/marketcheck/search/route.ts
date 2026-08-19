@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { defaultAssumptions } from "@/lib/assumptions";
 import type { MarketComp } from "@/types/comps";
-import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
 import {
   findGenerationCompRule,
   isInGenerationCompRange,
@@ -259,6 +258,83 @@ function setCachedResponse(searchKey: string, payload: Record<string, any>) {
   });
 }
 
+function normalizeModelIdentity(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function modelIdentityMatches({
+  listing,
+  requestedModel,
+}: {
+  listing: MarketCheckListing;
+  requestedModel: string;
+}) {
+  const build = listing.build || {};
+
+  const requested = normalizeModelIdentity(requestedModel);
+  if (!requested) {
+    return true;
+  }
+
+  const listingModel = normalizeModelIdentity(
+    build.model ?? listing.model ?? "",
+  );
+
+  if (listingModel === requested) {
+    return true;
+  }
+
+  const requestedCompact = requested.replace(/\s+/g, "");
+  const listingModelCompact = listingModel.replace(/\s+/g, "");
+
+  if (listingModelCompact && listingModelCompact === requestedCompact) {
+    return true;
+  }
+
+  const searchableText = normalizeModelIdentity(
+    [
+      build.model,
+      listing.model,
+      build.trim,
+      listing.trim,
+      listing.heading,
+      listing.title,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+  const searchableTokens = searchableText.split(" ").filter(Boolean);
+
+  if (searchableTokens.includes(requestedCompact)) {
+    return true;
+  }
+
+  const requestedTokens = requested.split(" ").filter(Boolean);
+
+  if (requestedTokens.length > 1) {
+    for (
+      let index = 0;
+      index <= searchableTokens.length - requestedTokens.length;
+      index += 1
+    ) {
+      const candidate = searchableTokens
+        .slice(index, index + requestedTokens.length)
+        .join("");
+
+      if (candidate === requestedCompact) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function trimMatches({
   listingTrim,
   preferredTrim,
@@ -376,6 +452,15 @@ function mapListingToComp({
     !fuelTypesMatch({
       targetFuelType,
       listing,
+    })
+  ) {
+    return null;
+  }
+
+  if (
+    !modelIdentityMatches({
+      listing,
+      requestedModel: searchModel,
     })
   ) {
     return null;
@@ -1211,6 +1296,15 @@ export async function POST(request: Request) {
             rejectedReasons.push("fuel mismatch");
           }
 
+          if (
+            !modelIdentityMatches({
+              listing,
+              requestedModel: model,
+            })
+          ) {
+            rejectedReasons.push("model mismatch");
+          }
+
           if (!askingPrice || !mileage) {
             rejectedReasons.push("missing price or mileage");
           }
@@ -1374,12 +1468,14 @@ export async function POST(request: Request) {
       attemptName,
       attemptYear,
       attemptModel,
+      attemptRows,
       maxApiCallsOverride,
       reserveOneCallWhenNoResults,
     }: {
       attemptName: string;
       attemptYear?: number;
       attemptModel?: string;
+      attemptRows?: number;
       maxApiCallsOverride?: number;
       reserveOneCallWhenNoResults?: boolean;
     }) {
@@ -1402,7 +1498,7 @@ export async function POST(request: Request) {
           model: attemptModel ?? model,
           zip,
           radius,
-          rows,
+          rows: attemptRows ?? rows,
           attemptName,
           searchKey,
           reason,
@@ -1439,12 +1535,17 @@ export async function POST(request: Request) {
       return progressiveSearches;
     }
 
+    const taxonomyRetrieval = findModelTaxonomyFallback({ make, model });
+
     const exactSearches = await runProgressiveRegionSearches({
-      attemptName: generationCompRule
-        ? `generation-aware-make-model-${generationCompRule.generation}`
-        : "exact-year-make-model",
+      attemptName: taxonomyRetrieval
+        ? `taxonomy-retrieval-${model}-via-${taxonomyRetrieval.fallbackModel}`
+        : generationCompRule
+          ? `generation-aware-make-model-${generationCompRule.generation}`
+          : "exact-year-make-model",
       attemptYear: generationCompRule ? undefined : year,
-      reserveOneCallWhenNoResults: true,
+      attemptModel: taxonomyRetrieval?.fallbackModel,
+      attemptRows: taxonomyRetrieval ? 25 : undefined,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
@@ -1462,114 +1563,37 @@ export async function POST(request: Request) {
 
     const exactSummary = buildCompSummary(exactSearches);
 
-    if (exactSummary.rawCount === 0) {
-      const modelAliases = findMarketCheckModelAliases({ make, model });
+    // Do not broaden vehicle identity when the primary search returns no results.
+    // For vehicles without a generation rule, we may still widen the YEAR search
+    // while keeping the exact same make/model.
+    if (exactSummary.rawCount === 0 && !generationCompRule) {
+      const remainingApiCalls = Math.max(
+        0,
+        apiControls.maxApiCallsPerSearch - searches.length,
+      );
 
-      for (const aliasModel of modelAliases) {
-        const remainingAliasApiCalls = Math.max(
-          0,
-          apiControls.maxApiCallsPerSearch - searches.length,
-        );
+      const fallbackSearches =
+        remainingApiCalls > 0
+          ? await runProgressiveRegionSearches({
+              attemptName: "same-model-year-expanded",
+              maxApiCallsOverride: remainingApiCalls,
+            })
+          : [];
 
-        if (remainingAliasApiCalls <= 0) {
-          break;
-        }
+      const failedFallbackSearch = fallbackSearches.find(
+        (search) => !search.ok,
+      );
 
-        const aliasSearches = await runProgressiveRegionSearches({
-          attemptName: `fallback-model-alias-${aliasModel}`,
-          attemptModel: aliasModel,
-          maxApiCallsOverride: remainingAliasApiCalls,
+      if (failedFallbackSearch) {
+        return buildFailedMarketCheckResponse({
+          failedSearch: failedFallbackSearch,
+          searches: [...searches, ...fallbackSearches],
+          orderedRegions,
+          apiControls,
         });
-
-        const failedAliasSearch = aliasSearches.find((search) => !search.ok);
-
-        if (failedAliasSearch) {
-          return buildFailedMarketCheckResponse({
-            failedSearch: failedAliasSearch,
-            searches: [...searches, ...aliasSearches],
-            orderedRegions,
-            apiControls,
-          });
-        }
-
-        searches = [...searches, ...aliasSearches];
-
-        const aliasSummary = buildCompSummary(searches);
-
-        if (aliasSummary.rawCount > 0) {
-          break;
-        }
       }
 
-      const aliasSummary = buildCompSummary(searches);
-
-      if (aliasSummary.rawCount === 0) {
-        const taxonomyFallback = findModelTaxonomyFallback({ make, model });
-
-        if (taxonomyFallback) {
-          const remainingTaxonomyApiCalls = Math.max(
-            0,
-            apiControls.maxApiCallsPerSearch - searches.length,
-          );
-
-          if (remainingTaxonomyApiCalls > 0) {
-            const taxonomySearches = await runProgressiveRegionSearches({
-              attemptName: `fallback-taxonomy-${taxonomyFallback.fallbackModel}`,
-              attemptModel: taxonomyFallback.fallbackModel,
-              maxApiCallsOverride: remainingTaxonomyApiCalls,
-            });
-
-            const failedTaxonomySearch = taxonomySearches.find(
-              (search) => !search.ok,
-            );
-
-            if (failedTaxonomySearch) {
-              return buildFailedMarketCheckResponse({
-                failedSearch: failedTaxonomySearch,
-                searches: [...searches, ...taxonomySearches],
-                orderedRegions,
-                apiControls,
-              });
-            }
-
-            searches = [...searches, ...taxonomySearches];
-          }
-        }
-      }
-
-      const aliasAndTaxonomySummary = buildCompSummary(searches);
-
-      if (aliasAndTaxonomySummary.rawCount === 0) {
-        const remainingApiCalls = Math.max(
-          0,
-          apiControls.maxApiCallsPerSearch - searches.length,
-        );
-
-        const fallbackSearches =
-          remainingApiCalls > 0
-            ? await runProgressiveRegionSearches({
-                attemptName: "fallback-make-model",
-                maxApiCallsOverride: remainingApiCalls,
-              })
-            : [];
-
-        const failedFallbackSearch = fallbackSearches.find(
-          (search) => !search.ok,
-        );
-
-        if (failedFallbackSearch) {
-          return buildFailedMarketCheckResponse({
-            failedSearch: failedFallbackSearch,
-            searches: searches.length
-              ? [...searches, ...fallbackSearches]
-              : fallbackSearches,
-            orderedRegions,
-            apiControls,
-          });
-        }
-
-        searches = [...searches, ...fallbackSearches];
-      }
+      searches = [...searches, ...fallbackSearches];
     }
 
     const {
@@ -1624,7 +1648,7 @@ export async function POST(request: Request) {
     const stopReason = searches.some((search) => !search.ok)
       ? "Stopped because a MarketCheck request failed."
       : hitApiCallCap && usableCompCount < MIN_USABLE_COMPS
-        ? `Stopped after reaching the API-call cap of ${apiControls.maxApiCallsPerSearch}.`
+        ? `Stopped after reaching the initial API-call limit of ${apiControls.maxApiCallsPerSearch}.`
         : rawCount === 0
           ? "Checked configured regions and no MarketCheck listings were returned."
           : usableCompCount >= MIN_USABLE_COMPS
@@ -1652,6 +1676,7 @@ export async function POST(request: Request) {
 
           return region ? `${region.market} (${region.zip})` : search.zip;
         }),
+        searchedZips: searches.map((search) => search.zip),
         radius,
         rows,
         generationFilter: generationCompRule,
