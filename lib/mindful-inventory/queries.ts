@@ -1,16 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { calculateInventoryFinancials } from "@/lib/mindful-inventory/financials";
 import type {
-  InventoryVehicleStage,
+  InventoryDashboardData,
+  InventoryDashboardSummary,
   InventoryTitleStatus,
-  InventoryWorkItemStatus,
+  InventoryVehicleGrade,
+  InventoryVehicleHealth,
+  InventoryVehiclePhase,
+  InventoryVehiclePriority,
+  InventoryVehicleView,
 } from "@/lib/mindful-inventory/types";
 
 type InventoryVehicleRow = {
   id: string;
   company_id: string;
   source_evaluation_id: string | null;
+  source_snapshot: Record<string, unknown> | null;
   stock_number: string | null;
   vin: string | null;
   year: number;
@@ -19,122 +24,48 @@ type InventoryVehicleRow = {
   trim: string | null;
   mileage: number | null;
   image_url: string | null;
+  project_owner_user_id: string | null;
+  phase: InventoryVehiclePhase;
+  grade: InventoryVehicleGrade | null;
+  priority: InventoryVehiclePriority;
+  health: InventoryVehicleHealth;
+  current_location_id: string | null;
+  next_action: string | null;
+  next_action_owner_user_id: string | null;
+  next_action_owner_partner_id: string | null;
+  next_action_due_at: string | null;
+  target_ready_at: string | null;
+  forecast_ready_at: string | null;
+  hold_active: boolean;
+  hold_reason: string | null;
+  hold_owner_user_id: string | null;
+  hold_follow_up_at: string | null;
+  exit_status: string | null;
+  exit_reason: string | null;
+  exited_at: string | null;
   purchase_date: string | null;
   purchase_price: number | string | null;
   buyer_fees: number | string | null;
-  transport_cost: number | string | null;
   other_acquisition_cost: number | string | null;
-  stage: InventoryVehicleStage;
-  current_location: string | null;
-  title_status: InventoryTitleStatus;
-  target_ready_date: string | null;
   expected_sale_price: number | string | null;
-  actual_sale_price: number | string | null;
-  sold_date: string | null;
-  next_action: string | null;
-  next_action_owner: string | null;
-  next_action_due_date: string | null;
-  notes: string | null;
-  source_snapshot: Record<string, unknown> | null;
+  title_status: InventoryTitleStatus;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
 };
 
-type InventoryWorkItemRow = {
+type LocationRow = {
   id: string;
-  inventory_vehicle_id: string;
-  description: string;
-  category: string;
-  priority: "required" | "recommended" | "optional";
-  status: InventoryWorkItemStatus;
-  vendor: string | null;
-  estimated_cost: number | string | null;
-  actual_cost: number | string | null;
-  scheduled_date: string | null;
-  completed_date: string | null;
-  requires_approval: boolean;
-  notes: string | null;
+  name: string;
 };
 
-export type InventoryWorkItemView = {
+type PartnerRow = {
   id: string;
-  description: string;
-  category: string;
-  priority: "required" | "recommended" | "optional";
-  status: InventoryWorkItemStatus;
-  vendor: string | null;
-  estimatedCost: number;
-  actualCost: number | null;
-  scheduledDate: string | null;
-  completedDate: string | null;
-  requiresApproval: boolean;
-  notes: string | null;
-};
-
-export type InventoryVehicleView = {
-  id: string;
-  sourceEvaluationId: string | null;
-  stockNumber: string | null;
-  vin: string | null;
-  year: number;
-  make: string;
-  model: string;
-  trim: string | null;
-  mileage: number | null;
-  imageUrl: string | null;
-  purchaseDate: string | null;
-  purchasePrice: number;
-  buyerFees: number;
-  transportCost: number;
-  otherAcquisitionCost: number;
-  stage: InventoryVehicleStage;
-  currentLocation: string | null;
-  titleStatus: InventoryTitleStatus;
-  targetReadyDate: string | null;
-  expectedSalePrice: number | null;
-  actualSalePrice: number | null;
-  soldDate: string | null;
-  nextAction: string | null;
-  nextActionOwner: string | null;
-  nextActionDueDate: string | null;
-  notes: string | null;
-  sourceSnapshot: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  workItems: InventoryWorkItemView[];
-  financials: {
-    acquisitionCost: number;
-    completedWorkCost: number;
-    outstandingWorkCost: number;
-    actualInvestedToDate: number;
-    projectedAllInCost: number;
-    projectedGrossProfit: number | null;
-  };
-};
-
-export type InventoryDashboardSummary = {
-  activeVehicles: number;
-  cashInvested: number;
-  remainingSpend: number;
-  projectedAllIn: number;
-  projectedRetail: number;
-  projectedGrossProfit: number;
-  readyForSale: number;
-  blocked: number;
-};
-
-export type InventoryDashboardData = {
-  vehicles: InventoryVehicleView[];
-  summary: InventoryDashboardSummary;
+  name: string;
 };
 
 function toNumber(value: number | string | null | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const parsed = Number(value);
+  const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -145,6 +76,26 @@ function toNullableNumber(value: number | string | null | undefined) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function daysHeld(vehicle: InventoryVehicleRow) {
+  const startValue = vehicle.purchase_date || vehicle.created_at;
+  const start = new Date(startValue).getTime();
+
+  if (!Number.isFinite(start)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - start) / 86_400_000));
+}
+
+function isOverdue(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  const due = new Date(value).getTime();
+  return Number.isFinite(due) && due < Date.now();
 }
 
 export async function getInventoryDashboardData(
@@ -158,6 +109,7 @@ export async function getInventoryDashboardData(
       id,
       company_id,
       source_evaluation_id,
+      source_snapshot,
       stock_number,
       vin,
       year,
@@ -166,23 +118,31 @@ export async function getInventoryDashboardData(
       trim,
       mileage,
       image_url,
+      project_owner_user_id,
+      phase,
+      grade,
+      priority,
+      health,
+      current_location_id,
+      next_action,
+      next_action_owner_user_id,
+      next_action_owner_partner_id,
+      next_action_due_at,
+      target_ready_at,
+      forecast_ready_at,
+      hold_active,
+      hold_reason,
+      hold_owner_user_id,
+      hold_follow_up_at,
+      exit_status,
+      exit_reason,
+      exited_at,
       purchase_date,
       purchase_price,
       buyer_fees,
-      transport_cost,
       other_acquisition_cost,
-      stage,
-      current_location,
-      title_status,
-      target_ready_date,
       expected_sale_price,
-      actual_sale_price,
-      sold_date,
-      next_action,
-      next_action_owner,
-      next_action_due_date,
-      notes,
-      source_snapshot,
+      title_status,
       archived_at,
       created_at,
       updated_at
@@ -190,6 +150,7 @@ export async function getInventoryDashboardData(
     )
     .eq("company_id", companyId)
     .is("archived_at", null)
+    .order("priority", { ascending: true })
     .order("updated_at", { ascending: false });
 
   if (vehicleError) {
@@ -197,157 +158,130 @@ export async function getInventoryDashboardData(
   }
 
   const vehicleRows = (vehicleData || []) as InventoryVehicleRow[];
-  const vehicleIds = vehicleRows.map((vehicle) => vehicle.id);
+  const locationIds = [
+    ...new Set(
+      vehicleRows
+        .map((vehicle) => vehicle.current_location_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  const partnerIds = [
+    ...new Set(
+      vehicleRows
+        .map((vehicle) => vehicle.next_action_owner_partner_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
 
-  let workItemRows: InventoryWorkItemRow[] = [];
+  const locationNames = new Map<string, string>();
+  const partnerNames = new Map<string, string>();
 
-  if (vehicleIds.length > 0) {
-    const { data: workItemData, error: workItemError } = await supabase
-      .from("mindful_inventory_work_items")
-      .select(
-        `
-        id,
-        inventory_vehicle_id,
-        description,
-        category,
-        priority,
-        status,
-        vendor,
-        estimated_cost,
-        actual_cost,
-        scheduled_date,
-        completed_date,
-        requires_approval,
-        notes
-      `,
-      )
-      .in("inventory_vehicle_id", vehicleIds)
-      .order("created_at", { ascending: true });
+  if (locationIds.length > 0) {
+    const { data, error } = await supabase
+      .from("mindful_inventory_locations")
+      .select("id,name")
+      .eq("company_id", companyId)
+      .in("id", locationIds);
 
-    if (workItemError) {
-      throw new Error(workItemError.message);
+    if (error) {
+      throw new Error(error.message);
     }
 
-    workItemRows = (workItemData || []) as InventoryWorkItemRow[];
+    for (const row of (data || []) as LocationRow[]) {
+      locationNames.set(row.id, row.name);
+    }
   }
 
-  const workItemsByVehicle = new Map<string, InventoryWorkItemView[]>();
+  if (partnerIds.length > 0) {
+    const { data, error } = await supabase
+      .from("mindful_inventory_partners")
+      .select("id,name")
+      .eq("company_id", companyId)
+      .in("id", partnerIds);
 
-  for (const item of workItemRows) {
-    const current = workItemsByVehicle.get(item.inventory_vehicle_id) || [];
+    if (error) {
+      throw new Error(error.message);
+    }
 
-    current.push({
-      id: item.id,
-      description: item.description,
-      category: item.category,
-      priority: item.priority,
-      status: item.status,
-      vendor: item.vendor,
-      estimatedCost: toNumber(item.estimated_cost),
-      actualCost: toNullableNumber(item.actual_cost),
-      scheduledDate: item.scheduled_date,
-      completedDate: item.completed_date,
-      requiresApproval: item.requires_approval,
-      notes: item.notes,
-    });
-
-    workItemsByVehicle.set(item.inventory_vehicle_id, current);
+    for (const row of (data || []) as PartnerRow[]) {
+      partnerNames.set(row.id, row.name);
+    }
   }
 
-  const vehicles: InventoryVehicleView[] = vehicleRows.map((vehicle) => {
-    const workItems = workItemsByVehicle.get(vehicle.id) || [];
+  const vehicles: InventoryVehicleView[] = vehicleRows.map((vehicle) => ({
+    id: vehicle.id,
+    sourceEvaluationId: vehicle.source_evaluation_id,
+    stockNumber: vehicle.stock_number,
+    vin: vehicle.vin,
+    year: vehicle.year,
+    make: vehicle.make,
+    model: vehicle.model,
+    trim: vehicle.trim,
+    mileage: vehicle.mileage,
+    imageUrl: vehicle.image_url,
+    projectOwnerUserId: vehicle.project_owner_user_id,
+    phase: vehicle.phase,
+    grade: vehicle.grade,
+    priority: vehicle.priority,
+    health: vehicle.health,
+    currentLocationId: vehicle.current_location_id,
+    currentLocationName: vehicle.current_location_id
+      ? locationNames.get(vehicle.current_location_id) || null
+      : null,
+    nextAction: vehicle.next_action,
+    nextActionOwnerUserId: vehicle.next_action_owner_user_id,
+    nextActionOwnerPartnerId: vehicle.next_action_owner_partner_id,
+    nextActionOwnerPartnerName: vehicle.next_action_owner_partner_id
+      ? partnerNames.get(vehicle.next_action_owner_partner_id) || null
+      : null,
+    nextActionDueAt: vehicle.next_action_due_at,
+    targetReadyAt: vehicle.target_ready_at,
+    forecastReadyAt: vehicle.forecast_ready_at,
+    holdActive: vehicle.hold_active,
+    holdReason: vehicle.hold_reason,
+    holdOwnerUserId: vehicle.hold_owner_user_id,
+    holdFollowUpAt: vehicle.hold_follow_up_at,
+    exitStatus: vehicle.exit_status,
+    exitReason: vehicle.exit_reason,
+    exitedAt: vehicle.exited_at,
+    purchaseDate: vehicle.purchase_date,
+    purchasePrice: toNumber(vehicle.purchase_price),
+    buyerFees: toNumber(vehicle.buyer_fees),
+    otherAcquisitionCost: toNumber(vehicle.other_acquisition_cost),
+    expectedSalePrice: toNullableNumber(vehicle.expected_sale_price),
+    titleStatus: vehicle.title_status,
+    sourceSnapshot: vehicle.source_snapshot || {},
+    createdAt: vehicle.created_at,
+    updatedAt: vehicle.updated_at,
+  }));
 
-    const financials = calculateInventoryFinancials({
-      purchasePrice: toNumber(vehicle.purchase_price),
-      buyerFees: toNumber(vehicle.buyer_fees),
-      transportCost: toNumber(vehicle.transport_cost),
-      otherAcquisitionCost: toNumber(vehicle.other_acquisition_cost),
-      expectedSalePrice: toNullableNumber(vehicle.expected_sale_price),
-      workItems: workItems.map((item) => ({
-        status: item.status,
-        estimatedCost: item.estimatedCost,
-        actualCost: item.actualCost,
-      })),
-    });
-
-    return {
-      id: vehicle.id,
-      sourceEvaluationId: vehicle.source_evaluation_id,
-      stockNumber: vehicle.stock_number,
-      vin: vehicle.vin,
-      year: vehicle.year,
-      make: vehicle.make,
-      model: vehicle.model,
-      trim: vehicle.trim,
-      mileage: vehicle.mileage,
-      imageUrl: vehicle.image_url,
-      purchaseDate: vehicle.purchase_date,
-      purchasePrice: toNumber(vehicle.purchase_price),
-      buyerFees: toNumber(vehicle.buyer_fees),
-      transportCost: toNumber(vehicle.transport_cost),
-      otherAcquisitionCost: toNumber(
-        vehicle.other_acquisition_cost,
-      ),
-      stage: vehicle.stage,
-      currentLocation: vehicle.current_location,
-      titleStatus: vehicle.title_status,
-      targetReadyDate: vehicle.target_ready_date,
-      expectedSalePrice: toNullableNumber(vehicle.expected_sale_price),
-      actualSalePrice: toNullableNumber(vehicle.actual_sale_price),
-      soldDate: vehicle.sold_date,
-      nextAction: vehicle.next_action,
-      nextActionOwner: vehicle.next_action_owner,
-      nextActionDueDate: vehicle.next_action_due_date,
-      notes: vehicle.notes,
-      sourceSnapshot: vehicle.source_snapshot || {},
-      createdAt: vehicle.created_at,
-      updatedAt: vehicle.updated_at,
-      workItems,
-      financials,
-    };
-  });
-
-  const activeVehicles = vehicles.filter(
-    (vehicle) => vehicle.stage !== "sold",
-  );
+  const activeRows = vehicleRows.filter((vehicle) => !vehicle.exited_at);
+  const needsAttention = activeRows.filter(
+    (vehicle) =>
+      vehicle.hold_active ||
+      vehicle.health !== "on_track" ||
+      isOverdue(vehicle.next_action_due_at),
+  ).length;
 
   const summary: InventoryDashboardSummary = {
-    activeVehicles: activeVehicles.length,
-    cashInvested: activeVehicles.reduce(
-      (total, vehicle) =>
-        total + vehicle.financials.actualInvestedToDate,
-      0,
-    ),
-    remainingSpend: activeVehicles.reduce(
-      (total, vehicle) =>
-        total + vehicle.financials.outstandingWorkCost,
-      0,
-    ),
-    projectedAllIn: activeVehicles.reduce(
-      (total, vehicle) =>
-        total + vehicle.financials.projectedAllInCost,
-      0,
-    ),
-    projectedRetail: activeVehicles.reduce(
-      (total, vehicle) =>
-        total + (vehicle.expectedSalePrice || 0),
-      0,
-    ),
-    projectedGrossProfit: activeVehicles.reduce(
-      (total, vehicle) =>
-        total + (vehicle.financials.projectedGrossProfit || 0),
-      0,
-    ),
-    readyForSale: activeVehicles.filter(
-      (vehicle) => vehicle.stage === "ready_for_sale",
-    ).length,
-    blocked: activeVehicles.filter(
-      (vehicle) => vehicle.stage === "blocked",
-    ).length,
+    activeVehicles: activeRows.length,
+    needsAttention,
+    readyVehicles: activeRows.filter((vehicle) => vehicle.phase === "ready").length,
+    onHold: activeRows.filter((vehicle) => vehicle.hold_active).length,
+    averageDaysHeld:
+      activeRows.length === 0
+        ? 0
+        : Math.round(
+            activeRows.reduce((total, vehicle) => total + daysHeld(vehicle), 0) /
+              activeRows.length,
+          ),
   };
 
-  return {
-    vehicles,
-    summary,
-  };
+  return { vehicles, summary };
 }
+
+export type {
+  InventoryDashboardData,
+  InventoryDashboardSummary,
+  InventoryVehicleView,
+} from "@/lib/mindful-inventory/types";
