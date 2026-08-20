@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 
+import { InventoryIntakeInspection } from "@/components/mindful-inventory/inventory-intake-inspection";
 import { InventoryVehicleWorkspace } from "@/components/mindful-inventory/inventory-vehicle-workspace";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +31,17 @@ export default async function MindfulInventoryVehiclePage({
     notFound();
   }
 
+  const intakeInspection = await getInventoryIntakeInspectionData(
+    access.supabase,
+    vehicle.id,
+  );
+
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
       <AppTopNav active="inventory" userEmail={access.userEmail} />
-      <div className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-5 lg:px-7">
+      <div className="mx-auto w-full max-w-[1480px] space-y-6 px-4 py-5 sm:px-5 lg:px-7">
         <InventoryVehicleWorkspace vehicle={vehicle} />
+        <InventoryIntakeInspection vehicleId={vehicle.id} data={intakeInspection} />
       </div>
     </main>
   );
