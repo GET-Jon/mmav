@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+
+import { InventoryVehicleDetailDrawer } from "@/components/mindful-inventory/inventory-vehicle-detail-drawer";
 import type {
   InventoryDashboardData,
   InventoryVehicleView,
@@ -133,6 +138,7 @@ function EmptyInventory() {
 
 export function InventoryDashboard({ data }: InventoryDashboardProps) {
   const { vehicles, summary } = data;
+  const [selectedVehicle, setSelectedVehicle] = useState<InventoryVehicleView | null>(null);
 
   return (
     <>
@@ -174,7 +180,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                 Vehicle Operations Board
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Current phase, ownership, next action, location, and readiness.
+                Current phase, ownership, next action, location, and readiness. Click a vehicle to review or update its operational details.
               </p>
             </div>
 
@@ -220,7 +226,16 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                     return (
                       <tr
                         key={vehicle.id}
-                        className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50/60"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedVehicle(vehicle)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedVehicle(vehicle);
+                          }
+                        }}
+                        className="cursor-pointer border-b border-slate-100 align-top outline-none last:border-0 hover:bg-slate-50/80 focus:bg-slate-50 focus:ring-2 focus:ring-inset focus:ring-slate-300"
                       >
                         <td className="px-4 py-4">
                           <div className="font-extrabold text-slate-950">
@@ -298,6 +313,14 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
           </div>
         )}
       </div>
+
+      {selectedVehicle ? (
+        <InventoryVehicleDetailDrawer
+          key={`${selectedVehicle.id}-${selectedVehicle.updatedAt}`}
+          vehicle={selectedVehicle}
+          onClose={() => setSelectedVehicle(null)}
+        />
+      ) : null}
     </>
   );
 }
