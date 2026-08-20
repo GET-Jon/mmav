@@ -44,10 +44,17 @@ language plpgsql
 set search_path = public
 as $$
 declare
+  target_plan_item_id uuid;
   linked_plan_status public.mindful_inventory_plan_status;
   linked_plan_vehicle_id uuid;
   linked_finding_vehicle_id uuid;
 begin
+  if tg_op = 'DELETE' then
+    target_plan_item_id := old.plan_item_id;
+  else
+    target_plan_item_id := new.plan_item_id;
+  end if;
+
   select version.status, plan.vehicle_id
     into linked_plan_status, linked_plan_vehicle_id
   from public.mindful_inventory_plan_items item
@@ -55,7 +62,7 @@ begin
     on version.id = item.plan_version_id
   join public.mindful_inventory_car_plans plan
     on plan.id = version.car_plan_id
-  where item.id = coalesce(new.plan_item_id, old.plan_item_id);
+  where item.id = target_plan_item_id;
 
   if linked_plan_vehicle_id is null then
     raise exception 'Plan Item does not exist.';
