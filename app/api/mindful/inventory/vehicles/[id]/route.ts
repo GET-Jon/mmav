@@ -87,6 +87,34 @@ function nullableDate(value: unknown, label: string) {
   return parsed.toISOString();
 }
 
+async function planningPrerequisitesComplete(
+  access: NonNullable<Awaited<ReturnType<typeof getMindfulInventoryAccess>>>,
+  vehicleId: string,
+) {
+  const [intakeResult, inspectionResult] = await Promise.all([
+    access.supabase
+      .from("mindful_inventory_intakes")
+      .select("id")
+      .eq("vehicle_id", vehicleId)
+      .eq("status", "complete")
+      .maybeSingle(),
+    access.supabase
+      .from("mindful_inventory_inspections")
+      .select("id")
+      .eq("vehicle_id", vehicleId)
+      .eq("inspection_type", "mechanical")
+      .eq("status", "complete")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (intakeResult.error) throw new Error(intakeResult.error.message);
+  if (inspectionResult.error) throw new Error(inspectionResult.error.message);
+
+  return Boolean(intakeResult.data && inspectionResult.data);
+}
+
 export async function PATCH(
   request: Request,
   context: {
@@ -114,6 +142,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
+    const requestedPhase = requiredEnum(body.phase, allowedPhases, "vehicle phase");
     const holdActive = Boolean(body.holdActive);
     const holdReason = optionalText(body.holdReason);
 
@@ -124,8 +153,18 @@ export async function PATCH(
       );
     }
 
+    if (requestedPhase === "planning") {
+      const ready = await planningPrerequisitesComplete(access, vehicleId);
+      if (!ready) {
+        return NextResponse.json(
+          { error: "Planning requires a completed purchaser Intake and completed mechanical Inspection." },
+          { status: 400 },
+        );
+      }
+    }
+
     const updateRow = {
-      phase: requiredEnum(body.phase, allowedPhases, "vehicle phase"),
+      phase: requestedPhase,
       grade: nullableEnum(body.grade, allowedGrades, "vehicle grade"),
       priority: requiredEnum(body.priority, allowedPriorities, "vehicle priority"),
       health: requiredEnum(body.health, allowedHealth, "vehicle health"),
