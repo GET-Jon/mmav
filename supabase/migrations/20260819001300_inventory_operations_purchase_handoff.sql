@@ -2,6 +2,14 @@
 -- This is the intentional integration seam. Inventory receives a snapshot;
 -- evaluator condition observations may become Findings, never executable work.
 
+-- auction_evaluations is owned by core Lot Logic and is not recreated by
+-- the Inventory Operations local migration chain. Install this integration
+-- RPC only in environments where that core table exists.
+do $handoff_install$
+begin
+  if to_regclass('public.auction_evaluations') is not null then
+
+    execute $handoff_function$
 create or replace function public.purchase_evaluation_and_add_to_inventory(
   evaluation_id uuid,
   requested_company_id uuid,
@@ -18,7 +26,7 @@ security definer
 set search_path = public
 as $$
 declare
-  evaluation_row public.auction_evaluations%rowtype;
+  evaluation_row record;
   existing_inventory_id uuid;
   new_inventory_id uuid;
   resolved_year integer;
@@ -44,12 +52,14 @@ begin
     raise exception 'Company membership required.';
   end if;
 
-  select *
+  execute
+    'select *
+       from public.auction_evaluations
+      where id = $1
+        and company_id = $2
+      for update'
   into evaluation_row
-  from public.auction_evaluations
-  where id = evaluation_id
-    and company_id = requested_company_id
-  for update;
+  using evaluation_id, requested_company_id;
 
   if not found then
     raise exception 'Evaluation not found.';
@@ -62,12 +72,13 @@ begin
   limit 1;
 
   if existing_inventory_id is not null then
-    update public.auction_evaluations
-    set
-      status = 'purchased',
-      updated_by = requesting_user_id,
-      updated_at = now()
-    where id = evaluation_row.id;
+    execute
+      'update public.auction_evaluations
+          set status = $1,
+              updated_by = $2,
+              updated_at = now()
+        where id = $3'
+    using 'purchased', requesting_user_id, evaluation_row.id;
 
     return query
     select evaluation_row.id, existing_inventory_id, 'purchased'::text, false;
@@ -279,17 +290,25 @@ begin
     )
   );
 
-  update public.auction_evaluations
-  set
-    status = 'purchased',
-    updated_by = requesting_user_id,
-    updated_at = now()
-  where id = evaluation_row.id;
+  execute
+    'update public.auction_evaluations
+        set status = $1,
+            updated_by = $2,
+            updated_at = now()
+      where id = $3'
+  using 'purchased', requesting_user_id, evaluation_row.id;
 
   return query
   select evaluation_row.id, new_inventory_id, 'purchased'::text, true;
 end;
 $$;
+$handoff_function$;
 
-revoke all on function public.purchase_evaluation_and_add_to_inventory(uuid, uuid, uuid) from public;
-grant execute on function public.purchase_evaluation_and_add_to_inventory(uuid, uuid, uuid) to service_role;
+    execute 'revoke all on function public.purchase_evaluation_and_add_to_inventory(uuid, uuid, uuid) from public';
+    execute 'grant execute on function public.purchase_evaluation_and_add_to_inventory(uuid, uuid, uuid) to service_role';
+
+  else
+    raise notice 'Skipping Lot Logic purchase handoff: public.auction_evaluations is not present in this environment.';
+  end if;
+end;
+$handoff_install$;

@@ -48,7 +48,7 @@ security definer
 set search_path = public
 as $$
 declare
-  evaluation_row public.auction_evaluations%rowtype;
+  evaluation_row record;
   existing_inventory_id uuid;
   new_inventory_id uuid;
   resolved_year integer;
