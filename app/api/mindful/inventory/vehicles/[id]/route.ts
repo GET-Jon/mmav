@@ -1,25 +1,34 @@
 import { NextResponse } from "next/server";
 
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import type {
+  InventoryTitleStatus,
+  InventoryVehicleGrade,
+  InventoryVehicleHealth,
+  InventoryVehiclePhase,
+  InventoryVehiclePriority,
+} from "@/lib/mindful-inventory/types";
 
-const allowedStages = new Set([
+const allowedPhases = new Set<InventoryVehiclePhase>([
   "purchased",
-  "awaiting_transport",
-  "received",
+  "intake",
   "inspection",
-  "work_scoping",
-  "parts_ordered",
-  "in_service",
-  "awaiting_detail",
-  "ready_for_sale",
-  "listed",
-  "sale_pending",
-  "sold",
-  "blocked",
+  "planning",
+  "reconditioning",
+  "final_qc",
+  "merchandising",
+  "ready",
 ]);
 
-const allowedTitleStatuses = new Set([
+const allowedGrades = new Set<InventoryVehicleGrade>(["a", "b", "c", "d", "e"]);
+const allowedPriorities = new Set<InventoryVehiclePriority>(["1", "2", "3"]);
+const allowedHealth = new Set<InventoryVehicleHealth>([
+  "on_track",
+  "at_risk",
+  "behind",
+  "blocked",
+]);
+const allowedTitleStatuses = new Set<InventoryTitleStatus>([
   "unknown",
   "awaiting",
   "received",
@@ -32,12 +41,12 @@ function optionalText(value: unknown) {
   return clean || null;
 }
 
-function requiredStatus(
+function requiredEnum<T extends string>(
   value: unknown,
-  allowed: Set<string>,
+  allowed: Set<T>,
   label: string,
-) {
-  const clean = String(value ?? "").trim();
+): T {
+  const clean = String(value ?? "").trim() as T;
 
   if (!allowed.has(clean)) {
     throw new Error(`Invalid ${label}.`);
@@ -46,25 +55,19 @@ function requiredStatus(
   return clean;
 }
 
-function nonNegativeMoney(value: unknown, label: string) {
-  const parsed = Number(value);
-
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${label} must be zero or greater.`);
-  }
-
-  return parsed;
-}
-
-function nullableMoney(value: unknown, label: string) {
+function nullableEnum<T extends string>(
+  value: unknown,
+  allowed: Set<T>,
+  label: string,
+): T | null {
   if (value === null || value === undefined || value === "") {
     return null;
   }
 
-  return nonNegativeMoney(value, label);
+  return requiredEnum(value, allowed, label);
 }
 
-function nullableDate(value: unknown) {
+function nullableDate(value: unknown, label: string) {
   const clean = String(value ?? "").trim();
 
   if (!clean) {
@@ -72,10 +75,16 @@ function nullableDate(value: unknown) {
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
-    throw new Error("Invalid date.");
+    throw new Error(`Invalid ${label}.`);
   }
 
-  return clean;
+  const parsed = new Date(`${clean}T00:00:00.000Z`);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  return parsed.toISOString();
 }
 
 export async function PATCH(
@@ -105,61 +114,41 @@ export async function PATCH(
     }
 
     const body = await request.json();
+    const holdActive = Boolean(body.holdActive);
+    const holdReason = optionalText(body.holdReason);
+
+    if (holdActive && !holdReason) {
+      return NextResponse.json(
+        { error: "A hold reason is required when a vehicle is on hold." },
+        { status: 400 },
+      );
+    }
 
     const updateRow = {
-      purchase_price: nonNegativeMoney(
-        body.purchasePrice,
-        "Purchase price",
-      ),
-      buyer_fees: nonNegativeMoney(
-        body.buyerFees,
-        "Buyer fees",
-      ),
-      transport_cost: nonNegativeMoney(
-        body.transportCost,
-        "Transport cost",
-      ),
-      other_acquisition_cost: nonNegativeMoney(
-        body.otherAcquisitionCost,
-        "Other acquisition cost",
-      ),
-
-      stage: requiredStatus(
-        body.stage,
-        allowedStages,
-        "vehicle stage",
-      ),
-
-      current_location: optionalText(body.currentLocation),
-
-      title_status: requiredStatus(
+      phase: requiredEnum(body.phase, allowedPhases, "vehicle phase"),
+      grade: nullableEnum(body.grade, allowedGrades, "vehicle grade"),
+      priority: requiredEnum(body.priority, allowedPriorities, "vehicle priority"),
+      health: requiredEnum(body.health, allowedHealth, "vehicle health"),
+      title_status: requiredEnum(
         body.titleStatus,
         allowedTitleStatuses,
         "title status",
       ),
-
-      target_ready_date: nullableDate(body.targetReadyDate),
-
-      expected_sale_price: nullableMoney(
-        body.expectedSalePrice,
-        "Expected sale price",
-      ),
-
       next_action: optionalText(body.nextAction),
-      next_action_owner: optionalText(body.nextActionOwner),
-      next_action_due_date: nullableDate(
-        body.nextActionDueDate,
-      ),
-
-      notes: optionalText(body.notes),
-
+      next_action_due_at: nullableDate(body.nextActionDueAt, "next action due date"),
+      target_ready_at: nullableDate(body.targetReadyAt, "target ready date"),
+      forecast_ready_at: nullableDate(body.forecastReadyAt, "forecast ready date"),
+      hold_active: holdActive,
+      hold_reason: holdActive ? holdReason : null,
+      hold_owner_user_id: holdActive ? access.userId : null,
+      hold_follow_up_at: holdActive
+        ? nullableDate(body.holdFollowUpAt, "hold follow-up date")
+        : null,
       updated_by: access.userId,
       updated_at: new Date().toISOString(),
     };
 
-    const supabase = createSupabaseAdminClient();
-
-    const { data, error } = await supabase
+    const { data, error } = await access.supabase
       .from("mindful_inventory_vehicles")
       .update(updateRow)
       .eq("id", vehicleId)
@@ -168,30 +157,31 @@ export async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const { error: activityError } = await supabase
-      .from("mindful_inventory_activity")
+    const { error: historyError } = await access.supabase
+      .from("mindful_inventory_history")
       .insert({
-        inventory_vehicle_id: vehicleId,
-        action: "vehicle_updated",
-        description: "Inventory vehicle details updated.",
+        company_id: access.company.companyId,
+        vehicle_id: vehicleId,
+        event_type: "vehicle_operational_details_updated",
+        entity_type: "vehicle",
+        entity_id: vehicleId,
         actor_user_id: access.userId,
+        summary: "Vehicle operational details updated.",
         metadata: {
-          stage: updateRow.stage,
-          currentLocation: updateRow.current_location,
+          phase: updateRow.phase,
+          grade: updateRow.grade,
+          priority: updateRow.priority,
+          health: updateRow.health,
+          titleStatus: updateRow.title_status,
+          holdActive: updateRow.hold_active,
         },
       });
 
-    if (activityError) {
-      console.error(
-        "Inventory activity insert failed:",
-        activityError.message,
-      );
+    if (historyError) {
+      console.error("Inventory history insert failed:", historyError.message);
     }
 
     return NextResponse.json({
