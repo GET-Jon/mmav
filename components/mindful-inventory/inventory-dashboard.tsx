@@ -1,9 +1,11 @@
 import type {
   InventoryDashboardData,
-  InventoryVehicleHealth,
-  InventoryVehiclePhase,
   InventoryVehicleView,
 } from "@/lib/mindful-inventory/queries";
+import type {
+  InventoryVehicleHealth,
+  InventoryVehiclePhase,
+} from "@/lib/mindful-inventory/types";
 
 type InventoryDashboardProps = {
   data: InventoryDashboardData;
