@@ -14,13 +14,10 @@ const emptyDashboard: InventoryDashboardData = {
   vehicles: [],
   summary: {
     activeVehicles: 0,
-    cashInvested: 0,
-    remainingSpend: 0,
-    projectedAllIn: 0,
-    projectedRetail: 0,
-    projectedGrossProfit: 0,
-    readyForSale: 0,
-    blocked: 0,
+    needsAttention: 0,
+    readyVehicles: 0,
+    onHold: 0,
+    averageDaysHeld: 0,
   },
 };
 
@@ -48,12 +45,9 @@ export default async function MindfulInventoryPage() {
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <AppTopNav
-        active="inventory"
-        userEmail={access.userEmail}
-      />
+      <AppTopNav active="inventory" userEmail={access.userEmail} />
 
-      <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
+      <div className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-5 lg:px-7">
         <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <div className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
@@ -65,13 +59,13 @@ export default async function MindfulInventoryPage() {
             </h1>
 
             <p className="mt-1 text-slate-600">
-              Track owned vehicles, reconditioning work, costs, and sale
-              readiness.
+              Move every purchased vehicle from intake through ready status with
+              clear ownership, next actions, and blockers.
             </p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm">
-            Read-only from Lot Logic
+            Lot Logic purchase snapshot → Inventory Operations
           </div>
         </div>
 
