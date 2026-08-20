@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:inventory-local": "bash scripts/seed-local-inventory.sh"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
