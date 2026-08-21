@@ -22,28 +22,15 @@ const phases = [
 ] as const;
 
 const phaseDescriptions: Record<string, string> = {
-  purchased: "The vehicle has been acquired. Confirm ownership, location, and complete purchaser intake.",
-  intake: "Record how the vehicle arrived: mileage, keys, visible damage, and initial observations.",
-  inspection: "Complete the mechanical inspection and record Findings. Findings are observations, not authorized repairs.",
-  planning: "Review the Findings and decide what belongs in the Car Plan before any work is authorized.",
-  reconditioning: "The approved Car Plan is being executed through Work Orders.",
-  final_qc: "Verify completed work and decide whether the vehicle is ready to move forward.",
-  merchandising: "Prepare photography, listing information, presentation, and sale materials.",
+  purchased: "Complete purchaser intake so the vehicle can move into inspection.",
+  intake: "Record how the vehicle arrived before mechanical inspection begins.",
+  inspection: "Complete mechanical inspection and record Findings before planning.",
+  planning: "Review Findings and decide what belongs in the Car Plan before work is authorized.",
+  reconditioning: "Execute the approved Car Plan through Work Orders.",
+  final_qc: "Verify completed work before the vehicle moves to merchandising.",
+  merchandising: "Prepare the vehicle and sales materials for market.",
   ready: "The vehicle has completed the operating workflow and is ready for sale.",
 };
-
-const healthLabels: Record<string, string> = {
-  on_track: "On Track",
-  at_risk: "At Risk",
-  behind: "Behind",
-  blocked: "Blocked",
-};
-
-function daysHeld(vehicle: InventoryVehicleView) {
-  const start = new Date(vehicle.purchaseDate || vehicle.createdAt).getTime();
-  if (!Number.isFinite(start)) return 0;
-  return Math.max(0, Math.floor((Date.now() - start) / 86_400_000));
-}
 
 export function InventoryVehicleShell({ vehicle, children }: Props) {
   const pathname = usePathname();
@@ -52,7 +39,6 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
     .filter(Boolean)
     .join(" ");
   const currentPhaseIndex = Math.max(0, phases.findIndex((phase) => phase.value === vehicle.phase));
-  const currentPhase = phases[currentPhaseIndex] || phases[0];
 
   const sections = [
     { label: "Overview", href: base },
@@ -66,14 +52,14 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-5 lg:px-7">
+    <div className="mx-auto w-full max-w-[1480px] space-y-4 px-4 py-5 sm:px-5 lg:px-7">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="px-5 py-5 sm:px-6">
+        <div className="px-5 py-4 sm:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Inventory Vehicle</div>
               <h1 className="mt-1 truncate text-2xl font-black tracking-[-0.03em] text-slate-950 sm:text-3xl">{vehicleName}</h1>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold text-slate-500">
+              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold text-slate-500">
                 <span>{vehicle.stockNumber ? `Stock # ${vehicle.stockNumber}` : "No stock number"}</span>
                 {vehicle.vin ? <span>{vehicle.vin}</span> : null}
                 {vehicle.mileage !== null ? <span>{vehicle.mileage.toLocaleString()} mi</span> : null}
@@ -88,25 +74,7 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
             </Link>
           </div>
 
-          <div className="mt-5 rounded-2xl bg-slate-950 p-4 text-white sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Current Step</div>
-                <div className="mt-1 text-xl font-black">{currentPhase.label}</div>
-                <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-300">
-                  {phaseDescriptions[vehicle.phase] || "Review the vehicle status and determine the next action."}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-x-7 gap-y-3 text-sm sm:grid-cols-4">
-                <div><div className="text-[10px] font-black uppercase text-slate-500">Health</div><div className="mt-1 font-black">{healthLabels[vehicle.health] || vehicle.health}</div></div>
-                <div><div className="text-[10px] font-black uppercase text-slate-500">Priority</div><div className="mt-1 font-black">P{vehicle.priority}</div></div>
-                <div><div className="text-[10px] font-black uppercase text-slate-500">Days Held</div><div className="mt-1 font-black">{daysHeld(vehicle)}</div></div>
-                <div><div className="text-[10px] font-black uppercase text-slate-500">On Hold</div><div className="mt-1 font-black">{vehicle.holdActive ? "Yes" : "No"}</div></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 overflow-x-auto pb-1">
+          <div className="mt-4 overflow-x-auto pb-1">
             <div className="flex min-w-[760px] items-start">
               {phases.map((phase, index) => {
                 const complete = index < currentPhaseIndex;
@@ -124,6 +92,11 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
                 );
               })}
             </div>
+          </div>
+
+          <div className="mt-2 text-center text-sm font-semibold text-slate-500">
+            <span className="font-black text-slate-900">Current: {phases[currentPhaseIndex]?.label || "Vehicle workflow"}.</span>{" "}
+            {phaseDescriptions[vehicle.phase] || "Review the vehicle and determine what should happen next."}
           </div>
         </div>
 
