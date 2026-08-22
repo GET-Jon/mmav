@@ -11,6 +11,7 @@ export type AppTopNavPage =
   | "evaluator"
   | "pipeline"
   | "inventory"
+  | "schedule"
   | "rules"
   | "settings";
 
@@ -60,7 +61,7 @@ export function AppTopNav({
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="relative mx-auto flex max-w-[1380px] items-center px-5 py-3 lg:px-7">
+      <div className="relative mx-auto flex max-w-[1480px] items-center px-5 py-3 lg:px-7">
         <Link
           href="/"
           aria-label="Lot Logic evaluator"
@@ -69,35 +70,18 @@ export function AppTopNav({
           <div className="sm:hidden">
             <LotLogicLogo compact />
           </div>
-
           <div className="hidden sm:block">
             <LotLogicLogo />
           </div>
         </Link>
 
         <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
-          <Link href="/" className={navClass(active === "evaluator")}>
-            Evaluator
-          </Link>
-
-          <Link href="/deals" className={navClass(active === "pipeline")}>
-            Pipeline
-          </Link>
-
-          <Link
-            href="/mindful/inventory"
-            className={navClass(active === "inventory")}
-          >
-            Inventory
-          </Link>
-
-          <Link href="/assumptions" className={navClass(active === "rules")}>
-            Rules
-          </Link>
-
-          <Link href="/settings" className={navClass(active === "settings")}>
-            Settings
-          </Link>
+          <Link href="/" className={navClass(active === "evaluator")}>Evaluator</Link>
+          <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
+          <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link>
+          <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link>
+          <Link href="/assumptions" className={navClass(active === "rules")}>Rules</Link>
+          <Link href="/settings" className={navClass(active === "settings")}>Settings</Link>
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center gap-3">
@@ -123,13 +107,8 @@ export function AppTopNav({
           </div>
 
           <div className="hidden min-w-0 sm:block">
-            <div className="truncate text-xs font-extrabold text-slate-900">
-              {userLabel}
-            </div>
-
-            <div className="text-[10px] font-semibold text-slate-500">
-              Mindful Motor Co.
-            </div>
+            <div className="truncate text-xs font-extrabold text-slate-900">{userLabel}</div>
+            <div className="text-[10px] font-semibold text-slate-500">Mindful Motor Co.</div>
           </div>
 
           {userEmail ? (
