@@ -52,6 +52,7 @@ export async function generateEvaluationSummary(input: EvaluationSummaryInput) {
 export type { EvaluationSummaryInput };
 
 export { generateConditionAnalysis } from "./condition-analysis";
+export { generatePreliminaryWorkPlan } from "./work-plan";
 
 export type {
   ConditionAnalysis,
@@ -64,3 +65,11 @@ export type {
   ConditionIssueSeverity,
   ConditionOverallRisk,
 } from "./condition-analysis-types";
+
+export type {
+  PreliminaryWorkPlan,
+  PreliminaryWorkPlanInput,
+  PreliminaryWorkPlanItem,
+  WorkPlanFindingInput,
+  WorkPlanUpgradeInput,
+} from "./work-plan-types";
