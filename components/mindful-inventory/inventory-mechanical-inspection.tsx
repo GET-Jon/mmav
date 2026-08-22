@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { InventoryFindingSeverity, InventoryIntakeInspectionData, InventoryInspectionStatus } from "@/lib/mindful-inventory/intake-inspection";
@@ -30,6 +30,8 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
   const [inspectionStatus, setInspectionStatus] = useState<InventoryInspectionStatus>(data.mechanicalInspection?.status || "draft");
   const [inspectionMessage, setInspectionMessage] = useState("");
   const [inspectionSaving, setInspectionSaving] = useState(false);
+  const inspectionMounted = useRef(false);
+  const saveSequence = useRef(0);
   const [findingTitle, setFindingTitle] = useState("");
   const [findingDescription, setFindingDescription] = useState("");
   const [findingCategory, setFindingCategory] = useState("mechanical");
@@ -44,9 +46,13 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
   const mechanicFindings = data.findings.filter((finding) => finding.source !== "ai");
   const proposedUpgrades = overview.upgrades.filter((upgrade) => upgrade.status === "proposed");
 
-  async function saveInspection() {
+  async function persistInspection(options?: { quiet?: boolean }) {
+    const quiet = options?.quiet === true;
+    const sequence = ++saveSequence.current;
+
     setInspectionSaving(true);
-    setInspectionMessage("");
+    if (!quiet) setInspectionMessage("");
+
     try {
       const response = await fetch(`/api/mindful/inventory/vehicles/${vehicle.id}/inspection`, {
         method: "PUT",
@@ -55,13 +61,41 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to save inspection.");
-      setInspectionMessage(inspectionStatus === "complete" ? "Mechanical inspection completed." : "Inspection saved.");
-      router.refresh();
+
+      if (sequence === saveSequence.current) {
+        setInspectionMessage(inspectionStatus === "complete" ? "Mechanical inspection saved as complete." : "Mechanical draft saved.");
+      }
     } catch (error) {
-      setInspectionMessage(error instanceof Error ? error.message : "Failed to save inspection.");
+      if (sequence === saveSequence.current) {
+        setInspectionMessage(error instanceof Error ? error.message : "Failed to save inspection.");
+      }
     } finally {
-      setInspectionSaving(false);
+      if (sequence === saveSequence.current) {
+        setInspectionSaving(false);
+      }
     }
+  }
+
+  useEffect(() => {
+    if (!inspectionMounted.current) {
+      inspectionMounted.current = true;
+      return;
+    }
+
+    setInspectionMessage("Saving mechanical draft…");
+
+    const timer = window.setTimeout(() => {
+      void persistInspection({ quiet: true });
+    }, 650);
+
+    return () => window.clearTimeout(timer);
+  // persistInspection intentionally reads the latest controlled field state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectionStatus, inspectionSummary]);
+
+  async function saveInspection() {
+    await persistInspection();
+    router.refresh();
   }
 
   async function addFinding(event: FormEvent<HTMLFormElement>) {
@@ -123,7 +157,7 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><h3 className="text-base font-black text-slate-950">Mechanical Assessment</h3><p className="mt-1 text-sm text-slate-500">Document the mechanic's overall assessment. The next slice will turn these inputs into the editable preliminary Work Plan and material-change approval workflow.</p></div><div className="flex items-center gap-3"><span className="text-sm font-semibold text-slate-500">{inspectionMessage}</span><button type="button" onClick={saveInspection} disabled={inspectionSaving} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Save Inspection</button></div></div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><h3 className="text-base font-black text-slate-950">Mechanical Assessment</h3><p className="mt-1 text-sm text-slate-500">This section auto-saves as you work. Document the mechanic's overall assessment; Mechanical Discoveries save when added below.</p></div><div className="flex items-center gap-3"><span className="text-sm font-semibold text-slate-500">{inspectionMessage}</span><button type="button" onClick={saveInspection} disabled={inspectionSaving} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Save Now</button></div></div>
         <div className="mt-5 grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]"><label><FieldLabel>Status</FieldLabel><select className={inputClass} value={inspectionStatus} onChange={(e) => setInspectionStatus(e.target.value as InventoryInspectionStatus)}><option value="draft">Draft</option><option value="in_progress">In Progress</option><option value="complete">Complete</option><option value="cancelled">Cancelled</option></select></label><label><FieldLabel>Inspection Summary</FieldLabel><textarea className={`${inputClass} min-h-28 resize-y`} value={inspectionSummary} onChange={(e) => setInspectionSummary(e.target.value)} placeholder="Overall mechanical condition, road test, scan results, and recommended scope changes..." /></label></div>
       </section>
 
