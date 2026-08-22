@@ -42,6 +42,7 @@ export type InventoryPlanItemView = {
   stableItemKey: string;
   primaryFindingId: string | null;
   findingIds: string[];
+  upgradeId: string | null;
   title: string;
   description: string | null;
   category: string;
@@ -153,7 +154,7 @@ export async function getInventoryCarPlanData(
   const { data: itemRows, error: itemsError } = await supabase
     .from("mindful_inventory_plan_items")
     .select(
-      "id,plan_version_id,stable_item_key,finding_id,title,description,category,subcategory,classification,decision,priority,rationale,estimated_cost_low,estimated_cost_high,planning_amount,estimated_duration_hours,suggested_partner_id,decline_reason,sequence_order,confidence,assumptions,manager_investigation_required,cost_source,cost_source_detail,created_at,updated_at",
+      "id,plan_version_id,stable_item_key,finding_id,upgrade_id,title,description,category,subcategory,classification,decision,priority,rationale,estimated_cost_low,estimated_cost_high,planning_amount,estimated_duration_hours,suggested_partner_id,decline_reason,sequence_order,confidence,assumptions,manager_investigation_required,cost_source,cost_source_detail,created_at,updated_at",
     )
     .eq("plan_version_id", currentDraftVersion.id)
     .order("sequence_order", { ascending: true })
@@ -188,6 +189,7 @@ export async function getInventoryCarPlanData(
     stableItemKey: row.stable_item_key,
     primaryFindingId: row.finding_id,
     findingIds: linksByItem.get(row.id) || (row.finding_id ? [row.finding_id] : []),
+    upgradeId: row.upgrade_id,
     title: row.title,
     description: row.description,
     category: row.category,
