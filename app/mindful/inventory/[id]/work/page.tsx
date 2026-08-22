@@ -1,5 +1,19 @@
-import { InventorySectionPlaceholder } from "@/components/mindful-inventory/inventory-section-placeholder";
+import { notFound } from "next/navigation";
 
-export default function InventoryWorkPage() {
-  return <InventorySectionPlaceholder eyebrow="Execution" title="Work Orders" description="Approved Plan Items will become schedulable execution here. This section will own partner assignment, status, blockers, dependencies, and completion requirements." items={["Work queue", "Scheduling & partner assignment", "Dependencies & blockers", "Completion evidence", "Difficulty capture", "Change requests"]} />;
+import { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work";
+import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { getInventoryActiveWork } from "@/lib/mindful-inventory/active-work";
+import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
+
+export default async function InventoryWorkPage({ params }: { params: Promise<{ id: string }> }) {
+  const access = await getMindfulInventoryAccess();
+  if (!access) notFound();
+
+  const { id } = await params;
+  const dashboard = await getInventoryDashboardData(access.supabase, access.company.companyId);
+  const vehicle = dashboard.vehicles.find((item) => item.id === id);
+  if (!vehicle) notFound();
+
+  const workOrders = await getInventoryActiveWork(access.supabase, vehicle.id);
+  return <InventoryActiveWork vehicleId={vehicle.id} workOrders={workOrders} />;
 }
