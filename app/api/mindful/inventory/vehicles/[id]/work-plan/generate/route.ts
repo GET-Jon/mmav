@@ -12,51 +12,58 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const access = await getMindfulInventoryAccess();
-  if (!access) return NextResponse.json({ error: "Mindful Inventory access denied." }, { status: 403 });
-
-  const { id } = await context.params;
-  const vehicleId = String(id || "").trim();
-  if (!vehicleId) return NextResponse.json({ error: "Inventory vehicle id is required." }, { status: 400 });
-
-  const { data: vehicle, error: vehicleError } = await access.supabase
-    .from("mindful_inventory_vehicles")
-    .select("id,year,make,model,trim,mileage,phase")
-    .eq("id", vehicleId)
-    .eq("company_id", access.company.companyId)
-    .single();
-
-  if (vehicleError || !vehicle) return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
-
-  const [intakeInspection, overview, existingPlan] = await Promise.all([
-    getInventoryIntakeInspectionData(access.supabase, vehicleId),
-    getInventoryOverviewIntakeData(access.supabase, access.company.companyId, vehicleId),
-    getInventoryCarPlanData(access.supabase, vehicleId),
-  ]);
-
-  if (!intakeInspection.planningReady || !intakeInspection.mechanicalInspection) {
-    return NextResponse.json(
-      { error: "Complete Overview / Intake and Mechanical Inspection before generating the Work Plan." },
-      { status: 400 },
-    );
-  }
-
-  if (existingPlan.currentDraftVersion?.aiGenerated && existingPlan.draftItems.length > 0) {
-    return NextResponse.json({
-      carPlanId: existingPlan.carPlanId,
-      planVersionId: existingPlan.currentDraftVersion.id,
-      created: false,
-    });
-  }
-
-  if (existingPlan.versions.length > 0) {
-    return NextResponse.json(
-      { error: "This vehicle already has Work Plan history. Revision/regeneration is not enabled yet." },
-      { status: 409 },
-    );
-  }
-
   try {
+    const access = await getMindfulInventoryAccess();
+    if (!access) {
+      return NextResponse.json({ error: "Mindful Inventory access denied." }, { status: 403 });
+    }
+
+    const { id } = await context.params;
+    const vehicleId = String(id || "").trim();
+    if (!vehicleId) {
+      return NextResponse.json({ error: "Inventory vehicle id is required." }, { status: 400 });
+    }
+
+    const { data: vehicle, error: vehicleError } = await access.supabase
+      .from("mindful_inventory_vehicles")
+      .select("id,year,make,model,trim,mileage,phase")
+      .eq("id", vehicleId)
+      .eq("company_id", access.company.companyId)
+      .single();
+
+    if (vehicleError) throw new Error(`Vehicle lookup failed: ${vehicleError.message}`);
+    if (!vehicle) {
+      return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
+    }
+
+    const [intakeInspection, overview, existingPlan] = await Promise.all([
+      getInventoryIntakeInspectionData(access.supabase, vehicleId),
+      getInventoryOverviewIntakeData(access.supabase, access.company.companyId, vehicleId),
+      getInventoryCarPlanData(access.supabase, vehicleId),
+    ]);
+
+    if (!intakeInspection.planningReady || !intakeInspection.mechanicalInspection) {
+      return NextResponse.json(
+        { error: "Complete Overview / Intake and Mechanical Inspection before generating the Work Plan." },
+        { status: 400 },
+      );
+    }
+
+    if (existingPlan.currentDraftVersion?.aiGenerated && existingPlan.draftItems.length > 0) {
+      return NextResponse.json({
+        carPlanId: existingPlan.carPlanId,
+        planVersionId: existingPlan.currentDraftVersion.id,
+        created: false,
+      });
+    }
+
+    if (existingPlan.versions.length > 0) {
+      return NextResponse.json(
+        { error: "This vehicle already has Work Plan history. Revision/regeneration is not enabled yet." },
+        { status: 409 },
+      );
+    }
+
     const preliminary = await generatePreliminaryWorkPlan({
       vehicle: {
         year: vehicle.year,
@@ -109,7 +116,7 @@ export async function POST(
         .insert({ vehicle_id: vehicleId, created_by: access.userId })
         .select("id")
         .single();
-      if (planError) throw new Error(planError.message);
+      if (planError) throw new Error(`Car Plan creation failed: ${planError.message}`);
       carPlanId = plan.id;
     }
 
@@ -128,7 +135,7 @@ export async function POST(
       .select("id,version_number")
       .single();
 
-    if (versionError) throw new Error(versionError.message);
+    if (versionError) throw new Error(`Work Plan version creation failed: ${versionError.message}`);
 
     try {
       let planningTotal = 0;
@@ -166,14 +173,14 @@ export async function POST(
           .select("id")
           .single();
 
-        if (itemError) throw new Error(itemError.message);
+        if (itemError) throw new Error(`Work Plan item creation failed for “${item.title}”: ${itemError.message}`);
         planningTotal += item.planningAmount;
 
         if (item.findingIds.length > 0) {
           const { error: linksError } = await access.supabase
             .from("mindful_inventory_plan_item_findings")
             .insert(item.findingIds.map((findingId) => ({ plan_item_id: insertedItem.id, finding_id: findingId })));
-          if (linksError) throw new Error(linksError.message);
+          if (linksError) throw new Error(`Finding linkage failed for “${item.title}”: ${linksError.message}`);
         }
       }
 
@@ -181,7 +188,7 @@ export async function POST(
         .from("mindful_inventory_car_plan_versions")
         .update({ planning_total: planningTotal, updated_at: new Date().toISOString() })
         .eq("id", version.id);
-      if (totalError) throw new Error(totalError.message);
+      if (totalError) throw new Error(`Work Plan total update failed: ${totalError.message}`);
 
       const { error: vehicleUpdateError } = await access.supabase
         .from("mindful_inventory_vehicles")
@@ -194,7 +201,7 @@ export async function POST(
         })
         .eq("id", vehicleId)
         .eq("company_id", access.company.companyId);
-      if (vehicleUpdateError) throw new Error(vehicleUpdateError.message);
+      if (vehicleUpdateError) throw new Error(`Vehicle workflow update failed: ${vehicleUpdateError.message}`);
 
       await access.supabase.from("mindful_inventory_history").insert({
         company_id: access.company.companyId,
@@ -225,9 +232,8 @@ export async function POST(
       throw writeError;
     }
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate Preliminary Work Plan." },
-      { status: 500 },
-    );
+    const message = error instanceof Error ? error.message : "Failed to generate Preliminary Work Plan.";
+    console.error("Preliminary Work Plan generation failed:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
