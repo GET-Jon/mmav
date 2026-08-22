@@ -185,10 +185,21 @@ on public.mindful_inventory_upgrades
 for each row
 execute function public.validate_inventory_upgrade_tenant();
 
+create or replace function public.set_inventory_upgrade_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 create trigger mindful_inventory_upgrades_set_updated_at
 before update on public.mindful_inventory_upgrades
 for each row
-execute function public.set_updated_at();
+execute function public.set_inventory_upgrade_updated_at();
 
 alter table public.mindful_inventory_upgrades enable row level security;
 
