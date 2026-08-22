@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export type AppTopNavPage =
   | "evaluator"
@@ -28,6 +31,8 @@ export function AppTopNav({
   userEmail = null,
   onNewEvaluation,
 }: AppTopNavProps) {
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
 
   const initials =
@@ -38,6 +43,20 @@ export function AppTopNav({
       .map((part) => part.charAt(0))
       .join("")
       .toUpperCase() || "MM";
+
+  async function signOut() {
+    if (signingOut) return;
+
+    setSigningOut(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setSigningOut(false);
+    }
+  }
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -112,6 +131,17 @@ export function AppTopNav({
               Mindful Motor Co.
             </div>
           </div>
+
+          {userEmail ? (
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              disabled={signingOut}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:opacity-50"
+            >
+              {signingOut ? "Logging out…" : "Log out"}
+            </button>
+          ) : null}
         </div>
       </div>
     </header>
