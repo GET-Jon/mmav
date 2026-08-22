@@ -46,6 +46,7 @@ type InventoryVehicleRow = {
   purchase_date: string | null;
   purchase_price: number | string | null;
   buyer_fees: number | string | null;
+  transport_cost: number | string | null;
   other_acquisition_cost: number | string | null;
   expected_sale_price: number | string | null;
   title_status: InventoryTitleStatus;
@@ -140,6 +141,7 @@ export async function getInventoryDashboardData(
       purchase_date,
       purchase_price,
       buyer_fees,
+      transport_cost,
       other_acquisition_cost,
       expected_sale_price,
       title_status,
@@ -247,6 +249,7 @@ export async function getInventoryDashboardData(
     purchaseDate: vehicle.purchase_date,
     purchasePrice: toNumber(vehicle.purchase_price),
     buyerFees: toNumber(vehicle.buyer_fees),
+    transportCost: toNumber(vehicle.transport_cost),
     otherAcquisitionCost: toNumber(vehicle.other_acquisition_cost),
     expectedSalePrice: toNullableNumber(vehicle.expected_sale_price),
     titleStatus: vehicle.title_status,
