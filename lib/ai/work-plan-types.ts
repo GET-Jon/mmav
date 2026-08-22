@@ -54,7 +54,12 @@ export type PreliminaryWorkPlanItem = {
   estimatedCostLow: number | null;
   estimatedCostHigh: number | null;
   planningAmount: number;
+  /** Legacy ambiguous duration retained only for compatibility with older generated plans. */
   estimatedDurationHours: number | null;
+  /** Hands-on technician/vendor time. Used for labor capacity, not calendar blocking. */
+  estimatedLaborHours: number | null;
+  /** Elapsed turnaround from task start until task-ready completion. Used for scheduling. */
+  estimatedElapsedHours: number | null;
   confidence: number | null;
   assumptions: string[];
   managerInvestigationRequired: boolean;
