@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
-import { getCurrentUser } from "@/lib/supabase/server-auth";
+import {
+  createSupabaseServerAuthClient,
+  getCurrentUser,
+} from "@/lib/supabase/server-auth";
 
 function toNumber(value: unknown) {
   const parsed = Number(value);
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const supabase = createSupabaseAdminClient();
+    const supabase = await createSupabaseServerAuthClient();
     const company = await getCurrentCompanyForUser(supabase, user.id);
 
     const id = toStringOrNull(body.id);
@@ -117,7 +119,7 @@ export async function POST(request: Request) {
             ? error.message
             : "Failed to save evaluation.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
