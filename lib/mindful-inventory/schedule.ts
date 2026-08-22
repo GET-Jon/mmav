@@ -35,7 +35,7 @@ export async function getInventorySchedule(
     supabase
       .from("mindful_inventory_work_orders")
       .select("id,vehicle_id,title,category,classification,status,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,assigned_partner_id")
-      .not("status", "in", '("cancelled")')
+      .neq("status", "cancelled")
       .order("scheduled_start_at", { ascending: true, nullsFirst: false }),
   ]);
 
