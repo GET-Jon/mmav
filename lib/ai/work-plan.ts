@@ -92,6 +92,13 @@ function normalizeItem(
   const confidenceRaw = nullableNumber(item.confidence);
   const confidence = confidenceRaw === null ? null : Math.min(1, confidenceRaw);
 
+  const labor = nullableNumber(item.estimatedLaborHours);
+  const elapsedInput = nullableNumber(item.estimatedElapsedHours);
+  const legacy = nullableNumber(item.estimatedDurationHours);
+  const elapsed = elapsedInput === null
+    ? (legacy === null ? labor : Math.max(labor ?? 0, legacy))
+    : Math.max(labor ?? 0, elapsedInput);
+
   return {
     title,
     description: stringValue(item.description) || null,
@@ -103,7 +110,9 @@ function normalizeItem(
     estimatedCostLow: low,
     estimatedCostHigh: high,
     planningAmount,
-    estimatedDurationHours: nullableNumber(item.estimatedDurationHours),
+    estimatedDurationHours: elapsed,
+    estimatedLaborHours: labor,
+    estimatedElapsedHours: elapsed,
     confidence,
     assumptions: Array.isArray(item.assumptions)
       ? item.assumptions.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean).slice(0, 10)
