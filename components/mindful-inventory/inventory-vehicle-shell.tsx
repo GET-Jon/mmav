@@ -12,21 +12,21 @@ type Props = {
 
 const phases = [
   { value: "purchased", label: "Purchased", short: "Purchased" },
-  { value: "intake", label: "Purchaser Intake", short: "Intake" },
-  { value: "inspection", label: "Mechanical Inspection", short: "Inspection" },
-  { value: "planning", label: "Car Plan", short: "Plan" },
-  { value: "reconditioning", label: "Work in Progress", short: "Work" },
+  { value: "intake", label: "Overview / Intake", short: "Intake" },
+  { value: "inspection", label: "Mechanical Inspection", short: "Mechanical" },
+  { value: "planning", label: "Work Plan Review", short: "Plan" },
+  { value: "reconditioning", label: "Active Work", short: "Work" },
   { value: "final_qc", label: "Final Quality Check", short: "QC" },
   { value: "merchandising", label: "Merchandising", short: "Merchandise" },
   { value: "ready", label: "Ready for Sale", short: "Ready" },
 ] as const;
 
 const phaseDescriptions: Record<string, string> = {
-  purchased: "Complete purchaser intake so the vehicle can move into inspection.",
-  intake: "Record how the vehicle arrived before mechanical inspection begins.",
-  inspection: "Complete mechanical inspection and record Findings before planning.",
-  planning: "Review Findings and decide what belongs in the Car Plan before work is authorized.",
-  reconditioning: "Execute the approved Car Plan through Work Orders.",
+  purchased: "Review the Lot Logic snapshot, assign an Owner, complete Intake, and add desired upgrades.",
+  intake: "Complete the received-condition record and hand the car to Mechanical.",
+  inspection: "Mechanical validates the known issues, intake notes, and requested upgrades.",
+  planning: "Review any material changes before the preliminary plan becomes active work.",
+  reconditioning: "Execute the active Work Plan through partner work, parts, and scheduling.",
   final_qc: "Verify completed work before the vehicle moves to merchandising.",
   merchandising: "Prepare the vehicle and sales materials for market.",
   ready: "The vehicle has completed the operating workflow and is ready for sale.",
@@ -41,10 +41,10 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
   const currentPhaseIndex = Math.max(0, phases.findIndex((phase) => phase.value === vehicle.phase));
 
   const sections = [
-    { label: "Overview", href: base },
-    { label: "Intake & Inspection", href: `${base}/intake` },
-    { label: "Car Plan", href: `${base}/car-plan` },
-    { label: "Work", href: `${base}/work` },
+    { label: "Overview / Intake", href: base },
+    { label: "Mechanical Inspection", href: `${base}/intake` },
+    { label: "Work Plan", href: `${base}/car-plan` },
+    { label: "Active Work", href: `${base}/work` },
     { label: "Parts / Transport", href: `${base}/parts` },
     { label: "QC", href: `${base}/qc` },
     { label: "Media", href: `${base}/media` },
