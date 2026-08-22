@@ -3,6 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+async function readResponseMessage(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error || null;
+  }
+
+  const text = await response.text();
+  const plain = text
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return plain.slice(0, 300) || null;
+}
+
 export function InventoryMechanicalNextStep({
   vehicleId,
   inspectionComplete,
@@ -25,8 +44,11 @@ export function InventoryMechanicalNextStep({
         `/api/mindful/inventory/vehicles/${vehicleId}/work-plan/generate`,
         { method: "POST" },
       );
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Failed to generate Preliminary Work Plan.");
+
+      if (!response.ok) {
+        const serverMessage = await readResponseMessage(response);
+        throw new Error(serverMessage || `Failed to generate Preliminary Work Plan (${response.status}).`);
+      }
 
       router.push(`/mindful/inventory/${vehicleId}/car-plan`);
       router.refresh();
