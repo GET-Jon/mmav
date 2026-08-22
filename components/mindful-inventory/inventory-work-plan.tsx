@@ -16,6 +16,11 @@ function labelize(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function hourLabel(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  return `${Math.round(value * 10) / 10} hr`;
+}
+
 export function InventoryWorkPlan({
   vehicleId,
   planningReady,
@@ -79,8 +84,11 @@ export function InventoryWorkPlan({
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
         <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Active Work Plan</div>
         <h2 className="mt-1 text-2xl font-black text-slate-950">Work Plan v{plan.currentApprovedVersion.versionNumber} is authorized</h2>
-        <p className="mt-2 text-sm font-medium text-slate-600">The approved snapshot is immutable. Execution is now managed through Active Work.</p>
-        <button type="button" onClick={() => router.push(`/mindful/inventory/${vehicleId}/work`)} className="mt-5 rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white">Open Active Work →</button>
+        <p className="mt-2 text-sm font-medium text-slate-600">The approved snapshot is immutable. Execution and scheduling are now managed through Active Work.</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button type="button" onClick={() => router.push(`/mindful/inventory/${vehicleId}/work`)} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white">Open Active Work →</button>
+          <button type="button" onClick={() => router.push("/mindful/inventory/schedule")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-700">Open Schedule →</button>
+        </div>
       </section>
     );
   }
@@ -108,7 +116,7 @@ export function InventoryWorkPlan({
           <div>
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Preliminary Work Plan</div>
             <h2 className="mt-1 text-2xl font-black text-slate-950">Review what we intend to do</h2>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">Generated from Lot Logic issues, Intake, requested upgrades, and the completed Mechanical Inspection. This is still proposed scope until you activate it.</p>
+            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">Generated from Lot Logic issues, Intake, requested upgrades, and Mechanical. Labor and turnaround are deliberately separate: labor is technician capacity; turnaround is calendar occupancy once the job begins.</p>
             {plan.currentDraftVersion.aiSummary ? <p className="mt-3 max-w-4xl text-sm font-semibold text-slate-700">{plan.currentDraftVersion.aiSummary}</p> : null}
           </div>
           <div className="grid min-w-[300px] grid-cols-3 gap-2">
@@ -130,6 +138,8 @@ export function InventoryWorkPlan({
           {plan.draftItems.map((item) => {
             const sourceFindings = item.findingIds.map((id) => findingsById.get(id)).filter(Boolean);
             const sourceUpgrade = item.upgradeId ? upgradesById.get(item.upgradeId) : null;
+            const turnaround = item.estimatedElapsedHours ?? item.estimatedDurationHours;
+            const legacyOnly = item.estimatedElapsedHours === null && item.estimatedDurationHours !== null;
             return (
               <details key={item.id} className="rounded-2xl border border-slate-200" open={plan.draftItems.length <= 5}>
                 <summary className="flex cursor-pointer list-none flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -146,9 +156,10 @@ export function InventoryWorkPlan({
                 <div className="border-t border-slate-100 px-4 py-4">
                   {item.description ? <p className="text-sm leading-6 text-slate-600">{item.description}</p> : null}
                   {item.rationale ? <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-600"><strong>Why:</strong> {item.rationale}</div> : null}
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <div><div className="text-[10px] font-black uppercase text-slate-400">Estimate</div><div className="mt-1 font-bold text-slate-700">{money(item.estimatedCostLow)}–{money(item.estimatedCostHigh)}</div></div>
-                    <div><div className="text-[10px] font-black uppercase text-slate-400">Time</div><div className="mt-1 font-bold text-slate-700">{item.estimatedDurationHours === null ? "—" : `${item.estimatedDurationHours} hr`}</div></div>
+                    <div><div className="text-[10px] font-black uppercase text-blue-500">Hands-on labor</div><div className="mt-1 font-bold text-blue-700">{hourLabel(item.estimatedLaborHours)}</div></div>
+                    <div><div className="text-[10px] font-black uppercase text-violet-500">Turnaround</div><div className="mt-1 font-bold text-violet-700">{hourLabel(turnaround)}{legacyOnly ? <span className="ml-1 text-[10px] text-slate-400">legacy estimate</span> : null}</div></div>
                     <div><div className="text-[10px] font-black uppercase text-slate-400">Cost basis</div><div className="mt-1 font-bold text-slate-700">{labelize(item.costSource)}</div></div>
                     <div><div className="text-[10px] font-black uppercase text-slate-400">Priority</div><div className="mt-1 font-bold text-slate-700">{item.priority}</div></div>
                   </div>
