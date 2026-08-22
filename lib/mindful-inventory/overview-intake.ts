@@ -31,6 +31,13 @@ export type InventoryInternalOwnerOption = {
   role: string;
 };
 
+type InventoryOwnerRpcRow = {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  role: string;
+};
+
 export type InventoryOverviewIntakeData = {
   upgrades: InventoryUpgradeView[];
   ownerOptions: InventoryInternalOwnerOption[];
@@ -92,7 +99,8 @@ export async function getInventoryOverviewIntakeData(
     updatedAt: row.updated_at,
   }));
 
-  const ownerOptions: InventoryInternalOwnerOption[] = (ownersResult.data || []).map((row) => ({
+  const ownerRows = (ownersResult.data || []) as InventoryOwnerRpcRow[];
+  const ownerOptions: InventoryInternalOwnerOption[] = ownerRows.map((row) => ({
     userId: row.user_id,
     displayName: row.display_name,
     email: row.email,
