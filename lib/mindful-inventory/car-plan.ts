@@ -54,7 +54,10 @@ export type InventoryPlanItemView = {
   estimatedCostLow: number | null;
   estimatedCostHigh: number | null;
   planningAmount: number;
+  /** Legacy ambiguous duration from older generated plans. */
   estimatedDurationHours: number | null;
+  estimatedLaborHours: number | null;
+  estimatedElapsedHours: number | null;
   suggestedPartnerId: string | null;
   declineReason: string | null;
   sequenceOrder: number;
@@ -80,6 +83,12 @@ function toNumber(value: number | string | null | undefined, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nullableNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function versionFromRow(row: Record<string, unknown>): InventoryCarPlanVersionSummary {
@@ -154,7 +163,7 @@ export async function getInventoryCarPlanData(
   const { data: itemRows, error: itemsError } = await supabase
     .from("mindful_inventory_plan_items")
     .select(
-      "id,plan_version_id,stable_item_key,finding_id,upgrade_id,title,description,category,subcategory,classification,decision,priority,rationale,estimated_cost_low,estimated_cost_high,planning_amount,estimated_duration_hours,suggested_partner_id,decline_reason,sequence_order,confidence,assumptions,manager_investigation_required,cost_source,cost_source_detail,created_at,updated_at",
+      "id,plan_version_id,stable_item_key,finding_id,upgrade_id,title,description,category,subcategory,classification,decision,priority,rationale,estimated_cost_low,estimated_cost_high,planning_amount,estimated_duration_hours,estimated_labor_hours,estimated_elapsed_hours,suggested_partner_id,decline_reason,sequence_order,confidence,assumptions,manager_investigation_required,cost_source,cost_source_detail,created_at,updated_at",
     )
     .eq("plan_version_id", currentDraftVersion.id)
     .order("sequence_order", { ascending: true })
@@ -198,15 +207,16 @@ export async function getInventoryCarPlanData(
     decision: row.decision as InventoryPlanItemDecision,
     priority: row.priority as "1" | "2" | "3",
     rationale: row.rationale,
-    estimatedCostLow: row.estimated_cost_low === null ? null : toNumber(row.estimated_cost_low),
-    estimatedCostHigh: row.estimated_cost_high === null ? null : toNumber(row.estimated_cost_high),
+    estimatedCostLow: nullableNumber(row.estimated_cost_low),
+    estimatedCostHigh: nullableNumber(row.estimated_cost_high),
     planningAmount: toNumber(row.planning_amount),
-    estimatedDurationHours:
-      row.estimated_duration_hours === null ? null : toNumber(row.estimated_duration_hours),
+    estimatedDurationHours: nullableNumber(row.estimated_duration_hours),
+    estimatedLaborHours: nullableNumber(row.estimated_labor_hours),
+    estimatedElapsedHours: nullableNumber(row.estimated_elapsed_hours),
     suggestedPartnerId: row.suggested_partner_id,
     declineReason: row.decline_reason,
     sequenceOrder: row.sequence_order,
-    confidence: row.confidence === null ? null : toNumber(row.confidence),
+    confidence: nullableNumber(row.confidence),
     assumptions: Array.isArray(row.assumptions) ? row.assumptions : [],
     managerInvestigationRequired: Boolean(row.manager_investigation_required),
     costSource: row.cost_source as InventoryPlanItemCostSource,
