@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
-import { getCurrentUser } from "@/lib/supabase/server-auth";
+import {
+  createSupabaseServerAuthClient,
+  getCurrentUser,
+} from "@/lib/supabase/server-auth";
 
 const allowedStatuses = new Set([
   "watching",
@@ -30,18 +32,18 @@ export async function PATCH(request: Request) {
     if (!id) {
       return NextResponse.json(
         { error: "Evaluation id is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!allowedStatuses.has(status)) {
       return NextResponse.json(
         { error: "Invalid evaluation status." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const supabase = createSupabaseAdminClient();
+    const supabase = await createSupabaseServerAuthClient();
     const company = await getCurrentCompanyForUser(supabase, user.id);
 
     const { data, error } = await supabase
@@ -72,7 +74,7 @@ export async function PATCH(request: Request) {
             ? error.message
             : "Failed to update evaluation status.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
