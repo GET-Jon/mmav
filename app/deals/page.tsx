@@ -1,8 +1,10 @@
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { DealsPipelineTable } from "@/components/deals/deals-pipeline-table";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
-import { getCurrentUser } from "@/lib/supabase/server-auth";
+import {
+  createSupabaseServerAuthClient,
+  getCurrentUser,
+} from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,13 @@ type CompanyUserOption = {
   label: string;
 };
 
+type CompanyMemberRpcRow = {
+  user_id: string;
+  display_name: string | null;
+  email: string | null;
+  role: string | null;
+};
+
 function compactUserLabelFromEmail(email?: string | null) {
   const clean = String(email || "").trim();
 
@@ -57,139 +66,78 @@ function compactUserLabelFromEmail(email?: string | null) {
   return normalized.length <= 10 ? normalized : normalized.slice(0, 5);
 }
 
-function getUserDisplayLabel(user: {
-  email?: string | null;
-  user_metadata?: {
-    full_name?: unknown;
-    name?: unknown;
-  };
-}) {
-  const fullName =
-    typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name.trim()
-      : "";
-
-  if (fullName) {
-    return fullName;
-  }
-
-  const name =
-    typeof user.user_metadata?.name === "string"
-      ? user.user_metadata.name.trim()
-      : "";
-
-  if (name) {
-    return name;
-  }
-
-  return compactUserLabelFromEmail(user.email);
-}
-
 async function getSavedEvaluations(userId: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await createSupabaseServerAuthClient();
   const company = await getCurrentCompanyForUser(supabase, userId);
 
-  const { data: members, error: membersError } = await supabase
-    .from("company_memberships")
-    .select("user_id, status")
-    .eq("company_id", company.companyId)
-    .eq("status", "active")
-    .order("created_at", { ascending: true });
+  const [membersResult, evaluationsResult] = await Promise.all([
+    supabase.rpc("get_inventory_company_members", {
+      requested_company_id: company.companyId,
+    }),
+    supabase
+      .from("auction_evaluations")
+      .select(
+        `
+        id,
+        created_at,
+        updated_at,
+        status,
+        vin,
+        vehicle_title,
+        mileage,
+        current_bid,
+        target_resale_used,
+        safe_bid,
+        max_smart_bid,
+        stretch_bid,
+        expected_gross_profit,
+        decision,
+        risk_grade,
+        auction_site,
+        created_by,
+        updated_by
+      `,
+      )
+      .eq("company_id", company.companyId)
+      .neq("status", "draft")
+      .order("updated_at", { ascending: false })
+      .limit(50),
+  ]);
 
-  if (membersError) {
+  if (membersResult.error) {
     return {
       evaluations: [] as SavedEvaluation[],
       companyUsers: [] as CompanyUserOption[],
-      error: membersError.message,
+      error: membersResult.error.message,
     };
   }
 
-  const companyUserIds = Array.from(
-    new Set(
-      ((members || []) as Array<{ user_id: string | null }>)
-        .map((member) => member.user_id)
-        .filter(Boolean) as string[],
-    ),
-  );
-
-  const { data, error } = await supabase
-    .from("auction_evaluations")
-    .select(
-      `
-      id,
-      created_at,
-      updated_at,
-      status,
-      vin,
-      vehicle_title,
-      mileage,
-      current_bid,
-      target_resale_used,
-      safe_bid,
-      max_smart_bid,
-      stretch_bid,
-      expected_gross_profit,
-      decision,
-      risk_grade,
-      auction_site,
-      created_by,
-      updated_by
-    `,
-    )
-    .eq("company_id", company.companyId)
-    .neq("status", "draft")
-    .order("updated_at", {
-      ascending: false,
-    })
-    .limit(50);
-
-  if (error) {
+  if (evaluationsResult.error) {
     return {
       evaluations: [] as SavedEvaluation[],
       companyUsers: [] as CompanyUserOption[],
-      error: error.message,
+      error: evaluationsResult.error.message,
     };
   }
 
-  const evaluations = (data || []) as SavedEvaluation[];
-  const evaluationUserIds = evaluations
-    .flatMap((evaluation) => [evaluation.created_by, evaluation.updated_by])
-    .filter(Boolean) as string[];
+  const memberRows = (membersResult.data || []) as CompanyMemberRpcRow[];
+  const companyUsers: CompanyUserOption[] = memberRows.map((member) => ({
+    id: member.user_id,
+    email: member.email,
+    label:
+      member.display_name ||
+      compactUserLabelFromEmail(member.email) ||
+      "Unknown",
+  }));
 
-  const userIds = Array.from(
-    new Set([...companyUserIds, ...evaluationUserIds]),
+  const userEmailById = new Map(
+    companyUsers.map((member) => [member.id, member.email || "Unknown user"]),
+  );
+  const userLabelById = new Map(
+    companyUsers.map((member) => [member.id, member.label]),
   );
 
-  const userEmailById = new Map<string, string>();
-  const userLabelById = new Map<string, string>();
-
-  if (userIds.length) {
-    const { data: usersData } = await supabase.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    });
-
-    for (const authUser of usersData?.users || []) {
-      if (userIds.includes(authUser.id)) {
-        const email = authUser.email || authUser.id;
-        userEmailById.set(authUser.id, email);
-        userLabelById.set(authUser.id, getUserDisplayLabel(authUser));
-      }
-    }
-  }
-
-  const companyUsers = companyUserIds.map((memberUserId) => {
-    const email = userEmailById.get(memberUserId) || null;
-
-    return {
-      id: memberUserId,
-      email,
-      label:
-        userLabelById.get(memberUserId) ||
-        compactUserLabelFromEmail(email) ||
-        "Unknown",
-    };
-  });
+  const evaluations = (evaluationsResult.data || []) as SavedEvaluation[];
 
   return {
     evaluations: evaluations.map((evaluation) => ({
