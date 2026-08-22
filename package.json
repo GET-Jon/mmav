@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:inventory-local": "bash scripts/seed-local-inventory.sh"
+    "seed:inventory-local": "bash scripts/seed-local-inventory.sh",
+    "sync:local-supabase-env": "bash scripts/sync-local-supabase-env.sh"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
