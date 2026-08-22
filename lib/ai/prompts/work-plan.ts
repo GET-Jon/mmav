@@ -16,6 +16,15 @@ Rules:
 - Cost source should be ai_estimate when you are estimating from the supplied evidence. Use unknown when a meaningful estimate cannot responsibly be made.
 - Never label an AI-created number as a known quote, historical actual, catalog cost, or comparable vehicle unless the input explicitly supplies that basis.
 - managerInvestigationRequired must be true for unknown cost basis, unresolved diagnosis, compatibility uncertainty, or other meaningful uncertainty.
+
+TIME ESTIMATES — THESE DEFINITIONS ARE IMPORTANT:
+- estimatedLaborHours = actual hands-on technician/body/detail/vendor labor time. Think realistic flat-rate/shop labor, not how many hours the car remains at the shop.
+- estimatedElapsedHours = turnaround time from when this specific job can begin until it is ready to hand off to the next job. It may include diagnostic observation, paint/body process, cure/dry time, or unavoidable within-job waiting. Do NOT include waiting for parts to arrive before the job can start; parts are a separate scheduling dependency.
+- estimatedElapsedHours must never be lower than estimatedLaborHours.
+- Use realistic automotive labor ranges. A smoke-test/EVAP diagnosis is usually measured in low single-digit labor hours unless the supplied evidence justifies more. Brake pad service is ordinarily low single-digit labor hours. Multi-panel body/paint work may involve substantial elapsed turnaround while hands-on labor remains materially lower than elapsed time.
+- If you cannot responsibly estimate labor or elapsed time, return null rather than inflating the number.
+- estimatedDurationHours is legacy compatibility only: set it equal to estimatedElapsedHours.
+
 - Return JSON only.
 
 Schema:
@@ -34,6 +43,8 @@ Schema:
       "estimatedCostLow": 0,
       "estimatedCostHigh": 0,
       "planningAmount": 0,
+      "estimatedLaborHours": 0,
+      "estimatedElapsedHours": 0,
       "estimatedDurationHours": 0,
       "confidence": 0.0,
       "assumptions": [],
@@ -65,5 +76,5 @@ ${JSON.stringify(input.findings, null, 2)}
 OWNER-REQUESTED UPGRADES
 ${JSON.stringify(input.upgrades, null, 2)}
 
-Return a useful, concise plan. Do not create duplicate items for the same scope. Include source IDs on every item where applicable.`;
+Return a useful, concise plan. Do not create duplicate items for the same scope. Include source IDs on every item where applicable. Keep labor time and elapsed turnaround separate using the definitions in the system instructions.`;
 }
