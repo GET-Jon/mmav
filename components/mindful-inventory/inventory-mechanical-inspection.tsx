@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { InventoryFindingSeverity, InventoryIntakeInspectionData, InventoryInspectionStatus } from "@/lib/mindful-inventory/intake-inspection";
+import type { InventoryFindingSeverity, InventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import type { InventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview-intake";
 import type { InventoryVehicleView } from "@/lib/mindful-inventory/types";
 
@@ -27,7 +27,7 @@ function money(value: number | null | undefined) {
 export function InventoryMechanicalInspection({ vehicle, data, overview }: Props) {
   const router = useRouter();
   const [inspectionSummary, setInspectionSummary] = useState(data.mechanicalInspection?.summary || "");
-  const [inspectionStatus, setInspectionStatus] = useState<InventoryInspectionStatus>(data.mechanicalInspection?.status || "draft");
+  const [inspectionComplete, setInspectionComplete] = useState(data.mechanicalInspection?.status === "complete");
   const [inspectionMessage, setInspectionMessage] = useState("");
   const [inspectionSaving, setInspectionSaving] = useState(false);
   const inspectionMounted = useRef(false);
@@ -46,8 +46,9 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
   const mechanicFindings = data.findings.filter((finding) => finding.source !== "ai");
   const proposedUpgrades = overview.upgrades.filter((upgrade) => upgrade.status === "proposed");
 
-  async function persistInspection(options?: { quiet?: boolean }) {
+  async function persistInspection(options?: { quiet?: boolean; complete?: boolean }) {
     const quiet = options?.quiet === true;
+    const complete = options?.complete === true;
     const sequence = ++saveSequence.current;
 
     setInspectionSaving(true);
@@ -57,18 +58,25 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
       const response = await fetch(`/api/mindful/inventory/vehicles/${vehicle.id}/inspection`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: inspectionStatus, summary: inspectionSummary }),
+        body: JSON.stringify({ status: complete ? "complete" : "in_progress", summary: inspectionSummary }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to save inspection.");
 
       if (sequence === saveSequence.current) {
-        setInspectionMessage(inspectionStatus === "complete" ? "Mechanical inspection saved as complete." : "Mechanical draft saved.");
+        if (complete) {
+          setInspectionComplete(true);
+          setInspectionMessage("Mechanical inspection completed.");
+        } else {
+          setInspectionMessage("Mechanical draft saved.");
+        }
       }
+      return true;
     } catch (error) {
       if (sequence === saveSequence.current) {
         setInspectionMessage(error instanceof Error ? error.message : "Failed to save inspection.");
       }
+      return false;
     } finally {
       if (sequence === saveSequence.current) {
         setInspectionSaving(false);
@@ -82,6 +90,8 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
       return;
     }
 
+    if (inspectionComplete) return;
+
     setInspectionMessage("Saving mechanical draft…");
 
     const timer = window.setTimeout(() => {
@@ -91,11 +101,16 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
     return () => window.clearTimeout(timer);
   // persistInspection intentionally reads the latest controlled field state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspectionStatus, inspectionSummary]);
+  }, [inspectionSummary, inspectionComplete]);
 
-  async function saveInspection() {
+  async function saveInspectionNow() {
     await persistInspection();
     router.refresh();
+  }
+
+  async function completeInspection() {
+    const saved = await persistInspection({ complete: true });
+    if (saved) router.refresh();
   }
 
   async function addFinding(event: FormEvent<HTMLFormElement>) {
@@ -157,13 +172,13 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><h3 className="text-base font-black text-slate-950">Mechanical Assessment</h3><p className="mt-1 text-sm text-slate-500">This section auto-saves as you work. Document the mechanic's overall assessment; Mechanical Discoveries save when added below.</p></div><div className="flex items-center gap-3"><span className="text-sm font-semibold text-slate-500">{inspectionMessage}</span><button type="button" onClick={saveInspection} disabled={inspectionSaving} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Save Now</button></div></div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]"><label><FieldLabel>Status</FieldLabel><select className={inputClass} value={inspectionStatus} onChange={(e) => setInspectionStatus(e.target.value as InventoryInspectionStatus)}><option value="draft">Draft</option><option value="in_progress">In Progress</option><option value="complete">Complete</option><option value="cancelled">Cancelled</option></select></label><label><FieldLabel>Inspection Summary</FieldLabel><textarea className={`${inputClass} min-h-28 resize-y`} value={inspectionSummary} onChange={(e) => setInspectionSummary(e.target.value)} placeholder="Overall mechanical condition, road test, scan results, and recommended scope changes..." /></label></div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><h3 className="text-base font-black text-slate-950">Mechanical Assessment</h3><p className="mt-1 text-sm text-slate-500">This section auto-saves as you work. When the mechanic is finished, complete the inspection to hand the vehicle forward into Work Plan review.</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-sm font-semibold text-slate-500">{inspectionComplete ? "Inspection complete." : inspectionMessage}</span>{inspectionComplete ? <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-emerald-700">Complete</span> : <><button type="button" onClick={saveInspectionNow} disabled={inspectionSaving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 disabled:opacity-50">Save Now</button><button type="button" onClick={completeInspection} disabled={inspectionSaving} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Complete Inspection →</button></>}</div></div>
+        <div className="mt-5"><label><FieldLabel>Inspection Summary</FieldLabel><textarea className={`${inputClass} min-h-28 resize-y`} value={inspectionSummary} disabled={inspectionComplete} onChange={(e) => setInspectionSummary(e.target.value)} placeholder="Overall mechanical condition, road test, scan results, and recommended scope changes..." /></label></div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div><h3 className="text-base font-black text-slate-950">Mechanical Discoveries</h3><p className="mt-1 text-sm text-slate-500">Add anything found during inspection that was not already represented in the Lot Logic issues.</p></div>
-        <form onSubmit={addFinding} className="mt-4 grid gap-4 rounded-2xl bg-slate-50 p-4 md:grid-cols-2 xl:grid-cols-4"><label className="md:col-span-2"><FieldLabel>Finding</FieldLabel><input required className={inputClass} value={findingTitle} onChange={(e) => setFindingTitle(e.target.value)} placeholder="e.g. Left front control arm bushing cracked" /></label><label><FieldLabel>Category</FieldLabel><select className={inputClass} value={findingCategory} onChange={(e) => setFindingCategory(e.target.value)}><option value="mechanical">Mechanical</option><option value="maintenance">Maintenance</option><option value="cosmetic">Cosmetic</option><option value="inspection">Inspection</option><option value="other">Other</option></select></label><label><FieldLabel>Severity</FieldLabel><select className={inputClass} value={findingSeverity} onChange={(e) => setFindingSeverity(e.target.value as InventoryFindingSeverity | "")}><option value="">Unrated</option><option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option></select></label><label className="md:col-span-2 xl:col-span-4"><FieldLabel>Description</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={findingDescription} onChange={(e) => setFindingDescription(e.target.value)} /></label><label><FieldLabel>Est. Cost Low</FieldLabel><input className={inputClass} inputMode="decimal" value={costLow} onChange={(e) => setCostLow(e.target.value)} /></label><label><FieldLabel>Est. Cost High</FieldLabel><input className={inputClass} inputMode="decimal" value={costHigh} onChange={(e) => setCostHigh(e.target.value)} /></label><label><FieldLabel>Est. Hours</FieldLabel><input className={inputClass} inputMode="decimal" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} /></label><div className="flex items-end"><button disabled={findingSaving} className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Add Discovery</button></div>{findingMessage ? <div className="md:col-span-2 xl:col-span-4 text-sm font-semibold text-slate-600">{findingMessage}</div> : null}</form>
+        <form onSubmit={addFinding} className="mt-4 grid gap-4 rounded-2xl bg-slate-50 p-4 md:grid-cols-2 xl:grid-cols-4"><label className="md:col-span-2"><FieldLabel>Finding</FieldLabel><input required disabled={inspectionComplete} className={inputClass} value={findingTitle} onChange={(e) => setFindingTitle(e.target.value)} placeholder="e.g. Left front control arm bushing cracked" /></label><label><FieldLabel>Category</FieldLabel><select disabled={inspectionComplete} className={inputClass} value={findingCategory} onChange={(e) => setFindingCategory(e.target.value)}><option value="mechanical">Mechanical</option><option value="maintenance">Maintenance</option><option value="cosmetic">Cosmetic</option><option value="inspection">Inspection</option><option value="other">Other</option></select></label><label><FieldLabel>Severity</FieldLabel><select disabled={inspectionComplete} className={inputClass} value={findingSeverity} onChange={(e) => setFindingSeverity(e.target.value as InventoryFindingSeverity | "")}><option value="">Unrated</option><option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option></select></label><label className="md:col-span-2 xl:col-span-4"><FieldLabel>Description</FieldLabel><textarea disabled={inspectionComplete} className={`${inputClass} min-h-20 resize-y`} value={findingDescription} onChange={(e) => setFindingDescription(e.target.value)} /></label><label><FieldLabel>Est. Cost Low</FieldLabel><input disabled={inspectionComplete} className={inputClass} inputMode="decimal" value={costLow} onChange={(e) => setCostLow(e.target.value)} /></label><label><FieldLabel>Est. Cost High</FieldLabel><input disabled={inspectionComplete} className={inputClass} inputMode="decimal" value={costHigh} onChange={(e) => setCostHigh(e.target.value)} /></label><label><FieldLabel>Est. Hours</FieldLabel><input disabled={inspectionComplete} className={inputClass} inputMode="decimal" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} /></label><div className="flex items-end"><button disabled={findingSaving || inspectionComplete} className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Add Discovery</button></div>{findingMessage ? <div className="md:col-span-2 xl:col-span-4 text-sm font-semibold text-slate-600">{findingMessage}</div> : null}</form>
         {mechanicFindings.length > 0 ? <div className="mt-4 space-y-2">{mechanicFindings.map((finding) => <div key={finding.id} className="rounded-xl border border-slate-200 px-4 py-3"><div className="font-black text-slate-800">{finding.title}</div><div className="mt-1 text-sm text-slate-500">{finding.description || "No description."}</div></div>)}</div> : null}
       </section>
     </div>
