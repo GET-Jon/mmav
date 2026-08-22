@@ -60,6 +60,7 @@ export type InventoryVehicleView = {
   purchaseDate: string | null;
   purchasePrice: number;
   buyerFees: number;
+  transportCost: number;
   otherAcquisitionCost: number;
   expectedSalePrice: number | null;
   titleStatus: InventoryTitleStatus;
