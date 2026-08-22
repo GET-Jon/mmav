@@ -30,7 +30,7 @@ export async function getInventorySchedule(
   const [vehiclesResult, workResult] = await Promise.all([
     supabase
       .from("mindful_inventory_vehicles")
-      .select("id,inventory_number,year,make,model")
+      .select("id,stock_number,vin,year,make,model")
       .eq("company_id", companyId),
     supabase
       .from("mindful_inventory_work_orders")
@@ -46,7 +46,9 @@ export async function getInventorySchedule(
     (vehiclesResult.data || []).map((vehicle) => [
       vehicle.id,
       {
-        inventoryNumber: vehicle.inventory_number,
+        inventoryNumber:
+          vehicle.stock_number ||
+          (vehicle.vin ? `VIN ${String(vehicle.vin).slice(-6)}` : "Inventory vehicle"),
         label: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
       },
     ]),
