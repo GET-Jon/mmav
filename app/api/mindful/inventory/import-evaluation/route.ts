@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 type ImportResult = {
   returned_evaluation_id: string;
@@ -31,9 +30,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createSupabaseAdminClient();
-
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await access.supabase.rpc(
       "purchase_evaluation_and_add_to_inventory",
       {
         evaluation_id: evaluationId,
@@ -62,8 +59,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       evaluationId: result.returned_evaluation_id,
-      inventoryVehicleId:
-        result.returned_inventory_vehicle_id,
+      inventoryVehicleId: result.returned_inventory_vehicle_id,
       status: result.returned_status,
       inventoryCreated: result.inventory_created,
     });
