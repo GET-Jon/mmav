@@ -4,7 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { InventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
-import type { InventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview-intake";
+import type { InventoryOverviewIntakeData, InventoryUpgradeView } from "@/lib/mindful-inventory/overview-intake";
 import type { InventoryVehicleView } from "@/lib/mindful-inventory/types";
 
 type Props = {
@@ -18,6 +18,28 @@ const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2
 function money(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+}
+
+function currencyInput(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function parseCurrency(value: string) {
+  const cleaned = value.replace(/[^0-9.-]/g, "");
+  if (!cleaned.trim()) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : null;
+}
+
+function formatCurrencyText(value: string) {
+  const parsed = parseCurrency(value);
+  return parsed === null ? "" : currencyInput(parsed);
 }
 
 function textValue(value: unknown) {
@@ -59,7 +81,9 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   const [grade, setGrade] = useState(intakeData.intake?.preliminaryGrade || vehicle.grade || "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
   const [showUpgradeForm, setShowUpgradeForm] = useState(false);
+  const [editingUpgradeId, setEditingUpgradeId] = useState<string | null>(null);
   const [upgradeSaving, setUpgradeSaving] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const [upgradeTitle, setUpgradeTitle] = useState("");
@@ -74,6 +98,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   const [upgradePartsCost, setUpgradePartsCost] = useState("");
   const [upgradeLaborCost, setUpgradeLaborCost] = useState("");
   const [upgradeTotalCost, setUpgradeTotalCost] = useState("");
+  const [totalBudgetOverridden, setTotalBudgetOverridden] = useState(false);
   const [upgradeNotes, setUpgradeNotes] = useState("");
   const [substitutesAllowed, setSubstitutesAllowed] = useState(true);
 
@@ -188,15 +213,98 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
     }
   }
 
-  async function addUpgrade(event: FormEvent<HTMLFormElement>) {
+  function resetUpgradeForm() {
+    setEditingUpgradeId(null);
+    setUpgradeTitle("");
+    setUpgradeCategory("performance");
+    setUpgradeDescription("");
+    setUpgradeOutcome("");
+    setUpgradeManufacturer("");
+    setUpgradePartNumber("");
+    setUpgradeQuantity("1");
+    setUpgradeVendor("");
+    setUpgradeUrl("");
+    setUpgradePartsCost("");
+    setUpgradeLaborCost("");
+    setUpgradeTotalCost("");
+    setTotalBudgetOverridden(false);
+    setUpgradeNotes("");
+    setSubstitutesAllowed(true);
+  }
+
+  function openAddUpgrade() {
+    resetUpgradeForm();
+    setUpgradeMessage("");
+    setShowUpgradeForm(true);
+  }
+
+  function openEditUpgrade(upgrade: InventoryUpgradeView) {
+    const parts = upgrade.estimatedPartsCost ?? 0;
+    const labor = upgrade.estimatedLaborCost ?? 0;
+    const calculated = parts + labor;
+    const savedTotal = upgrade.estimatedTotalCost;
+
+    setEditingUpgradeId(upgrade.id);
+    setUpgradeTitle(upgrade.title);
+    setUpgradeCategory(upgrade.category || "other");
+    setUpgradeDescription(upgrade.description || "");
+    setUpgradeOutcome(upgrade.desiredOutcome || "");
+    setUpgradeManufacturer(upgrade.manufacturer || "");
+    setUpgradePartNumber(upgrade.partNumber || "");
+    setUpgradeQuantity(String(upgrade.quantity || 1));
+    setUpgradeVendor(upgrade.preferredVendor || "");
+    setUpgradeUrl(upgrade.productUrl || "");
+    setUpgradePartsCost(upgrade.estimatedPartsCost === null ? "" : currencyInput(upgrade.estimatedPartsCost));
+    setUpgradeLaborCost(upgrade.estimatedLaborCost === null ? "" : currencyInput(upgrade.estimatedLaborCost));
+    setUpgradeTotalCost(savedTotal === null ? currencyInput(calculated) : currencyInput(savedTotal));
+    setTotalBudgetOverridden(savedTotal !== null && Math.abs(savedTotal - calculated) > 0.005);
+    setUpgradeNotes(upgrade.notes || "");
+    setSubstitutesAllowed(upgrade.substitutesAllowed);
+    setUpgradeMessage("");
+    setShowUpgradeForm(true);
+  }
+
+  function closeUpgradeModal() {
+    setShowUpgradeForm(false);
+    resetUpgradeForm();
+  }
+
+  function syncCalculatedTotal(partsText: string, laborText: string) {
+    if (totalBudgetOverridden) return;
+    const parts = parseCurrency(partsText) || 0;
+    const labor = parseCurrency(laborText) || 0;
+    setUpgradeTotalCost(currencyInput(parts + labor));
+  }
+
+  function changePartsCost(value: string) {
+    const formatted = formatCurrencyText(value);
+    setUpgradePartsCost(formatted);
+    syncCalculatedTotal(formatted, upgradeLaborCost);
+  }
+
+  function changeLaborCost(value: string) {
+    const formatted = formatCurrencyText(value);
+    setUpgradeLaborCost(formatted);
+    syncCalculatedTotal(upgradePartsCost, formatted);
+  }
+
+  function useCalculatedBudget() {
+    const parts = parseCurrency(upgradePartsCost) || 0;
+    const labor = parseCurrency(upgradeLaborCost) || 0;
+    setTotalBudgetOverridden(false);
+    setUpgradeTotalCost(currencyInput(parts + labor));
+  }
+
+  async function saveUpgrade(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setUpgradeSaving(true);
     setUpgradeMessage("");
     try {
       const response = await fetch(`/api/mindful/inventory/vehicles/${vehicle.id}/upgrades`, {
-        method: "POST",
+        method: editingUpgradeId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          upgradeId: editingUpgradeId,
           title: upgradeTitle,
           category: upgradeCategory,
           description: upgradeDescription,
@@ -206,21 +314,21 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
           quantity: upgradeQuantity,
           preferredVendor: upgradeVendor,
           productUrl: upgradeUrl,
-          estimatedPartsCost: upgradePartsCost,
-          estimatedLaborCost: upgradeLaborCost,
-          estimatedTotalCost: upgradeTotalCost,
+          estimatedPartsCost: parseCurrency(upgradePartsCost),
+          estimatedLaborCost: parseCurrency(upgradeLaborCost),
+          estimatedTotalCost: parseCurrency(upgradeTotalCost),
           notes: upgradeNotes,
           substitutesAllowed,
         }),
       });
       const payload = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Failed to add upgrade.");
-      setUpgradeTitle(""); setUpgradeDescription(""); setUpgradeOutcome(""); setUpgradeManufacturer(""); setUpgradePartNumber(""); setUpgradeQuantity("1"); setUpgradeVendor(""); setUpgradeUrl(""); setUpgradePartsCost(""); setUpgradeLaborCost(""); setUpgradeTotalCost(""); setUpgradeNotes("");
-      setShowUpgradeForm(false);
-      setUpgradeMessage("Upgrade added.");
+      if (!response.ok) throw new Error(payload.error || (editingUpgradeId ? "Failed to update upgrade." : "Failed to add upgrade."));
+      const wasEditing = Boolean(editingUpgradeId);
+      closeUpgradeModal();
+      setUpgradeMessage(wasEditing ? "Upgrade updated." : "Upgrade added.");
       router.refresh();
     } catch (error) {
-      setUpgradeMessage(error instanceof Error ? error.message : "Failed to add upgrade.");
+      setUpgradeMessage(error instanceof Error ? error.message : "Failed to save upgrade.");
     } finally {
       setUpgradeSaving(false);
     }
@@ -312,30 +420,37 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-base font-black text-slate-950">Upgrades</h3><p className="mt-1 text-sm text-slate-500">Owner-requested improvements beyond condition-driven repair. These are intent for Mechanical to validate, not authorization to spend.</p></div><button type="button" onClick={() => setShowUpgradeForm((value) => !value)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700">{showUpgradeForm ? "Close" : "+ Add Upgrade"}</button></div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div><h3 className="text-base font-black text-slate-950">Upgrades</h3><p className="mt-1 text-sm text-slate-500">Owner-requested improvements beyond condition-driven repair. These are intent for Mechanical to validate, not authorization to spend.</p></div>
+          <button type="button" onClick={openAddUpgrade} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700">+ Add Upgrade</button>
+        </div>
         {upgradeMessage ? <div className="mt-3 text-sm font-semibold text-slate-600">{upgradeMessage}</div> : null}
-        {showUpgradeForm ? (
-          <form onSubmit={addUpgrade} className="mt-4 grid gap-4 rounded-2xl bg-slate-50 p-4 md:grid-cols-2 lg:grid-cols-4">
-            <label className="md:col-span-2"><FieldLabel>Upgrade</FieldLabel><input required className={inputClass} value={upgradeTitle} onChange={(e) => setUpgradeTitle(e.target.value)} placeholder="e.g. Stage 1 engine tune" /></label>
-            <label><FieldLabel>Category</FieldLabel><select className={inputClass} value={upgradeCategory} onChange={(e) => setUpgradeCategory(e.target.value)}><option value="performance">Performance</option><option value="exhaust">Exhaust</option><option value="lighting">Lighting</option><option value="wheels_tires">Wheels / Tires</option><option value="audio">Audio</option><option value="suspension">Suspension</option><option value="cosmetic">Cosmetic</option><option value="protection">Protection</option><option value="other">Other</option></select></label>
-            <label><FieldLabel>Quantity</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeQuantity} onChange={(e) => setUpgradeQuantity(e.target.value)} /></label>
-            <label className="md:col-span-2"><FieldLabel>Description / Desired Part</FieldLabel><input className={inputClass} value={upgradeDescription} onChange={(e) => setUpgradeDescription(e.target.value)} /></label>
-            <label className="md:col-span-2"><FieldLabel>Desired Outcome</FieldLabel><input className={inputClass} value={upgradeOutcome} onChange={(e) => setUpgradeOutcome(e.target.value)} placeholder="What should this change accomplish?" /></label>
-            <label><FieldLabel>Manufacturer</FieldLabel><input className={inputClass} value={upgradeManufacturer} onChange={(e) => setUpgradeManufacturer(e.target.value)} /></label>
-            <label><FieldLabel>Part Number</FieldLabel><input className={inputClass} value={upgradePartNumber} onChange={(e) => setUpgradePartNumber(e.target.value)} /></label>
-            <label><FieldLabel>Preferred Vendor</FieldLabel><input className={inputClass} value={upgradeVendor} onChange={(e) => setUpgradeVendor(e.target.value)} /></label>
-            <label><FieldLabel>Product URL</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
-            <label><FieldLabel>Parts Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => setUpgradePartsCost(e.target.value)} /></label>
-            <label><FieldLabel>Labor Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => setUpgradeLaborCost(e.target.value)} /></label>
-            <label><FieldLabel>Total Budget</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeTotalCost} onChange={(e) => setUpgradeTotalCost(e.target.value)} /></label>
-            <label className="flex items-end pb-3 text-sm font-black text-slate-700"><input type="checkbox" className="mr-2 h-4 w-4" checked={substitutesAllowed} onChange={(e) => setSubstitutesAllowed(e.target.checked)} />Substitutes allowed</label>
-            <label className="md:col-span-2 lg:col-span-4"><FieldLabel>Notes</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={upgradeNotes} onChange={(e) => setUpgradeNotes(e.target.value)} /></label>
-            <div className="md:col-span-2 lg:col-span-4 flex justify-end"><button disabled={upgradeSaving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Add Upgrade</button></div>
-          </form>
-        ) : null}
         <div className="mt-4 space-y-3">
-          {overview.upgrades.filter((item) => item.status === "proposed").length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-7 text-center text-sm font-semibold text-slate-500">No owner-requested upgrades yet.</div> : overview.upgrades.filter((item) => item.status === "proposed").map((upgrade) => (
-            <details key={upgrade.id} className="rounded-xl border border-slate-200"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3"><div><div className="font-black text-slate-800">{upgrade.title}</div><div className="mt-0.5 text-xs font-bold uppercase text-slate-400">{upgrade.category.replaceAll("_", " ")}</div></div><div className="font-black text-slate-800">{money(upgrade.estimatedTotalCost ?? ((upgrade.estimatedPartsCost || 0) + (upgrade.estimatedLaborCost || 0)))}</div></summary><div className="grid gap-3 border-t border-slate-100 px-4 py-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4"><div><strong>Manufacturer:</strong> {upgrade.manufacturer || "—"}</div><div><strong>Part #:</strong> {upgrade.partNumber || "—"}</div><div><strong>Vendor:</strong> {upgrade.preferredVendor || "—"}</div><div><strong>Substitutes:</strong> {upgrade.substitutesAllowed ? "Allowed" : "Exact item"}</div>{upgrade.description ? <div className="sm:col-span-2 lg:col-span-4">{upgrade.description}</div> : null}</div></details>
+          {overview.upgrades.filter((item) => item.status === "proposed").length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-7 text-center text-sm font-semibold text-slate-500">No owner-requested upgrades yet.</div>
+          ) : overview.upgrades.filter((item) => item.status === "proposed").map((upgrade) => (
+            <details key={upgrade.id} className="rounded-xl border border-slate-200">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <div><div className="font-black text-slate-800">{upgrade.title}</div><div className="mt-0.5 text-xs font-bold uppercase text-slate-400">{upgrade.category.replaceAll("_", " ")}</div></div>
+                <div className="font-black text-slate-800">{money(upgrade.estimatedTotalCost ?? ((upgrade.estimatedPartsCost || 0) + (upgrade.estimatedLaborCost || 0)))}</div>
+              </summary>
+              <div className="border-t border-slate-100 px-4 py-3">
+                <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
+                  <div><strong>Manufacturer:</strong> {upgrade.manufacturer || "—"}</div>
+                  <div><strong>Part #:</strong> {upgrade.partNumber || "—"}</div>
+                  <div><strong>Vendor:</strong> {upgrade.preferredVendor || "—"}</div>
+                  <div><strong>Quantity:</strong> {upgrade.quantity}</div>
+                  <div><strong>Parts:</strong> {money(upgrade.estimatedPartsCost)}</div>
+                  <div><strong>Labor:</strong> {money(upgrade.estimatedLaborCost)}</div>
+                  <div><strong>Total:</strong> {money(upgrade.estimatedTotalCost ?? ((upgrade.estimatedPartsCost || 0) + (upgrade.estimatedLaborCost || 0)))}</div>
+                  <div><strong>Substitutes:</strong> {upgrade.substitutesAllowed ? "Allowed" : "Exact item"}</div>
+                  {upgrade.description ? <div className="sm:col-span-2 lg:col-span-4">{upgrade.description}</div> : null}
+                </div>
+                <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+                  <button type="button" onClick={() => openEditUpgrade(upgrade)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Edit Upgrade</button>
+                </div>
+              </div>
+            </details>
           ))}
         </div>
       </section>
@@ -343,6 +458,56 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
       <section className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Next Step</div><h3 className="mt-1 text-lg font-black text-slate-950">Ready for Mechanical Inspection?</h3><p className="mt-1 text-sm font-medium text-slate-500">Mechanical will receive the AI issues, these intake notes, and all proposed upgrades as the starting scope.</p></div><button type="button" onClick={proceedToMechanical} disabled={saving} className="rounded-xl bg-slate-950 px-6 py-3 text-sm font-black text-white disabled:bg-slate-300">Proceed to Mechanical Inspection →</button></div>
       </section>
+
+      {showUpgradeForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label={editingUpgradeId ? "Edit upgrade" : "Add upgrade"} onMouseDown={(event) => { if (event.target === event.currentTarget) closeUpgradeModal(); }}>
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Upgrade</div>
+                <h3 className="mt-1 text-xl font-black text-slate-950">{editingUpgradeId ? "Edit Upgrade" : "Add Upgrade"}</h3>
+                <p className="mt-1 text-sm text-slate-500">Capture the intended improvement and budget. Mechanical will validate the final scope.</p>
+              </div>
+              <button type="button" onClick={closeUpgradeModal} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600">Close</button>
+            </div>
+
+            <form onSubmit={saveUpgrade} className="grid gap-4 p-5 md:grid-cols-2 lg:grid-cols-4 sm:p-6">
+              <label className="md:col-span-2"><FieldLabel>Upgrade</FieldLabel><input required className={inputClass} value={upgradeTitle} onChange={(e) => setUpgradeTitle(e.target.value)} placeholder="e.g. Stage 1 engine tune" /></label>
+              <label><FieldLabel>Category</FieldLabel><select className={inputClass} value={upgradeCategory} onChange={(e) => setUpgradeCategory(e.target.value)}><option value="performance">Performance</option><option value="exhaust">Exhaust</option><option value="lighting">Lighting</option><option value="wheels_tires">Wheels / Tires</option><option value="audio">Audio</option><option value="suspension">Suspension</option><option value="cosmetic">Cosmetic</option><option value="protection">Protection</option><option value="other">Other</option></select></label>
+              <label><FieldLabel>Quantity</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeQuantity} onChange={(e) => setUpgradeQuantity(e.target.value)} /></label>
+              <label className="md:col-span-2"><FieldLabel>Description / Desired Part</FieldLabel><input className={inputClass} value={upgradeDescription} onChange={(e) => setUpgradeDescription(e.target.value)} /></label>
+              <label className="md:col-span-2"><FieldLabel>Desired Outcome</FieldLabel><input className={inputClass} value={upgradeOutcome} onChange={(e) => setUpgradeOutcome(e.target.value)} placeholder="What should this change accomplish?" /></label>
+              <label><FieldLabel>Manufacturer</FieldLabel><input className={inputClass} value={upgradeManufacturer} onChange={(e) => setUpgradeManufacturer(e.target.value)} /></label>
+              <label><FieldLabel>Part Number</FieldLabel><input className={inputClass} value={upgradePartNumber} onChange={(e) => setUpgradePartNumber(e.target.value)} /></label>
+              <label><FieldLabel>Preferred Vendor</FieldLabel><input className={inputClass} value={upgradeVendor} onChange={(e) => setUpgradeVendor(e.target.value)} /></label>
+              <label><FieldLabel>Product URL</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
+
+              <label>
+                <FieldLabel>Parts Estimate</FieldLabel>
+                <input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="$0" />
+              </label>
+              <label>
+                <FieldLabel>Labor Estimate</FieldLabel>
+                <input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="$0" />
+              </label>
+              <label className="lg:col-span-2">
+                <div className="flex items-center justify-between gap-3"><FieldLabel>Total Budget</FieldLabel>{totalBudgetOverridden ? <button type="button" onClick={useCalculatedBudget} className="mb-1.5 text-[11px] font-black text-slate-500 underline">Use parts + labor</button> : null}</div>
+                <input className={inputClass} inputMode="decimal" value={upgradeTotalCost} onChange={(e) => { setTotalBudgetOverridden(true); setUpgradeTotalCost(formatCurrencyText(e.target.value)); }} placeholder="$0" />
+                <div className="mt-1 text-xs font-semibold text-slate-400">Auto-calculated from Parts + Labor until manually changed.</div>
+              </label>
+
+              <label className="flex items-end pb-3 text-sm font-black text-slate-700"><input type="checkbox" className="mr-2 h-4 w-4" checked={substitutesAllowed} onChange={(e) => setSubstitutesAllowed(e.target.checked)} />Substitutes allowed</label>
+              <label className="md:col-span-2 lg:col-span-4"><FieldLabel>Notes</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={upgradeNotes} onChange={(e) => setUpgradeNotes(e.target.value)} /></label>
+
+              {upgradeMessage ? <div className="md:col-span-2 lg:col-span-4 text-sm font-semibold text-red-600">{upgradeMessage}</div> : null}
+              <div className="md:col-span-2 lg:col-span-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={closeUpgradeModal} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-700">Cancel</button>
+                <button disabled={upgradeSaving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white disabled:bg-slate-300">{upgradeSaving ? "Saving..." : editingUpgradeId ? "Save Changes" : "Add Upgrade"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
