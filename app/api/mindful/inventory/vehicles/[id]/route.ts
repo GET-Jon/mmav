@@ -141,10 +141,43 @@ export async function PATCH(
       );
     }
 
+    const { data: currentVehicle, error: currentVehicleError } = await access.supabase
+      .from("mindful_inventory_vehicles")
+      .select("id,project_owner_user_id")
+      .eq("id", vehicleId)
+      .eq("company_id", access.company.companyId)
+      .single();
+
+    if (currentVehicleError || !currentVehicle) {
+      return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
+    }
+
     const body = await request.json();
     const requestedPhase = requiredEnum(body.phase, allowedPhases, "vehicle phase");
     const holdActive = Boolean(body.holdActive);
     const holdReason = optionalText(body.holdReason);
+    const ownerWasProvided = Object.prototype.hasOwnProperty.call(body, "projectOwnerUserId");
+    const requestedOwnerUserId = ownerWasProvided
+      ? optionalText(body.projectOwnerUserId)
+      : currentVehicle.project_owner_user_id;
+
+    if (requestedOwnerUserId) {
+      const { data: ownerMembership, error: ownerMembershipError } = await access.supabase
+        .from("company_memberships")
+        .select("user_id")
+        .eq("company_id", access.company.companyId)
+        .eq("user_id", requestedOwnerUserId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (ownerMembershipError) throw new Error(ownerMembershipError.message);
+      if (!ownerMembership) {
+        return NextResponse.json(
+          { error: "Vehicle Owner must be an active member of Mindful Motor Co." },
+          { status: 400 },
+        );
+      }
+    }
 
     if (holdActive && !holdReason) {
       return NextResponse.json(
@@ -164,6 +197,7 @@ export async function PATCH(
     }
 
     const updateRow = {
+      project_owner_user_id: requestedOwnerUserId,
       phase: requestedPhase,
       grade: nullableEnum(body.grade, allowedGrades, "vehicle grade"),
       priority: requiredEnum(body.priority, allowedPriorities, "vehicle priority"),
@@ -210,6 +244,7 @@ export async function PATCH(
         actor_user_id: access.userId,
         summary: "Vehicle operational details updated.",
         metadata: {
+          projectOwnerUserId: updateRow.project_owner_user_id,
           phase: updateRow.phase,
           grade: updateRow.grade,
           priority: updateRow.priority,
