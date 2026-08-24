@@ -321,8 +321,29 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
           substitutesAllowed,
         }),
       });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || (editingUpgradeId ? "Failed to update upgrade." : "Failed to add upgrade."));
+      const responseText = await response.text();
+      let payload: { error?: string } = {};
+
+      if (responseText.trim()) {
+        try {
+          payload = JSON.parse(responseText) as { error?: string };
+        } catch {
+          if (!response.ok) {
+            throw new Error(
+              `Upgrade request failed (${response.status}). The server returned a non-JSON response. Check the dev-server terminal for the underlying error.`,
+            );
+          }
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error ||
+            (editingUpgradeId
+              ? "Failed to update upgrade."
+              : "Failed to add upgrade."),
+        );
+      }
       const wasEditing = Boolean(editingUpgradeId);
       closeUpgradeModal();
       setUpgradeMessage(wasEditing ? "Upgrade updated." : "Upgrade added.");
