@@ -1,5 +1,39 @@
-import { InventorySectionPlaceholder } from "@/components/mindful-inventory/inventory-section-placeholder";
+import { notFound } from "next/navigation";
 
-export default function InventoryQcPage() {
-  return <InventorySectionPlaceholder eyebrow="Release Gate" title="Final QC" description="Final QC will be a manager-owned release gate with explicit pass, fail, and override outcomes before merchandising and Ready." items={["QC checklist", "Pass / fail outcome", "Failed-item routing", "Manager override reason", "Final readiness check", "QC history"]} />;
+import { InventoryQc } from "@/components/mindful-inventory/inventory-qc";
+import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
+import { getInventoryQcData } from "@/lib/mindful-inventory/qc";
+
+export default async function InventoryQcPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const access = await getMindfulInventoryAccess();
+
+  if (!access) notFound();
+
+  const { id } = await params;
+
+  const dashboard = await getInventoryDashboardData(
+    access.supabase,
+    access.company.companyId,
+  );
+
+  const vehicle = dashboard.vehicles.find((item) => item.id === id);
+
+  if (!vehicle) notFound();
+
+  const data = await getInventoryQcData(
+    access.supabase,
+    vehicle.id,
+  );
+
+  return (
+    <InventoryQc
+      vehicleId={vehicle.id}
+      data={data}
+    />
+  );
 }
