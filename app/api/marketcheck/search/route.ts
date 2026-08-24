@@ -6,6 +6,7 @@ import {
   isInGenerationCompRange,
 } from "@/lib/marketcheck/generation-comps";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
+import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
 
 type MarketCheckListing = Record<string, any>;
 
@@ -208,7 +209,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-low-confidence-v8-generation-comps",
+    cacheVersion: "progressive-regions-low-confidence-v9-model-aliases",
   });
 }
 
@@ -1536,16 +1537,27 @@ export async function POST(request: Request) {
     }
 
     const taxonomyRetrieval = findModelTaxonomyFallback({ make, model });
+    const modelAliases = findMarketCheckModelAliases({ make, model });
+    const aliasRetrievalModel = modelAliases[0] || null;
+    const retrievalModel =
+      taxonomyRetrieval?.fallbackModel ||
+      aliasRetrievalModel ||
+      model;
 
     const exactSearches = await runProgressiveRegionSearches({
       attemptName: taxonomyRetrieval
         ? `taxonomy-retrieval-${model}-via-${taxonomyRetrieval.fallbackModel}`
-        : generationCompRule
-          ? `generation-aware-make-model-${generationCompRule.generation}`
-          : "exact-year-make-model",
+        : aliasRetrievalModel
+          ? `model-alias-${model}-via-${aliasRetrievalModel}`
+          : generationCompRule
+            ? `generation-aware-make-model-${generationCompRule.generation}`
+            : "exact-year-make-model",
       attemptYear: generationCompRule ? undefined : year,
-      attemptModel: taxonomyRetrieval?.fallbackModel,
-      attemptRows: taxonomyRetrieval ? 25 : undefined,
+      attemptModel: retrievalModel,
+      attemptRows:
+        taxonomyRetrieval || aliasRetrievalModel
+          ? 25
+          : undefined,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
