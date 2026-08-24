@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import type { InventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import type { InventoryOverviewIntakeData, InventoryUpgradeView } from "@/lib/mindful-inventory/overview-intake";
-import type { InventoryVehicleView } from "@/lib/mindful-inventory/types";
+import type { InventoryTitleStatus, InventoryVehicleView } from "@/lib/mindful-inventory/types";
 
 type Props = {
   vehicle: InventoryVehicleView;
@@ -14,6 +14,7 @@ type Props = {
 };
 
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-500";
+const darkInputClass = "w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white outline-none transition focus:border-slate-400 [color-scheme:dark]";
 
 function money(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
@@ -71,9 +72,23 @@ function SummaryCard({ label, value, sub }: { label: string; value: React.ReactN
   );
 }
 
+function DetailGrid({ items }: { items: Array<[string, React.ReactNode]> }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">{label}</div>
+          <div className="mt-1 break-words text-sm font-semibold text-slate-800">{value || "—"}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props) {
   const router = useRouter();
   const [ownerId, setOwnerId] = useState(vehicle.projectOwnerUserId || "");
+  const [titleStatus, setTitleStatus] = useState<InventoryTitleStatus>(vehicle.titleStatus);
   const [mileage, setMileage] = useState(intakeData.intake?.mileage?.toString() || vehicle.mileage?.toString() || "");
   const [keysCount, setKeysCount] = useState(intakeData.intake?.keysCount?.toString() || "");
   const [visibleDamage, setVisibleDamage] = useState(intakeData.intake?.visibleDamageSummary || "");
@@ -81,6 +96,8 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   const [grade, setGrade] = useState(intakeData.intake?.preliminaryGrade || vehicle.grade || "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [showLotLogicModal, setShowLotLogicModal] = useState(false);
+  const [lotLogicTab, setLotLogicTab] = useState<"vehicle" | "bid">("vehicle");
 
   const [showUpgradeForm, setShowUpgradeForm] = useState(false);
   const [editingUpgradeId, setEditingUpgradeId] = useState<string | null>(null);
@@ -129,7 +146,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   const aiFindings = intakeData.findings.filter((finding) => finding.source === "ai");
   const ownerName = overview.ownerOptions.find((owner) => owner.userId === ownerId)?.displayName || "Unassigned";
 
-  const lotLogicDetails = useMemo(() => [
+  const lotLogicBidDetails = useMemo<Array<[string, React.ReactNode]>>(() => [
     ["Source", textValue(snapshot.auctionSite) || textValue(fullEvaluation?.auction_site)],
     ["Auction / Listing", textValue(snapshot.auctionUrl) || textValue(fullEvaluation?.auction_url)],
     ["Decision", textValue(snapshot.decision) || textValue(fullEvaluation?.decision)],
@@ -137,7 +154,27 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
     ["Safe Bid", money(numberValue(snapshot.safeBid) ?? numberValue(fullEvaluation?.safe_bid))],
     ["Max Smart Bid", money(numberValue(snapshot.maxSmartBid) ?? numberValue(fullEvaluation?.max_smart_bid))],
     ["Stretch Bid", money(numberValue(snapshot.stretchBid) ?? numberValue(fullEvaluation?.stretch_bid))],
-  ], [snapshot, fullEvaluation]);
+    ["Purchase Price", money(vehicle.purchasePrice)],
+    ["Lot Logic Recon", money(originalRecon)],
+    ["Expected Sale", money(originalTarget)],
+    ["Expected Gross", money(originalGross)],
+  ], [snapshot, fullEvaluation, vehicle.purchasePrice, originalRecon, originalTarget, originalGross]);
+
+  const lotLogicVehicleDetails = useMemo<Array<[string, React.ReactNode]>>(() => [
+    ["VIN", vehicle.vin || textValue(snapshot.vin) || textValue(fullEvaluation?.vin)],
+    ["Year", vehicle.year || numberValue(snapshot.year) || numberValue(fullEvaluation?.year)],
+    ["Make", vehicle.make || textValue(snapshot.make) || textValue(fullEvaluation?.make)],
+    ["Model", vehicle.model || textValue(snapshot.model) || textValue(fullEvaluation?.model)],
+    ["Trim", vehicle.trim || textValue(snapshot.trim) || textValue(fullEvaluation?.trim)],
+    ["Mileage", vehicle.mileage === null ? "—" : vehicle.mileage.toLocaleString()],
+    ["Body Style", textValue(snapshot.bodyStyle) || textValue(snapshot.body_style) || textValue(fullEvaluation?.body_style)],
+    ["Engine", textValue(snapshot.engine) || textValue(snapshot.engineDescription) || textValue(fullEvaluation?.engine)],
+    ["Transmission", textValue(snapshot.transmission) || textValue(fullEvaluation?.transmission)],
+    ["Drivetrain", textValue(snapshot.drivetrain) || textValue(snapshot.driveType) || textValue(fullEvaluation?.drivetrain)],
+    ["Fuel Type", textValue(snapshot.fuelType) || textValue(snapshot.fuel_type) || textValue(fullEvaluation?.fuel_type)],
+    ["Exterior Color", textValue(snapshot.exteriorColor) || textValue(snapshot.exterior_color) || textValue(fullEvaluation?.exterior_color)],
+    ["Interior Color", textValue(snapshot.interiorColor) || textValue(snapshot.interior_color) || textValue(fullEvaluation?.interior_color)],
+  ], [snapshot, fullEvaluation, vehicle]);
 
   function vehiclePayload(nextAction = vehicle.nextAction, phase = vehicle.phase) {
     return {
@@ -145,7 +182,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
       grade: vehicle.grade,
       priority: vehicle.priority,
       health: vehicle.health,
-      titleStatus: vehicle.titleStatus,
+      titleStatus,
       projectOwnerUserId: ownerId || null,
       nextAction,
       nextActionDueAt: vehicle.nextActionDueAt?.slice(0, 10) || "",
@@ -375,29 +412,38 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
-            <div><h3 className="text-base font-black text-slate-950">Vehicle & Lot Logic Snapshot</h3><p className="mt-1 text-sm text-slate-500">Permanent purchase-time context. Later evaluator changes do not rewrite this record.</p></div>
+            <div><h3 className="text-base font-black text-slate-950">Vehicle & Lot Logic Snapshot</h3><p className="mt-1 text-sm text-slate-500">Permanent purchase-time context, plus current Inventory title status.</p></div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Snapshot</span>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard label="VIN" value={vehicle.vin || "—"} />
             <SummaryCard label="Mileage" value={vehicle.mileage === null ? "—" : vehicle.mileage.toLocaleString()} />
-            <SummaryCard label="Title" value={vehicle.titleStatus.replaceAll("_", " ")} />
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Title Status</div>
+              <select className="mt-1 w-full bg-transparent text-base font-black text-slate-950 outline-none" value={titleStatus} onChange={(e) => setTitleStatus(e.target.value as InventoryTitleStatus)}>
+                <option value="unknown">Unknown</option>
+                <option value="awaiting">Awaiting Title</option>
+                <option value="received">Received</option>
+                <option value="issue">Issue</option>
+                <option value="not_applicable">Not Applicable</option>
+              </select>
+            </div>
             <SummaryCard label="Purchase Date" value={vehicle.purchaseDate || "—"} />
           </div>
-          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50">
-            <summary className="cursor-pointer px-4 py-3 text-sm font-black text-slate-700">View Lot Logic evaluation details</summary>
-            <div className="grid gap-3 border-t border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-3">
-              {lotLogicDetails.map(([label, value]) => <div key={label}><div className="text-[10px] font-black uppercase text-slate-400">{label}</div><div className="mt-1 break-words text-sm font-semibold text-slate-700">{value || "—"}</div></div>)}
-              {fullEvaluation ? <div className="sm:col-span-2 lg:col-span-3"><div className="text-[10px] font-black uppercase text-slate-400">Complete Snapshot</div><div className="mt-1 text-xs font-semibold text-slate-500">The complete Lot Logic evaluation row is preserved in Inventory for audit/history. The interface surfaces the useful fields rather than dumping raw evaluation data.</div></div> : null}
-            </div>
-          </details>
+          <button type="button" onClick={() => { setLotLogicTab("vehicle"); setShowLotLogicModal(true); }} className="mt-4 inline-flex rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-100">View Lot Logic Evaluation</button>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">Vehicle Owner</div>
           <div className="mt-1 text-xl font-black">{ownerName}</div>
           <p className="mt-1 text-sm font-medium text-slate-400">The internal Mindful person accountable for this car and approval decisions.</p>
-          <label className="mt-5 block"><FieldLabel>Assign Owner</FieldLabel><select className={`${inputClass} border-slate-700 bg-slate-900 text-white`} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}><option value="">Unassigned</option>{overview.ownerOptions.map((owner) => <option key={owner.userId} value={owner.userId}>{owner.displayName}{owner.email ? ` — ${owner.email}` : ""}</option>)}</select></label>
+          <label className="mt-5 block">
+            <div className="mb-1.5 text-xs font-black uppercase tracking-[0.08em] text-slate-400">Assign Owner</div>
+            <select className={darkInputClass} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+              <option className="bg-slate-900 text-white" value="">Unassigned</option>
+              {overview.ownerOptions.map((owner) => <option className="bg-slate-900 text-white" key={owner.userId} value={owner.userId}>{owner.displayName}{owner.email ? ` — ${owner.email}` : ""}</option>)}
+            </select>
+          </label>
         </div>
       </section>
 
@@ -479,6 +525,31 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
       <section className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Next Step</div><h3 className="mt-1 text-lg font-black text-slate-950">Ready for Mechanical Inspection?</h3><p className="mt-1 text-sm font-medium text-slate-500">Mechanical will receive the AI issues, these intake notes, and all proposed upgrades as the starting scope.</p></div><button type="button" onClick={proceedToMechanical} disabled={saving} className="rounded-xl bg-slate-950 px-6 py-3 text-sm font-black text-white disabled:bg-slate-300">Proceed to Mechanical Inspection →</button></div>
       </section>
+
+      {showLotLogicModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="Purchase-time Lot Logic evaluation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLotLogicModal(false); }}>
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Purchase-Time Snapshot</div>
+                  <h3 className="mt-1 text-xl font-black text-slate-950">Lot Logic Evaluation</h3>
+                  <p className="mt-1 text-sm text-slate-500">Read-only information preserved when this vehicle entered Inventory.</p>
+                </div>
+                <button type="button" onClick={() => setShowLotLogicModal(false)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600">Close</button>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={() => setLotLogicTab("vehicle")} className={`rounded-xl px-4 py-2 text-sm font-black ${lotLogicTab === "vehicle" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Vehicle / VIN</button>
+                <button type="button" onClick={() => setLotLogicTab("bid")} className={`rounded-xl px-4 py-2 text-sm font-black ${lotLogicTab === "bid" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Bid / Deal</button>
+              </div>
+            </div>
+            <div className="p-5 sm:p-6">
+              {lotLogicTab === "vehicle" ? <DetailGrid items={lotLogicVehicleDetails} /> : <DetailGrid items={lotLogicBidDetails} />}
+              {fullEvaluation ? <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">The complete purchase-time Lot Logic evaluation record remains preserved in Inventory for audit and history. This modal surfaces the useful operating fields without exposing raw evaluation data.</div> : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showUpgradeForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label={editingUpgradeId ? "Edit upgrade" : "Add upgrade"} onMouseDown={(event) => { if (event.target === event.currentTarget) closeUpgradeModal(); }}>
