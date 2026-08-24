@@ -5,6 +5,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { InventoryWorkOrderView } from "@/lib/mindful-inventory/active-work";
+import {
+  suggestedPerformerForWork,
+  type InventoryPerformerOption,
+} from "@/lib/mindful-inventory/performers";
 
 function money(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
@@ -50,9 +54,24 @@ function statusClass(status: InventoryWorkOrderView["status"]) {
   return "bg-slate-100 text-slate-700";
 }
 
-export function InventoryActiveWork({ vehicleId, workOrders }: { vehicleId: string; workOrders: InventoryWorkOrderView[] }) {
+function performerKey(work: InventoryWorkOrderView) {
+  if (work.assignedPartnerId) return `partner:${work.assignedPartnerId}`;
+  if (work.assignedUserId) return `user:${work.assignedUserId}`;
+  return "unassigned";
+}
+
+export function InventoryActiveWork({
+  vehicleId,
+  workOrders,
+  performerOptions,
+}: {
+  vehicleId: string;
+  workOrders: InventoryWorkOrderView[];
+  performerOptions: InventoryPerformerOption[];
+}) {
   const router = useRouter();
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   const completed = workOrders.filter((work) => work.status === "complete" || work.status === "cancelled").length;
@@ -87,6 +106,9 @@ export function InventoryActiveWork({ vehicleId, workOrders }: { vehicleId: stri
     return Array.from(map.entries());
   }, [workOrders]);
 
+  const partnerOptions = performerOptions.filter((option) => option.type === "partner");
+  const internalOptions = performerOptions.filter((option) => option.type === "internal");
+
   async function updateStatus(workOrderId: string, status: "in_progress" | "complete") {
     setWorkingId(workOrderId);
     setMessage("");
@@ -104,6 +126,26 @@ export function InventoryActiveWork({ vehicleId, workOrders }: { vehicleId: stri
       setMessage(error instanceof Error ? error.message : "Failed to update Work Order.");
     } finally {
       setWorkingId(null);
+    }
+  }
+
+  async function assignPerformer(workOrderId: string, selectedKey: string) {
+    setAssigningId(workOrderId);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/mindful/inventory/work-orders/${workOrderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ performerKey: selectedKey }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Failed to assign performer.");
+      setMessage(selectedKey === "unassigned" ? "Performer cleared." : "Performer assigned.");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to assign performer.");
+    } finally {
+      setAssigningId(null);
     }
   }
 
@@ -156,7 +198,7 @@ export function InventoryActiveWork({ vehicleId, workOrders }: { vehicleId: stri
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
           <h3 className="text-sm font-black text-slate-950">Execution calendar</h3>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-500">Chronological view of who is doing what, when, and where. Suggested slots remain editable from the schedule.</p>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-500">Chronological view of who is doing what, when, and where. Assign the actual performer here; capability matches are suggested, not automatically committed.</p>
         </div>
 
         <div className="divide-y divide-slate-200">
@@ -170,8 +212,11 @@ export function InventoryActiveWork({ vehicleId, workOrders }: { vehicleId: stri
                 {items.map((work) => {
                   const turnaround = work.estimatedElapsedMinutes ?? work.estimatedDurationMinutes;
                   const isDone = work.status === "complete" || work.status === "cancelled";
+                  const suggestedPerformer = !work.performerName
+                    ? suggestedPerformerForWork(work, performerOptions)
+                    : null;
                   return (
-                    <article key={work.id} className={`grid gap-3 px-4 py-4 xl:grid-cols-[105px_minmax(0,1fr)_210px_auto] xl:items-center ${isDone ? "bg-slate-50/60" : "bg-white"}`}>
+                    <article key={work.id} className={`grid gap-3 px-4 py-4 xl:grid-cols-[105px_minmax(0,1fr)_260px_auto] xl:items-center ${isDone ? "bg-slate-50/60" : "bg-white"}`}>
                       <div>
                         <div className="text-sm font-black text-slate-950">{timeLabel(work.scheduledStartAt)}</div>
                         {work.scheduledEndAt ? <div className="mt-0.5 text-[10px] font-bold text-slate-400">to {timeLabel(work.scheduledEndAt)}</div> : null}
@@ -194,9 +239,46 @@ export function InventoryActiveWork({ vehicleId, workOrders }: { vehicleId: stri
                       </div>
 
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Who / Where</div>
-                        <div className={`mt-1 text-sm font-black ${work.performerName ? "text-slate-950" : "text-amber-700"}`}>{work.performerName || "Needs assignment"}</div>
-                        <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{work.locationName || "Location TBD"}</div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Who / Where</div>
+                          {suggestedPerformer ? (
+                            <button
+                              type="button"
+                              disabled={assigningId === work.id || isDone}
+                              onClick={() => void assignPerformer(work.id, suggestedPerformer.key)}
+                              className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black text-blue-700 disabled:opacity-50"
+                            >
+                              Suggest {suggestedPerformer.displayName}
+                            </button>
+                          ) : null}
+                        </div>
+                        <select
+                          disabled={assigningId === work.id || isDone}
+                          value={performerKey(work)}
+                          onChange={(event) => void assignPerformer(work.id, event.target.value)}
+                          className={`mt-1 w-full rounded-lg border px-2.5 py-2 text-sm font-black outline-none ${work.performerName ? "border-slate-200 bg-white text-slate-950" : "border-amber-200 bg-amber-50 text-amber-800"}`}
+                        >
+                          <option value="unassigned">Needs assignment</option>
+                          {partnerOptions.length > 0 ? (
+                            <optgroup label="Partners">
+                              {partnerOptions.map((option) => (
+                                <option key={option.key} value={option.key}>
+                                  {option.displayName}{option.secondaryLabel ? ` · ${option.secondaryLabel}` : ""}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : null}
+                          {internalOptions.length > 0 ? (
+                            <optgroup label="Mindful team">
+                              {internalOptions.map((option) => (
+                                <option key={option.key} value={option.key}>
+                                  {option.displayName}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : null}
+                        </select>
+                        <div className="mt-1 text-[11px] font-semibold text-slate-500">{work.locationName || suggestedPerformer?.primaryLocationName || "Location TBD"}</div>
                       </div>
 
                       <div className="flex shrink-0 items-center gap-2">
