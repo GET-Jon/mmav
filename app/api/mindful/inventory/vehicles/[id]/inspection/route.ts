@@ -34,6 +34,39 @@ export async function PUT(
     const status = String(body.status || "draft");
     if (!allowedStatuses.has(status)) return NextResponse.json({ error: "Invalid inspection status." }, { status: 400 });
 
+    if (status === "complete") {
+      const [findingResult, upgradeResult] = await Promise.all([
+        access.supabase
+          .from("mindful_inventory_findings")
+          .select("id", { count: "exact", head: true })
+          .eq("vehicle_id", vehicleId)
+          .eq("source", "ai")
+          .eq("status", "open")
+          .eq("mechanical_validation_status", "pending"),
+        access.supabase
+          .from("mindful_inventory_upgrades")
+          .select("id", { count: "exact", head: true })
+          .eq("vehicle_id", vehicleId)
+          .eq("company_id", access.company.companyId)
+          .eq("status", "proposed")
+          .eq("mechanical_validation_status", "pending"),
+      ]);
+
+      if (findingResult.error) throw new Error(findingResult.error.message);
+      if (upgradeResult.error) throw new Error(upgradeResult.error.message);
+
+      const pendingFindings = findingResult.count || 0;
+      const pendingUpgrades = upgradeResult.count || 0;
+      if (pendingFindings > 0 || pendingUpgrades > 0) {
+        return NextResponse.json(
+          {
+            error: `Validate the preliminary scope before completing Mechanical (${pendingFindings} issue${pendingFindings === 1 ? "" : "s"}, ${pendingUpgrades} upgrade${pendingUpgrades === 1 ? "" : "s"} still pending).`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const { data: existing } = await access.supabase
       .from("mindful_inventory_inspections")
