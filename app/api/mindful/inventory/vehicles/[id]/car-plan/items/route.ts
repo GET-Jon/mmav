@@ -38,9 +38,7 @@ function optionalText(value: unknown) {
 function nullableNonNegativeNumber(value: unknown, label: string) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${label} must be zero or greater.`);
-  }
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${label} must be zero or greater.`);
   return parsed;
 }
 
@@ -55,95 +53,99 @@ function confidenceValue(value: unknown) {
 
 function uniqueIds(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return Array.from(
-    new Set(
-      value
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean),
-    ),
-  );
+  return Array.from(new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean)));
 }
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ id: string }> },
+async function getDraftContext(
+  access: NonNullable<Awaited<ReturnType<typeof getMindfulInventoryAccess>>>,
+  vehicleId: string,
 ) {
+  const { data: vehicle, error: vehicleError } = await access.supabase
+    .from("mindful_inventory_vehicles")
+    .select("id")
+    .eq("id", vehicleId)
+    .eq("company_id", access.company.companyId)
+    .maybeSingle();
+  if (vehicleError) throw new Error(vehicleError.message);
+  if (!vehicle) throw new Error("Inventory vehicle not found.");
+
+  const { data: carPlan, error: planError } = await access.supabase
+    .from("mindful_inventory_car_plans")
+    .select("id")
+    .eq("vehicle_id", vehicleId)
+    .maybeSingle();
+  if (planError) throw new Error(planError.message);
+  if (!carPlan) throw new Error("Create the Draft Car Plan before editing Plan Items.");
+
+  const { data: draftVersion, error: draftError } = await access.supabase
+    .from("mindful_inventory_car_plan_versions")
+    .select("id,version_number")
+    .eq("car_plan_id", carPlan.id)
+    .eq("status", "draft")
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (draftError) throw new Error(draftError.message);
+  if (!draftVersion) throw new Error("No editable Draft Car Plan version exists.");
+
+  return { draftVersion };
+}
+
+function validateEnums(body: Record<string, unknown>) {
+  const classification = String(body.classification || "recommended") as InventoryPlanItemClassification;
+  const decision = String(body.decision || "investigate") as InventoryPlanItemDecision;
+  const priority = String(body.priority || "2");
+  const costSource = String(body.costSource || "unknown") as InventoryPlanItemCostSource;
+
+  if (!allowedClassifications.has(classification)) throw new Error("Invalid Plan Item classification.");
+  if (!allowedDecisions.has(decision)) throw new Error("Invalid Plan Item decision.");
+  if (!allowedPriorities.has(priority)) throw new Error("Invalid Plan Item priority.");
+  if (!allowedCostSources.has(costSource)) throw new Error("Invalid cost source.");
+
+  return { classification, decision, priority, costSource };
+}
+
+async function recalculatePlanningTotal(
+  access: NonNullable<Awaited<ReturnType<typeof getMindfulInventoryAccess>>>,
+  planVersionId: string,
+) {
+  const { data: amountRows, error: amountError } = await access.supabase
+    .from("mindful_inventory_plan_items")
+    .select("planning_amount,decision")
+    .eq("plan_version_id", planVersionId);
+  if (amountError) throw new Error(amountError.message);
+
+  const planningTotal = (amountRows || []).reduce(
+    (sum, row) => sum + (row.decision === "declined" ? 0 : Number(row.planning_amount || 0)),
+    0,
+  );
+
+  const { error: totalError } = await access.supabase
+    .from("mindful_inventory_car_plan_versions")
+    .update({ planning_total: planningTotal, updated_at: new Date().toISOString() })
+    .eq("id", planVersionId)
+    .eq("status", "draft");
+  if (totalError) throw new Error(totalError.message);
+  return planningTotal;
+}
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const access = await getMindfulInventoryAccess();
-    if (!access) {
-      return NextResponse.json({ error: "Mindful Inventory access denied." }, { status: 403 });
-    }
-
+    if (!access) return NextResponse.json({ error: "Mindful Inventory access denied." }, { status: 403 });
     const { id } = await context.params;
     const vehicleId = String(id || "").trim();
-    if (!vehicleId) {
-      return NextResponse.json({ error: "Inventory vehicle id is required." }, { status: 400 });
-    }
+    if (!vehicleId) return NextResponse.json({ error: "Inventory vehicle id is required." }, { status: 400 });
 
-    const { data: vehicle, error: vehicleError } = await access.supabase
-      .from("mindful_inventory_vehicles")
-      .select("id")
-      .eq("id", vehicleId)
-      .eq("company_id", access.company.companyId)
-      .maybeSingle();
-
-    if (vehicleError) throw new Error(vehicleError.message);
-    if (!vehicle) {
-      return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
-    }
-
-    const { data: carPlan, error: planError } = await access.supabase
-      .from("mindful_inventory_car_plans")
-      .select("id")
-      .eq("vehicle_id", vehicleId)
-      .maybeSingle();
-
-    if (planError) throw new Error(planError.message);
-    if (!carPlan) {
-      return NextResponse.json({ error: "Create the Draft Car Plan before adding Plan Items." }, { status: 409 });
-    }
-
-    const { data: draftVersion, error: draftError } = await access.supabase
-      .from("mindful_inventory_car_plan_versions")
-      .select("id,version_number")
-      .eq("car_plan_id", carPlan.id)
-      .eq("status", "draft")
-      .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (draftError) throw new Error(draftError.message);
-    if (!draftVersion) {
-      return NextResponse.json({ error: "No editable Draft Car Plan version exists." }, { status: 409 });
-    }
-
-    const body = await request.json();
+    const { draftVersion } = await getDraftContext(access, vehicleId);
+    const body = (await request.json()) as Record<string, unknown>;
     const title = String(body.title || "").trim();
-    if (!title) {
-      return NextResponse.json({ error: "Plan Item title is required." }, { status: 400 });
-    }
+    if (!title) return NextResponse.json({ error: "Plan Item title is required." }, { status: 400 });
 
-    const classification = String(body.classification || "recommended") as InventoryPlanItemClassification;
-    const decision = String(body.decision || "investigate") as InventoryPlanItemDecision;
-    const priority = String(body.priority || "2");
-    const costSource = String(body.costSource || "unknown") as InventoryPlanItemCostSource;
-
-    if (!allowedClassifications.has(classification)) {
-      return NextResponse.json({ error: "Invalid Plan Item classification." }, { status: 400 });
-    }
-    if (!allowedDecisions.has(decision)) {
-      return NextResponse.json({ error: "Invalid Plan Item decision." }, { status: 400 });
-    }
-    if (!allowedPriorities.has(priority)) {
-      return NextResponse.json({ error: "Invalid Plan Item priority." }, { status: 400 });
-    }
-    if (!allowedCostSources.has(costSource)) {
-      return NextResponse.json({ error: "Invalid cost source." }, { status: 400 });
-    }
-
+    const { classification, decision, priority, costSource } = validateEnums(body);
     const declineReason = optionalText(body.declineReason);
     if (decision === "declined" && !declineReason) {
-      return NextResponse.json({ error: "Declined Plan Items require a reason." }, { status: 400 });
+      return NextResponse.json({ error: "Deferred / declined Plan Items require a reason." }, { status: 400 });
     }
 
     const estimatedCostLow = nullableNonNegativeNumber(body.estimatedCostLow, "Estimated cost low");
@@ -151,16 +153,13 @@ export async function POST(
     if (estimatedCostLow !== null && estimatedCostHigh !== null && estimatedCostHigh < estimatedCostLow) {
       return NextResponse.json({ error: "Estimated cost high cannot be less than estimated cost low." }, { status: 400 });
     }
-
-    const explicitPlanningAmount = nullableNonNegativeNumber(body.planningAmount, "Planning amount");
-    const planningAmount = explicitPlanningAmount ?? estimatedCostHigh ?? estimatedCostLow ?? 0;
+    const planningAmount = nullableNonNegativeNumber(body.planningAmount, "Planning amount") ?? estimatedCostHigh ?? estimatedCostLow ?? 0;
     const estimatedDurationHours = nullableNonNegativeNumber(body.estimatedDurationHours, "Estimated duration");
+    const estimatedLaborHours = nullableNonNegativeNumber(body.estimatedLaborHours, "Estimated labor");
+    const estimatedElapsedHours = nullableNonNegativeNumber(body.estimatedElapsedHours, "Estimated turnaround");
     const confidence = confidenceValue(body.confidence);
     const assumptions = body.assumptions === undefined ? [] : body.assumptions;
-
-    if (!Array.isArray(assumptions)) {
-      return NextResponse.json({ error: "Plan Item assumptions must be an array." }, { status: 400 });
-    }
+    if (!Array.isArray(assumptions)) return NextResponse.json({ error: "Plan Item assumptions must be an array." }, { status: 400 });
 
     const findingIds = uniqueIds(body.findingIds);
     if (findingIds.length > 0) {
@@ -169,20 +168,8 @@ export async function POST(
         .select("id,status")
         .eq("vehicle_id", vehicleId)
         .in("id", findingIds);
-
       if (findingsError) throw new Error(findingsError.message);
-      if ((findingRows || []).length !== findingIds.length) {
-        return NextResponse.json(
-          { error: "Every linked Finding must belong to this vehicle." },
-          { status: 400 },
-        );
-      }
-      if ((findingRows || []).some((finding) => finding.status !== "open")) {
-        return NextResponse.json(
-          { error: "Only open Findings may be linked to a Draft Plan Item." },
-          { status: 400 },
-        );
-      }
+      if ((findingRows || []).length !== findingIds.length) return NextResponse.json({ error: "Every linked Finding must belong to this vehicle." }, { status: 400 });
     }
 
     const { data: lastItem, error: orderError } = await access.supabase
@@ -192,12 +179,8 @@ export async function POST(
       .order("sequence_order", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (orderError) throw new Error(orderError.message);
-    const sequenceOrder =
-      body.sequenceOrder === null || body.sequenceOrder === undefined || body.sequenceOrder === ""
-        ? Number(lastItem?.sequence_order || 0) + 10
-        : nullableNonNegativeNumber(body.sequenceOrder, "Sequence order") ?? 0;
+    const sequenceOrder = Number(lastItem?.sequence_order || 0) + 10;
 
     const { data: planItem, error: itemError } = await access.supabase
       .from("mindful_inventory_plan_items")
@@ -207,7 +190,6 @@ export async function POST(
         title,
         description: optionalText(body.description),
         category: optionalText(body.category) || "other",
-        subcategory: optionalText(body.subcategory),
         classification,
         decision,
         priority,
@@ -216,7 +198,8 @@ export async function POST(
         estimated_cost_high: estimatedCostHigh,
         planning_amount: planningAmount,
         estimated_duration_hours: estimatedDurationHours,
-        suggested_partner_id: optionalText(body.suggestedPartnerId),
+        estimated_labor_hours: estimatedLaborHours,
+        estimated_elapsed_hours: estimatedElapsedHours,
         decline_reason: decision === "declined" ? declineReason : null,
         sequence_order: sequenceOrder,
         confidence,
@@ -227,81 +210,111 @@ export async function POST(
       })
       .select("id")
       .single();
-
     if (itemError) throw new Error(itemError.message);
 
     if (findingIds.length > 0) {
       const { error: linkError } = await access.supabase
         .from("mindful_inventory_plan_item_findings")
-        .insert(
-          findingIds.map((findingId) => ({
-            plan_item_id: planItem.id,
-            finding_id: findingId,
-          })),
-        );
-
-      if (linkError) {
-        await access.supabase
-          .from("mindful_inventory_plan_items")
-          .delete()
-          .eq("id", planItem.id);
-        throw new Error(linkError.message);
-      }
+        .insert(findingIds.map((findingId) => ({ plan_item_id: planItem.id, finding_id: findingId })));
+      if (linkError) throw new Error(linkError.message);
     }
 
-    const { data: amountRows, error: amountError } = await access.supabase
-      .from("mindful_inventory_plan_items")
-      .select("planning_amount")
-      .eq("plan_version_id", draftVersion.id);
-
-    if (amountError) throw new Error(amountError.message);
-    const planningTotal = (amountRows || []).reduce(
-      (sum, row) => sum + Number(row.planning_amount || 0),
-      0,
-    );
-
-    const { error: totalError } = await access.supabase
-      .from("mindful_inventory_car_plan_versions")
-      .update({ planning_total: planningTotal, updated_at: new Date().toISOString() })
-      .eq("id", draftVersion.id)
-      .eq("status", "draft");
-
-    if (totalError) throw new Error(totalError.message);
-
-    const { error: historyError } = await access.supabase
-      .from("mindful_inventory_history")
-      .insert({
-        company_id: access.company.companyId,
-        vehicle_id: vehicleId,
-        event_type: "car_plan_item_added",
-        entity_type: "plan_item",
-        entity_id: planItem.id,
-        actor_user_id: access.userId,
-        summary: `Draft Plan Item added: ${title}`,
-        metadata: {
-          planVersionId: draftVersion.id,
-          versionNumber: draftVersion.version_number,
-          classification,
-          decision,
-          findingIds,
-          planningAmount,
-          costSource,
-        },
-      });
-
-    if (historyError) {
-      console.error("Inventory history insert failed:", historyError.message);
-    }
-
-    return NextResponse.json({
-      id: planItem.id,
-      planVersionId: draftVersion.id,
-      planningTotal,
+    const planningTotal = await recalculatePlanningTotal(access, draftVersion.id);
+    await access.supabase.from("mindful_inventory_history").insert({
+      company_id: access.company.companyId,
+      vehicle_id: vehicleId,
+      event_type: "car_plan_item_added",
+      entity_type: "plan_item",
+      entity_id: planItem.id,
+      actor_user_id: access.userId,
+      summary: `Manager Plan Item added: ${title}`,
+      metadata: { planVersionId: draftVersion.id, versionNumber: draftVersion.version_number, classification, decision, planningAmount },
     });
+
+    return NextResponse.json({ id: planItem.id, planVersionId: draftVersion.id, planningTotal });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to add Draft Plan Item." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to add Draft Plan Item." }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const access = await getMindfulInventoryAccess();
+    if (!access) return NextResponse.json({ error: "Mindful Inventory access denied." }, { status: 403 });
+    const { id } = await context.params;
+    const vehicleId = String(id || "").trim();
+    if (!vehicleId) return NextResponse.json({ error: "Inventory vehicle id is required." }, { status: 400 });
+
+    const { draftVersion } = await getDraftContext(access, vehicleId);
+    const body = (await request.json()) as Record<string, unknown>;
+    const itemId = String(body.itemId || "").trim();
+    const title = String(body.title || "").trim();
+    if (!itemId) return NextResponse.json({ error: "Plan Item id is required." }, { status: 400 });
+    if (!title) return NextResponse.json({ error: "Plan Item title is required." }, { status: 400 });
+
+    const { classification, decision, priority, costSource } = validateEnums(body);
+    const declineReason = optionalText(body.declineReason);
+    if (decision === "declined" && !declineReason) {
+      return NextResponse.json({ error: "Deferred / declined Plan Items require a reason." }, { status: 400 });
+    }
+    const estimatedCostLow = nullableNonNegativeNumber(body.estimatedCostLow, "Estimated cost low");
+    const estimatedCostHigh = nullableNonNegativeNumber(body.estimatedCostHigh, "Estimated cost high");
+    if (estimatedCostLow !== null && estimatedCostHigh !== null && estimatedCostHigh < estimatedCostLow) {
+      return NextResponse.json({ error: "Estimated cost high cannot be less than estimated cost low." }, { status: 400 });
+    }
+
+    const planningAmount = nullableNonNegativeNumber(body.planningAmount, "Planning amount") ?? 0;
+    const estimatedLaborHours = nullableNonNegativeNumber(body.estimatedLaborHours, "Estimated labor");
+    const estimatedElapsedHours = nullableNonNegativeNumber(body.estimatedElapsedHours, "Estimated turnaround");
+
+    const { data: existing, error: existingError } = await access.supabase
+      .from("mindful_inventory_plan_items")
+      .select("id,title")
+      .eq("id", itemId)
+      .eq("plan_version_id", draftVersion.id)
+      .maybeSingle();
+    if (existingError) throw new Error(existingError.message);
+    if (!existing) return NextResponse.json({ error: "Draft Plan Item not found." }, { status: 404 });
+
+    const { error: updateError } = await access.supabase
+      .from("mindful_inventory_plan_items")
+      .update({
+        title,
+        description: optionalText(body.description),
+        category: optionalText(body.category) || "other",
+        classification,
+        decision,
+        priority,
+        rationale: optionalText(body.rationale),
+        estimated_cost_low: estimatedCostLow,
+        estimated_cost_high: estimatedCostHigh,
+        planning_amount: planningAmount,
+        estimated_labor_hours: estimatedLaborHours,
+        estimated_elapsed_hours: estimatedElapsedHours,
+        manager_investigation_required: Boolean(body.managerInvestigationRequired),
+        cost_source: costSource,
+        cost_source_detail: optionalText(body.costSourceDetail),
+        decline_reason: decision === "declined" ? declineReason : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", itemId)
+      .eq("plan_version_id", draftVersion.id);
+    if (updateError) throw new Error(updateError.message);
+
+    const planningTotal = await recalculatePlanningTotal(access, draftVersion.id);
+    await access.supabase.from("mindful_inventory_history").insert({
+      company_id: access.company.companyId,
+      vehicle_id: vehicleId,
+      event_type: "car_plan_item_updated",
+      entity_type: "plan_item",
+      entity_id: itemId,
+      actor_user_id: access.userId,
+      summary: `Draft Plan Item updated: ${title}`,
+      metadata: { previousTitle: existing.title, planVersionId: draftVersion.id, classification, decision, planningAmount },
+    });
+
+    return NextResponse.json({ id: itemId, planningTotal });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update Draft Plan Item." }, { status: 500 });
   }
 }
