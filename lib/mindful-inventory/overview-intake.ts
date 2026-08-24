@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type InventoryUpgradeStatus = "proposed" | "withdrawn";
+export type InventoryUpgradeMechanicalValidationStatus =
+  | "pending"
+  | "feasible"
+  | "feasible_with_changes"
+  | "not_recommended"
+  | "needs_info";
 
 export type InventoryUpgradeView = {
   id: string;
@@ -20,6 +26,8 @@ export type InventoryUpgradeView = {
   estimatedTotalCost: number | null;
   notes: string | null;
   status: InventoryUpgradeStatus;
+  mechanicalValidationStatus: InventoryUpgradeMechanicalValidationStatus;
+  mechanicalValidationNotes: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -64,7 +72,7 @@ export async function getInventoryOverviewIntakeData(
     supabase
       .from("mindful_inventory_upgrades")
       .select(
-        "id,requested_by_user_id,title,description,category,desired_outcome,manufacturer,part_number,quantity,preferred_vendor,product_url,substitutes_allowed,estimated_parts_cost,estimated_labor_cost,estimated_total_cost,notes,status,created_at,updated_at",
+        "id,requested_by_user_id,title,description,category,desired_outcome,manufacturer,part_number,quantity,preferred_vendor,product_url,substitutes_allowed,estimated_parts_cost,estimated_labor_cost,estimated_total_cost,notes,status,mechanical_validation_status,mechanical_validation_notes,created_at,updated_at",
       )
       .eq("company_id", companyId)
       .eq("vehicle_id", vehicleId)
@@ -95,6 +103,8 @@ export async function getInventoryOverviewIntakeData(
     estimatedTotalCost: toNullableNumber(row.estimated_total_cost),
     notes: row.notes,
     status: row.status as InventoryUpgradeStatus,
+    mechanicalValidationStatus: (row.mechanical_validation_status || "pending") as InventoryUpgradeMechanicalValidationStatus,
+    mechanicalValidationNotes: row.mechanical_validation_notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
