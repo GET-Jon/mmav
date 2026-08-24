@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { InventoryFindingSeverity, InventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import type { InventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview-intake";
 import type { InventoryVehicleView } from "@/lib/mindful-inventory/types";
+import { MechanicalDiscoveryCard } from "@/components/mindful-inventory/mechanical-discovery-card";
 
 type Props = {
   vehicle: InventoryVehicleView;
@@ -43,7 +44,10 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
   const [findingSaving, setFindingSaving] = useState(false);
 
   const aiFindings = data.findings.filter((finding) => finding.source === "ai" && finding.status === "open");
-  const mechanicFindings = data.findings.filter((finding) => finding.source !== "ai");
+  const mechanicFindings = data.findings.filter(
+    (finding) =>
+      finding.source === "inspection" || finding.source === "manager",
+  );
   const proposedUpgrades = overview.upgrades.filter((upgrade) => upgrade.status === "proposed");
 
   async function persistInspection(options?: { quiet?: boolean; complete?: boolean }) {
@@ -179,7 +183,18 @@ export function InventoryMechanicalInspection({ vehicle, data, overview }: Props
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div><h3 className="text-base font-black text-slate-950">Mechanical Discoveries</h3><p className="mt-1 text-sm text-slate-500">Add anything found during inspection that was not already represented in the Lot Logic issues.</p></div>
         <form onSubmit={addFinding} className="mt-4 grid gap-4 rounded-2xl bg-slate-50 p-4 md:grid-cols-2 xl:grid-cols-4"><label className="md:col-span-2"><FieldLabel>Finding</FieldLabel><input required disabled={inspectionComplete} className={inputClass} value={findingTitle} onChange={(e) => setFindingTitle(e.target.value)} placeholder="e.g. Left front control arm bushing cracked" /></label><label><FieldLabel>Category</FieldLabel><select disabled={inspectionComplete} className={inputClass} value={findingCategory} onChange={(e) => setFindingCategory(e.target.value)}><option value="mechanical">Mechanical</option><option value="maintenance">Maintenance</option><option value="cosmetic">Cosmetic</option><option value="inspection">Inspection</option><option value="other">Other</option></select></label><label><FieldLabel>Severity</FieldLabel><select disabled={inspectionComplete} className={inputClass} value={findingSeverity} onChange={(e) => setFindingSeverity(e.target.value as InventoryFindingSeverity | "")}><option value="">Unrated</option><option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option></select></label><label className="md:col-span-2 xl:col-span-4"><FieldLabel>Description</FieldLabel><textarea disabled={inspectionComplete} className={`${inputClass} min-h-20 resize-y`} value={findingDescription} onChange={(e) => setFindingDescription(e.target.value)} /></label><label><FieldLabel>Est. Cost Low</FieldLabel><input disabled={inspectionComplete} className={inputClass} inputMode="decimal" value={costLow} onChange={(e) => setCostLow(e.target.value)} /></label><label><FieldLabel>Est. Cost High</FieldLabel><input disabled={inspectionComplete} className={inputClass} inputMode="decimal" value={costHigh} onChange={(e) => setCostHigh(e.target.value)} /></label><label><FieldLabel>Est. Hours</FieldLabel><input disabled={inspectionComplete} className={inputClass} inputMode="decimal" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} /></label><div className="flex items-end"><button disabled={findingSaving || inspectionComplete} className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Add Discovery</button></div>{findingMessage ? <div className="md:col-span-2 xl:col-span-4 text-sm font-semibold text-slate-600">{findingMessage}</div> : null}</form>
-        {mechanicFindings.length > 0 ? <div className="mt-4 space-y-2">{mechanicFindings.map((finding) => <div key={finding.id} className="rounded-xl border border-slate-200 px-4 py-3"><div className="font-black text-slate-800">{finding.title}</div><div className="mt-1 text-sm text-slate-500">{finding.description || "No description."}</div></div>)}</div> : null}
+        {mechanicFindings.length > 0 ? (
+          <div className="mt-4 space-y-2">
+            {mechanicFindings.map((finding) => (
+              <MechanicalDiscoveryCard
+                key={finding.id}
+                vehicleId={vehicle.id}
+                finding={finding}
+                disabled={inspectionComplete}
+              />
+            ))}
+          </div>
+        ) : null}
       </section>
     </div>
   );
