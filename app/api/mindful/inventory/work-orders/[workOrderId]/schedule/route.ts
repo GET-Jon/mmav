@@ -50,12 +50,13 @@ export async function PATCH(
       .update({
         scheduled_start_at: start.toISOString(),
         scheduled_end_at: end.toISOString(),
+        schedule_source: "manual",
         status: existing.status === "complete" ? "complete" : "scheduled",
         updated_by: access.userId,
         updated_at: now,
       })
       .eq("id", workOrderId)
-      .select("id,scheduled_start_at,scheduled_end_at,status")
+      .select("id,scheduled_start_at,scheduled_end_at,status,schedule_source")
       .single();
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -67,11 +68,12 @@ export async function PATCH(
       entity_type: "work_order",
       entity_id: workOrderId,
       actor_user_id: access.userId,
-      summary: "Work Order scheduled.",
+      summary: "Work Order schedule manually set or adjusted.",
       metadata: {
         scheduledStartAt: updated.scheduled_start_at,
         scheduledEndAt: updated.scheduled_end_at,
         elapsedMinutes: safeDuration,
+        scheduleSource: "manual",
       },
     });
 
