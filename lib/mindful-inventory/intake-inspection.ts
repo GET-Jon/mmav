@@ -5,6 +5,12 @@ export type InventoryInspectionStatus = "draft" | "in_progress" | "complete" | "
 export type InventoryFindingSeverity = "green" | "yellow" | "red";
 export type InventoryFindingSource = "intake" | "inspection" | "ai" | "partner" | "manager" | "qc" | "other";
 export type InventoryFindingStatus = "open" | "resolved" | "dismissed";
+export type InventoryFindingMechanicalValidationStatus =
+  | "pending"
+  | "confirmed"
+  | "not_found"
+  | "changed"
+  | "needs_diagnosis";
 
 export type InventoryIntakeView = {
   id: string;
@@ -45,6 +51,8 @@ export type InventoryFindingView = {
   estimatedCostHigh: number | null;
   estimatedDurationHours: number | null;
   status: InventoryFindingStatus;
+  mechanicalValidationStatus: InventoryFindingMechanicalValidationStatus;
+  mechanicalValidationNotes: string | null;
   resolvedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -83,7 +91,7 @@ export async function getInventoryIntakeInspectionData(
       .maybeSingle(),
     supabase
       .from("mindful_inventory_findings")
-      .select("id,intake_id,inspection_id,source,title,description,category,subcategory,severity,confidence,certainty,estimated_cost_low,estimated_cost_high,estimated_duration_hours,status,resolved_at,created_at,updated_at")
+      .select("id,intake_id,inspection_id,source,title,description,category,subcategory,severity,confidence,certainty,estimated_cost_low,estimated_cost_high,estimated_duration_hours,status,mechanical_validation_status,mechanical_validation_notes,resolved_at,created_at,updated_at")
       .eq("vehicle_id", vehicleId)
       .order("created_at", { ascending: false }),
   ]);
@@ -138,6 +146,8 @@ export async function getInventoryIntakeInspectionData(
     estimatedCostHigh: toNullableNumber(row.estimated_cost_high),
     estimatedDurationHours: toNullableNumber(row.estimated_duration_hours),
     status: row.status as InventoryFindingStatus,
+    mechanicalValidationStatus: (row.mechanical_validation_status || "pending") as InventoryFindingMechanicalValidationStatus,
+    mechanicalValidationNotes: row.mechanical_validation_notes,
     resolvedAt: row.resolved_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
