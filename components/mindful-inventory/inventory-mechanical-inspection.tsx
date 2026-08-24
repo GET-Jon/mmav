@@ -49,9 +49,27 @@ function money(value: number | null | undefined) {
 }
 
 function validationBadge(status: string, label: string) {
-  const complete = status !== "pending";
+  const statusClass = (() => {
+    switch (status) {
+      case "confirmed":
+      case "feasible":
+        return "bg-emerald-100 text-emerald-700";
+      case "not_found":
+      case "not_recommended":
+        return "bg-red-100 text-red-700";
+      case "changed":
+      case "feasible_with_changes":
+        return "bg-blue-100 text-blue-700";
+      case "pending":
+      case "needs_diagnosis":
+      case "needs_info":
+      default:
+        return "bg-amber-100 text-amber-700";
+    }
+  })();
+
   return (
-    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${complete ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${statusClass}`}>
       {label}
     </span>
   );
