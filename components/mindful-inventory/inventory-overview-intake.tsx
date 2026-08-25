@@ -15,6 +15,13 @@ type Props = {
 
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-500";
 const darkInputClass = "w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white outline-none transition focus:border-slate-400 [color-scheme:dark]";
+const preliminaryGradeOptions = [
+  { value: "a", label: "A — Light / minimal reconditioning", note: "Essentially retail-ready; very little corrective work." },
+  { value: "b", label: "B — Minor reconditioning", note: "A few straightforward cosmetic or maintenance items." },
+  { value: "c", label: "C — Moderate reconditioning", note: "Multiple items or meaningful work, but still normal recon." },
+  { value: "d", label: "D — Major reconditioning", note: "Substantial mechanical/cosmetic work, expense, or coordination." },
+  { value: "e", label: "E — Extensive / complex reconditioning", note: "Heavy project, major repairs, or significant uncertainty." },
+] as const;
 
 function money(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
@@ -145,6 +152,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   const projectedGross = vehicle.expectedSalePrice === null ? null : vehicle.expectedSalePrice - projectedAllIn;
   const aiFindings = intakeData.findings.filter((finding) => finding.source === "ai");
   const ownerName = overview.ownerOptions.find((owner) => owner.userId === ownerId)?.displayName || "Unassigned";
+  const selectedGrade = preliminaryGradeOptions.find((option) => option.value === grade);
 
   const lotLogicBidDetails = useMemo<Array<[string, React.ReactNode]>>(() => [
     ["Source", textValue(snapshot.auctionSite) || textValue(fullEvaluation?.auction_site)],
@@ -366,20 +374,13 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
           payload = JSON.parse(responseText) as { error?: string };
         } catch {
           if (!response.ok) {
-            throw new Error(
-              `Upgrade request failed (${response.status}). The server returned a non-JSON response. Check the dev-server terminal for the underlying error.`,
-            );
+            throw new Error(`Upgrade request failed (${response.status}). The server returned a non-JSON response. Check the dev-server terminal for the underlying error.`);
           }
         }
       }
 
       if (!response.ok) {
-        throw new Error(
-          payload.error ||
-            (editingUpgradeId
-              ? "Failed to update upgrade."
-              : "Failed to add upgrade."),
-        );
+        throw new Error(payload.error || (editingUpgradeId ? "Failed to update upgrade." : "Failed to add upgrade."));
       }
       const wasEditing = Boolean(editingUpgradeId);
       closeUpgradeModal();
@@ -479,7 +480,14 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label><FieldLabel>Mileage Received</FieldLabel><input className={inputClass} inputMode="numeric" value={mileage} onChange={(e) => setMileage(e.target.value)} /></label>
             <label><FieldLabel>Keys</FieldLabel><input className={inputClass} inputMode="numeric" value={keysCount} onChange={(e) => setKeysCount(e.target.value)} /></label>
-            <label><FieldLabel>Preliminary Grade</FieldLabel><select className={inputClass} value={grade} onChange={(e) => setGrade(e.target.value)}><option value="">Unassigned</option>{["a","b","c","d","e"].map((value) => <option key={value} value={value}>{value.toUpperCase()}</option>)}</select></label>
+            <label>
+              <FieldLabel>Preliminary Grade</FieldLabel>
+              <select className={inputClass} value={grade} onChange={(e) => setGrade(e.target.value)}>
+                <option value="">Unassigned</option>
+                {preliminaryGradeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <div className="mt-1.5 text-xs font-semibold text-slate-500">{selectedGrade ? selectedGrade.note : "Quick intake assessment of expected reconditioning difficulty."}</div>
+            </label>
             <label className="sm:col-span-2"><FieldLabel>Visible Damage / Differences From Listing</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={visibleDamage} onChange={(e) => setVisibleDamage(e.target.value)} placeholder="Damage, missing items, or differences from the Lot Logic source material" /></label>
             <label className="sm:col-span-2"><FieldLabel>Additional Intake Notes</FieldLabel><textarea className={`${inputClass} min-h-24 resize-y`} value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Warning lights, noises, smells, driveability, missing equipment, owner notes..." /></label>
           </div>
@@ -573,24 +581,15 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
               <label><FieldLabel>Part Number</FieldLabel><input className={inputClass} value={upgradePartNumber} onChange={(e) => setUpgradePartNumber(e.target.value)} /></label>
               <label><FieldLabel>Preferred Vendor</FieldLabel><input className={inputClass} value={upgradeVendor} onChange={(e) => setUpgradeVendor(e.target.value)} /></label>
               <label><FieldLabel>Product URL</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
-
-              <label>
-                <FieldLabel>Parts Estimate</FieldLabel>
-                <input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="$0" />
-              </label>
-              <label>
-                <FieldLabel>Labor Estimate</FieldLabel>
-                <input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="$0" />
-              </label>
+              <label><FieldLabel>Parts Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="$0" /></label>
+              <label><FieldLabel>Labor Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="$0" /></label>
               <label className="lg:col-span-2">
                 <div className="flex items-center justify-between gap-3"><FieldLabel>Total Budget</FieldLabel>{totalBudgetOverridden ? <button type="button" onClick={useCalculatedBudget} className="mb-1.5 text-[11px] font-black text-slate-500 underline">Use parts + labor</button> : null}</div>
                 <input className={inputClass} inputMode="decimal" value={upgradeTotalCost} onChange={(e) => { setTotalBudgetOverridden(true); setUpgradeTotalCost(formatCurrencyText(e.target.value)); }} placeholder="$0" />
                 <div className="mt-1 text-xs font-semibold text-slate-400">Auto-calculated from Parts + Labor until manually changed.</div>
               </label>
-
               <label className="flex items-end pb-3 text-sm font-black text-slate-700"><input type="checkbox" className="mr-2 h-4 w-4" checked={substitutesAllowed} onChange={(e) => setSubstitutesAllowed(e.target.checked)} />Substitutes allowed</label>
               <label className="md:col-span-2 lg:col-span-4"><FieldLabel>Notes</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={upgradeNotes} onChange={(e) => setUpgradeNotes(e.target.value)} /></label>
-
               {upgradeMessage ? <div className="md:col-span-2 lg:col-span-4 text-sm font-semibold text-red-600">{upgradeMessage}</div> : null}
               <div className="md:col-span-2 lg:col-span-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
                 <button type="button" onClick={closeUpgradeModal} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-700">Cancel</button>
