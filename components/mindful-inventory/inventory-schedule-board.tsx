@@ -39,12 +39,22 @@ function localInputDefault() {
   return local.toISOString().slice(0, 16);
 }
 
+function overlaps(a: InventoryScheduleWork, b: InventoryScheduleWork) {
+  if (!a.scheduledStartAt || !a.scheduledEndAt || !b.scheduledStartAt || !b.scheduledEndAt) return false;
+  return new Date(a.scheduledStartAt).getTime() < new Date(b.scheduledEndAt).getTime()
+    && new Date(a.scheduledEndAt).getTime() > new Date(b.scheduledStartAt).getTime();
+}
+
+type Conflict = { itemId: string; otherId: string; kind: "performer" | "resource"; label: string };
+type ViewMode = "all" | "conflicts" | "gaps";
+
 export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[] }) {
   const router = useRouter();
   const [weekOffset, setWeekOffset] = useState(0);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [starts, setStarts] = useState<Record<string, string>>({});
+  const [viewMode, setViewMode] = useState<ViewMode>("all");
 
   const weekStart = useMemo(() => startOfWeek(weekOffset), [weekOffset]);
   const days = useMemo(
@@ -56,12 +66,51 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
     [weekStart],
   );
 
-  const scheduled = work.filter((item) => item.scheduledStartAt);
-  const unscheduled = work.filter(
-    (item) => !item.scheduledStartAt && item.status !== "complete" && item.status !== "cancelled",
-  );
-  const totalLabor = work.reduce((sum, item) => sum + (item.laborMinutes || 0), 0);
-  const scheduledCount = work.filter((item) => item.scheduledStartAt).length;
+  const active = work.filter((item) => item.status !== "complete" && item.status !== "cancelled");
+  const scheduled = active.filter((item) => item.scheduledStartAt);
+  const unscheduled = active.filter((item) => !item.scheduledStartAt);
+  const unassigned = active.filter((item) => !item.performerName);
+  const locationTbd = active.filter((item) => !item.locationId);
+  const totalLabor = active.reduce((sum, item) => sum + (item.laborMinutes || 0), 0);
+
+  const conflicts = useMemo(() => {
+    const found: Conflict[] = [];
+    const scheduledActive = work.filter((item) => item.status !== "complete" && item.status !== "cancelled" && item.scheduledStartAt && item.scheduledEndAt);
+    for (let i = 0; i < scheduledActive.length; i += 1) {
+      for (let j = i + 1; j < scheduledActive.length; j += 1) {
+        const a = scheduledActive[i];
+        const b = scheduledActive[j];
+        if (!overlaps(a, b)) continue;
+        if (a.assignedPartnerId && a.assignedPartnerId === b.assignedPartnerId) {
+          const label = a.performerName || b.performerName || "Partner";
+          found.push({ itemId: a.id, otherId: b.id, kind: "performer", label }, { itemId: b.id, otherId: a.id, kind: "performer", label });
+        }
+        if (a.assignedUserId && a.assignedUserId === b.assignedUserId) {
+          const label = a.performerName || b.performerName || "Team member";
+          found.push({ itemId: a.id, otherId: b.id, kind: "performer", label }, { itemId: b.id, otherId: a.id, kind: "performer", label });
+        }
+        if (a.resourceId && a.resourceId === b.resourceId) {
+          const label = a.resourceName || b.resourceName || "Resource";
+          found.push({ itemId: a.id, otherId: b.id, kind: "resource", label }, { itemId: b.id, otherId: a.id, kind: "resource", label });
+        }
+      }
+    }
+    return found;
+  }, [work]);
+
+  const conflictsByItem = useMemo(() => {
+    const map = new Map<string, Conflict[]>();
+    conflicts.forEach((conflict) => map.set(conflict.itemId, [...(map.get(conflict.itemId) || []), conflict]));
+    return map;
+  }, [conflicts]);
+  const conflictItemCount = new Set(conflicts.map((conflict) => conflict.itemId)).size;
+  const gapItemIds = new Set([...unscheduled, ...unassigned, ...locationTbd].map((item) => item.id));
+
+  function visible(item: InventoryScheduleWork) {
+    if (viewMode === "conflicts") return conflictsByItem.has(item.id);
+    if (viewMode === "gaps") return gapItemIds.has(item.id);
+    return true;
+  }
 
   async function schedule(item: InventoryScheduleWork) {
     const localStart = starts[item.id] || localInputDefault();
@@ -90,24 +139,35 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Operations Schedule</div>
-            <h1 className="mt-1 text-2xl font-black text-slate-950">Work across every vehicle</h1>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">
-              Calendar blocks use <strong>turnaround time</strong>. Labor load is shown separately so a 3-hour repair that keeps a car for a day does not look like 24 hours of technician labor.
-            </p>
+            <h1 className="mt-1 text-2xl font-black text-slate-950">Resource planning across every car</h1>
+            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, assignment gaps, calendar occupancy, and labor load in one place. Turnaround controls calendar occupancy; labor remains the hands-on capacity estimate.</p>
           </div>
-          <div className="grid min-w-[330px] grid-cols-3 gap-2">
-            <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Work Orders</div><div className="mt-1 text-lg font-black">{work.length}</div></div>
-            <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Scheduled</div><div className="mt-1 text-lg font-black">{scheduledCount}</div></div>
+          <div className="grid min-w-[420px] grid-cols-4 gap-2">
+            <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Active Work</div><div className="mt-1 text-lg font-black">{active.length}</div></div>
+            <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Unscheduled</div><div className="mt-1 text-lg font-black">{unscheduled.length}</div></div>
+            <div className={`rounded-xl px-3 py-3 ${conflictItemCount ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}><div className="text-[10px] font-black uppercase opacity-70">Conflicts</div><div className="mt-1 text-lg font-black">{conflictItemCount}</div></div>
             <div className="rounded-xl bg-slate-950 px-3 py-3 text-white"><div className="text-[10px] font-black uppercase text-slate-400">Labor Load</div><div className="mt-1 text-lg font-black">{hours(totalLabor)}</div></div>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-bold text-slate-500">
-          <span className="rounded-full bg-blue-50 px-3 py-1.5 text-blue-700">Labor = hands-on capacity</span>
-          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-violet-700">Turnaround = calendar occupancy</span>
-          <span>Parts waiting is not included in turnaround; it will become a separate dependency.</span>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {(["all", "conflicts", "gaps"] as ViewMode[]).map((mode) => <button key={mode} onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>{mode === "all" ? "All Work" : mode === "conflicts" ? `Conflicts (${conflictItemCount})` : `Scheduling Gaps (${gapItemIds.size})`}</button>)}
+          <span className="ml-1 text-xs font-bold text-slate-400">{unassigned.length} unassigned · {locationTbd.length} location TBD</span>
         </div>
-        {message ? <div className="mt-3 text-sm font-bold text-slate-600">{message}</div> : null}
+        {message ? <div className={`mt-3 rounded-xl px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"}`}>{message}</div> : null}
       </section>
+
+      {conflictItemCount > 0 ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
+        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-600">Conflict audit</div>
+        <div className="mt-1 text-base font-black text-red-950">Existing overlaps need attention</div>
+        <p className="mt-1 text-sm font-semibold text-red-800">These can include legacy suggested schedules created before conflict enforcement. Open either vehicle to move one of the overlapping jobs.</p>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {Array.from(conflictsByItem.entries()).map(([itemId, itemConflicts]) => {
+            const item = work.find((entry) => entry.id === itemId);
+            if (!item) return null;
+            return <Link key={itemId} href={`/mindful/inventory/${item.vehicleId}/work`} className="rounded-xl border border-red-200 bg-white px-3 py-3 hover:border-red-400"><div className="text-sm font-black text-slate-950">{item.vehicleLabel} · {item.title}</div><div className="mt-1 text-xs font-bold text-red-700">{Array.from(new Set(itemConflicts.map((conflict) => `${conflict.kind === "performer" ? "Performer" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></Link>;
+          })}
+        </div>
+      </section> : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -116,39 +176,31 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
             <button type="button" onClick={() => setWeekOffset(0)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-black text-slate-600">This week</button>
             <button type="button" onClick={() => setWeekOffset((value) => value + 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-black text-slate-600">→</button>
           </div>
-          <div className="text-sm font-black text-slate-700">
-            {days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-          </div>
+          <div className="text-sm font-black text-slate-700">{days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
         </div>
 
         <div className="grid min-w-[1120px] grid-cols-7 gap-2 overflow-x-auto">
           {days.map((day) => {
-            const items = scheduled.filter((item) => {
-              if (!item.scheduledStartAt) return false;
-              return dayKey(new Date(item.scheduledStartAt)) === dayKey(day);
-            });
+            const items = scheduled.filter((item) => item.scheduledStartAt && dayKey(new Date(item.scheduledStartAt)) === dayKey(day) && visible(item));
             return (
               <div key={dayKey(day)} className="min-h-[320px] rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <div className="border-b border-slate-200 px-1 pb-2">
-                  <div className="text-[10px] font-black uppercase text-slate-400">{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
-                  <div className="text-base font-black text-slate-900">{day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
-                </div>
+                <div className="border-b border-slate-200 px-1 pb-2"><div className="text-[10px] font-black uppercase text-slate-400">{day.toLocaleDateString("en-US", { weekday: "short" })}</div><div className="text-base font-black text-slate-900">{day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div></div>
                 <div className="mt-2 space-y-2">
                   {items.map((item) => {
                     const elapsed = item.elapsedMinutes ?? item.legacyDurationMinutes;
+                    const itemConflicts = conflictsByItem.get(item.id) || [];
+                    const hasGap = !item.performerName || !item.locationId;
                     return (
-                      <Link key={item.id} href={`/mindful/inventory/${item.vehicleId}/work`} className="block rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-slate-400">
-                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{new Date(item.scheduledStartAt!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
+                      <Link key={item.id} href={`/mindful/inventory/${item.vehicleId}/work`} className={`block rounded-xl border bg-white p-3 shadow-sm transition ${itemConflicts.length ? "border-red-300 ring-1 ring-red-100 hover:border-red-500" : hasGap ? "border-amber-300 hover:border-amber-500" : "border-slate-200 hover:border-slate-400"}`}>
+                        <div className="flex items-center justify-between gap-2"><div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{new Date(item.scheduledStartAt!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>{itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : hasGap ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Gap</span> : null}</div>
                         <div className="mt-1 text-xs font-black text-slate-950">{item.inventoryNumber} · {item.vehicleLabel}</div>
                         <div className="mt-1 text-sm font-black text-slate-800">{item.title}</div>
-                        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black">
-                          <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Labor {hours(item.laborMinutes)}</span>
-                          <span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Turn {hours(elapsed)}</span>
-                        </div>
+                        <div className="mt-2 text-[10px] font-bold text-slate-500">{item.performerName || "Performer TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}{item.resourceName ? ` · ${item.resourceName}` : ""}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black"><span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Labor {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Turn {hours(elapsed)}</span></div>
                       </Link>
                     );
                   })}
-                  {items.length === 0 ? <div className="px-1 py-4 text-xs font-bold text-slate-300">No scheduled work</div> : null}
+                  {items.length === 0 ? <div className="px-1 py-4 text-xs font-bold text-slate-300">No matching work</div> : null}
                 </div>
               </div>
             );
@@ -157,35 +209,19 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-end justify-between gap-4">
-          <div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Unscheduled Queue</div><h2 className="mt-1 text-xl font-black text-slate-950">Work waiting for a calendar slot</h2></div>
-          <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{unscheduled.length} waiting</div>
-        </div>
+        <div className="flex items-end justify-between gap-4"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Unscheduled Queue</div><h2 className="mt-1 text-xl font-black text-slate-950">Work waiting for a calendar slot</h2></div><div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{unscheduled.length} waiting</div></div>
         <div className="mt-4 space-y-2">
-          {unscheduled.map((item) => {
+          {unscheduled.filter(visible).map((item) => {
             const elapsed = item.elapsedMinutes ?? item.legacyDurationMinutes;
             const legacyOnly = item.elapsedMinutes === null && item.legacyDurationMinutes !== null;
             return (
               <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/mindful/inventory/${item.vehicleId}/work`} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</Link>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-600">{labelize(item.category)}</span>
-                  </div>
-                  <div className="mt-1 text-sm font-black text-slate-800">{item.title}</div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">Hands-on labor: {hours(item.laborMinutes)}</span>
-                    <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">Turnaround: {hours(elapsed)}{legacyOnly ? " (legacy AI estimate)" : ""}</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="block"><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Start</div><input type="datetime-local" value={starts[item.id] || ""} onChange={(event) => setStarts((current) => ({ ...current, [item.id]: event.target.value }))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700" /></label>
-                  <button type="button" disabled={workingId === item.id} onClick={() => void schedule(item)} className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Schedule</button>
-                </div>
+                <div><div className="flex flex-wrap items-center gap-2"><Link href={`/mindful/inventory/${item.vehicleId}/work`} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</Link><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-600">{labelize(item.category)}</span>{!item.performerName ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Needs performer</span> : null}{!item.locationId ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Needs location</span> : null}</div><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-1 text-xs font-bold text-slate-500">{item.performerName || "Performer TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}</div><div className="mt-2 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">Hands-on labor: {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">Turnaround: {hours(elapsed)}{legacyOnly ? " (legacy AI estimate)" : ""}</span></div></div>
+                <div className="flex flex-wrap items-end gap-2"><label className="block"><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Start</div><input type="datetime-local" value={starts[item.id] || ""} onChange={(event) => setStarts((current) => ({ ...current, [item.id]: event.target.value }))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700" /></label><button type="button" disabled={workingId === item.id} onClick={() => void schedule(item)} className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Schedule</button></div>
               </div>
             );
           })}
-          {unscheduled.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">No unscheduled active work.</div> : null}
+          {unscheduled.filter(visible).length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">No matching unscheduled work.</div> : null}
         </div>
       </section>
     </div>
