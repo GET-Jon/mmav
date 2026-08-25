@@ -65,6 +65,12 @@ type PartnerRow = {
   name: string;
 };
 
+type WorkForecastRow = {
+  vehicle_id: string;
+  scheduled_end_at: string | null;
+  status: string;
+};
+
 function toNumber(value: number | string | null | undefined) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -160,6 +166,7 @@ export async function getInventoryDashboardData(
   }
 
   const vehicleRows = (vehicleData || []) as InventoryVehicleRow[];
+  const vehicleIds = vehicleRows.map((vehicle) => vehicle.id);
   const locationIds = [
     ...new Set(
       vehicleRows
@@ -177,6 +184,7 @@ export async function getInventoryDashboardData(
 
   const locationNames = new Map<string, string>();
   const partnerNames = new Map<string, string>();
+  const scheduledForecastByVehicle = new Map<string, string>();
 
   if (locationIds.length > 0) {
     const { data, error } = await supabase
@@ -210,6 +218,27 @@ export async function getInventoryDashboardData(
     }
   }
 
+  if (vehicleIds.length > 0) {
+    const { data, error } = await supabase
+      .from("mindful_inventory_work_orders")
+      .select("vehicle_id,scheduled_end_at,status")
+      .in("vehicle_id", vehicleIds)
+      .not("scheduled_end_at", "is", null)
+      .not("status", "in", '("cancelled")');
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    for (const row of (data || []) as WorkForecastRow[]) {
+      if (!row.scheduled_end_at) continue;
+      const current = scheduledForecastByVehicle.get(row.vehicle_id);
+      if (!current || new Date(row.scheduled_end_at).getTime() > new Date(current).getTime()) {
+        scheduledForecastByVehicle.set(row.vehicle_id, row.scheduled_end_at);
+      }
+    }
+  }
+
   const vehicles: InventoryVehicleView[] = vehicleRows.map((vehicle) => ({
     id: vehicle.id,
     sourceEvaluationId: vehicle.source_evaluation_id,
@@ -238,7 +267,8 @@ export async function getInventoryDashboardData(
       : null,
     nextActionDueAt: vehicle.next_action_due_at,
     targetReadyAt: vehicle.target_ready_at,
-    forecastReadyAt: vehicle.forecast_ready_at,
+    forecastReadyAt:
+      scheduledForecastByVehicle.get(vehicle.id) || vehicle.forecast_ready_at,
     holdActive: vehicle.hold_active,
     holdReason: vehicle.hold_reason,
     holdOwnerUserId: vehicle.hold_owner_user_id,
