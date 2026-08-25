@@ -55,21 +55,10 @@ type InventoryVehicleRow = {
   updated_at: string;
 };
 
-type LocationRow = {
-  id: string;
-  name: string;
-};
-
-type PartnerRow = {
-  id: string;
-  name: string;
-};
-
-type WorkForecastRow = {
-  vehicle_id: string;
-  scheduled_end_at: string | null;
-  status: string;
-};
+type LocationRow = { id: string; name: string };
+type PartnerRow = { id: string; name: string };
+type WorkForecastRow = { vehicle_id: string; scheduled_end_at: string | null; status: string };
+type CompanyMemberRow = { user_id: string; display_name: string };
 
 function toNumber(value: number | string | null | undefined) {
   const parsed = Number(value ?? 0);
@@ -77,10 +66,7 @@ function toNumber(value: number | string | null | undefined) {
 }
 
 function toNullableNumber(value: number | string | null | undefined) {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
-
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -88,19 +74,12 @@ function toNullableNumber(value: number | string | null | undefined) {
 function daysHeld(vehicle: InventoryVehicleRow) {
   const startValue = vehicle.purchase_date || vehicle.created_at;
   const start = new Date(startValue).getTime();
-
-  if (!Number.isFinite(start)) {
-    return 0;
-  }
-
+  if (!Number.isFinite(start)) return 0;
   return Math.max(0, Math.floor((Date.now() - start) / 86_400_000));
 }
 
 function isOverdue(value: string | null) {
-  if (!value) {
-    return false;
-  }
-
+  if (!value) return false;
   const due = new Date(value).getTime();
   return Number.isFinite(due) && due < Date.now();
 }
@@ -111,111 +90,50 @@ export async function getInventoryDashboardData(
 ): Promise<InventoryDashboardData> {
   const { data: vehicleData, error: vehicleError } = await supabase
     .from("mindful_inventory_vehicles")
-    .select(
-      `
-      id,
-      company_id,
-      source_evaluation_id,
-      source_snapshot,
-      stock_number,
-      vin,
-      year,
-      make,
-      model,
-      trim,
-      mileage,
-      image_url,
-      project_owner_user_id,
-      phase,
-      grade,
-      priority,
-      health,
-      current_location_id,
-      next_action,
-      next_action_owner_user_id,
-      next_action_owner_partner_id,
-      next_action_due_at,
-      target_ready_at,
-      forecast_ready_at,
-      hold_active,
-      hold_reason,
-      hold_owner_user_id,
-      hold_follow_up_at,
-      exit_status,
-      exit_reason,
-      exited_at,
-      purchase_date,
-      purchase_price,
-      buyer_fees,
-      transport_cost,
-      other_acquisition_cost,
-      expected_sale_price,
-      title_status,
-      archived_at,
-      created_at,
-      updated_at
-    `,
-    )
+    .select(`
+      id, company_id, source_evaluation_id, source_snapshot, stock_number, vin,
+      year, make, model, trim, mileage, image_url, project_owner_user_id, phase,
+      grade, priority, health, current_location_id, next_action,
+      next_action_owner_user_id, next_action_owner_partner_id, next_action_due_at,
+      target_ready_at, forecast_ready_at, hold_active, hold_reason,
+      hold_owner_user_id, hold_follow_up_at, exit_status, exit_reason, exited_at,
+      purchase_date, purchase_price, buyer_fees, transport_cost,
+      other_acquisition_cost, expected_sale_price, title_status, archived_at,
+      created_at, updated_at
+    `)
     .eq("company_id", companyId)
     .is("archived_at", null)
     .order("priority", { ascending: true })
     .order("updated_at", { ascending: false });
 
-  if (vehicleError) {
-    throw new Error(vehicleError.message);
-  }
+  if (vehicleError) throw new Error(vehicleError.message);
 
   const vehicleRows = (vehicleData || []) as InventoryVehicleRow[];
   const vehicleIds = vehicleRows.map((vehicle) => vehicle.id);
-  const locationIds = [
-    ...new Set(
-      vehicleRows
-        .map((vehicle) => vehicle.current_location_id)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
-  const partnerIds = [
-    ...new Set(
-      vehicleRows
-        .map((vehicle) => vehicle.next_action_owner_partner_id)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
+  const locationIds = [...new Set(vehicleRows.map((vehicle) => vehicle.current_location_id).filter((value): value is string => Boolean(value)))];
+  const partnerIds = [...new Set(vehicleRows.map((vehicle) => vehicle.next_action_owner_partner_id).filter((value): value is string => Boolean(value)))];
 
   const locationNames = new Map<string, string>();
   const partnerNames = new Map<string, string>();
+  const ownerNames = new Map<string, string>();
   const scheduledForecastByVehicle = new Map<string, string>();
 
+  const [membersResult] = await Promise.all([
+    supabase.rpc("get_inventory_company_members", { requested_company_id: companyId }),
+  ]);
+  if (membersResult.error) throw new Error(membersResult.error.message);
+  for (const row of (membersResult.data || []) as CompanyMemberRow[]) ownerNames.set(row.user_id, row.display_name);
+
   if (locationIds.length > 0) {
-    const { data, error } = await supabase
-      .from("mindful_inventory_locations")
-      .select("id,name")
-      .eq("company_id", companyId)
-      .in("id", locationIds);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    for (const row of (data || []) as LocationRow[]) {
-      locationNames.set(row.id, row.name);
-    }
+    const { data, error } = await supabase.from("mindful_inventory_locations").select("id,name").eq("company_id", companyId).in("id", locationIds);
+    if (error) throw new Error(error.message);
+    for (const row of (data || []) as LocationRow[]) locationNames.set(row.id, row.name);
   }
 
   if (partnerIds.length > 0) {
-    const { data, error } = await supabase
-      .from("mindful_inventory_partners")
-      .select("id,name")
-      .eq("company_id", companyId)
-      .in("id", partnerIds);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    for (const row of (data || []) as PartnerRow[]) {
-      partnerNames.set(row.id, row.name);
-    }
+    const { data, error } = await supabase.from("mindful_inventory_partners").select("id,name").eq("company_id", companyId).in("id", partnerIds);
+    if (error) throw new Error(error.message);
+    for (const row of (data || []) as PartnerRow[]) partnerNames.set(row.id, row.name);
   }
 
   if (vehicleIds.length > 0) {
@@ -225,11 +143,7 @@ export async function getInventoryDashboardData(
       .in("vehicle_id", vehicleIds)
       .not("scheduled_end_at", "is", null)
       .not("status", "in", '("cancelled")');
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
+    if (error) throw new Error(error.message);
     for (const row of (data || []) as WorkForecastRow[]) {
       if (!row.scheduled_end_at) continue;
       const current = scheduledForecastByVehicle.get(row.vehicle_id);
@@ -251,24 +165,20 @@ export async function getInventoryDashboardData(
     mileage: vehicle.mileage,
     imageUrl: vehicle.image_url,
     projectOwnerUserId: vehicle.project_owner_user_id,
+    projectOwnerName: vehicle.project_owner_user_id ? ownerNames.get(vehicle.project_owner_user_id) || null : null,
     phase: vehicle.phase,
     grade: vehicle.grade,
     priority: vehicle.priority,
     health: vehicle.health,
     currentLocationId: vehicle.current_location_id,
-    currentLocationName: vehicle.current_location_id
-      ? locationNames.get(vehicle.current_location_id) || null
-      : null,
+    currentLocationName: vehicle.current_location_id ? locationNames.get(vehicle.current_location_id) || null : null,
     nextAction: vehicle.next_action,
     nextActionOwnerUserId: vehicle.next_action_owner_user_id,
     nextActionOwnerPartnerId: vehicle.next_action_owner_partner_id,
-    nextActionOwnerPartnerName: vehicle.next_action_owner_partner_id
-      ? partnerNames.get(vehicle.next_action_owner_partner_id) || null
-      : null,
+    nextActionOwnerPartnerName: vehicle.next_action_owner_partner_id ? partnerNames.get(vehicle.next_action_owner_partner_id) || null : null,
     nextActionDueAt: vehicle.next_action_due_at,
     targetReadyAt: vehicle.target_ready_at,
-    forecastReadyAt:
-      scheduledForecastByVehicle.get(vehicle.id) || vehicle.forecast_ready_at,
+    forecastReadyAt: scheduledForecastByVehicle.get(vehicle.id) || vehicle.forecast_ready_at,
     holdActive: vehicle.hold_active,
     holdReason: vehicle.hold_reason,
     holdOwnerUserId: vehicle.hold_owner_user_id,
@@ -289,25 +199,14 @@ export async function getInventoryDashboardData(
   }));
 
   const activeRows = vehicleRows.filter((vehicle) => !vehicle.exited_at);
-  const needsAttention = activeRows.filter(
-    (vehicle) =>
-      vehicle.hold_active ||
-      vehicle.health !== "on_track" ||
-      isOverdue(vehicle.next_action_due_at),
-  ).length;
+  const needsAttention = activeRows.filter((vehicle) => vehicle.hold_active || vehicle.health !== "on_track" || isOverdue(vehicle.next_action_due_at)).length;
 
   const summary: InventoryDashboardSummary = {
     activeVehicles: activeRows.length,
     needsAttention,
     readyVehicles: activeRows.filter((vehicle) => vehicle.phase === "ready").length,
     onHold: activeRows.filter((vehicle) => vehicle.hold_active).length,
-    averageDaysHeld:
-      activeRows.length === 0
-        ? 0
-        : Math.round(
-            activeRows.reduce((total, vehicle) => total + daysHeld(vehicle), 0) /
-              activeRows.length,
-          ),
+    averageDaysHeld: activeRows.length === 0 ? 0 : Math.round(activeRows.reduce((total, vehicle) => total + daysHeld(vehicle), 0) / activeRows.length),
   };
 
   return { vehicles, summary };
