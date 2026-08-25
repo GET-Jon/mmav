@@ -1,17 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
 import { AppTopNav } from "@/components/navigation/app-top-nav";
-import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
-import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
-import { CompanyUserActions } from "@/components/settings/company-user-actions";
+import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
-type SettingsTab = "account" | "api" | "users" | "organization";
+type SettingsTab = "account" | "api" | "organization";
 
 type SettingsPageProps = {
   searchParams?: Promise<{
@@ -19,31 +18,9 @@ type SettingsPageProps = {
   }>;
 };
 
-type CompanyMemberRow = {
-  id: string;
-  user_id: string;
-  role: string | null;
-  status: string | null;
-  created_at: string | null;
-};
-
-type CompanyMemberView = CompanyMemberRow & {
-  email: string;
-  lastSignInAt: string | null;
-};
-
 function normalizeTab(value: string | string[] | undefined): SettingsTab {
   const raw = Array.isArray(value) ? value[0] : value;
-
-  if (
-    raw === "account" ||
-    raw === "api" ||
-    raw === "users" ||
-    raw === "organization"
-  ) {
-    return raw;
-  }
-
+  if (raw === "account" || raw === "api" || raw === "organization") return raw;
   return "account";
 }
 
@@ -56,116 +33,49 @@ function tabClass(isActive: boolean) {
   ].join(" ");
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function roleTone(role: string | null) {
-  switch (role) {
-    case "company_admin":
-      return "bg-blue-50 text-blue-700";
-    case "user":
-      return "bg-emerald-50 text-emerald-700";
-    default:
-      return "bg-slate-100 text-slate-600";
-  }
-}
-
-function formatRole(role: string | null) {
-  switch (role) {
-    case "company_admin":
-      return "Company Admin";
-    case "user":
-      return "User";
-    default:
-      return role || "User";
-  }
-}
-
 async function loadSettingsContext(userId: string) {
   const supabase = createSupabaseAdminClient();
   const company = await getCurrentCompanyForUser(supabase, userId);
 
-  const { data: members, error: membersError } = await supabase
+  const { count, error } = await supabase
     .from("company_memberships")
-    .select("id, user_id, role, status, created_at")
-    .eq("company_id", company.companyId)
-    .order("created_at", { ascending: true });
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", company.companyId);
 
-  if (membersError) {
-    throw new Error(membersError.message);
-  }
-
-  const enrichedMembers: CompanyMemberView[] = await Promise.all(
-    ((members || []) as CompanyMemberRow[]).map(async (member) => {
-      const { data } = await supabase.auth.admin.getUserById(member.user_id);
-
-      return {
-        ...member,
-        email: data?.user?.email || "Unknown user",
-        lastSignInAt: data?.user?.last_sign_in_at || null,
-      };
-    }),
-  );
+  if (error) throw new Error(error.message);
 
   return {
     company,
-    members: enrichedMembers,
+    memberCount: count || 0,
   };
 }
 
-export default async function SettingsPage({
-  searchParams,
-}: SettingsPageProps) {
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeTab = normalizeTab(resolvedSearchParams.tab);
-
   const user = await getCurrentUser();
 
-  if (!user) {
-    redirect("/login?next=/settings");
-  }
+  if (!user) redirect("/login?next=/settings");
 
-  let companyContext: Awaited<ReturnType<typeof loadSettingsContext>> | null =
-    null;
+  let companyContext: Awaited<ReturnType<typeof loadSettingsContext>> | null = null;
   let loadError: string | null = null;
 
-  if (user) {
-    try {
-      companyContext = await loadSettingsContext(user.id);
-    } catch (error) {
-      loadError =
-        error instanceof Error
-          ? error.message
-          : "Settings data failed to load.";
-    }
+  try {
+    companyContext = await loadSettingsContext(user.id);
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Settings data failed to load.";
   }
 
   const company = companyContext?.company;
-  const members = companyContext?.members || [];
-  const canManageUsers = company?.role === "company_admin";
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <AppTopNav active="settings" userEmail={user?.email} userRole={company?.role} />
+      <AppTopNav active="settings" userEmail={user.email} userRole={company?.role} />
 
       <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
         <div className="mb-6">
-          <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">
-            Settings
-          </h1>
-          <p className="mt-1 text-slate-600">
-            Review operational rules, company users, and organization
-            configuration.
-          </p>
+          <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">Settings</h1>
+          <p className="mt-1 text-slate-600">Manage your account, API usage, and organization information.</p>
         </div>
 
         {loadError ? (
@@ -177,7 +87,6 @@ export default async function SettingsPage({
         <div className="mb-5 flex flex-wrap gap-2">
           <Link href="/settings?tab=account" className={tabClass(activeTab === "account")}>Account</Link>
           <Link href="/settings?tab=api" className={tabClass(activeTab === "api")}>API Usage</Link>
-          <Link href="/settings?tab=users" className={tabClass(activeTab === "users")}>Users</Link>
           <Link href="/settings?tab=organization" className={tabClass(activeTab === "organization")}>Organization</Link>
         </div>
 
@@ -191,63 +100,30 @@ export default async function SettingsPage({
                   : ""
             }
             initialEmail={user.email || ""}
-            companyName={companyContext?.company.companyName || ""}
-            role={companyContext?.company.role || ""}
+            companyName={company?.companyName || ""}
+            role={company?.role || ""}
           />
         ) : null}
 
         {activeTab === "api" ? <MarketCheckApiSettingsCard /> : null}
 
-        {activeTab === "users" ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
-              <div>
-                <h2 className="text-xl font-bold">Company Users</h2>
-                <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                  Users attached to {company?.companyName || "this company"}.
-                  Add users, adjust roles, and disable access for users who
-                  should no longer see this company workspace.
-                </p>
-              </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                User invites are now available for company admins. Email delivery/password setup can be refined next.
-              </div>
-            </div>
-
-            <div className="mb-5"><CompanyUserInviteForm canManageUsers={canManageUsers} /></div>
-
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr><th className="px-4 py-3">User</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Added</th><th className="px-4 py-3">Last Sign In</th><th className="px-4 py-3">Actions</th></tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {members.length ? members.map((member) => (
-                    <tr key={member.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3"><div className="font-bold text-slate-950">{member.email}</div><div className="mt-1 font-mono text-xs text-slate-400">{member.user_id}</div></td>
-                      <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-bold ${roleTone(member.role)}`}>{formatRole(member.role)}</span></td>
-                      <td className="px-4 py-3"><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{member.status || "active"}</span></td>
-                      <td className="px-4 py-3 text-slate-600">{formatDate(member.created_at)}</td>
-                      <td className="px-4 py-3 text-slate-600">{formatDate(member.lastSignInAt)}</td>
-                      <td className="px-4 py-3"><CompanyUserActions membershipId={member.id} currentRole={member.role || "user"} currentStatus={member.status || "active"} canManageUsers={canManageUsers} isCurrentUser={member.user_id === user?.id} /></td>
-                    </tr>
-                  )) : <tr><td colSpan={6} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">No company users found.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
-
         {activeTab === "organization" ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-5"><h2 className="text-xl font-bold">Organization</h2><p className="mt-1 max-w-3xl text-sm text-slate-600">Current company context resolved from the logged-in user's active company membership.</p></div>
+            <div className="mb-5">
+              <h2 className="text-xl font-bold">Organization</h2>
+              <p className="mt-1 max-w-3xl text-sm text-slate-600">Your current Mindful Motor Co. organization context.</p>
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Company</div><div className="mt-2 text-lg font-black">{company?.companyName || "—"}</div></div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Slug</div><div className="mt-2 font-mono text-sm font-bold">{company?.companySlug || "—"}</div></div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Your Role</div><div className="mt-2 text-lg font-black">{company?.role || "—"}</div></div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Members</div><div className="mt-2 text-lg font-black">{members.length}</div></div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Members</div><div className="mt-2 text-lg font-black">{companyContext?.memberCount ?? "—"}</div></div>
             </div>
-            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Editing company name, slug, API limits, and user roles should be added after invite/user-management actions are wired.</div>
+            {company?.role === "company_admin" ? (
+              <div className="mt-5 text-sm font-semibold text-slate-500">
+                Team roles and access are managed from <Link href="/admin/team" className="font-black text-slate-950 hover:underline">Admin → Team & Access</Link>.
+              </div>
+            ) : null}
           </section>
         ) : null}
       </div>
