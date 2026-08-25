@@ -15,7 +15,7 @@ export default async function InventorySchedulePage() {
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <AppTopNav active="schedule" userEmail={access.userEmail} />
+      <AppTopNav active="schedule" userEmail={access.userEmail} userRole={access.company.role} />
       <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-5 lg:px-7">
         <InventoryScheduleBoard work={work} />
       </div>
