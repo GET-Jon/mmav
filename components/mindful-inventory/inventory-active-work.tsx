@@ -58,6 +58,12 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
   const completed = workOrders.filter((work) => work.status === "complete" || work.status === "cancelled").length;
   const activeBudget = workOrders.reduce((sum, work) => sum + work.approvedBudget, 0);
   const totalLabor = workOrders.reduce((sum, work) => sum + (work.estimatedLaborMinutes || 0), 0);
+  const openWork = workOrders.filter((work) => !["complete", "cancelled"].includes(work.status));
+  const unscheduledCount = openWork.filter((work) => !work.scheduledStartAt).length;
+  const unassignedCount = openWork.filter((work) => !work.performerName).length;
+  const locationTbdCount = openWork.filter((work) => !work.locationId).length;
+  const blockedCount = openWork.filter((work) => work.status === "blocked").length;
+  const scheduleReady = unscheduledCount === 0 && unassignedCount === 0 && locationTbdCount === 0 && blockedCount === 0;
   const forecastReady = [...workOrders].filter((w) => w.scheduledEndAt && w.status !== "cancelled").sort((a,b) => new Date(b.scheduledEndAt!).getTime()-new Date(a.scheduledEndAt!).getTime())[0]?.scheduledEndAt || null;
   const nextWork = [...workOrders].filter((w) => !["complete","cancelled"].includes(w.status)).sort((a,b) => {
     if (a.status === "in_progress" && b.status !== "in_progress") return -1;
@@ -108,14 +114,30 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
       </div>{message ? <div className="mt-3 text-sm font-bold text-slate-600">{message}</div> : null}
     </section>
 
+    {openWork.length > 0 ? <section className={`rounded-2xl border px-4 py-3 ${scheduleReady ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div><div className={`text-[10px] font-black uppercase tracking-[0.1em] ${scheduleReady ? "text-emerald-700" : "text-amber-700"}`}>Schedule readiness</div><div className="mt-0.5 text-sm font-black text-slate-900">{scheduleReady ? "Execution schedule is fully assigned." : "This car still has scheduling gaps."}</div></div>
+        <div className="flex flex-wrap gap-2">
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${unscheduledCount ? "bg-amber-100 text-amber-800" : "bg-white/70 text-slate-500"}`}>{unscheduledCount} unscheduled</span>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${unassignedCount ? "bg-amber-100 text-amber-800" : "bg-white/70 text-slate-500"}`}>{unassignedCount} unassigned</span>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${locationTbdCount ? "bg-amber-100 text-amber-800" : "bg-white/70 text-slate-500"}`}>{locationTbdCount} location TBD</span>
+          {blockedCount ? <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-black text-red-700">{blockedCount} blocked</span> : null}
+        </div>
+      </div>
+    </section> : null}
+
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h3 className="text-sm font-black">Execution calendar</h3><p className="mt-0.5 text-[11px] text-slate-500">Set who, where, resource, and start time. Conflicts are blocked across the entire operation.</p></div>
       <div className="divide-y divide-slate-200">{grouped.map(([key, items]) => <div key={key} className="grid lg:grid-cols-[150px_minmax(0,1fr)]"><div className="border-r border-slate-200 bg-slate-50 px-4 py-4"><div className="text-[10px] font-black uppercase text-slate-400">{key === "unscheduled" ? "Needs slot" : "Scheduled"}</div><div className="mt-1 text-sm font-black">{key === "unscheduled" ? "Unscheduled" : dayLabel(key)}</div></div><div className="divide-y divide-slate-100">{items.map((work) => {
         const isDone = work.status === "complete" || work.status === "cancelled";
         const suggestion = !work.performerName ? suggestedPerformerForWork(work, performerOptions) : null;
         const filteredResources = resourceOptions.filter((r) => !work.locationId || r.locationId === work.locationId);
+        const missing: string[] = [];
+        if (!isDone && !work.scheduledStartAt) missing.push("time");
+        if (!isDone && !work.performerName) missing.push("performer");
+        if (!isDone && !work.locationId) missing.push("location");
         return <article key={work.id} className={`grid gap-3 px-4 py-4 xl:grid-cols-[105px_minmax(0,1fr)_390px_auto] xl:items-center ${isDone ? "bg-slate-50/60" : ""}`}>
           <div><div className="text-sm font-black">{timeLabel(work.scheduledStartAt)}</div>{work.scheduledEndAt ? <div className="text-[10px] font-bold text-slate-400">to {timeLabel(work.scheduledEndAt)}</div> : null}{work.scheduleSource === "suggested" ? <span className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black uppercase text-violet-700">Suggested</span> : null}</div>
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${statusClass(work.status)}`}>{labelize(work.status)}</span><h4 className="text-sm font-black sm:text-base">{work.title}</h4></div>{work.description ? <p className="mt-1 truncate text-xs text-slate-500">{work.description}</p> : null}<div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold text-slate-500"><span>{labelize(work.category)}</span><span>{money(work.approvedBudget)}</span><span>Labor {hours(work.estimatedLaborMinutes)}</span></div></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${statusClass(work.status)}`}>{labelize(work.status)}</span><h4 className="text-sm font-black sm:text-base">{work.title}</h4>{missing.length ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Needs {missing.join(" + ")}</span> : null}</div>{work.description ? <p className="mt-1 truncate text-xs text-slate-500">{work.description}</p> : null}<div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold text-slate-500"><span>{labelize(work.category)}</span><span>{money(work.approvedBudget)}</span><span>Labor {hours(work.estimatedLaborMinutes)}</span></div></div>
           <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
             <div className="sm:col-span-2 flex items-center justify-between"><div className="text-[9px] font-black uppercase text-slate-400">Execution assignment</div>{suggestion ? <button disabled={isDone || workingId===work.id} onClick={() => void patchWork(work.id,{ performerKey:suggestion.key },`Assigned ${suggestion.displayName}.`)} className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black text-blue-700">Suggest {suggestion.displayName}</button> : null}</div>
             <select disabled={isDone || workingId===work.id} value={performerKey(work)} onChange={(e)=>void patchWork(work.id,{ performerKey:e.target.value },"Performer updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter(o=>o.type==="partner").map(o=><option key={o.key} value={o.key}>{o.displayName}{o.secondaryLabel ? ` · ${o.secondaryLabel}`:""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter(o=>o.type==="internal").map(o=><option key={o.key} value={o.key}>{o.displayName}</option>)}</optgroup></select>
