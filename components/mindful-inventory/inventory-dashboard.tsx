@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
@@ -12,9 +13,8 @@ import type {
   InventoryVehiclePriority,
 } from "@/lib/mindful-inventory/types";
 
-type InventoryDashboardProps = {
-  data: InventoryDashboardData;
-};
+type InventoryDashboardProps = { data: InventoryDashboardData };
+type SortMode = "newest" | "owner";
 
 const phaseLabels: Record<InventoryVehiclePhase, string> = {
   purchased: "Purchased",
@@ -136,7 +136,25 @@ function EmptyInventory() {
 export function InventoryDashboard({ data }: InventoryDashboardProps) {
   const router = useRouter();
   const { vehicles, summary } = data;
-  const orderedVehicles = [...vehicles].sort((a, b) => acquisitionStamp(b) - acquisitionStamp(a));
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+
+  const ownerCounts = vehicles.reduce((counts, vehicle) => {
+    const key = vehicle.projectOwnerName || "Unassigned";
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+
+  const orderedVehicles = [...vehicles].sort((a, b) => {
+    if (sortMode === "owner") {
+      const aOwner = a.projectOwnerName || "Unassigned";
+      const bOwner = b.projectOwnerName || "Unassigned";
+      const countDifference = (ownerCounts.get(bOwner) || 0) - (ownerCounts.get(aOwner) || 0);
+      if (countDifference !== 0) return countDifference;
+      const ownerDifference = aOwner.localeCompare(bOwner);
+      if (ownerDifference !== 0) return ownerDifference;
+    }
+    return acquisitionStamp(b) - acquisitionStamp(a);
+  });
 
   function openVehicle(vehicleId: string) {
     router.push(`/mindful/inventory/${vehicleId}`);
@@ -161,9 +179,18 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Inventory at a glance</div>
                 <h2 className="mt-1 text-lg font-black tracking-[-0.025em] text-slate-950">Vehicle Operations</h2>
-                <p className="mt-1 text-sm text-slate-500">Newest acquisitions first. Open a vehicle for its full operating workspace.</p>
+                <p className="mt-1 text-sm text-slate-500">{sortMode === "newest" ? "Newest acquisitions first." : "Grouped by owner, busiest workload first."} Open a vehicle for its full operating workspace.</p>
               </div>
-              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">{vehicles.length} vehicles</div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">
+                  <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Sort</span>
+                  <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} className="bg-transparent font-black text-slate-800 outline-none">
+                    <option value="newest">Newest acquisition</option>
+                    <option value="owner">Owner workload</option>
+                  </select>
+                </label>
+                <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">{vehicles.length} vehicles</div>
+              </div>
             </div>
 
             <div className="divide-y divide-slate-200">
@@ -171,6 +198,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                 const vehicleName = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
                 const held = daysHeld(vehicle);
                 const priority = priorityLabels[vehicle.priority];
+                const vehicleOwner = vehicle.projectOwnerName || "Unassigned";
                 return (
                   <article
                     key={vehicle.id}
@@ -183,7 +211,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                         openVehicle(vehicle.id);
                       }
                     }}
-                    className={`grid cursor-pointer gap-4 border-l-4 px-4 py-4 outline-none transition hover:bg-slate-50/80 focus:bg-slate-50 focus:ring-2 focus:ring-inset focus:ring-slate-300 md:grid-cols-[minmax(250px,1.4fr)_180px_minmax(260px,1.4fr)_180px] md:items-center sm:px-5 ${urgencyBorder(vehicle)}`}
+                    className={`grid cursor-pointer gap-4 border-l-4 px-4 py-4 outline-none transition hover:bg-slate-50/80 focus:bg-slate-50 focus:ring-2 focus:ring-inset focus:ring-slate-300 md:grid-cols-[minmax(250px,1.3fr)_165px_150px_minmax(260px,1.35fr)_180px] md:items-center sm:px-5 ${urgencyBorder(vehicle)}`}
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -198,11 +226,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                       <div className="mt-2 text-xs font-bold text-slate-500">
                         Acquired {formatDate(vehicle.purchaseDate || vehicle.createdAt, true)} · <span className={held >= 30 ? "text-red-700" : held >= 14 ? "text-amber-700" : "text-slate-700"}>{held} day{held === 1 ? "" : "s"} held</span>
                       </div>
-                      {vehicle.grade ? (
-                        <div className="mt-1 text-[11px] font-semibold text-slate-500">
-                          Condition Grade {vehicle.grade.toUpperCase()} · {gradeNotes[vehicle.grade]}
-                        </div>
-                      ) : null}
+                      {vehicle.grade ? <div className="mt-1 text-[11px] font-semibold text-slate-500">Condition Grade {vehicle.grade.toUpperCase()} · {gradeNotes[vehicle.grade]}</div> : null}
                     </div>
 
                     <div>
@@ -210,11 +234,17 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                       <div className="mt-1.5"><PhasePill phase={vehicle.phase} /></div>
                     </div>
 
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Vehicle Owner</div>
+                      <div className={`mt-1.5 text-sm font-black ${vehicle.projectOwnerName ? "text-slate-900" : "text-amber-700"}`}>{vehicleOwner}</div>
+                      {sortMode === "owner" ? <div className="mt-0.5 text-[10px] font-semibold text-slate-500">{ownerCounts.get(vehicleOwner) || 0} vehicle{(ownerCounts.get(vehicleOwner) || 0) === 1 ? "" : "s"} assigned</div> : null}
+                    </div>
+
                     <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
                       <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Next Action</div>
                       <div className="mt-1 text-sm font-black leading-5 text-slate-900">{vehicle.nextAction || "No next action set"}</div>
                       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
-                        <span>Owner: {ownerLabel(vehicle)}</span>
+                        <span>Action owner: {ownerLabel(vehicle)}</span>
                         {vehicle.nextActionDueAt ? <span>Due {formatDate(vehicle.nextActionDueAt)}</span> : null}
                       </div>
                       {vehicle.holdActive && vehicle.holdReason ? <div className="mt-2 text-xs font-bold text-amber-700">Hold: {vehicle.holdReason}</div> : null}
@@ -223,9 +253,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                     <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
                       <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                         <div className="text-[9px] font-black uppercase tracking-[0.09em] text-slate-400">Forecast Ready</div>
-                        <div className="mt-1 text-sm font-black text-slate-900">
-                          {vehicle.forecastReadyAt ? formatDate(vehicle.forecastReadyAt) : vehicle.phase === "ready" ? "Ready now" : "Pending schedule"}
-                        </div>
+                        <div className="mt-1 text-sm font-black text-slate-900">{vehicle.forecastReadyAt ? formatDate(vehicle.forecastReadyAt) : vehicle.phase === "ready" ? "Ready now" : "Pending schedule"}</div>
                         {vehicle.targetReadyAt ? <div className="mt-0.5 text-[10px] font-semibold text-slate-500">Target {formatDate(vehicle.targetReadyAt)}</div> : null}
                       </div>
                       <div className="rounded-xl bg-slate-50 px-3 py-2.5">
