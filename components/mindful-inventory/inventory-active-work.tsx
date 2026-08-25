@@ -56,6 +56,7 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>({});
+  const [scheduleMessages, setScheduleMessages] = useState<Record<string, { type: "success" | "error"; text: string }>>({});
   const completed = workOrders.filter((work) => work.status === "complete" || work.status === "cancelled").length;
   const activeBudget = workOrders.reduce((sum, work) => sum + work.approvedBudget, 0);
   const totalLabor = workOrders.reduce((sum, work) => sum + (work.estimatedLaborMinutes || 0), 0);
@@ -95,6 +96,11 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
   async function scheduleWork(workOrderId: string, value: string) {
     if (!value) return;
     setWorkingId(workOrderId); setMessage("");
+    setScheduleMessages((current) => {
+      const next = { ...current };
+      delete next[workOrderId];
+      return next;
+    });
     try {
       const response = await fetch(`/api/mindful/inventory/work-orders/${workOrderId}/schedule`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduledStartAt: new Date(value).toISOString() }) });
       const payload = await response.json() as { error?: string; warning?: string };
@@ -104,8 +110,14 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
         delete next[workOrderId];
         return next;
       });
-      setMessage(payload.warning || "Schedule updated."); router.refresh();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Failed to schedule Work Order."); }
+      const successText = payload.warning || "Schedule updated.";
+      setScheduleMessages((current) => ({ ...current, [workOrderId]: { type: "success", text: successText } }));
+      setMessage(successText); router.refresh();
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Failed to schedule Work Order.";
+      setScheduleMessages((current) => ({ ...current, [workOrderId]: { type: "error", text: errorText } }));
+      setMessage(errorText);
+    }
     finally { setWorkingId(null); }
   }
 
@@ -144,16 +156,18 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
         const savedScheduleValue = localInput(work.scheduledStartAt);
         const scheduleDraftValue = scheduleDrafts[work.id] ?? savedScheduleValue;
         const scheduleChanged = scheduleDraftValue !== savedScheduleValue;
+        const scheduleMessage = scheduleMessages[work.id];
         return <article key={work.id} className={`grid gap-3 px-4 py-4 xl:grid-cols-[105px_minmax(0,1fr)_390px_auto] xl:items-center ${isDone ? "bg-slate-50/60" : ""}`}>
           <div><div className="text-sm font-black">{timeLabel(work.scheduledStartAt)}</div>{work.scheduledEndAt ? <div className="text-[10px] font-bold text-slate-400">to {timeLabel(work.scheduledEndAt)}</div> : null}{work.scheduleSource === "suggested" ? <span className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black uppercase text-violet-700">Suggested</span> : null}</div>
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${statusClass(work.status)}`}>{labelize(work.status)}</span><h4 className="text-sm font-black sm:text-base">{work.title}</h4>{missing.length ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Needs {missing.join(" + ")}</span> : null}</div>{work.description ? <p className="mt-1 truncate text-xs text-slate-500">{work.description}</p> : null}<div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold text-slate-500"><span>{labelize(work.category)}</span><span>{money(work.approvedBudget)}</span><span>Labor {hours(work.estimatedLaborMinutes)}</span></div></div>
-          <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <div className={`grid gap-2 rounded-xl border p-3 sm:grid-cols-2 ${scheduleMessage?.type === "error" ? "border-red-300 bg-red-50/50" : "border-slate-200 bg-slate-50"}`}>
             <div className="sm:col-span-2 flex items-center justify-between"><div className="text-[9px] font-black uppercase text-slate-400">Execution assignment</div>{suggestion ? <button disabled={isDone || workingId===work.id} onClick={() => void patchWork(work.id,{ performerKey:suggestion.key },`Assigned ${suggestion.displayName}.`)} className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black text-blue-700">Suggest {suggestion.displayName}</button> : null}</div>
             <select disabled={isDone || workingId===work.id} value={performerKey(work)} onChange={(e)=>void patchWork(work.id,{ performerKey:e.target.value },"Performer updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter(o=>o.type==="partner").map(o=><option key={o.key} value={o.key}>{o.displayName}{o.secondaryLabel ? ` · ${o.secondaryLabel}`:""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter(o=>o.type==="internal").map(o=><option key={o.key} value={o.key}>{o.displayName}</option>)}</optgroup></select>
             <select disabled={isDone || workingId===work.id} value={work.locationId || ""} onChange={(e)=>void patchWork(work.id,{ locationId:e.target.value || null },"Location updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="">Location TBD</option>{locationOptions.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select>
             <select disabled={isDone || workingId===work.id || !work.locationId} value={work.resourceId || ""} onChange={(e)=>void patchWork(work.id,{ resourceId:e.target.value || null },"Resource updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="">No resource</option>{filteredResources.map(o=><option key={o.id} value={o.id}>{o.name} · {labelize(o.resourceType)}</option>)}</select>
-            <input disabled={isDone || workingId===work.id} type="datetime-local" value={scheduleDraftValue} onChange={(e)=>setScheduleDrafts((current)=>({ ...current, [work.id]: e.target.value }))} className={`rounded-lg border bg-white px-2 py-2 text-xs font-bold ${scheduleChanged ? "border-blue-400 ring-1 ring-blue-100" : "border-slate-200"}`} />
+            <input disabled={isDone || workingId===work.id} type="datetime-local" value={scheduleDraftValue} onChange={(e)=>{ setScheduleDrafts((current)=>({ ...current, [work.id]: e.target.value })); setScheduleMessages((current)=>{ const next={...current}; delete next[work.id]; return next; }); }} className={`rounded-lg border bg-white px-2 py-2 text-xs font-bold ${scheduleChanged ? "border-blue-400 ring-1 ring-blue-100" : "border-slate-200"}`} />
             <button disabled={isDone || workingId===work.id || !scheduleDraftValue || !scheduleChanged} onClick={()=>void scheduleWork(work.id,scheduleDraftValue)} className="sm:col-span-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{workingId===work.id ? "Saving..." : scheduleChanged ? "Save Schedule" : "Schedule Saved"}</button>
+            {scheduleMessage ? <div role="alert" className={`sm:col-span-2 rounded-lg border px-3 py-2 text-xs font-bold ${scheduleMessage.type === "error" ? "border-red-200 bg-red-100 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{scheduleMessage.type === "error" ? "Could not save: " : ""}{scheduleMessage.text}</div> : null}
           </div>
           <div className="flex gap-2">{!isDone && work.status !== "in_progress" ? <button disabled={workingId===work.id} onClick={()=>void patchWork(work.id,{status:"in_progress"},"Work started.")} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black">Start</button> : null}{work.status === "in_progress" ? <button disabled={workingId===work.id} onClick={()=>void patchWork(work.id,{status:"complete"},"Work completed.")} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">Complete</button> : null}</div>
         </article>;
