@@ -37,6 +37,7 @@ export type InventoryVehicleView = {
   mileage: number | null;
   imageUrl: string | null;
   projectOwnerUserId: string | null;
+  projectOwnerName: string | null;
   phase: InventoryVehiclePhase;
   grade: InventoryVehicleGrade | null;
   priority: InventoryVehiclePriority;
