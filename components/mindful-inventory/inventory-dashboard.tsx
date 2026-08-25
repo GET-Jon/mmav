@@ -298,7 +298,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
               </div>
             ) : (
               <div className="divide-y divide-slate-200">
-                {orderedVehicles.map((vehicle) => {
+                {orderedVehicles.map((vehicle, index) => {
                   const vehicleName = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
                   const held = daysHeld(vehicle);
                   const priority = priorityLabels[vehicle.priority];
@@ -315,7 +315,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                           openVehicle(vehicle.id);
                         }
                       }}
-                      className={`grid cursor-pointer gap-4 border-l-4 px-4 py-4 outline-none transition hover:bg-slate-50/80 focus:bg-slate-50 focus:ring-2 focus:ring-inset focus:ring-slate-300 md:grid-cols-[minmax(250px,1.3fr)_165px_150px_minmax(260px,1.35fr)_180px] md:items-center sm:px-5 ${urgencyBorder(vehicle)}`}
+                      className={`grid cursor-pointer gap-4 border-l-4 px-4 py-4 outline-none transition hover:bg-slate-100/70 focus:bg-slate-100 focus:ring-2 focus:ring-inset focus:ring-slate-300 md:grid-cols-[minmax(250px,1.3fr)_165px_150px_minmax(260px,1.35fr)_180px] md:items-center sm:px-5 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/55"} ${urgencyBorder(vehicle)}`}
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
