@@ -110,7 +110,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const conflictFields = [partnerId ? { field: "assigned_partner_id", id: partnerId } : null, resourceId ? { field: "resource_id", id: resourceId } : null].filter(Boolean) as Array<{ field: string; id: string }>;
         let conflictEnd: string | null = null;
         for (const conflictField of conflictFields) {
-          const { data: conflicts, error: conflictError } = await access.supabase.from("mindful_inventory_work_orders").select("scheduled_end_at").eq(conflictField.field, conflictField.id).neq("vehicle_id", vehicleId).not("status", "in", '("complete","cancelled")').lt("scheduled_start_at", proposedEnd.toISOString()).gt("scheduled_end_at", cursor.toISOString()).order("scheduled_end_at", { ascending: false }).limit(1);
+          const { data: conflicts, error: conflictError } = await access.supabase.from("mindful_inventory_work_orders").select("scheduled_end_at").eq(conflictField.field, conflictField.id).neq("id", work.id).not("status", "in", '("complete","cancelled")').lt("scheduled_start_at", proposedEnd.toISOString()).gt("scheduled_end_at", cursor.toISOString()).order("scheduled_end_at", { ascending: false }).limit(1);
           if (conflictError) throw new Error(conflictError.message);
           if (conflicts?.[0]?.scheduled_end_at && (!conflictEnd || conflicts[0].scheduled_end_at > conflictEnd)) conflictEnd = conflicts[0].scheduled_end_at;
         }
