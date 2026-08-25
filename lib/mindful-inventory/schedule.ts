@@ -46,7 +46,7 @@ export async function getInventorySchedule(
       .order("scheduled_start_at", { ascending: true, nullsFirst: false }),
     supabase.from("mindful_inventory_partners").select("id,name").eq("company_id", companyId),
     supabase.from("mindful_inventory_locations").select("id,name").eq("company_id", companyId),
-    supabase.from("mindful_inventory_resources").select("id,name,location_id").eq("company_id", companyId),
+    supabase.from("mindful_inventory_resources").select("id,name,location_id"),
     supabase.rpc("get_inventory_company_members", { requested_company_id: companyId }),
   ]);
 
@@ -70,7 +70,11 @@ export async function getInventorySchedule(
   );
   const partners = new Map((partnersResult.data || []).map((partner) => [partner.id, partner.name]));
   const locations = new Map((locationsResult.data || []).map((location) => [location.id, location.name]));
-  const resources = new Map((resourcesResult.data || []).map((resource) => [resource.id, resource.name]));
+  const resources = new Map(
+    (resourcesResult.data || [])
+      .filter((resource) => locations.has(resource.location_id))
+      .map((resource) => [resource.id, resource.name]),
+  );
   const members = new Map(
     ((membersResult.data || []) as Array<{ user_id: string; display_name?: string | null; email?: string | null }>).map((member) => [
       member.user_id,
