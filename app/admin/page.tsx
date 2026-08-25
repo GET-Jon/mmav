@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const sections = [
   { href: "/admin/partners", title: "Partners", description: "Manage outside specialists, capabilities, permissions, and operating access.", ready: true },
   { href: "/admin/locations", title: "Locations & Resources", description: "Mindful facilities, partner shops, storage, transport locations, bays, lifts, detail spaces, and other schedulable capacity.", ready: true },
-  { href: "#", title: "Team & Access", description: "Internal users, roles, and administrative access.", ready: false },
+  { href: "/admin/team", title: "Team & Access", description: "Manage internal users, company roles, account status, and administrative access.", ready: true },
 ];
 
 export default async function AdminPage() {
@@ -25,7 +25,7 @@ export default async function AdminPage() {
           <h1 className="mt-1 text-[30px] font-black tracking-[-0.035em]">Manage how Lot Logic operates</h1>
           <p className="mt-2 max-w-3xl text-slate-600">Configure the people, places, resources, and access rules that the operating workflows depend on.</p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sections.map((section) => section.ready ? (
             <Link key={section.title} href={section.href} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-slate-400">
               <div className="text-xl font-black">{section.title}</div><p className="mt-2 text-sm leading-6 text-slate-600">{section.description}</p><div className="mt-5 text-sm font-black text-slate-950">Manage {section.title} →</div>
