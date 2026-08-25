@@ -55,6 +55,7 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
   const router = useRouter();
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>({});
   const completed = workOrders.filter((work) => work.status === "complete" || work.status === "cancelled").length;
   const activeBudget = workOrders.reduce((sum, work) => sum + work.approvedBudget, 0);
   const totalLabor = workOrders.reduce((sum, work) => sum + (work.estimatedLaborMinutes || 0), 0);
@@ -98,6 +99,11 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
       const response = await fetch(`/api/mindful/inventory/work-orders/${workOrderId}/schedule`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduledStartAt: new Date(value).toISOString() }) });
       const payload = await response.json() as { error?: string; warning?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to schedule Work Order.");
+      setScheduleDrafts((current) => {
+        const next = { ...current };
+        delete next[workOrderId];
+        return next;
+      });
       setMessage(payload.warning || "Schedule updated."); router.refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Failed to schedule Work Order."); }
     finally { setWorkingId(null); }
@@ -126,7 +132,7 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
       </div>
     </section> : null}
 
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h3 className="text-sm font-black">Execution calendar</h3><p className="mt-0.5 text-[11px] text-slate-500">Set who, where, resource, and start time. Conflicts are blocked across the entire operation.</p></div>
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h3 className="text-sm font-black">Execution calendar</h3><p className="mt-0.5 text-[11px] text-slate-500">Set who, where, resource, and start time. Use Save Schedule to commit time changes. Start only means work has actually begun.</p></div>
       <div className="divide-y divide-slate-200">{grouped.map(([key, items]) => <div key={key} className="grid lg:grid-cols-[150px_minmax(0,1fr)]"><div className="border-r border-slate-200 bg-slate-50 px-4 py-4"><div className="text-[10px] font-black uppercase text-slate-400">{key === "unscheduled" ? "Needs slot" : "Scheduled"}</div><div className="mt-1 text-sm font-black">{key === "unscheduled" ? "Unscheduled" : dayLabel(key)}</div></div><div className="divide-y divide-slate-100">{items.map((work) => {
         const isDone = work.status === "complete" || work.status === "cancelled";
         const suggestion = !work.performerName ? suggestedPerformerForWork(work, performerOptions) : null;
@@ -135,6 +141,9 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
         if (!isDone && !work.scheduledStartAt) missing.push("time");
         if (!isDone && !work.performerName) missing.push("performer");
         if (!isDone && !work.locationId) missing.push("location");
+        const savedScheduleValue = localInput(work.scheduledStartAt);
+        const scheduleDraftValue = scheduleDrafts[work.id] ?? savedScheduleValue;
+        const scheduleChanged = scheduleDraftValue !== savedScheduleValue;
         return <article key={work.id} className={`grid gap-3 px-4 py-4 xl:grid-cols-[105px_minmax(0,1fr)_390px_auto] xl:items-center ${isDone ? "bg-slate-50/60" : ""}`}>
           <div><div className="text-sm font-black">{timeLabel(work.scheduledStartAt)}</div>{work.scheduledEndAt ? <div className="text-[10px] font-bold text-slate-400">to {timeLabel(work.scheduledEndAt)}</div> : null}{work.scheduleSource === "suggested" ? <span className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black uppercase text-violet-700">Suggested</span> : null}</div>
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${statusClass(work.status)}`}>{labelize(work.status)}</span><h4 className="text-sm font-black sm:text-base">{work.title}</h4>{missing.length ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Needs {missing.join(" + ")}</span> : null}</div>{work.description ? <p className="mt-1 truncate text-xs text-slate-500">{work.description}</p> : null}<div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold text-slate-500"><span>{labelize(work.category)}</span><span>{money(work.approvedBudget)}</span><span>Labor {hours(work.estimatedLaborMinutes)}</span></div></div>
@@ -143,7 +152,8 @@ export function InventoryActiveWork({ vehicleId, workOrders, performerOptions, l
             <select disabled={isDone || workingId===work.id} value={performerKey(work)} onChange={(e)=>void patchWork(work.id,{ performerKey:e.target.value },"Performer updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter(o=>o.type==="partner").map(o=><option key={o.key} value={o.key}>{o.displayName}{o.secondaryLabel ? ` · ${o.secondaryLabel}`:""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter(o=>o.type==="internal").map(o=><option key={o.key} value={o.key}>{o.displayName}</option>)}</optgroup></select>
             <select disabled={isDone || workingId===work.id} value={work.locationId || ""} onChange={(e)=>void patchWork(work.id,{ locationId:e.target.value || null },"Location updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="">Location TBD</option>{locationOptions.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select>
             <select disabled={isDone || workingId===work.id || !work.locationId} value={work.resourceId || ""} onChange={(e)=>void patchWork(work.id,{ resourceId:e.target.value || null },"Resource updated.")} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold"><option value="">No resource</option>{filteredResources.map(o=><option key={o.id} value={o.id}>{o.name} · {labelize(o.resourceType)}</option>)}</select>
-            <input disabled={isDone || workingId===work.id} type="datetime-local" defaultValue={localInput(work.scheduledStartAt)} onBlur={(e)=>e.target.value && void scheduleWork(work.id,e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold" />
+            <input disabled={isDone || workingId===work.id} type="datetime-local" value={scheduleDraftValue} onChange={(e)=>setScheduleDrafts((current)=>({ ...current, [work.id]: e.target.value }))} className={`rounded-lg border bg-white px-2 py-2 text-xs font-bold ${scheduleChanged ? "border-blue-400 ring-1 ring-blue-100" : "border-slate-200"}`} />
+            <button disabled={isDone || workingId===work.id || !scheduleDraftValue || !scheduleChanged} onClick={()=>void scheduleWork(work.id,scheduleDraftValue)} className="sm:col-span-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{workingId===work.id ? "Saving..." : scheduleChanged ? "Save Schedule" : "Schedule Saved"}</button>
           </div>
           <div className="flex gap-2">{!isDone && work.status !== "in_progress" ? <button disabled={workingId===work.id} onClick={()=>void patchWork(work.id,{status:"in_progress"},"Work started.")} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black">Start</button> : null}{work.status === "in_progress" ? <button disabled={workingId===work.id} onClick={()=>void patchWork(work.id,{status:"complete"},"Work completed.")} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">Complete</button> : null}</div>
         </article>;
