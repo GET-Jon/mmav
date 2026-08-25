@@ -9,6 +9,7 @@ import type {
 import type {
   InventoryVehicleHealth,
   InventoryVehiclePhase,
+  InventoryVehiclePriority,
 } from "@/lib/mindful-inventory/types";
 
 type InventoryDashboardProps = {
@@ -32,6 +33,20 @@ const healthLabels: Record<InventoryVehicleHealth, string> = {
   behind: "Behind",
   blocked: "Blocked",
 };
+
+const priorityLabels: Record<InventoryVehiclePriority, { label: string; note: string }> = {
+  "1": { label: "High", note: "Move first / time-sensitive" },
+  "2": { label: "Normal", note: "Standard operating priority" },
+  "3": { label: "Low", note: "Can wait behind other work" },
+};
+
+const gradeNotes = {
+  a: "Light / minimal reconditioning",
+  b: "Minor reconditioning",
+  c: "Moderate reconditioning",
+  d: "Major reconditioning",
+  e: "Extensive / complex reconditioning",
+} as const;
 
 function formatDate(value: string | null, includeYear = false) {
   if (!value) return "—";
@@ -155,6 +170,7 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
               {orderedVehicles.map((vehicle) => {
                 const vehicleName = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
                 const held = daysHeld(vehicle);
+                const priority = priorityLabels[vehicle.priority];
                 return (
                   <article
                     key={vehicle.id}
@@ -177,16 +193,21 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
                         <span>{vehicle.stockNumber ? `Stock #${vehicle.stockNumber}` : vehicle.vin || "No VIN"}</span>
                         {vehicle.mileage !== null ? <span>{vehicle.mileage.toLocaleString()} mi</span> : null}
+                        {vehicle.currentLocationName ? <span>{vehicle.currentLocationName}</span> : null}
                       </div>
                       <div className="mt-2 text-xs font-bold text-slate-500">
                         Acquired {formatDate(vehicle.purchaseDate || vehicle.createdAt, true)} · <span className={held >= 30 ? "text-red-700" : held >= 14 ? "text-amber-700" : "text-slate-700"}>{held} day{held === 1 ? "" : "s"} held</span>
                       </div>
+                      {vehicle.grade ? (
+                        <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                          Condition Grade {vehicle.grade.toUpperCase()} · {gradeNotes[vehicle.grade]}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div>
                       <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Current Step</div>
                       <div className="mt-1.5"><PhasePill phase={vehicle.phase} /></div>
-                      {vehicle.currentLocationName ? <div className="mt-2 truncate text-xs font-semibold text-slate-500">{vehicle.currentLocationName}</div> : null}
                     </div>
 
                     <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
@@ -202,12 +223,15 @@ export function InventoryDashboard({ data }: InventoryDashboardProps) {
                     <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
                       <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                         <div className="text-[9px] font-black uppercase tracking-[0.09em] text-slate-400">Forecast Ready</div>
-                        <div className="mt-1 text-sm font-black text-slate-900">{formatDate(vehicle.forecastReadyAt)}</div>
+                        <div className="mt-1 text-sm font-black text-slate-900">
+                          {vehicle.forecastReadyAt ? formatDate(vehicle.forecastReadyAt) : vehicle.phase === "ready" ? "Ready now" : "Pending schedule"}
+                        </div>
                         {vehicle.targetReadyAt ? <div className="mt-0.5 text-[10px] font-semibold text-slate-500">Target {formatDate(vehicle.targetReadyAt)}</div> : null}
                       </div>
                       <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-                        <div className="text-[9px] font-black uppercase tracking-[0.09em] text-slate-400">Priority</div>
-                        <div className="mt-1 text-sm font-black text-slate-900">{vehicle.grade ? `${vehicle.grade.toUpperCase()} · ` : ""}P{vehicle.priority}</div>
+                        <div className="text-[9px] font-black uppercase tracking-[0.09em] text-slate-400">Urgency</div>
+                        <div className="mt-1 text-sm font-black text-slate-900">{priority.label}</div>
+                        <div className="mt-0.5 text-[10px] font-semibold text-slate-500">P{vehicle.priority} · {priority.note}</div>
                       </div>
                     </div>
                   </article>
