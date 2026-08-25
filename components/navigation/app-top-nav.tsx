@@ -29,27 +29,42 @@ function navClass(isActive: boolean) {
     : "rounded-lg px-3 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950";
 }
 
-export function AppTopNav({
-  active,
-  userEmail = null,
-  userRole = null,
-  onNewEvaluation,
-}: AppTopNavProps) {
+export function AppTopNav({ active, userEmail = null, userRole = null, onNewEvaluation }: AppTopNavProps) {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [resolvedRole, setResolvedRole] = useState<string | null>(userRole);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
-  const isAdmin = userRole === "company_admin";
+  const isAdmin = resolvedRole === "company_admin";
 
-  const initials =
-    userLabel
-      .split(/[.\-_\s]+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part.charAt(0))
-      .join("")
-      .toUpperCase() || "MM";
+  const initials = userLabel
+    .split(/[.\-_\s]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase() || "MM";
+
+  useEffect(() => {
+    if (resolvedRole || !userEmail) return;
+    let cancelled = false;
+    void (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data } = await supabase
+        .from("company_memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled) setResolvedRole(data?.role || "user");
+    })();
+    return () => { cancelled = true; };
+  }, [resolvedRole, userEmail]);
 
   useEffect(() => {
     function closeOnOutsideClick(event: MouseEvent) {
@@ -103,13 +118,7 @@ export function AppTopNav({
           )}
 
           <div ref={menuRef} className="relative">
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((value) => !value)}
-              className="flex items-center gap-3 rounded-xl px-1.5 py-1 transition hover:bg-slate-50"
-            >
+            <button type="button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex items-center gap-3 rounded-xl px-1.5 py-1 transition hover:bg-slate-50">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">{initials}</div>
               <div className="hidden min-w-0 text-left sm:block">
                 <div className="truncate text-xs font-extrabold text-slate-900">{userLabel}</div>
