@@ -8,8 +8,7 @@ export const dynamic = "force-dynamic";
 
 const sections = [
   { href: "/admin/partners", title: "Partners", description: "Manage outside specialists, capabilities, permissions, and operating access.", ready: true },
-  { href: "#", title: "Locations", description: "Mindful facilities, partner shops, storage, auction, and transport locations.", ready: false },
-  { href: "#", title: "Resources", description: "Shop bays, lifts, detail spaces, and other schedulable operating resources.", ready: false },
+  { href: "/admin/locations", title: "Locations & Resources", description: "Mindful facilities, partner shops, storage, transport locations, bays, lifts, detail spaces, and other schedulable capacity.", ready: true },
   { href: "#", title: "Team & Access", description: "Internal users, roles, and administrative access.", ready: false },
 ];
 
