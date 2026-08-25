@@ -39,6 +39,13 @@ function localInputDefault() {
   return local.toISOString().slice(0, 16);
 }
 
+function localInput(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 function overlaps(a: InventoryScheduleWork, b: InventoryScheduleWork) {
   if (!a.scheduledStartAt || !a.scheduledEndAt || !b.scheduledStartAt || !b.scheduledEndAt) return false;
   return new Date(a.scheduledStartAt).getTime() < new Date(b.scheduledEndAt).getTime()
@@ -55,6 +62,7 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
   const [message, setMessage] = useState("");
   const [starts, setStarts] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<ViewMode>("all");
+  const [selectedItem, setSelectedItem] = useState<InventoryScheduleWork | null>(null);
 
   const weekStart = useMemo(() => startOfWeek(weekOffset), [weekOffset]);
   const days = useMemo(
@@ -112,8 +120,14 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
     return true;
   }
 
-  async function schedule(item: InventoryScheduleWork) {
-    const localStart = starts[item.id] || localInputDefault();
+  function openItem(item: InventoryScheduleWork) {
+    setMessage("");
+    setStarts((current) => ({ ...current, [item.id]: current[item.id] || localInput(item.scheduledStartAt) || localInputDefault() }));
+    setSelectedItem(item);
+  }
+
+  async function schedule(item: InventoryScheduleWork, closeOnSuccess = false) {
+    const localStart = starts[item.id] || localInput(item.scheduledStartAt) || localInputDefault();
     setWorkingId(item.id);
     setMessage("");
     try {
@@ -125,6 +139,7 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to schedule work.");
       setMessage(`${item.title} scheduled.`);
+      if (closeOnSuccess) setSelectedItem(null);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to schedule work.");
@@ -133,6 +148,9 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
     }
   }
 
+  const selectedConflicts = selectedItem ? conflictsByItem.get(selectedItem.id) || [] : [];
+  const selectedElapsed = selectedItem ? selectedItem.elapsedMinutes ?? selectedItem.legacyDurationMinutes : null;
+
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -140,7 +158,7 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
           <div>
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Operations Schedule</div>
             <h1 className="mt-1 text-2xl font-black text-slate-950">Resource planning across every car</h1>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, assignment gaps, calendar occupancy, and labor load in one place. Turnaround controls calendar occupancy; labor remains the hands-on capacity estimate.</p>
+            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, assignment gaps, calendar occupancy, and labor load in one place. Click a scheduled job to inspect or reschedule it without leaving this board.</p>
           </div>
           <div className="grid min-w-[420px] grid-cols-4 gap-2">
             <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Active Work</div><div className="mt-1 text-lg font-black">{active.length}</div></div>
@@ -153,18 +171,18 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
           {(["all", "conflicts", "gaps"] as ViewMode[]).map((mode) => <button key={mode} onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>{mode === "all" ? "All Work" : mode === "conflicts" ? `Conflicts (${conflictItemCount})` : `Scheduling Gaps (${gapItemIds.size})`}</button>)}
           <span className="ml-1 text-xs font-bold text-slate-400">{unassigned.length} unassigned · {locationTbd.length} location TBD</span>
         </div>
-        {message ? <div className={`mt-3 rounded-xl px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"}`}>{message}</div> : null}
+        {message && !selectedItem ? <div className={`mt-3 rounded-xl px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"}`}>{message}</div> : null}
       </section>
 
       {conflictItemCount > 0 ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
         <div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-600">Conflict audit</div>
         <div className="mt-1 text-base font-black text-red-950">Existing overlaps need attention</div>
-        <p className="mt-1 text-sm font-semibold text-red-800">These can include legacy suggested schedules created before conflict enforcement. Open either vehicle to move one of the overlapping jobs.</p>
+        <p className="mt-1 text-sm font-semibold text-red-800">These can include legacy suggested schedules created before conflict enforcement. Click a job to inspect and move it here.</p>
         <div className="mt-3 grid gap-2 lg:grid-cols-2">
           {Array.from(conflictsByItem.entries()).map(([itemId, itemConflicts]) => {
             const item = work.find((entry) => entry.id === itemId);
             if (!item) return null;
-            return <Link key={itemId} href={`/mindful/inventory/${item.vehicleId}/work`} className="rounded-xl border border-red-200 bg-white px-3 py-3 hover:border-red-400"><div className="text-sm font-black text-slate-950">{item.vehicleLabel} · {item.title}</div><div className="mt-1 text-xs font-bold text-red-700">{Array.from(new Set(itemConflicts.map((conflict) => `${conflict.kind === "performer" ? "Performer" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></Link>;
+            return <button type="button" key={itemId} onClick={() => openItem(item)} className="rounded-xl border border-red-200 bg-white px-3 py-3 text-left hover:border-red-400"><div className="text-sm font-black text-slate-950">{item.vehicleLabel} · {item.title}</div><div className="mt-1 text-xs font-bold text-red-700">{Array.from(new Set(itemConflicts.map((conflict) => `${conflict.kind === "performer" ? "Performer" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></button>;
           })}
         </div>
       </section> : null}
@@ -191,13 +209,13 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
                     const itemConflicts = conflictsByItem.get(item.id) || [];
                     const hasGap = !item.performerName || !item.locationId;
                     return (
-                      <Link key={item.id} href={`/mindful/inventory/${item.vehicleId}/work`} className={`block rounded-xl border bg-white p-3 shadow-sm transition ${itemConflicts.length ? "border-red-300 ring-1 ring-red-100 hover:border-red-500" : hasGap ? "border-amber-300 hover:border-amber-500" : "border-slate-200 hover:border-slate-400"}`}>
+                      <button type="button" key={item.id} onClick={() => openItem(item)} className={`block w-full rounded-xl border bg-white p-3 text-left shadow-sm transition ${itemConflicts.length ? "border-red-300 ring-1 ring-red-100 hover:border-red-500" : hasGap ? "border-amber-300 hover:border-amber-500" : "border-slate-200 hover:border-slate-400"}`}>
                         <div className="flex items-center justify-between gap-2"><div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{new Date(item.scheduledStartAt!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>{itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : hasGap ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Gap</span> : null}</div>
                         <div className="mt-1 text-xs font-black text-slate-950">{item.inventoryNumber} · {item.vehicleLabel}</div>
                         <div className="mt-1 text-sm font-black text-slate-800">{item.title}</div>
                         <div className="mt-2 text-[10px] font-bold text-slate-500">{item.performerName || "Performer TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}{item.resourceName ? ` · ${item.resourceName}` : ""}</div>
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black"><span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Labor {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Turn {hours(elapsed)}</span></div>
-                      </Link>
+                      </button>
                     );
                   })}
                   {items.length === 0 ? <div className="px-1 py-4 text-xs font-bold text-slate-300">No matching work</div> : null}
@@ -216,7 +234,7 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
             const legacyOnly = item.elapsedMinutes === null && item.legacyDurationMinutes !== null;
             return (
               <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <div><div className="flex flex-wrap items-center gap-2"><Link href={`/mindful/inventory/${item.vehicleId}/work`} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</Link><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-600">{labelize(item.category)}</span>{!item.performerName ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Needs performer</span> : null}{!item.locationId ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Needs location</span> : null}</div><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-1 text-xs font-bold text-slate-500">{item.performerName || "Performer TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}</div><div className="mt-2 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">Hands-on labor: {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">Turnaround: {hours(elapsed)}{legacyOnly ? " (legacy AI estimate)" : ""}</span></div></div>
+                <div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => openItem(item)} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</button><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-600">{labelize(item.category)}</span>{!item.performerName ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Needs performer</span> : null}{!item.locationId ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">Needs location</span> : null}</div><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-1 text-xs font-bold text-slate-500">{item.performerName || "Performer TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}</div><div className="mt-2 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">Hands-on labor: {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">Turnaround: {hours(elapsed)}{legacyOnly ? " (legacy AI estimate)" : ""}</span></div></div>
                 <div className="flex flex-wrap items-end gap-2"><label className="block"><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Start</div><input type="datetime-local" value={starts[item.id] || ""} onChange={(event) => setStarts((current) => ({ ...current, [item.id]: event.target.value }))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700" /></label><button type="button" disabled={workingId === item.id} onClick={() => void schedule(item)} className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Schedule</button></div>
               </div>
             );
@@ -224,6 +242,33 @@ export function InventoryScheduleBoard({ work }: { work: InventoryScheduleWork[]
           {unscheduled.filter(visible).length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">No matching unscheduled work.</div> : null}
         </div>
       </section>
+
+      {selectedItem ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-label={`${selectedItem.vehicleLabel} ${selectedItem.title}`} onMouseDown={(event) => { if (event.currentTarget === event.target) setSelectedItem(null); }}>
+        <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+            <div className="min-w-0"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Schedule item</div><h2 className="mt-1 text-xl font-black text-slate-950">{selectedItem.title}</h2><div className="mt-1 text-sm font-bold text-slate-500">{selectedItem.inventoryNumber} · {selectedItem.vehicleLabel}</div></div>
+            <button type="button" onClick={() => setSelectedItem(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-black text-slate-500">Close</button>
+          </div>
+          <div className="space-y-4 p-5">
+            {selectedConflicts.length ? <div className="rounded-xl border border-red-200 bg-red-50 p-3"><div className="text-[10px] font-black uppercase text-red-600">Conflict</div><div className="mt-1 text-sm font-black text-red-900">{Array.from(new Set(selectedConflicts.map((conflict) => `${conflict.kind === "performer" ? "Performer" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></div> : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Status</div><div className="mt-1 text-sm font-black text-slate-900">{labelize(selectedItem.status)}</div>{selectedItem.scheduleSource ? <div className="mt-0.5 text-xs font-semibold text-slate-500">{labelize(selectedItem.scheduleSource)} schedule</div> : null}</div>
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Workload</div><div className="mt-1 text-sm font-black text-slate-900">Labor {hours(selectedItem.laborMinutes)} · Turn {hours(selectedElapsed)}</div></div>
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Performer</div><div className={`mt-1 text-sm font-black ${selectedItem.performerName ? "text-slate-900" : "text-amber-700"}`}>{selectedItem.performerName || "Needs assignment"}</div></div>
+              <div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Where</div><div className={`mt-1 text-sm font-black ${selectedItem.locationName ? "text-slate-900" : "text-amber-700"}`}>{selectedItem.locationName || "Location TBD"}{selectedItem.resourceName ? ` · ${selectedItem.resourceName}` : ""}</div></div>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4">
+              <label className="block"><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Scheduled start</div><input type="datetime-local" value={starts[selectedItem.id] || localInput(selectedItem.scheduledStartAt)} onChange={(event) => setStarts((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-800" /></label>
+              {message ? <div className={`mt-3 rounded-lg px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</div> : null}
+              <button type="button" disabled={workingId === selectedItem.id} onClick={() => void schedule(selectedItem, true)} className="mt-3 w-full rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{workingId === selectedItem.id ? "Saving..." : "Save Schedule"}</button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="text-xs font-semibold text-slate-500">Assignment editing can stay on the vehicle page for now; this popup keeps schedule planning on the board.</div>
+            <Link href={`/mindful/inventory/${selectedItem.vehicleId}/work`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">Open full Active Work →</Link>
+          </div>
+        </div>
+      </div> : null}
     </div>
   );
 }
