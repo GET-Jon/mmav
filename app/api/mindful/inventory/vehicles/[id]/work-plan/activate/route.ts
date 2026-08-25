@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryCarPlanData } from "@/lib/mindful-inventory/car-plan";
+import { getInventoryPerformerOptions, suggestedPerformerForWork } from "@/lib/mindful-inventory/performers";
 
 const COMPANY_TIME_ZONE = "America/New_York";
 
@@ -63,9 +64,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const result = Array.isArray(data) ? data[0] : data;
 
-    const [{ data: workRows, error: workError }, { data: planItems, error: itemError }] = await Promise.all([
+    const [{ data: workRows, error: workError }, { data: planItems, error: itemError }, performerOptions] = await Promise.all([
       access.supabase.from("mindful_inventory_work_orders").select("id,plan_item_id,title,category,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,location_id,resource_id,status").eq("vehicle_id", vehicleId).eq("plan_version_id", requestedVersionId),
       access.supabase.from("mindful_inventory_plan_items").select("id,sequence_order,suggested_partner_id").eq("plan_version_id", requestedVersionId).eq("decision", "approved").order("sequence_order", { ascending: true }),
+      getInventoryPerformerOptions(access.supabase, access.company.companyId),
     ]);
     if (workError) throw new Error(workError.message);
     if (itemError) throw new Error(itemError.message);
@@ -77,7 +79,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     for (const item of planItems || []) {
       const work = workByPlanItem.get(item.id);
       if (!work || work.status === "complete" || work.status === "cancelled") continue;
-      const partnerId = item.suggested_partner_id || work.assigned_partner_id || null;
+      let partnerId = item.suggested_partner_id || work.assigned_partner_id || null;
+      if (!partnerId) {
+        const suggested = suggestedPerformerForWork({ title: work.title, category: work.category }, performerOptions);
+        if (suggested?.type === "partner") partnerId = suggested.id;
+      }
       const durationMinutes = Math.max(60, Number(work.estimated_elapsed_minutes ?? work.estimated_duration_minutes ?? 60) || 60);
       let locationId = work.location_id || null;
       let resourceId = work.resource_id || null;
@@ -119,7 +125,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       cursor = nextBusinessSlot(end);
     }
 
-    if (suggestedCount > 0) await access.supabase.from("mindful_inventory_history").insert({ company_id: access.company.companyId, vehicle_id: vehicleId, event_type: "suggested_schedule_created", entity_type: "car_plan_version", entity_id: requestedVersionId, actor_user_id: access.userId, summary: "Suggested execution schedule created from performer, location, resource, and existing schedule availability.", metadata: { suggestedWorkOrders: suggestedCount, timeZone: COMPANY_TIME_ZONE } });
+    if (suggestedCount > 0) await access.supabase.from("mindful_inventory_history").insert({ company_id: access.company.companyId, vehicle_id: vehicleId, event_type: "suggested_schedule_created", entity_type: "car_plan_version", entity_id: requestedVersionId, actor_user_id: access.userId, summary: "Suggested execution schedule created from capabilities, locations, resources, and current availability.", metadata: { suggestedWorkOrders: suggestedCount, timeZone: COMPANY_TIME_ZONE } });
 
     return NextResponse.json({ planVersionId: result?.returned_plan_version_id || requestedVersionId, workOrdersCreated: Number(result?.work_orders_created || 0), suggestedWorkOrders: suggestedCount, activated: Boolean(result?.activated) });
   } catch (error) {
