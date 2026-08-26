@@ -90,7 +90,6 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   const unscheduled = active.filter((item) => !item.scheduledStartAt);
   const unassigned = active.filter((item) => !item.performerName);
   const locationTbd = active.filter((item) => !item.locationId);
-  const totalLabor = active.reduce((sum, item) => sum + (item.laborMinutes || 0), 0);
 
   const conflicts = useMemo(() => {
     const found: Conflict[] = [];
@@ -136,6 +135,10 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     setMessage("");
     setStarts((current) => ({ ...current, [item.id]: current[item.id] || localInput(item.scheduledStartAt) || localInputDefault() }));
     setSelectedItem(item);
+  }
+
+  function scrollToUnscheduled() {
+    document.getElementById("unscheduled-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function schedule(item: InventoryScheduleWork, closeOnSuccess = false) {
@@ -217,38 +220,20 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Operations Schedule</div>
-            <h1 className="mt-1 text-2xl font-black text-slate-950">Resource planning across every car</h1>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, missing schedule information, calendar occupancy, and labor load in one place. Click a job to edit its execution details without leaving this board.</p>
-          </div>
-          <div className="grid min-w-[420px] grid-cols-4 gap-2">
-            <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Active Work</div><div className="mt-1 text-lg font-black">{active.length}</div></div>
-            <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Unscheduled</div><div className="mt-1 text-lg font-black">{unscheduled.length}</div></div>
-            <div className={`rounded-xl px-3 py-3 ${conflictItemCount ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}><div className="text-[10px] font-black uppercase opacity-70">Conflicts</div><div className="mt-1 text-lg font-black">{conflictItemCount}</div></div>
-            <div className="rounded-xl bg-slate-950 px-3 py-3 text-white"><div className="text-[10px] font-black uppercase text-slate-400">Labor Load</div><div className="mt-1 text-lg font-black">{hours(totalLabor)}</div></div>
-          </div>
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Operations Schedule</div>
+          <h1 className="mt-1 text-2xl font-black text-slate-950">Resource planning across every car</h1>
+          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, missing schedule information, calendar occupancy, and labor load in one place. Click a job to edit its execution details without leaving this board.</p>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {(["all", "conflicts", "gaps"] as ViewMode[]).map((mode) => <button key={mode} onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>{mode === "all" ? "All Work" : mode === "conflicts" ? `Conflicts (${conflictItemCount})` : `Missing Info (${gapItemIds.size})`}</button>)}
+          <button type="button" onClick={() => setViewMode("all")} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === "all" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>All Work ({active.length})</button>
+          <button type="button" onClick={() => setViewMode("conflicts")} className={`rounded-full px-3 py-1.5 text-xs font-black ${conflictItemCount > 0 ? viewMode === "conflicts" ? "bg-red-700 text-white" : "bg-red-100 text-red-700" : viewMode === "conflicts" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Conflicts ({conflictItemCount})</button>
+          <button type="button" onClick={() => setViewMode("gaps")} className={`rounded-full px-3 py-1.5 text-xs font-black ${gapItemIds.size > 0 ? viewMode === "gaps" ? "bg-amber-600 text-white" : "bg-amber-100 text-amber-800" : viewMode === "gaps" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Missing Info ({gapItemIds.size})</button>
+          <button type="button" onClick={scrollToUnscheduled} className={`rounded-full px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500"}`}>Unscheduled ({unscheduled.length})</button>
           <span className="ml-1 text-xs font-bold text-slate-400">{unassigned.length} need partner / technician · {locationTbd.length} need location</span>
         </div>
         {message && !selectedItem ? <div className={`mt-3 rounded-xl px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"}`}>{message}</div> : null}
       </section>
-
-      {conflictItemCount > 0 ? <section className="rounded-xl border border-red-200 bg-red-50/70 px-3 py-2.5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.1em] text-red-600">Schedule conflicts</span>
-          <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-black text-red-700">{conflictItemCount} need attention</span>
-          {Array.from(conflictsByItem.entries()).map(([itemId, itemConflicts]) => {
-            const item = work.find((entry) => entry.id === itemId);
-            if (!item) return null;
-            const issueLabel = Array.from(new Set(itemConflicts.map((conflict) => `${conflict.kind === "performer" ? "Partner / technician" : "Resource"}: ${conflict.label}`))).join(" · ");
-            return <button type="button" key={itemId} onClick={() => openItem(item)} className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-left text-xs font-black text-red-800 hover:border-red-400"><span className="text-slate-900">{item.vehicleLabel} · {item.title}</span><span className="ml-1 font-bold text-red-600">— {issueLabel}</span></button>;
-          })}
-        </div>
-      </section> : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -285,7 +270,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section id="unscheduled-work" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-end justify-between gap-4"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Unscheduled Queue</div><h2 className="mt-1 text-xl font-black text-slate-950">Work waiting for a calendar slot</h2></div><div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{unscheduled.length} waiting</div></div>
         <div className="mt-4 space-y-2">
           {unscheduled.filter(visible).map((item) => {
