@@ -1,17 +1,55 @@
 import { NextResponse } from "next/server";
 
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
-import { defaultPartnerPermissions } from "@/lib/admin/partners";
+import { defaultPartnerPermissions, type AdminPartnerPermissionSet } from "@/lib/admin/partners";
 
 function clean(value: unknown) {
   const text = String(value ?? "").trim();
   return text || null;
 }
 
+const permissionKeys = Object.keys(defaultPartnerPermissions) as Array<keyof AdminPartnerPermissionSet>;
+
+function normalizePermissions(value: unknown): AdminPartnerPermissionSet {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return permissionKeys.reduce(
+    (permissions, key) => {
+      permissions[key] = typeof source[key] === "boolean" ? Boolean(source[key]) : defaultPartnerPermissions[key];
+      return permissions;
+    },
+    { ...defaultPartnerPermissions },
+  );
+}
+
+function normalizeCapabilityIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((item) => String(item || "").trim()).filter(Boolean)));
+}
+
 async function requireAdmin() {
   const access = await getMindfulInventoryAccess();
   if (!access || access.company.role !== "company_admin") return null;
   return access;
+}
+
+async function validateCapabilityIds(
+  access: NonNullable<Awaited<ReturnType<typeof requireAdmin>>>,
+  capabilityIds: string[],
+) {
+  if (!capabilityIds.length) return { validIds: [] as string[], error: null as string | null };
+
+  const { data, error } = await access.supabase
+    .from("mindful_inventory_partner_capabilities")
+    .select("id")
+    .eq("company_id", access.company.companyId)
+    .in("id", capabilityIds);
+  if (error) return { validIds: [] as string[], error: error.message };
+
+  const validIds = (data || []).map((row) => row.id);
+  if (validIds.length !== capabilityIds.length) {
+    return { validIds, error: "One or more selected capabilities are not available for this company." };
+  }
+  return { validIds, error: null as string | null };
 }
 
 export async function POST(request: Request) {
@@ -22,6 +60,11 @@ export async function POST(request: Request) {
     const name = clean(body.name);
     if (!name) return NextResponse.json({ error: "Partner name is required." }, { status: 400 });
 
+    const capabilityIds = normalizeCapabilityIds(body.capabilityIds);
+    const capabilityValidation = await validateCapabilityIds(access, capabilityIds);
+    if (capabilityValidation.error) return NextResponse.json({ error: capabilityValidation.error }, { status: 400 });
+    const permissions = normalizePermissions(body.permissions);
+
     const { data: partner, error } = await access.supabase
       .from("mindful_inventory_partners")
       .insert({
@@ -30,7 +73,7 @@ export async function POST(request: Request) {
         company_name: clean(body.companyName),
         email: clean(body.email),
         phone: clean(body.phone),
-        active: true,
+        active: body.active !== false,
         scheduling_mode: "manager_scheduled",
         notes: clean(body.notes),
         created_by: access.userId,
@@ -40,10 +83,23 @@ export async function POST(request: Request) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    if (capabilityValidation.validIds.length) {
+      const { error: capabilityError } = await access.supabase
+        .from("mindful_inventory_partner_capability_assignments")
+        .insert(capabilityValidation.validIds.map((capabilityId) => ({ partner_id: partner.id, capability_id: capabilityId })));
+      if (capabilityError) {
+        await access.supabase.from("mindful_inventory_partners").delete().eq("id", partner.id);
+        return NextResponse.json({ error: capabilityError.message }, { status: 500 });
+      }
+    }
+
     const { error: permissionError } = await access.supabase
       .from("mindful_inventory_partner_permissions")
-      .insert({ partner_id: partner.id, ...defaultPartnerPermissions });
-    if (permissionError) return NextResponse.json({ error: permissionError.message }, { status: 500 });
+      .insert({ partner_id: partner.id, ...permissions });
+    if (permissionError) {
+      await access.supabase.from("mindful_inventory_partners").delete().eq("id", partner.id);
+      return NextResponse.json({ error: permissionError.message }, { status: 500 });
+    }
 
     return NextResponse.json({ id: partner.id }, { status: 201 });
   } catch (error) {
@@ -70,6 +126,11 @@ export async function PATCH(request: Request) {
     const name = clean(body.name);
     if (!name) return NextResponse.json({ error: "Partner name is required." }, { status: 400 });
 
+    const capabilityIds = normalizeCapabilityIds(body.capabilityIds);
+    const capabilityValidation = await validateCapabilityIds(access, capabilityIds);
+    if (capabilityValidation.error) return NextResponse.json({ error: capabilityValidation.error }, { status: 400 });
+    const permissions = normalizePermissions(body.permissions);
+
     const now = new Date().toISOString();
     const { error: updateError } = await access.supabase
       .from("mindful_inventory_partners")
@@ -86,24 +147,22 @@ export async function PATCH(request: Request) {
       .eq("id", partnerId);
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
-    const capabilityIds = Array.isArray(body.capabilityIds) ? body.capabilityIds.map(String) : [];
     const { error: deleteCapabilitiesError } = await access.supabase
       .from("mindful_inventory_partner_capability_assignments")
       .delete()
       .eq("partner_id", partnerId);
     if (deleteCapabilitiesError) return NextResponse.json({ error: deleteCapabilitiesError.message }, { status: 500 });
 
-    if (capabilityIds.length) {
+    if (capabilityValidation.validIds.length) {
       const { error: capabilityError } = await access.supabase
         .from("mindful_inventory_partner_capability_assignments")
-        .insert(capabilityIds.map((capabilityId: string) => ({ partner_id: partnerId, capability_id: capabilityId })));
+        .insert(capabilityValidation.validIds.map((capabilityId) => ({ partner_id: partnerId, capability_id: capabilityId })));
       if (capabilityError) return NextResponse.json({ error: capabilityError.message }, { status: 500 });
     }
 
-    const permissions = { ...defaultPartnerPermissions, ...(body.permissions || {}) };
     const { error: permissionError } = await access.supabase
       .from("mindful_inventory_partner_permissions")
-      .upsert({ partner_id: partnerId, ...permissions, updated_at: now });
+      .upsert({ partner_id: partnerId, ...permissions, updated_at: now }, { onConflict: "partner_id" });
     if (permissionError) return NextResponse.json({ error: permissionError.message }, { status: 500 });
 
     return NextResponse.json({ id: partnerId });
