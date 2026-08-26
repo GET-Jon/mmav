@@ -140,9 +140,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
     }
 
     const effectiveStatus = requestedStatus || existing.status;
-    const assignmentChanged = performerKey !== undefined || resourceProvided || locationProvided;
     if (
-      assignmentChanged &&
+      (performerKey !== undefined || resourceProvided) &&
       existing.scheduled_start_at &&
       existing.scheduled_end_at &&
       !["complete", "cancelled"].includes(effectiveStatus)
@@ -158,9 +157,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
         : existing.resource_id;
 
       const checks: Array<{ field: string; id: string; label: string }> = [];
-      if (effectivePartnerId) checks.push({ field: "assigned_partner_id", id: effectivePartnerId, label: "partner" });
-      if (effectiveUserId) checks.push({ field: "assigned_user_id", id: effectiveUserId, label: "team member" });
-      if (effectiveResourceId) checks.push({ field: "resource_id", id: effectiveResourceId, label: "resource" });
+      if (performerKey !== undefined) {
+        if (effectivePartnerId) checks.push({ field: "assigned_partner_id", id: effectivePartnerId, label: "partner" });
+        if (effectiveUserId) checks.push({ field: "assigned_user_id", id: effectiveUserId, label: "team member" });
+      }
+      if (resourceProvided && effectiveResourceId) {
+        checks.push({ field: "resource_id", id: effectiveResourceId, label: "resource" });
+      }
 
       for (const check of checks) {
         const { data: conflicts, error: conflictError } = await access.supabase
