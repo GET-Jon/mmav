@@ -5,6 +5,7 @@ export type InventoryScheduleWork = {
   vehicleId: string;
   vehicleLabel: string;
   inventoryNumber: string;
+  vehiclePriority: "1" | "2" | "3";
   title: string;
   category: string;
   classification: string;
@@ -30,6 +31,11 @@ function nullableNumber(value: number | string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function priorityValue(value: unknown): "1" | "2" | "3" {
+  const normalized = String(value || "2");
+  return normalized === "1" || normalized === "3" ? normalized : "2";
+}
+
 export async function getInventorySchedule(
   supabase: SupabaseClient,
   companyId: string,
@@ -37,7 +43,7 @@ export async function getInventorySchedule(
   const [vehiclesResult, workResult, partnersResult, locationsResult, resourcesResult, membersResult] = await Promise.all([
     supabase
       .from("mindful_inventory_vehicles")
-      .select("id,stock_number,vin,year,make,model")
+      .select("id,stock_number,vin,year,make,model,priority")
       .eq("company_id", companyId),
     supabase
       .from("mindful_inventory_work_orders")
@@ -65,6 +71,7 @@ export async function getInventorySchedule(
           vehicle.stock_number ||
           (vehicle.vin ? `VIN ${String(vehicle.vin).slice(-6)}` : "Inventory vehicle"),
         label: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+        priority: priorityValue(vehicle.priority),
       },
     ]),
   );
@@ -93,6 +100,7 @@ export async function getInventorySchedule(
         vehicleId: work.vehicle_id,
         vehicleLabel: vehicle.label,
         inventoryNumber: vehicle.inventoryNumber,
+        vehiclePriority: vehicle.priority,
         title: work.title,
         category: work.category,
         classification: work.classification,
