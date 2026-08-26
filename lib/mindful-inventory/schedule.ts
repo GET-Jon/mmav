@@ -15,6 +15,8 @@ export type InventoryScheduleWork = {
   legacyDurationMinutes: number | null;
   scheduledStartAt: string | null;
   scheduledEndAt: string | null;
+  actualStartAt: string | null;
+  actualEndAt: string | null;
   assignedPartnerId: string | null;
   assignedUserId: string | null;
   performerName: string | null;
@@ -47,7 +49,7 @@ export async function getInventorySchedule(
       .eq("company_id", companyId),
     supabase
       .from("mindful_inventory_work_orders")
-      .select("id,vehicle_id,title,category,classification,status,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,assigned_partner_id,assigned_user_id,location_id,resource_id,schedule_source")
+      .select("id,vehicle_id,title,category,classification,status,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,actual_start_at,actual_end_at,assigned_partner_id,assigned_user_id,location_id,resource_id,schedule_source")
       .neq("status", "cancelled")
       .order("scheduled_start_at", { ascending: true, nullsFirst: false }),
     supabase.from("mindful_inventory_partners").select("id,name").eq("company_id", companyId),
@@ -110,6 +112,8 @@ export async function getInventorySchedule(
         legacyDurationMinutes: nullableNumber(work.estimated_duration_minutes),
         scheduledStartAt: work.scheduled_start_at,
         scheduledEndAt: work.scheduled_end_at,
+        actualStartAt: work.actual_start_at,
+        actualEndAt: work.actual_end_at,
         assignedPartnerId,
         assignedUserId,
         performerName: assignedPartnerId ? partners.get(assignedPartnerId) || "Partner" : assignedUserId ? members.get(assignedUserId) || "Mindful team member" : null,
