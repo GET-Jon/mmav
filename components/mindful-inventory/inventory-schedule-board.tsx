@@ -151,8 +151,21 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduledStartAt: new Date(localStart).toISOString() }),
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as {
+        error?: string;
+        scheduled_start_at?: string;
+        scheduled_end_at?: string;
+        status?: string;
+        schedule_source?: string;
+      };
       if (!response.ok) throw new Error(payload.error || "Failed to schedule work.");
+      setSelectedItem((current) => current && current.id === item.id ? {
+        ...current,
+        scheduledStartAt: payload.scheduled_start_at || new Date(localStart).toISOString(),
+        scheduledEndAt: payload.scheduled_end_at || current.scheduledEndAt,
+        status: payload.status || current.status,
+        scheduleSource: payload.schedule_source || current.scheduleSource,
+      } : current);
       setMessage(`${item.title} scheduled.`);
       router.refresh();
     } catch (error) {
@@ -200,6 +213,33 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     }
   }
 
+  function previewConflicts(item: InventoryScheduleWork) {
+    const localStart = starts[item.id] || localInput(item.scheduledStartAt);
+    if (!localStart) return [] as Conflict[];
+    const start = new Date(localStart);
+    if (!Number.isFinite(start.getTime())) return [] as Conflict[];
+    const durationMinutes = item.elapsedMinutes ?? item.legacyDurationMinutes ?? 60;
+    const end = new Date(start.getTime() + Math.max(1, durationMinutes) * 60_000);
+    const found: Conflict[] = [];
+
+    for (const other of work) {
+      if (other.id === item.id || other.status === "complete" || other.status === "cancelled" || !other.scheduledStartAt || !other.scheduledEndAt) continue;
+      const otherStart = new Date(other.scheduledStartAt);
+      const otherEnd = new Date(other.scheduledEndAt);
+      if (start.getTime() >= otherEnd.getTime() || end.getTime() <= otherStart.getTime()) continue;
+      if (item.assignedPartnerId && item.assignedPartnerId === other.assignedPartnerId) {
+        found.push({ itemId: item.id, otherId: other.id, kind: "performer", label: item.performerName || other.performerName || "Partner / technician" });
+      }
+      if (item.assignedUserId && item.assignedUserId === other.assignedUserId) {
+        found.push({ itemId: item.id, otherId: other.id, kind: "performer", label: item.performerName || other.performerName || "Team member" });
+      }
+      if (item.resourceId && item.resourceId === other.resourceId) {
+        found.push({ itemId: item.id, otherId: other.id, kind: "resource", label: item.resourceName || other.resourceName || "Resource" });
+      }
+    }
+    return found;
+  }
+
   function WorkCard({ item, compact = false }: { item: InventoryScheduleWork; compact?: boolean }) {
     const elapsed = item.elapsedMinutes ?? item.legacyDurationMinutes;
     const itemConflicts = conflictsByItem.get(item.id) || [];
@@ -216,7 +256,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     </button>;
   }
 
-  const selectedConflicts = selectedItem ? conflictsByItem.get(selectedItem.id) || [] : [];
+  const selectedConflicts = selectedItem ? previewConflicts(selectedItem) : [];
   const selectedElapsed = selectedItem ? selectedItem.elapsedMinutes ?? selectedItem.legacyDurationMinutes : null;
   const selectedResources = selectedItem?.locationId ? resourceOptions.filter((resource) => resource.locationId === selectedItem.locationId) : [];
 
