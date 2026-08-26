@@ -101,7 +101,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         const b = scheduledActive[j];
         if (!overlaps(a, b)) continue;
         if (a.assignedPartnerId && a.assignedPartnerId === b.assignedPartnerId) {
-          const label = a.performerName || b.performerName || "Partner";
+          const label = a.performerName || b.performerName || "Partner / technician";
           found.push({ itemId: a.id, otherId: b.id, kind: "performer", label }, { itemId: b.id, otherId: a.id, kind: "performer", label });
         }
         if (a.assignedUserId && a.assignedUserId === b.assignedUserId) {
@@ -221,7 +221,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           <div>
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Operations Schedule</div>
             <h1 className="mt-1 text-2xl font-black text-slate-950">Resource planning across every car</h1>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, assignment gaps, calendar occupancy, and labor load in one place. Click a job to edit its execution details without leaving this board.</p>
+            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">See conflicts, missing schedule information, calendar occupancy, and labor load in one place. Click a job to edit its execution details without leaving this board.</p>
           </div>
           <div className="grid min-w-[420px] grid-cols-4 gap-2">
             <div className="rounded-xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-black uppercase text-slate-400">Active Work</div><div className="mt-1 text-lg font-black">{active.length}</div></div>
@@ -231,21 +231,21 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {(["all", "conflicts", "gaps"] as ViewMode[]).map((mode) => <button key={mode} onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>{mode === "all" ? "All Work" : mode === "conflicts" ? `Conflicts (${conflictItemCount})` : `Scheduling Gaps (${gapItemIds.size})`}</button>)}
-          <span className="ml-1 text-xs font-bold text-slate-400">{unassigned.length} unassigned · {locationTbd.length} location TBD</span>
+          {(["all", "conflicts", "gaps"] as ViewMode[]).map((mode) => <button key={mode} onClick={() => setViewMode(mode)} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === mode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>{mode === "all" ? "All Work" : mode === "conflicts" ? `Conflicts (${conflictItemCount})` : `Missing Info (${gapItemIds.size})`}</button>)}
+          <span className="ml-1 text-xs font-bold text-slate-400">{unassigned.length} need partner / technician · {locationTbd.length} need location</span>
         </div>
         {message && !selectedItem ? <div className={`mt-3 rounded-xl px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"}`}>{message}</div> : null}
       </section>
 
-      {conflictItemCount > 0 ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
-        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-600">Conflict audit</div>
-        <div className="mt-1 text-base font-black text-red-950">Existing overlaps need attention</div>
-        <p className="mt-1 text-sm font-semibold text-red-800">These can include legacy suggested schedules created before conflict enforcement. Click a job to fix the assignment or timing here.</p>
-        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+      {conflictItemCount > 0 ? <section className="rounded-xl border border-red-200 bg-red-50/70 px-3 py-2.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-[0.1em] text-red-600">Schedule conflicts</span>
+          <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-black text-red-700">{conflictItemCount} need attention</span>
           {Array.from(conflictsByItem.entries()).map(([itemId, itemConflicts]) => {
             const item = work.find((entry) => entry.id === itemId);
             if (!item) return null;
-            return <button type="button" key={itemId} onClick={() => openItem(item)} className="rounded-xl border border-red-200 bg-white px-3 py-3 text-left hover:border-red-400"><div className="text-sm font-black text-slate-950">{item.vehicleLabel} · {item.title}</div><div className="mt-1 text-xs font-bold text-red-700">{Array.from(new Set(itemConflicts.map((conflict) => `${conflict.kind === "performer" ? "Performer" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></button>;
+            const issueLabel = Array.from(new Set(itemConflicts.map((conflict) => `${conflict.kind === "performer" ? "Partner / technician" : "Resource"}: ${conflict.label}`))).join(" · ");
+            return <button type="button" key={itemId} onClick={() => openItem(item)} className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-left text-xs font-black text-red-800 hover:border-red-400"><span className="text-slate-900">{item.vehicleLabel} · {item.title}</span><span className="ml-1 font-bold text-red-600">— {issueLabel}</span></button>;
           })}
         </div>
       </section> : null}
@@ -269,12 +269,12 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
                 {items.map((item) => {
                   const elapsed = item.elapsedMinutes ?? item.legacyDurationMinutes;
                   const itemConflicts = conflictsByItem.get(item.id) || [];
-                  const hasGap = !item.performerName || !item.locationId;
-                  return <button type="button" key={item.id} onClick={() => openItem(item)} className={`block w-full rounded-xl border bg-white p-3 text-left shadow-sm transition ${itemConflicts.length ? "border-red-300 ring-1 ring-red-100 hover:border-red-500" : hasGap ? "border-amber-300 hover:border-amber-500" : "border-slate-200 hover:border-slate-400"}`}>
-                    <div className="flex items-center justify-between gap-2"><div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{new Date(item.scheduledStartAt!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>{itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : hasGap ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Gap</span> : null}</div>
+                  const hasMissingInfo = !item.performerName || !item.locationId;
+                  return <button type="button" key={item.id} onClick={() => openItem(item)} className={`block w-full rounded-xl border bg-white p-3 text-left shadow-sm transition ${itemConflicts.length ? "border-red-300 ring-1 ring-red-100 hover:border-red-500" : hasMissingInfo ? "border-amber-300 hover:border-amber-500" : "border-slate-200 hover:border-slate-400"}`}>
+                    <div className="flex items-center justify-between gap-2"><div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{new Date(item.scheduledStartAt!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>{itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : hasMissingInfo ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Missing info</span> : null}</div>
                     <div className="mt-1 text-xs font-black text-slate-950">{item.inventoryNumber} · {item.vehicleLabel}</div>
                     <div className="mt-1 text-sm font-black text-slate-800">{item.title}</div>
-                    <div className="mt-2 text-[10px] font-bold text-slate-500">{item.performerName || "Performer TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}{item.resourceName ? ` · ${item.resourceName}` : ""}</div>
+                    <div className="mt-2 text-[10px] font-bold text-slate-500">{item.performerName || "Partner / technician TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}{item.resourceName ? ` · ${item.resourceName}` : ""}</div>
                     <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black"><span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Labor {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Turn {hours(elapsed)}</span></div>
                   </button>;
                 })}
@@ -291,7 +291,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           {unscheduled.filter(visible).map((item) => {
             const elapsed = item.elapsedMinutes ?? item.legacyDurationMinutes;
             return <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-              <div><button type="button" onClick={() => openItem(item)} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</button><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-2 text-xs font-bold text-slate-500">{item.performerName || "Performer TBD"} · {item.locationName || "Location TBD"} · Labor {hours(item.laborMinutes)} · Turn {hours(elapsed)}</div></div>
+              <div><button type="button" onClick={() => openItem(item)} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</button><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-2 text-xs font-bold text-slate-500">{item.performerName || "Partner / technician TBD"} · {item.locationName || "Location TBD"} · Labor {hours(item.laborMinutes)} · Turn {hours(elapsed)}</div></div>
               <button type="button" onClick={() => openItem(item)} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700">Edit & schedule</button>
             </div>;
           })}
@@ -307,7 +307,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           </div>
 
           <div className="space-y-4 p-5">
-            {selectedConflicts.length ? <div className="rounded-xl border border-red-200 bg-red-50 p-3"><div className="text-[10px] font-black uppercase text-red-600">Conflict</div><div className="mt-1 text-sm font-black text-red-900">{Array.from(new Set(selectedConflicts.map((conflict) => `${conflict.kind === "performer" ? "Performer" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></div> : null}
+            {selectedConflicts.length ? <div className="rounded-xl border border-red-200 bg-red-50 p-3"><div className="text-[10px] font-black uppercase text-red-600">Conflict</div><div className="mt-1 text-sm font-black text-red-900">{Array.from(new Set(selectedConflicts.map((conflict) => `${conflict.kind === "performer" ? "Partner / technician" : "Resource"}: ${conflict.label}`))).join(" · ")}</div></div> : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Workload</div><div className="mt-1 text-sm font-black text-slate-900">Labor {hours(selectedItem.laborMinutes)} · Turn {hours(selectedElapsed)}</div></div>
@@ -317,7 +317,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Execution assignment</div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Performer</div><select disabled={workingId === selectedItem.id} value={performerKey(selectedItem)} onChange={(event) => void patchItem(selectedItem, { performerKey: event.target.value }, "Performer updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter((option) => option.type === "partner").map((option) => <option key={option.key} value={option.key}>{option.displayName}{option.secondaryLabel ? ` · ${option.secondaryLabel}` : ""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter((option) => option.type === "internal").map((option) => <option key={option.key} value={option.key}>{option.displayName}</option>)}</optgroup></select></label>
+                <label><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Partner / technician</div><select disabled={workingId === selectedItem.id} value={performerKey(selectedItem)} onChange={(event) => void patchItem(selectedItem, { performerKey: event.target.value }, "Assignment updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter((option) => option.type === "partner").map((option) => <option key={option.key} value={option.key}>{option.displayName}{option.secondaryLabel ? ` · ${option.secondaryLabel}` : ""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter((option) => option.type === "internal").map((option) => <option key={option.key} value={option.key}>{option.displayName}</option>)}</optgroup></select></label>
                 <label><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Location</div><select disabled={workingId === selectedItem.id} value={selectedItem.locationId || ""} onChange={(event) => void patchItem(selectedItem, { locationId: event.target.value || null }, "Location updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="">Location TBD</option>{locationOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
                 <label className="sm:col-span-2"><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Resource / bay</div><select disabled={workingId === selectedItem.id || !selectedItem.locationId} value={selectedItem.resourceId || ""} onChange={(event) => void patchItem(selectedItem, { resourceId: event.target.value || null }, "Resource updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="">No resource</option>{selectedResources.map((option) => <option key={option.id} value={option.id}>{option.name} · {labelize(option.resourceType)}</option>)}</select></label>
               </div>
@@ -332,7 +332,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-            <div className="text-xs font-semibold text-slate-500">Performer, location, resource, status, and timing can now be managed here.</div>
+            <div className="text-xs font-semibold text-slate-500">Partner / technician, location, resource, status, and timing can be managed here.</div>
             <Link href={`/mindful/inventory/${selectedItem.vehicleId}/work`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">Open full Active Work →</Link>
           </div>
         </div>
