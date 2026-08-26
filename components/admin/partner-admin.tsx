@@ -39,6 +39,7 @@ const permissionGroups: Array<{ title: string; items: Array<[keyof AdminPartnerP
   { title: "Scheduling", items: [["reschedule_work", "Reschedule assigned work"]] },
 ];
 
+const permissionKeys = permissionGroups.flatMap((group) => group.items.map(([key]) => key));
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-slate-500";
 
 function fromPartner(partner: AdminPartner): Draft {
@@ -63,11 +64,22 @@ export function PartnerAdmin({ partners, capabilities }: Props) {
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active");
 
   const filtered = useMemo(() => partners.filter((partner) => filter === "all" || (filter === "active" ? partner.active : !partner.active)), [partners, filter]);
+  const allPermissionsSelected = permissionKeys.every((key) => draft.permissions[key]);
 
   function edit(partner: AdminPartner) {
     setDraft(fromPartner(partner));
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function setAllPermissions(value: boolean) {
+    setDraft((current) => ({
+      ...current,
+      permissions: permissionKeys.reduce(
+        (next, key) => ({ ...next, [key]: value }),
+        { ...current.permissions },
+      ),
+    }));
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -153,7 +165,10 @@ export function PartnerAdmin({ partners, capabilities }: Props) {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="font-black text-slate-950">Partner Permissions</h3><p className="mt-1 text-sm text-slate-500">What this partner can do when partner access is enabled.</p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><h3 className="font-black text-slate-950">Partner Permissions</h3><p className="mt-1 text-sm text-slate-500">What this partner can do when partner access is enabled.</p></div>
+            <button type="button" onClick={() => setAllPermissions(!allPermissionsSelected)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-slate-400">{allPermissionsSelected ? "Clear All" : "Select All"}</button>
+          </div>
           <div className="mt-4 grid gap-5 lg:grid-cols-2">{permissionGroups.map((group) => <div key={group.title}><div className="mb-2 text-xs font-black uppercase tracking-[0.08em] text-slate-400">{group.title}</div><div className="space-y-2">{group.items.map(([key, label]) => <label key={key} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-700"><span>{label}</span><input type="checkbox" checked={draft.permissions[key]} onChange={(event) => setDraft((current) => ({ ...current, permissions: { ...current.permissions, [key]: event.target.checked } }))} /></label>)}</div></div>)}</div>
         </section>
 
