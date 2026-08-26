@@ -190,7 +190,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
       .from("mindful_inventory_work_orders")
       .update(patch)
       .eq("id", workOrderId)
-      .select("id,status,vehicle_id,assigned_partner_id,assigned_user_id,location_id,resource_id")
+      .select("id,status,vehicle_id,assigned_partner_id,assigned_user_id,location_id,resource_id,actual_start_at,actual_end_at")
       .single();
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
@@ -254,6 +254,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
       assignedUserId: updated.assigned_user_id,
       locationId: updated.location_id,
       resourceId: updated.resource_id,
+      actualStartAt: updated.actual_start_at,
+      actualEndAt: updated.actual_end_at,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update Work Order." }, { status: 500 });
