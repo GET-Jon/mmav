@@ -25,6 +25,9 @@ export type InventoryWorkOrderView = {
   estimatedElapsedMinutes: number | null;
   scheduledStartAt: string | null;
   scheduledEndAt: string | null;
+  proposedStartAt: string | null;
+  proposedEndAt: string | null;
+  partnerConfirmationStatus: "awaiting_partner" | "confirmed" | "declined" | null;
   scheduleSource: "suggested" | "manual" | null;
   actualStartAt: string | null;
   actualEndAt: string | null;
@@ -35,6 +38,8 @@ export type InventoryWorkOrderView = {
   assignedUserId: string | null;
   performerName: string | null;
   performerType: "partner" | "internal" | null;
+  partnerEmail: string | null;
+  partnerSchedulingMode: string | null;
   locationId: string | null;
   locationName: string | null;
   resourceId: string | null;
@@ -110,9 +115,10 @@ export async function getInventoryActiveWork(
 
   const { data, error } = await supabase
     .from("mindful_inventory_work_orders")
-    .select("id,vehicle_id,plan_item_id,plan_version_id,title,description,category,classification,status,blocker_reason,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,schedule_source,actual_start_at,actual_end_at,approved_budget,current_forecast,actual_cost,assigned_partner_id,assigned_user_id,location_id,resource_id,created_at,updated_at")
+    .select("id,vehicle_id,plan_item_id,plan_version_id,title,description,category,classification,status,blocker_reason,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source,actual_start_at,actual_end_at,approved_budget,current_forecast,actual_cost,assigned_partner_id,assigned_user_id,location_id,resource_id,created_at,updated_at")
     .eq("vehicle_id", vehicleId)
     .order("scheduled_start_at", { ascending: true, nullsFirst: false })
+    .order("proposed_start_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
 
@@ -122,7 +128,9 @@ export async function getInventoryActiveWork(
   const assignedUserIds = new Set((data || []).map((row) => row.assigned_user_id).filter(Boolean) as string[]);
 
   const [partnersResult, locationsResult, resourcesResult, membersResult] = await Promise.all([
-    partnerIds.length ? supabase.from("mindful_inventory_partners").select("id,name,company_name").in("id", partnerIds) : Promise.resolve({ data: [], error: null }),
+    partnerIds.length
+      ? supabase.from("mindful_inventory_partners").select("id,name,company_name,email,scheduling_mode").in("id", partnerIds)
+      : Promise.resolve({ data: [], error: null }),
     locationIds.length ? supabase.from("mindful_inventory_locations").select("id,name").in("id", locationIds) : Promise.resolve({ data: [], error: null }),
     resourceIds.length ? supabase.from("mindful_inventory_resources").select("id,name").in("id", resourceIds) : Promise.resolve({ data: [], error: null }),
     supabase.rpc("get_inventory_company_members", { requested_company_id: vehicle.company_id }),
@@ -133,7 +141,11 @@ export async function getInventoryActiveWork(
   if (resourcesResult.error) throw new Error(resourcesResult.error.message);
   if (membersResult.error) throw new Error(membersResult.error.message);
 
-  const partners = new Map((partnersResult.data || []).map((row) => [row.id, row.company_name ? `${row.name} · ${row.company_name}` : row.name]));
+  const partners = new Map((partnersResult.data || []).map((row) => [row.id, {
+    name: row.company_name ? `${row.name} · ${row.company_name}` : row.name,
+    email: row.email || null,
+    schedulingMode: row.scheduling_mode || null,
+  }]));
   const locations = new Map((locationsResult.data || []).map((row) => [row.id, row.name]));
   const resources = new Map((resourcesResult.data || []).map((row) => [row.id, row.name]));
   const members = new Map(
@@ -143,7 +155,7 @@ export async function getInventoryActiveWork(
   );
 
   return (data || []).map((row) => {
-    const partnerName = row.assigned_partner_id ? partners.get(row.assigned_partner_id) || null : null;
+    const partner = row.assigned_partner_id ? partners.get(row.assigned_partner_id) || null : null;
     const userName = row.assigned_user_id ? members.get(row.assigned_user_id) || null : null;
     return {
       id: row.id,
@@ -161,6 +173,9 @@ export async function getInventoryActiveWork(
       estimatedElapsedMinutes: nullableNumber(row.estimated_elapsed_minutes),
       scheduledStartAt: row.scheduled_start_at,
       scheduledEndAt: row.scheduled_end_at,
+      proposedStartAt: row.proposed_start_at,
+      proposedEndAt: row.proposed_end_at,
+      partnerConfirmationStatus: row.partner_confirmation_status as InventoryWorkOrderView["partnerConfirmationStatus"],
       scheduleSource: row.schedule_source as "suggested" | "manual" | null,
       actualStartAt: row.actual_start_at,
       actualEndAt: row.actual_end_at,
@@ -169,8 +184,10 @@ export async function getInventoryActiveWork(
       actualCost: nullableNumber(row.actual_cost),
       assignedPartnerId: row.assigned_partner_id,
       assignedUserId: row.assigned_user_id,
-      performerName: partnerName || userName,
-      performerType: partnerName ? "partner" : userName ? "internal" : null,
+      performerName: partner?.name || userName,
+      performerType: partner ? "partner" : userName ? "internal" : null,
+      partnerEmail: partner?.email || null,
+      partnerSchedulingMode: partner?.schedulingMode || null,
       locationId: row.location_id,
       locationName: row.location_id ? locations.get(row.location_id) || null : null,
       resourceId: row.resource_id,
