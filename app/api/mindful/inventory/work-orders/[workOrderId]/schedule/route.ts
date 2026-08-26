@@ -58,14 +58,29 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
     const now = new Date().toISOString();
     const { data: updated, error: updateError } = await access.supabase
       .from("mindful_inventory_work_orders")
-      .update({ scheduled_start_at: start.toISOString(), scheduled_end_at: end.toISOString(), schedule_source: "manual", status: existing.status === "complete" ? "complete" : "scheduled", updated_by: access.userId, updated_at: now })
+      .update({
+        scheduled_start_at: start.toISOString(),
+        scheduled_end_at: end.toISOString(),
+        proposed_start_at: null,
+        proposed_end_at: null,
+        partner_confirmation_status: existing.assigned_partner_id ? "confirmed" : null,
+        schedule_source: "manual",
+        status: existing.status === "complete" ? "complete" : "scheduled",
+        updated_by: access.userId,
+        updated_at: now,
+      })
       .eq("id", workOrderId)
       .select("id,scheduled_start_at,scheduled_end_at,status,schedule_source")
       .single();
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
     await access.supabase.from("mindful_inventory_history").insert({
-      company_id: access.company.companyId, vehicle_id: existing.vehicle_id, event_type: "work_order_scheduled", entity_type: "work_order", entity_id: workOrderId, actor_user_id: access.userId,
+      company_id: access.company.companyId,
+      vehicle_id: existing.vehicle_id,
+      event_type: "work_order_scheduled",
+      entity_type: "work_order",
+      entity_id: workOrderId,
+      actor_user_id: access.userId,
       summary: "Work Order schedule manually set or adjusted.",
       metadata: { scheduledStartAt: updated.scheduled_start_at, scheduledEndAt: updated.scheduled_end_at, elapsedMinutes: safeDuration, scheduleSource: "manual" },
     });
