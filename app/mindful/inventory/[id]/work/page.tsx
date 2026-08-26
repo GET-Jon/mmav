@@ -24,6 +24,14 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
   return (
     <InventoryActiveWork
       vehicleId={vehicle.id}
+      vehicle={{
+        year: vehicle.year,
+        make: vehicle.make,
+        model: vehicle.model,
+        trim: vehicle.trim,
+        vin: vehicle.vin,
+        stockNumber: vehicle.stockNumber,
+      }}
       workOrders={workOrders}
       performerOptions={performerOptions}
       locationOptions={schedulingOptions.locations}
