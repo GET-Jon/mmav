@@ -18,6 +18,11 @@ function hours(minutes: number | null) {
   if (minutes === null) return "—";
   return `${Math.round((minutes / 60) * 10) / 10} hr`;
 }
+function durationLabel(minutes: number) {
+  if (minutes < 60) return `${Math.max(1, Math.round(minutes))} min`;
+  const rounded = Math.round((minutes / 60) * 10) / 10;
+  return `${rounded} hr`;
+}
 function startOfWeek(offset: number) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -52,14 +57,56 @@ function performerKey(item: InventoryScheduleWork) {
 }
 
 type Conflict = { itemId: string; otherId: string; kind: "performer" | "resource"; label: string };
-type ViewMode = "all" | "conflicts" | "gaps";
+type ViewMode = "all" | "conflicts" | "gaps" | "late";
 type LayoutMode = "calendar" | "technicians" | "resources";
+type ScheduleHealth = null | {
+  level: "late_start" | "running_late" | "overdue";
+  label: string;
+};
 type Props = {
   work: InventoryScheduleWork[];
   performerOptions: InventoryPerformerOption[];
   locationOptions: InventorySchedulingLocationOption[];
   resourceOptions: InventorySchedulingResourceOption[];
 };
+
+const START_GRACE_MINUTES = 30;
+const SERIOUS_OVERDUE_EXTRA_MINUTES = 60;
+
+function getScheduleHealth(item: InventoryScheduleWork, nowMs: number): ScheduleHealth {
+  if (!item.scheduledStartAt || item.status === "complete" || item.status === "cancelled") return null;
+
+  const durationMinutes = Math.max(1, item.elapsedMinutes ?? item.legacyDurationMinutes ?? 60);
+
+  if (item.status === "in_progress" && item.actualStartAt) {
+    const actualStart = new Date(item.actualStartAt).getTime();
+    if (!Number.isFinite(actualStart)) return null;
+    const expectedFinish = actualStart + durationMinutes * 60_000;
+    const finishBufferMinutes = Math.max(30, Math.round(durationMinutes * 0.15));
+    const lateMinutes = Math.floor((nowMs - expectedFinish) / 60_000);
+    if (lateMinutes > finishBufferMinutes + SERIOUS_OVERDUE_EXTRA_MINUTES) {
+      return { level: "overdue", label: `${durationLabel(lateMinutes)} past expected finish` };
+    }
+    if (lateMinutes > finishBufferMinutes) {
+      return { level: "running_late", label: `${durationLabel(lateMinutes)} past expected finish` };
+    }
+    return null;
+  }
+
+  if (item.status !== "in_progress" && !item.actualStartAt) {
+    const scheduledStart = new Date(item.scheduledStartAt).getTime();
+    if (!Number.isFinite(scheduledStart)) return null;
+    const lateMinutes = Math.floor((nowMs - scheduledStart) / 60_000);
+    if (lateMinutes > START_GRACE_MINUTES + SERIOUS_OVERDUE_EXTRA_MINUTES) {
+      return { level: "overdue", label: `${durationLabel(lateMinutes)} late to start` };
+    }
+    if (lateMinutes > START_GRACE_MINUTES) {
+      return { level: "late_start", label: `${durationLabel(lateMinutes)} late to start` };
+    }
+  }
+
+  return null;
+}
 
 export function InventoryScheduleBoard({ work, performerOptions, locationOptions, resourceOptions }: Props) {
   const router = useRouter();
@@ -71,11 +118,17 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("calendar");
   const [selectedItem, setSelectedItem] = useState<InventoryScheduleWork | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     setScheduleWork(work);
     setSelectedItem((current) => current ? work.find((item) => item.id === current.id) || current : current);
   }, [work]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const weekStart = useMemo(() => startOfWeek(weekOffset), [weekOffset]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => {
@@ -88,12 +141,14 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     end.setHours(23, 59, 59, 999);
     return end;
   }, [days]);
-  const today = dayKey(new Date());
+  const today = dayKey(new Date(nowMs));
 
   const active = scheduleWork.filter((item) => item.status !== "complete" && item.status !== "cancelled");
   const unscheduled = active.filter((item) => !item.scheduledStartAt).sort((a, b) => Number(a.vehiclePriority) - Number(b.vehiclePriority));
   const unassigned = active.filter((item) => !item.performerName);
   const locationTbd = active.filter((item) => !item.locationId);
+  const behindSchedule = active.filter((item) => getScheduleHealth(item, nowMs));
+  const hasSeriouslyOverdue = behindSchedule.some((item) => getScheduleHealth(item, nowMs)?.level === "overdue");
   const weekWork = scheduleWork.filter((item) => {
     if (!item.scheduledStartAt || item.status === "cancelled") return false;
     const when = new Date(item.scheduledStartAt).getTime();
@@ -136,6 +191,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     if (item.status === "complete") return viewMode === "all";
     if (viewMode === "conflicts") return conflictsByItem.has(item.id);
     if (viewMode === "gaps") return gapItemIds.has(item.id);
+    if (viewMode === "late") return Boolean(getScheduleHealth(item, nowMs));
     return true;
   }
   function openItem(item: InventoryScheduleWork) {
@@ -177,6 +233,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         status: payload.status || current.status,
         scheduleSource: payload.schedule_source || current.scheduleSource,
       }));
+      setNowMs(Date.now());
       setMessage(`${item.title} scheduled.`);
       router.refresh();
     } catch (error) {
@@ -196,7 +253,14 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         body: JSON.stringify(body),
       });
       const payload = (await response.json()) as {
-        error?: string; status?: string; assignedPartnerId?: string | null; assignedUserId?: string | null; locationId?: string | null; resourceId?: string | null;
+        error?: string;
+        status?: string;
+        assignedPartnerId?: string | null;
+        assignedUserId?: string | null;
+        locationId?: string | null;
+        resourceId?: string | null;
+        actualStartAt?: string | null;
+        actualEndAt?: string | null;
       };
       if (!response.ok) throw new Error(payload.error || "Failed to update Work Order.");
       replaceLocalItem(item.id, (current) => {
@@ -206,6 +270,8 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         if (Object.prototype.hasOwnProperty.call(payload, "assignedUserId")) next.assignedUserId = payload.assignedUserId ?? null;
         if (Object.prototype.hasOwnProperty.call(payload, "locationId")) next.locationId = payload.locationId ?? null;
         if (Object.prototype.hasOwnProperty.call(payload, "resourceId")) next.resourceId = payload.resourceId ?? null;
+        if (Object.prototype.hasOwnProperty.call(payload, "actualStartAt")) next.actualStartAt = payload.actualStartAt ?? null;
+        if (Object.prototype.hasOwnProperty.call(payload, "actualEndAt")) next.actualEndAt = payload.actualEndAt ?? null;
         const performer = next.assignedPartnerId
           ? performerOptions.find((option) => option.type === "partner" && option.id === next.assignedPartnerId)
           : next.assignedUserId ? performerOptions.find((option) => option.type === "internal" && option.id === next.assignedUserId) : null;
@@ -214,6 +280,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         next.resourceName = next.resourceId ? resourceOptions.find((option) => option.id === next.resourceId)?.name || null : null;
         return next;
       });
+      setNowMs(Date.now());
       setMessage(success);
       router.refresh();
     } catch (error) {
@@ -255,13 +322,34 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     const itemConflicts = conflictsByItem.get(item.id) || [];
     const missing = !item.performerName || !item.locationId;
     const complete = item.status === "complete";
-    return <button type="button" onClick={() => openItem(item)} className={`block w-full rounded-xl border bg-white text-left shadow-sm transition ${compact ? "p-2.5" : "p-3"} ${complete ? "border-slate-200 opacity-45 hover:opacity-70" : itemConflicts.length ? "border-red-300 ring-1 ring-red-100 hover:border-red-500" : missing ? "border-amber-300 hover:border-amber-500" : "border-slate-200 hover:border-slate-400"}`}>
-      <div className="flex items-center justify-between gap-2">
+    const health = getScheduleHealth(item, nowMs);
+    const borderClass = complete
+      ? "border-slate-200 opacity-45 hover:opacity-70"
+      : itemConflicts.length
+        ? "border-red-300 ring-1 ring-red-100 hover:border-red-500"
+        : health?.level === "overdue"
+          ? "border-red-400 bg-red-50/40 ring-1 ring-red-100 hover:border-red-500"
+          : health?.level === "running_late"
+            ? "border-orange-300 bg-orange-50/40 ring-1 ring-orange-100 hover:border-orange-500"
+            : health?.level === "late_start"
+              ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-100 hover:border-amber-500"
+              : missing
+                ? "border-amber-300 hover:border-amber-500"
+                : "border-slate-200 hover:border-slate-400";
+
+    return <button type="button" onClick={() => openItem(item)} className={`block w-full rounded-xl border bg-white text-left shadow-sm transition ${compact ? "p-2.5" : "p-3"} ${borderClass}`}>
+      <div className="flex items-start justify-between gap-2">
         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.scheduledStartAt ? new Date(item.scheduledStartAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "Unscheduled"}</div>
-        {complete ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">Complete</span> : itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : missing ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Missing info</span> : null}
+        <div className="flex flex-wrap justify-end gap-1">
+          {complete ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">Complete</span> : null}
+          {itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : null}
+          {!complete && health ? <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${health.level === "overdue" ? "bg-red-100 text-red-700" : health.level === "running_late" ? "bg-orange-100 text-orange-800" : "bg-amber-100 text-amber-800"}`}>{health.level === "late_start" ? "Late start" : health.level === "running_late" ? "Running late" : "Overdue"}</span> : null}
+          {!complete && !itemConflicts.length && !health && missing ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Missing info</span> : null}
+        </div>
       </div>
       <div className="mt-1 text-xs font-black text-slate-950">{item.inventoryNumber} · {item.vehicleLabel}</div>
       <div className="mt-1 text-sm font-black text-slate-800">{item.title}</div>
+      {health ? <div className={`mt-2 text-[10px] font-black ${health.level === "overdue" ? "text-red-700" : health.level === "running_late" ? "text-orange-700" : "text-amber-700"}`}>{health.label}</div> : null}
       {!compact ? <><div className="mt-2 text-[10px] font-bold text-slate-500">{item.performerName || "Partner / technician TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}{item.resourceName ? ` · ${item.resourceName}` : ""}</div><div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black"><span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Labor {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Turn {hours(elapsed)}</span></div></> : null}
     </button>;
   }
@@ -269,6 +357,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   const selectedConflicts = selectedItem ? previewConflicts(selectedItem) : [];
   const selectedElapsed = selectedItem ? selectedItem.elapsedMinutes ?? selectedItem.legacyDurationMinutes : null;
   const selectedResources = selectedItem?.locationId ? resourceOptions.filter((resource) => resource.locationId === selectedItem.locationId) : [];
+  const selectedHealth = selectedItem ? getScheduleHealth(selectedItem, nowMs) : null;
 
   return <div className="space-y-5">
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -278,6 +367,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setViewMode("all")} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === "all" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>All Work ({active.length})</button>
         <button type="button" onClick={() => setViewMode("conflicts")} className={`rounded-full px-3 py-1.5 text-xs font-black ${conflictItemCount > 0 ? viewMode === "conflicts" ? "bg-red-700 text-white" : "bg-red-100 text-red-700" : viewMode === "conflicts" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Conflicts ({conflictItemCount})</button>
+        <button type="button" onClick={() => setViewMode("late")} className={`rounded-full px-3 py-1.5 text-xs font-black ${behindSchedule.length > 0 ? viewMode === "late" ? hasSeriouslyOverdue ? "bg-red-700 text-white" : "bg-amber-600 text-white" : hasSeriouslyOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800" : viewMode === "late" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Behind Schedule ({behindSchedule.length})</button>
         <button type="button" onClick={() => setViewMode("gaps")} className={`rounded-full px-3 py-1.5 text-xs font-black ${gapItemIds.size > 0 ? viewMode === "gaps" ? "bg-amber-600 text-white" : "bg-amber-100 text-amber-800" : viewMode === "gaps" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Missing Info ({gapItemIds.size})</button>
         <button type="button" onClick={scrollToUnscheduled} className={`rounded-full px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500"}`}>Unscheduled ({unscheduled.length})</button>
       </div>
@@ -343,7 +433,8 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Schedule item editor</div><h2 className="mt-1 text-xl font-black text-slate-950">{selectedItem.title}</h2><div className="mt-1 text-sm font-bold text-slate-500">{selectedItem.inventoryNumber} · {selectedItem.vehicleLabel}</div></div><button type="button" onClick={() => setSelectedItem(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-black text-slate-500">Close</button></div>
         <div className="space-y-4 p-5">
           {selectedConflicts.length ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-black text-red-900">Conflict: {Array.from(new Set(selectedConflicts.map((conflict) => `${conflict.kind === "performer" ? "Partner / technician" : "Resource"}: ${conflict.label}`))).join(" · ")}</div> : null}
-          <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Workload</div><div className="mt-1 text-sm font-black text-slate-900">Labor {hours(selectedItem.laborMinutes)} · Turn {hours(selectedElapsed)}</div></div><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Status</div><div className="mt-1 text-sm font-black text-slate-900">{labelize(selectedItem.status)}</div></div></div>
+          {selectedHealth ? <div className={`rounded-xl border p-3 text-sm font-black ${selectedHealth.level === "overdue" ? "border-red-200 bg-red-50 text-red-900" : selectedHealth.level === "running_late" ? "border-orange-200 bg-orange-50 text-orange-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{selectedHealth.level === "late_start" ? "Late start" : selectedHealth.level === "running_late" ? "Running late" : "Overdue"}: {selectedHealth.label}</div> : null}
+          <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Workload</div><div className="mt-1 text-sm font-black text-slate-900">Labor {hours(selectedItem.laborMinutes)} · Turn {hours(selectedElapsed)}</div></div><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Status</div><div className="mt-1 text-sm font-black text-slate-900">{labelize(selectedItem.status)}</div>{selectedItem.actualStartAt ? <div className="mt-1 text-[10px] font-bold text-slate-500">Started {new Date(selectedItem.actualStartAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div> : null}</div></div>
           <div className="rounded-xl border border-slate-200 p-4"><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Execution assignment</div><div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Partner / technician</div><select disabled={workingId === selectedItem.id} value={performerKey(selectedItem)} onChange={(event) => void patchItem(selectedItem, { performerKey: event.target.value }, "Assignment updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter((option) => option.type === "partner").map((option) => <option key={option.key} value={option.key}>{option.displayName}{option.secondaryLabel ? ` · ${option.secondaryLabel}` : ""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter((option) => option.type === "internal").map((option) => <option key={option.key} value={option.key}>{option.displayName}</option>)}</optgroup></select></label>
             <label><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Location</div><select disabled={workingId === selectedItem.id} value={selectedItem.locationId || ""} onChange={(event) => void patchItem(selectedItem, { locationId: event.target.value || null }, "Location updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="">Location TBD</option>{locationOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
@@ -354,7 +445,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           {selectedItem.status === "in_progress" ? <button type="button" disabled={workingId === selectedItem.id} onClick={() => void patchItem(selectedItem, { status: "complete" }, "Work completed.")} className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800">Mark Complete</button> : null}
           {message ? <div className={`rounded-lg px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</div> : null}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><div className="text-xs font-semibold text-slate-500">Start/complete actions are explicit. Role-based responsibility for those actions can be tightened when partner workflows are added.</div><Link href={`/mindful/inventory/${selectedItem.vehicleId}/work`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">Open full Active Work →</Link></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><div className="text-xs font-semibold text-slate-500">Schedule health updates visually before notifications. Start/complete responsibility can be tightened when partner workflows are added.</div><Link href={`/mindful/inventory/${selectedItem.vehicleId}/work`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">Open full Active Work →</Link></div>
       </div>
     </div> : null}
   </div>;
