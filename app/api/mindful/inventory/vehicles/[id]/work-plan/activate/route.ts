@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryCarPlanData } from "@/lib/mindful-inventory/car-plan";
 import { getInventoryPerformerOptions, suggestedPerformerForWork } from "@/lib/mindful-inventory/performers";
+import { defaultPartnerStandardHours, type PartnerStandardHours } from "@/lib/admin/partners";
 
 const COMPANY_TIME_ZONE = "America/New_York";
+const dayKeyByWeekday: Record<string, keyof PartnerStandardHours> = { Mon: "mon", Tue: "tue", Wed: "wed", Thu: "thu", Fri: "fri", Sat: "sat", Sun: "sun" };
 
 function zonedParts(date: Date, timeZone = COMPANY_TIME_ZONE) {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(date);
@@ -21,29 +23,51 @@ function localToUtc(year: number, month: number, day: number, hour: number, minu
   }
   return guess;
 }
-function nextBusinessMorning(from = new Date()) {
-  const local = zonedParts(from);
-  let candidate = new Date(Date.UTC(local.year, local.month - 1, local.day + 1, 12));
-  while (true) {
-    const parts = zonedParts(candidate);
-    if (parts.weekday !== "Sat" && parts.weekday !== "Sun") return localToUtc(parts.year, parts.month, parts.day, 9, 0);
-    candidate = new Date(candidate.getTime() + 86_400_000);
+function parseClock(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return { hour: Number.isFinite(hour) ? hour : 9, minute: Number.isFinite(minute) ? minute : 0 };
+}
+function normalizeHours(value: unknown): PartnerStandardHours {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const next = structuredClone(defaultPartnerStandardHours);
+  (Object.keys(next) as Array<keyof PartnerStandardHours>).forEach((day) => {
+    const row = source[day] && typeof source[day] === "object" ? source[day] as Record<string, unknown> : {};
+    next[day] = {
+      enabled: typeof row.enabled === "boolean" ? row.enabled : next[day].enabled,
+      start: typeof row.start === "string" ? row.start : next[day].start,
+      end: typeof row.end === "string" ? row.end : next[day].end,
+    };
+  });
+  return next;
+}
+function nextSlotWithinHours(after: Date, durationMinutes: number, hours: PartnerStandardHours) {
+  let probe = new Date(after);
+  for (let guard = 0; guard < 21; guard += 1) {
+    const local = zonedParts(probe);
+    const day = hours[dayKeyByWeekday[local.weekday]];
+    if (day?.enabled) {
+      const open = parseClock(day.start);
+      const close = parseClock(day.end);
+      const openAt = localToUtc(local.year, local.month, local.day, open.hour, open.minute);
+      const closeAt = localToUtc(local.year, local.month, local.day, close.hour, close.minute);
+      let candidate = new Date(Math.max(probe.getTime(), openAt.getTime()));
+      const localCandidate = zonedParts(candidate);
+      const rounded = Math.ceil(localCandidate.minute / 30) * 30;
+      if (rounded >= 60) candidate = localToUtc(localCandidate.year, localCandidate.month, localCandidate.day, localCandidate.hour + 1, 0);
+      else candidate = localToUtc(localCandidate.year, localCandidate.month, localCandidate.day, localCandidate.hour, rounded);
+      if (candidate.getTime() + durationMinutes * 60_000 <= closeAt.getTime()) return candidate;
+    }
+    const tomorrowNoon = new Date(Date.UTC(local.year, local.month - 1, local.day + 1, 12));
+    const tomorrow = zonedParts(tomorrowNoon);
+    probe = localToUtc(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0);
   }
+  return after;
+}
+function nextBusinessMorning(from = new Date()) {
+  return nextSlotWithinHours(from, 60, defaultPartnerStandardHours);
 }
 function nextBusinessSlot(after: Date) {
-  const local = zonedParts(after);
-  if (local.weekday !== "Sat" && local.weekday !== "Sun" && local.hour < 16) {
-    const roundedMinute = local.minute <= 30 ? 30 : 0;
-    const addHour = local.minute <= 30 ? 0 : 1;
-    const hour = Math.max(9, local.hour + addHour);
-    if (hour < 17) return localToUtc(local.year, local.month, local.day, hour, roundedMinute);
-  }
-  let candidate = new Date(Date.UTC(local.year, local.month - 1, local.day + 1, 12));
-  while (true) {
-    const parts = zonedParts(candidate);
-    if (parts.weekday !== "Sat" && parts.weekday !== "Sun") return localToUtc(parts.year, parts.month, parts.day, 9, 0);
-    candidate = new Date(candidate.getTime() + 86_400_000);
-  }
+  return nextSlotWithinHours(after, 60, defaultPartnerStandardHours);
 }
 function tokens(value: string) {
   return new Set(value.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter((v) => v.length >= 3));
@@ -75,6 +99,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const workByPlanItem = new Map((workRows || []).map((row) => [row.plan_item_id, row]));
     let cursor = nextBusinessMorning();
     let suggestedCount = 0;
+    let coordinationCount = 0;
 
     for (const item of planItems || []) {
       const work = workByPlanItem.get(item.id);
@@ -87,6 +112,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const durationMinutes = Math.max(60, Number(work.estimated_elapsed_minutes ?? work.estimated_duration_minutes ?? 60) || 60);
       let locationId = work.location_id || null;
       let resourceId = work.resource_id || null;
+      let schedulingMode = "manager_scheduled";
+      let partnerHours = defaultPartnerStandardHours;
+
+      if (partnerId) {
+        const { data: partner } = await access.supabase.from("mindful_inventory_partners").select("scheduling_mode,standard_hours").eq("id", partnerId).eq("company_id", access.company.companyId).maybeSingle();
+        if (partner) {
+          schedulingMode = partner.scheduling_mode || "manager_scheduled";
+          partnerHours = normalizeHours(partner.standard_hours);
+        }
+      }
 
       if (partnerId && !locationId) {
         const { data: primary } = await access.supabase.from("mindful_inventory_partner_locations").select("location_id").eq("partner_id", partnerId).eq("is_primary", true).limit(1).maybeSingle();
@@ -105,6 +140,24 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         if (ranked.length === 1 || (ranked[0] && ranked[0].score > (ranked[1]?.score || 0))) resourceId = ranked[0].resource.id;
       }
 
+      if (partnerId && (schedulingMode === "coordination_required" || schedulingMode === "partner_self_scheduling")) {
+        const { error: coordinationError } = await access.supabase.from("mindful_inventory_work_orders").update({
+          assigned_partner_id: partnerId,
+          location_id: locationId,
+          resource_id: resourceId,
+          scheduled_start_at: null,
+          scheduled_end_at: null,
+          schedule_source: null,
+          status: "ready_to_schedule",
+          updated_by: access.userId,
+          updated_at: new Date().toISOString(),
+        }).eq("id", work.id);
+        if (coordinationError) throw new Error(coordinationError.message);
+        coordinationCount += 1;
+        continue;
+      }
+
+      cursor = nextSlotWithinHours(cursor, durationMinutes, partnerId ? partnerHours : defaultPartnerStandardHours);
       for (let guard = 0; guard < 40; guard += 1) {
         const proposedEnd = new Date(cursor.getTime() + durationMinutes * 60_000);
         const conflictFields = [partnerId ? { field: "assigned_partner_id", id: partnerId } : null, resourceId ? { field: "resource_id", id: resourceId } : null].filter(Boolean) as Array<{ field: string; id: string }>;
@@ -115,19 +168,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           if (conflicts?.[0]?.scheduled_end_at && (!conflictEnd || conflicts[0].scheduled_end_at > conflictEnd)) conflictEnd = conflicts[0].scheduled_end_at;
         }
         if (!conflictEnd) break;
-        cursor = nextBusinessSlot(new Date(conflictEnd));
+        cursor = nextSlotWithinHours(new Date(conflictEnd), durationMinutes, partnerId ? partnerHours : defaultPartnerStandardHours);
       }
 
       const end = new Date(cursor.getTime() + durationMinutes * 60_000);
       const { error: scheduleError } = await access.supabase.from("mindful_inventory_work_orders").update({ assigned_partner_id: partnerId, location_id: locationId, resource_id: resourceId, scheduled_start_at: cursor.toISOString(), scheduled_end_at: end.toISOString(), schedule_source: "suggested", status: "scheduled", updated_by: access.userId, updated_at: new Date().toISOString() }).eq("id", work.id);
       if (scheduleError) throw new Error(scheduleError.message);
       suggestedCount += 1;
-      cursor = nextBusinessSlot(end);
+      cursor = partnerId ? nextSlotWithinHours(end, 60, partnerHours) : nextBusinessSlot(end);
     }
 
-    if (suggestedCount > 0) await access.supabase.from("mindful_inventory_history").insert({ company_id: access.company.companyId, vehicle_id: vehicleId, event_type: "suggested_schedule_created", entity_type: "car_plan_version", entity_id: requestedVersionId, actor_user_id: access.userId, summary: "Suggested execution schedule created from capabilities, locations, resources, and current availability.", metadata: { suggestedWorkOrders: suggestedCount, timeZone: COMPANY_TIME_ZONE } });
+    if (suggestedCount > 0 || coordinationCount > 0) await access.supabase.from("mindful_inventory_history").insert({ company_id: access.company.companyId, vehicle_id: vehicleId, event_type: "suggested_schedule_created", entity_type: "car_plan_version", entity_id: requestedVersionId, actor_user_id: access.userId, summary: "Execution schedule prepared from capabilities, partner scheduling controls, hours, resources, and current bookings.", metadata: { suggestedWorkOrders: suggestedCount, coordinationRequiredWorkOrders: coordinationCount, timeZone: COMPANY_TIME_ZONE } });
 
-    return NextResponse.json({ planVersionId: result?.returned_plan_version_id || requestedVersionId, workOrdersCreated: Number(result?.work_orders_created || 0), suggestedWorkOrders: suggestedCount, activated: Boolean(result?.activated) });
+    return NextResponse.json({ planVersionId: result?.returned_plan_version_id || requestedVersionId, workOrdersCreated: Number(result?.work_orders_created || 0), suggestedWorkOrders: suggestedCount, coordinationRequiredWorkOrders: coordinationCount, activated: Boolean(result?.activated) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to activate Work Plan." }, { status: 500 });
   }
