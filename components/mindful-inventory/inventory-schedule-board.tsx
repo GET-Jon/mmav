@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
@@ -63,6 +63,7 @@ type Props = {
 
 export function InventoryScheduleBoard({ work, performerOptions, locationOptions, resourceOptions }: Props) {
   const router = useRouter();
+  const [scheduleWork, setScheduleWork] = useState<InventoryScheduleWork[]>(work);
   const [weekOffset, setWeekOffset] = useState(0);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -70,6 +71,11 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("calendar");
   const [selectedItem, setSelectedItem] = useState<InventoryScheduleWork | null>(null);
+
+  useEffect(() => {
+    setScheduleWork(work);
+    setSelectedItem((current) => current ? work.find((item) => item.id === current.id) || current : current);
+  }, [work]);
 
   const weekStart = useMemo(() => startOfWeek(weekOffset), [weekOffset]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => {
@@ -84,11 +90,11 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   }, [days]);
   const today = dayKey(new Date());
 
-  const active = work.filter((item) => item.status !== "complete" && item.status !== "cancelled");
+  const active = scheduleWork.filter((item) => item.status !== "complete" && item.status !== "cancelled");
   const unscheduled = active.filter((item) => !item.scheduledStartAt).sort((a, b) => Number(a.vehiclePriority) - Number(b.vehiclePriority));
   const unassigned = active.filter((item) => !item.performerName);
   const locationTbd = active.filter((item) => !item.locationId);
-  const weekWork = work.filter((item) => {
+  const weekWork = scheduleWork.filter((item) => {
     if (!item.scheduledStartAt || item.status === "cancelled") return false;
     const when = new Date(item.scheduledStartAt).getTime();
     return when >= weekStart.getTime() && when <= weekEnd.getTime();
@@ -96,7 +102,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
 
   const conflicts = useMemo(() => {
     const found: Conflict[] = [];
-    const scheduledActive = work.filter((item) => item.status !== "complete" && item.status !== "cancelled" && item.scheduledStartAt && item.scheduledEndAt);
+    const scheduledActive = scheduleWork.filter((item) => item.status !== "complete" && item.status !== "cancelled" && item.scheduledStartAt && item.scheduledEndAt);
     for (let i = 0; i < scheduledActive.length; i += 1) {
       for (let j = i + 1; j < scheduledActive.length; j += 1) {
         const a = scheduledActive[i];
@@ -117,7 +123,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
       }
     }
     return found;
-  }, [work]);
+  }, [scheduleWork]);
   const conflictsByItem = useMemo(() => {
     const map = new Map<string, Conflict[]>();
     conflicts.forEach((conflict) => map.set(conflict.itemId, [...(map.get(conflict.itemId) || []), conflict]));
@@ -141,6 +147,11 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     document.getElementById("unscheduled-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function replaceLocalItem(itemId: string, updater: (item: InventoryScheduleWork) => InventoryScheduleWork) {
+    setScheduleWork((current) => current.map((item) => item.id === itemId ? updater(item) : item));
+    setSelectedItem((current) => current && current.id === itemId ? updater(current) : current);
+  }
+
   async function schedule(item: InventoryScheduleWork) {
     const localStart = starts[item.id] || localInput(item.scheduledStartAt) || localInputDefault();
     setWorkingId(item.id);
@@ -159,13 +170,13 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         schedule_source?: string;
       };
       if (!response.ok) throw new Error(payload.error || "Failed to schedule work.");
-      setSelectedItem((current) => current && current.id === item.id ? {
+      replaceLocalItem(item.id, (current) => ({
         ...current,
         scheduledStartAt: payload.scheduled_start_at || new Date(localStart).toISOString(),
         scheduledEndAt: payload.scheduled_end_at || current.scheduledEndAt,
         status: payload.status || current.status,
         scheduleSource: payload.schedule_source || current.scheduleSource,
-      } : current);
+      }));
       setMessage(`${item.title} scheduled.`);
       router.refresh();
     } catch (error) {
@@ -188,8 +199,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         error?: string; status?: string; assignedPartnerId?: string | null; assignedUserId?: string | null; locationId?: string | null; resourceId?: string | null;
       };
       if (!response.ok) throw new Error(payload.error || "Failed to update Work Order.");
-      setSelectedItem((current) => {
-        if (!current || current.id !== item.id) return current;
+      replaceLocalItem(item.id, (current) => {
         const next = { ...current };
         if (payload.status) next.status = payload.status;
         if (Object.prototype.hasOwnProperty.call(payload, "assignedPartnerId")) next.assignedPartnerId = payload.assignedPartnerId ?? null;
@@ -222,7 +232,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     const end = new Date(start.getTime() + Math.max(1, durationMinutes) * 60_000);
     const found: Conflict[] = [];
 
-    for (const other of work) {
+    for (const other of scheduleWork) {
       if (other.id === item.id || other.status === "complete" || other.status === "cancelled" || !other.scheduledStartAt || !other.scheduledEndAt) continue;
       const otherStart = new Date(other.scheduledStartAt);
       const otherEnd = new Date(other.scheduledEndAt);
