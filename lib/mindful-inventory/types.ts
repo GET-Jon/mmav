@@ -18,6 +18,11 @@ export type InventoryVehicleHealth =
   | "behind"
   | "blocked";
 
+export type InventoryScheduleHealth =
+  | "late_start"
+  | "running_late"
+  | "overdue";
+
 export type InventoryTitleStatus =
   | "unknown"
   | "awaiting"
@@ -42,6 +47,9 @@ export type InventoryVehicleView = {
   grade: InventoryVehicleGrade | null;
   priority: InventoryVehiclePriority;
   health: InventoryVehicleHealth;
+  scheduleHealth: InventoryScheduleHealth | null;
+  scheduleHealthDetail: string | null;
+  behindScheduleCount: number;
   currentLocationId: string | null;
   currentLocationName: string | null;
   nextAction: string | null;
@@ -83,8 +91,6 @@ export type InventoryDashboardData = {
   summary: InventoryDashboardSummary;
 };
 
-// Legacy prototype types remain temporarily so the old mutation routes continue
-// to compile until their conversion in the next Inventory application slice.
 export type InventoryVehicleStage =
   | "purchased"
   | "awaiting_transport"
@@ -131,9 +137,7 @@ export type InventoryFinancialInputs = {
   transportCost: number;
   otherAcquisitionCost: number;
   expectedSalePrice: number | null;
-  workItems: Array<
-    Pick<InventoryWorkItem, "status" | "estimatedCost" | "actualCost">
-  >;
+  workItems: Array<Pick<InventoryWorkItem, "status" | "estimatedCost" | "actualCost">>;
 };
 
 export type InventoryFinancialSummary = {
