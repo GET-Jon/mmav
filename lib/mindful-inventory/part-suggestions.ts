@@ -78,7 +78,6 @@ export function buildPartSearchSuggestion(
     .trim();
   const searchQuery = `${vehicleTokens} ${partName}`.replace(/\s+/g, " ").trim();
   const encoded = encodeURIComponent(searchQuery);
-  const turn14SiteSearch = encodeURIComponent(`site:turn14.com ${searchQuery}`);
   const confidence = confidenceForWork(work);
 
   return {
@@ -92,9 +91,9 @@ export function buildPartSearchSuggestion(
     sources: [
       {
         key: "turn14",
-        label: "Turn 14",
-        url: `https://www.google.com/search?q=${turn14SiteSearch}`,
-        note: "Site-specific Turn 14 search until catalog/API integration.",
+        label: "Turn 14 Portal",
+        url: "https://www.turn14.com/",
+        note: "Turn 14 keeps its live product catalog inside the dealer portal. Open the portal, then paste the generated search phrase.",
       },
       {
         key: "amazon",
