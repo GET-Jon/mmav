@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  summarizePartsReadiness,
+  type InventoryPartsReadiness,
+} from "@/lib/mindful-inventory/parts-readiness";
+
 export type InventoryScheduleWork = {
   id: string;
   vehicleId: string;
@@ -25,6 +30,11 @@ export type InventoryScheduleWork = {
   resourceId: string | null;
   resourceName: string | null;
   scheduleSource: string | null;
+  partsReadiness: InventoryPartsReadiness;
+  partCount: number;
+  pendingPartCount: number;
+  partsLatestEtaAt: string | null;
+  partsReadyForExecution: boolean;
 };
 
 function nullableNumber(value: number | string | null | undefined) {
@@ -65,6 +75,25 @@ export async function getInventorySchedule(
   if (resourcesResult.error) throw new Error(resourcesResult.error.message);
   if (membersResult.error) throw new Error(membersResult.error.message);
 
+  const companyVehicleIds = new Set((vehiclesResult.data || []).map((vehicle) => vehicle.id));
+  const companyWorkIds = (workResult.data || [])
+    .filter((work) => companyVehicleIds.has(work.vehicle_id))
+    .map((work) => work.id);
+  const { data: partRows, error: partsError } = companyWorkIds.length
+    ? await supabase
+        .from("mindful_inventory_work_order_parts")
+        .select("work_order_id,status,eta_at")
+        .in("work_order_id", companyWorkIds)
+    : { data: [], error: null };
+  if (partsError) throw new Error(partsError.message);
+
+  const partsByWorkOrder = new Map<string, Array<{ work_order_id: string; status: string; eta_at: string | null }>>();
+  for (const part of partRows || []) {
+    const current = partsByWorkOrder.get(part.work_order_id) || [];
+    current.push({ work_order_id: part.work_order_id, status: part.status, eta_at: part.eta_at });
+    partsByWorkOrder.set(part.work_order_id, current);
+  }
+
   const vehicles = new Map(
     (vehiclesResult.data || []).map((vehicle) => [
       vehicle.id,
@@ -97,6 +126,7 @@ export async function getInventorySchedule(
       const vehicle = vehicles.get(work.vehicle_id)!;
       const assignedPartnerId = work.assigned_partner_id || null;
       const assignedUserId = work.assigned_user_id || null;
+      const parts = summarizePartsReadiness(partsByWorkOrder.get(work.id) || []);
       return {
         id: work.id,
         vehicleId: work.vehicle_id,
@@ -122,6 +152,11 @@ export async function getInventorySchedule(
         resourceId: work.resource_id || null,
         resourceName: work.resource_id ? resources.get(work.resource_id) || "Resource" : null,
         scheduleSource: work.schedule_source || null,
+        partsReadiness: parts.readiness,
+        partCount: parts.partCount,
+        pendingPartCount: parts.pendingPartCount,
+        partsLatestEtaAt: parts.latestEtaAt,
+        partsReadyForExecution: parts.readyForExecution,
       };
     });
 }
