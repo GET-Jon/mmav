@@ -2,6 +2,13 @@ import type { InventoryVehicleView } from "@/lib/mindful-inventory/types";
 import type { InventoryWorkOrderView } from "@/lib/mindful-inventory/active-work";
 
 export type PartSearchConfidence = "high" | "medium" | "verify";
+export type RecommendedPartNeed = "likely_required" | "possible" | "consumable";
+
+export type RecommendedPartSuggestion = {
+  name: string;
+  need: RecommendedPartNeed;
+  searchQuery: string;
+};
 
 export type PartSearchSuggestion = {
   workOrderId: string;
@@ -10,6 +17,7 @@ export type PartSearchSuggestion = {
   fitmentLabel: string;
   searchQuery: string;
   alternateQueries: string[];
+  recommendedParts: RecommendedPartSuggestion[];
   aiNormalized?: boolean;
   confidence: PartSearchConfidence;
   confidenceLabel: string;
@@ -112,6 +120,7 @@ export function buildPartSearchSuggestion(
     fitmentLabel: vehicleTokens,
     searchQuery,
     alternateQueries: [],
+    recommendedParts: [],
     aiNormalized: false,
     confidence: confidence.confidence,
     confidenceLabel: confidence.label,
