@@ -7,12 +7,30 @@ const validStatuses = new Set([
   "ordered",
   "backordered",
   "received",
+  "installed",
   "cancelled",
+]);
+
+const validSourceTypes = new Set([
+  "official_retailer",
+  "parts_retailer",
+  "marketplace",
+  "local_supplier",
+  "other",
 ]);
 
 function optionalText(value: unknown) {
   const clean = String(value ?? "").trim();
   return clean || null;
+}
+
+function optionalSourceType(value: unknown) {
+  const clean = String(value ?? "").trim();
+  if (!clean) return null;
+  if (!validSourceTypes.has(clean)) {
+    throw new Error("Invalid part source type.");
+  }
+  return clean;
 }
 
 function nullableNumber(value: unknown) {
@@ -108,8 +126,14 @@ export async function POST(
         description,
         quantity,
         supplier: optionalText(body.supplier),
+        source_type: optionalSourceType(body.sourceType),
+        source_url: optionalText(body.sourceUrl),
+        part_number: optionalText(body.partNumber),
         supplier_reference: optionalText(body.supplierReference),
         quoted_unit_price: nullableNumber(body.quotedUnitPrice),
+        actual_unit_price: nullableNumber(body.actualUnitPrice),
+        shipping_cost: nullableNumber(body.shippingCost),
+        tracking_reference: optionalText(body.trackingReference),
         eta_at: optionalText(body.etaAt),
         notes: optionalText(body.notes),
         status: "needed",
@@ -131,7 +155,11 @@ export async function POST(
       entity_id: data.id,
       actor_user_id: access.userId,
       summary: `Part added for ${workOrder.title}: ${description}`,
-      metadata: { workOrderId },
+      metadata: {
+        workOrderId,
+        supplier: optionalText(body.supplier),
+        sourceType: optionalSourceType(body.sourceType),
+      },
     });
 
     return NextResponse.json({ id: data.id });
@@ -171,11 +199,17 @@ export async function PATCH(
 
     const body = (await request.json()) as Record<string, unknown>;
     const partId = String(body.partId || "").trim();
-    const status = String(body.status || "").trim();
+    const status = body.status === undefined ? null : String(body.status || "").trim();
 
-    if (!partId || !validStatuses.has(status)) {
+    if (!partId) {
       return NextResponse.json(
-        { error: "Valid part id and status are required." },
+        { error: "Part id is required." },
+        { status: 400 },
+      );
+    }
+    if (status !== null && !validStatuses.has(status)) {
+      return NextResponse.json(
+        { error: "A valid part status is required." },
         { status: 400 },
       );
     }
@@ -209,13 +243,27 @@ export async function PATCH(
 
     const now = new Date().toISOString();
     const updates: Record<string, unknown> = {
-      status,
       updated_by: access.userId,
       updated_at: now,
     };
 
-    if (status === "ordered") updates.ordered_at = now;
-    if (status === "received") updates.received_at = now;
+    if (status !== null) {
+      updates.status = status;
+      if (status === "ordered") updates.ordered_at = now;
+      if (status === "received") updates.received_at = now;
+      if (status === "installed") updates.installed_at = now;
+    }
+    if (body.supplier !== undefined) updates.supplier = optionalText(body.supplier);
+    if (body.sourceType !== undefined) updates.source_type = optionalSourceType(body.sourceType);
+    if (body.sourceUrl !== undefined) updates.source_url = optionalText(body.sourceUrl);
+    if (body.partNumber !== undefined) updates.part_number = optionalText(body.partNumber);
+    if (body.supplierReference !== undefined) updates.supplier_reference = optionalText(body.supplierReference);
+    if (body.quotedUnitPrice !== undefined) updates.quoted_unit_price = nullableNumber(body.quotedUnitPrice);
+    if (body.actualUnitPrice !== undefined) updates.actual_unit_price = nullableNumber(body.actualUnitPrice);
+    if (body.shippingCost !== undefined) updates.shipping_cost = nullableNumber(body.shippingCost);
+    if (body.trackingReference !== undefined) updates.tracking_reference = optionalText(body.trackingReference);
+    if (body.etaAt !== undefined) updates.eta_at = optionalText(body.etaAt);
+    if (body.notes !== undefined) updates.notes = optionalText(body.notes);
 
     const { error } = await access.supabase
       .from("mindful_inventory_work_order_parts")
@@ -229,12 +277,14 @@ export async function PATCH(
     await access.supabase.from("mindful_inventory_history").insert({
       company_id: access.company.companyId,
       vehicle_id: vehicleId,
-      event_type: "part_status_updated",
+      event_type: status ? "part_status_updated" : "part_updated",
       entity_type: "work_order_part",
       entity_id: partId,
       actor_user_id: access.userId,
-      summary: `${part.description}: ${status.replaceAll("_", " ")}`,
-      metadata: { status },
+      summary: status
+        ? `${part.description}: ${status.replaceAll("_", " ")}`
+        : `${part.description}: part details updated`,
+      metadata: status ? { status } : {},
     });
 
     return NextResponse.json({ id: partId, status });
