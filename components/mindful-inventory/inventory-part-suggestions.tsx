@@ -82,63 +82,64 @@ export function InventoryPartSuggestions({
 
       {message ? <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">{message}</div> : null}
 
-      <div className="mt-5 grid gap-3 xl:grid-cols-2">
+      <div className="mt-5 space-y-3">
         {suggestions.map((suggestion) => {
           const tracked = trackedWorkOrders.has(suggestion.workOrderId);
           return (
-            <article key={suggestion.workOrderId} className="rounded-2xl border border-slate-200 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <article key={suggestion.workOrderId} className="rounded-2xl border border-slate-200 p-5">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)_auto] xl:items-center">
                 <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Suggested Part</div>
-                  <div className="mt-1 text-base font-black text-slate-950">{suggestion.partName}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Suggested Part</div>
+                      <div className="mt-1 text-base font-black text-slate-950">{suggestion.partName}</div>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceClass(suggestion.confidence)}`}>
+                      {suggestion.confidenceLabel}
+                    </span>
+                  </div>
                   <div className="mt-1 text-xs font-semibold text-slate-500">For: {suggestion.workOrderTitle}</div>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceClass(suggestion.confidence)}`}>
-                  {suggestion.confidenceLabel}
-                </span>
-              </div>
 
-              <div className="mt-3 rounded-xl bg-slate-50 px-3 py-3">
-                <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Vehicle fitment context</div>
-                <div className="mt-1 text-xs font-black text-slate-700">{suggestion.fitmentLabel}</div>
-                <div className="mt-2 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Generated search</div>
-                <div className="mt-1 break-words text-xs font-semibold leading-5 text-slate-600">{suggestion.searchQuery}</div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {suggestion.sources.map((source) => (
-                  <a
-                    key={source.key}
-                    href={source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={source.note}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                  >
-                    {source.label} ↗
-                  </a>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => void copyQuery(suggestion)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500 hover:bg-slate-50"
-                >
-                  {copiedId === suggestion.workOrderId ? "Copied" : "Copy Search"}
-                </button>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                <div className="text-[11px] font-semibold text-slate-500">
-                  {tracked ? "A part is already tracked for this Work Order." : "Found a likely need? Add it now and fill in the exact listing after sourcing."}
+                <div className="rounded-xl bg-slate-50 px-3 py-3">
+                  <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Generated search</div>
+                  <div className="mt-1 break-words text-xs font-semibold leading-5 text-slate-600">{suggestion.searchQuery}</div>
                 </div>
-                <button
-                  type="button"
-                  disabled={tracked || workingId === suggestion.workOrderId}
-                  onClick={() => void addSuggestedPart(suggestion)}
-                  className="shrink-0 rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  {tracked ? "Part Tracked" : workingId === suggestion.workOrderId ? "Adding..." : "+ Add to Parts"}
-                </button>
+
+                <div className="flex flex-wrap gap-2 xl:justify-end">
+                  {suggestion.sources.map((source) => (
+                    <a
+                      key={source.key}
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={source.note}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                    >
+                      {source.label} ↗
+                    </a>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => void copyQuery(suggestion)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500 hover:bg-slate-50"
+                  >
+                    {copiedId === suggestion.workOrderId ? "Copied" : "Copy Search"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={tracked || workingId === suggestion.workOrderId}
+                    onClick={() => void addSuggestedPart(suggestion)}
+                    className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
+                  >
+                    {tracked ? "Part Tracked" : workingId === suggestion.workOrderId ? "Adding..." : "+ Add to Parts"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-[11px] font-semibold text-slate-500">
+                <span>Fitment context: {suggestion.fitmentLabel}</span>
+                <span>{tracked ? "A part is already tracked for this Work Order." : "Choose a source, find the exact listing, then add the selected part."}</span>
               </div>
             </article>
           );
@@ -146,7 +147,7 @@ export function InventoryPartSuggestions({
       </div>
 
       <div className="mt-4 text-[11px] font-semibold leading-5 text-slate-400">
-        Turn 14 currently uses a site-specific web search because the dealer catalog is not connected yet. Amazon and eBay open targeted marketplace searches directly.
+        Turn 14 keeps its live catalog inside the dealer portal. Open Turn 14, then use Copy Search to paste the generated phrase into the portal search. Amazon and eBay open targeted searches directly.
       </div>
     </section>
   );
