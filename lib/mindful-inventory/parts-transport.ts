@@ -5,13 +5,10 @@ import {
   type InventoryWorkOrderView,
 } from "@/lib/mindful-inventory/active-work";
 
-export type InventoryPartStatus =
-  | "needed"
-  | "ordered"
-  | "backordered"
-  | "received"
-  | "installed"
-  | "cancelled";
+// Keep this permissive at the view boundary because part lifecycle states may
+// expand without requiring every consumer to update in the same commit.
+// The API still validates writes against the supported status set.
+export type InventoryPartStatus = string;
 
 export type InventoryPartSourceType =
   | "official_retailer"
@@ -191,7 +188,7 @@ export async function getInventoryPartsTransportData(
       actualUnitPrice: nullableNumber(row.actual_unit_price),
       shippingCost: nullableNumber(row.shipping_cost),
       trackingReference: row.tracking_reference,
-      status: row.status as InventoryPartStatus,
+      status: row.status,
       orderedAt: row.ordered_at,
       etaAt: row.eta_at,
       receivedAt: row.received_at,
