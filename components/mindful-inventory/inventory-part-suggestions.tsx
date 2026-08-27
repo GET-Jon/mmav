@@ -237,22 +237,22 @@ export function InventoryPartSuggestions({
                 </div>
 
                 <div className="min-w-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                      Suggested Search
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Suggested Search
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1 text-sm font-black leading-5 text-slate-800">
+                      {suggestion.searchQuery}
                     </div>
                     <button
                       type="button"
                       onClick={() =>
                         void copyText(suggestion.workOrderId, suggestion.searchQuery)
                       }
-                      className="text-[11px] font-black text-slate-400 hover:text-slate-700"
+                      className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                     >
-                      {copiedId === suggestion.workOrderId ? "Copied" : "Copy"}
+                      {copiedId === suggestion.workOrderId ? "Copied search" : "Copy search"}
                     </button>
-                  </div>
-                  <div className="mt-1 text-sm font-black leading-5 text-slate-800">
-                    {suggestion.searchQuery}
                   </div>
                   {suggestion.alternateQueries.length ? (
                     <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">
@@ -268,6 +268,7 @@ export function InventoryPartSuggestions({
                               )
                             }
                             className="hover:text-slate-800"
+                            title="Copy alternate search"
                           >
                             {copiedId === `${suggestion.workOrderId}:alt:${index}`
                               ? "Copied"
