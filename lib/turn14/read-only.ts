@@ -67,17 +67,19 @@ async function getTurn14AccessToken() {
     throw new Error("TURN14_CLIENT_ID and TURN14_CLIENT_SECRET are not available to this deployment.");
   }
 
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
   const response = await fetch(turn14TokenUrl(), {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
+    body: body.toString(),
     cache: "no-store",
   });
 
