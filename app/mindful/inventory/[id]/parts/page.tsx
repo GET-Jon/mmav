@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 
+import { InventoryPartSuggestions } from "@/components/mindful-inventory/inventory-part-suggestions";
 import { InventoryPartsTransport } from "@/components/mindful-inventory/inventory-parts-transport";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { buildPartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
 import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";
 import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
 
@@ -29,5 +31,18 @@ export default async function InventoryPartsPage({
     vehicle.id,
   );
 
-  return <InventoryPartsTransport vehicleId={vehicle.id} data={data} />;
+  const suggestions = data.workOrders
+    .filter((work) => !["complete", "cancelled"].includes(work.status))
+    .map((work) => buildPartSearchSuggestion(vehicle, work));
+
+  return (
+    <div className="space-y-6">
+      <InventoryPartSuggestions
+        vehicleId={vehicle.id}
+        suggestions={suggestions}
+        parts={data.parts}
+      />
+      <InventoryPartsTransport vehicleId={vehicle.id} data={data} />
+    </div>
+  );
 }
