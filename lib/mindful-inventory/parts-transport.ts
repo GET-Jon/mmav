@@ -10,7 +10,15 @@ export type InventoryPartStatus =
   | "ordered"
   | "backordered"
   | "received"
+  | "installed"
   | "cancelled";
+
+export type InventoryPartSourceType =
+  | "official_retailer"
+  | "parts_retailer"
+  | "marketplace"
+  | "local_supplier"
+  | "other";
 
 export type InventoryTransportStatus =
   | "requested"
@@ -27,13 +35,19 @@ export type InventoryPartView = {
   description: string;
   quantity: number;
   supplier: string | null;
+  sourceType: InventoryPartSourceType | null;
+  sourceUrl: string | null;
+  partNumber: string | null;
   supplierReference: string | null;
   quotedUnitPrice: number | null;
   actualUnitPrice: number | null;
+  shippingCost: number | null;
+  trackingReference: string | null;
   status: InventoryPartStatus;
   orderedAt: string | null;
   etaAt: string | null;
   receivedAt: string | null;
+  installedAt: string | null;
   notes: string | null;
 };
 
@@ -84,13 +98,19 @@ type InventoryPartRow = {
   description: string;
   quantity: number | string;
   supplier: string | null;
+  source_type: string | null;
+  source_url: string | null;
+  part_number: string | null;
   supplier_reference: string | null;
   quoted_unit_price: number | string | null;
   actual_unit_price: number | string | null;
+  shipping_cost: number | string | null;
+  tracking_reference: string | null;
   status: string;
   ordered_at: string | null;
   eta_at: string | null;
   received_at: string | null;
+  installed_at: string | null;
   notes: string | null;
 };
 
@@ -114,7 +134,7 @@ export async function getInventoryPartsTransportData(
     const { data, error } = await supabase
       .from("mindful_inventory_work_order_parts")
       .select(
-        "id,work_order_id,description,quantity,supplier,supplier_reference,quoted_unit_price,actual_unit_price,status,ordered_at,eta_at,received_at,notes",
+        "id,work_order_id,description,quantity,supplier,source_type,source_url,part_number,supplier_reference,quoted_unit_price,actual_unit_price,shipping_cost,tracking_reference,status,ordered_at,eta_at,received_at,installed_at,notes",
       )
       .in("work_order_id", workOrderIds)
       .order("created_at", { ascending: true });
@@ -163,13 +183,19 @@ export async function getInventoryPartsTransportData(
       description: row.description,
       quantity: Number(row.quantity || 1),
       supplier: row.supplier,
+      sourceType: row.source_type as InventoryPartSourceType | null,
+      sourceUrl: row.source_url,
+      partNumber: row.part_number,
       supplierReference: row.supplier_reference,
       quotedUnitPrice: nullableNumber(row.quoted_unit_price),
       actualUnitPrice: nullableNumber(row.actual_unit_price),
+      shippingCost: nullableNumber(row.shipping_cost),
+      trackingReference: row.tracking_reference,
       status: row.status as InventoryPartStatus,
       orderedAt: row.ordered_at,
       etaAt: row.eta_at,
       receivedAt: row.received_at,
+      installedAt: row.installed_at,
       notes: row.notes,
     })),
     transportation: (transportRows || []).map((row) => ({
