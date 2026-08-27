@@ -1,9 +1,27 @@
-const TURN14_API_BASE = "https://api.turn14.com/v1";
-const TURN14_TOKEN_URL = `${TURN14_API_BASE}/token`;
+export type Turn14Environment = "test" | "production";
+
+const TURN14_API_BASES: Record<Turn14Environment, string> = {
+  test: "https://apitest.turn14.com/v1",
+  production: "https://api.turn14.com/v1",
+};
+
+function turn14Environment(): Turn14Environment {
+  const configured = process.env.TURN14_ENVIRONMENT?.trim().toLowerCase();
+  return configured === "production" ? "production" : "test";
+}
+
+function turn14ApiBase() {
+  return TURN14_API_BASES[turn14Environment()];
+}
+
+function turn14TokenUrl() {
+  return `${turn14ApiBase()}/token`;
+}
 
 export type Turn14ConnectionDiagnostics = {
   configured: boolean;
   authenticated: boolean;
+  environment: Turn14Environment;
   apiBase: string;
   orderingEnabled: false;
   tokenType: string | null;
@@ -13,6 +31,8 @@ export type Turn14ConnectionDiagnostics = {
 
 export type Turn14CatalogProbe = {
   ok: boolean;
+  environment: Turn14Environment;
+  apiBase: string;
   endpoint: string;
   status: number;
   query: string;
@@ -47,7 +67,7 @@ async function getTurn14AccessToken() {
     throw new Error("TURN14_CLIENT_ID and TURN14_CLIENT_SECRET are not available to this deployment.");
   }
 
-  const response = await fetch(TURN14_TOKEN_URL, {
+  const response = await fetch(turn14TokenUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -86,13 +106,18 @@ async function getTurn14AccessToken() {
  * - Catalog and inventory probes use GET only.
  * - There are intentionally no quote, order, purchase, checkout, or fulfillment methods.
  * - There is intentionally no generic arbitrary-request helper.
+ * - Testing is the default environment. Production must be opted into explicitly with TURN14_ENVIRONMENT=production.
  */
 export async function testTurn14Connection(): Promise<Turn14ConnectionDiagnostics> {
+  const environment = turn14Environment();
+  const apiBase = turn14ApiBase();
+
   if (!isTurn14Configured()) {
     return {
       configured: false,
       authenticated: false,
-      apiBase: TURN14_API_BASE,
+      environment,
+      apiBase,
       orderingEnabled: false,
       tokenType: null,
       expiresInSeconds: null,
@@ -105,17 +130,19 @@ export async function testTurn14Connection(): Promise<Turn14ConnectionDiagnostic
     return {
       configured: true,
       authenticated: true,
-      apiBase: TURN14_API_BASE,
+      environment,
+      apiBase,
       orderingEnabled: false,
       tokenType: token.tokenType,
       expiresInSeconds: token.expiresInSeconds,
-      message: "Turn 14 credentials authenticated successfully. Read-only integration mode is active.",
+      message: `Turn 14 credentials authenticated successfully against the ${environment} environment. Read-only integration mode is active.`,
     };
   } catch (error) {
     return {
       configured: true,
       authenticated: false,
-      apiBase: TURN14_API_BASE,
+      environment,
+      apiBase,
       orderingEnabled: false,
       tokenType: null,
       expiresInSeconds: null,
@@ -151,8 +178,10 @@ export async function probeTurn14Catalog(query: string): Promise<Turn14CatalogPr
   const cleaned = query.trim().slice(0, 160);
   if (!cleaned) throw new Error("Enter a catalog search phrase.");
 
+  const environment = turn14Environment();
+  const apiBase = turn14ApiBase();
   const token = await getTurn14AccessToken();
-  const url = new URL(`${TURN14_API_BASE}/items`);
+  const url = new URL(`${apiBase}/items`);
   url.searchParams.set("search", cleaned);
 
   const response = await fetch(url, {
@@ -173,6 +202,8 @@ export async function probeTurn14Catalog(query: string): Promise<Turn14CatalogPr
 
   return {
     ok: response.ok,
+    environment,
+    apiBase,
     endpoint: "/items?search=…",
     status: response.status,
     query: cleaned,
@@ -180,8 +211,8 @@ export async function probeTurn14Catalog(query: string): Promise<Turn14CatalogPr
     resultCount: inferredCount(payload),
     data: safeJsonPreview(payload),
     message: response.ok
-      ? "Catalog GET succeeded. Review the response shape below before we wire product fields into Parts sourcing."
-      : `Catalog GET returned HTTP ${response.status}. This is still useful for confirming the exact Turn 14 query contract without issuing any write request.`,
+      ? `Catalog GET succeeded against the ${environment} environment. Review the response shape below before we wire product fields into Parts sourcing.`
+      : `Catalog GET returned HTTP ${response.status} from the ${environment} environment. This is still useful for confirming the exact Turn 14 query contract without issuing any write request.`,
   };
 }
 
@@ -189,9 +220,11 @@ export async function probeTurn14Inventory(itemId: string): Promise<Turn14Catalo
   const cleaned = itemId.trim().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
   if (!cleaned) throw new Error("Enter a Turn 14 item ID.");
 
+  const environment = turn14Environment();
+  const apiBase = turn14ApiBase();
   const token = await getTurn14AccessToken();
   const endpoint = `/inventory/${cleaned}`;
-  const response = await fetch(`${TURN14_API_BASE}${endpoint}`, {
+  const response = await fetch(`${apiBase}${endpoint}`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -209,6 +242,8 @@ export async function probeTurn14Inventory(itemId: string): Promise<Turn14Catalo
 
   return {
     ok: response.ok,
+    environment,
+    apiBase,
     endpoint,
     status: response.status,
     query: "",
@@ -216,7 +251,7 @@ export async function probeTurn14Inventory(itemId: string): Promise<Turn14Catalo
     resultCount: inferredCount(payload),
     data: safeJsonPreview(payload),
     message: response.ok
-      ? "Inventory GET succeeded for this item ID."
-      : `Inventory GET returned HTTP ${response.status}.`,
+      ? `Inventory GET succeeded for this item ID against the ${environment} environment.`
+      : `Inventory GET returned HTTP ${response.status} from the ${environment} environment.`,
   };
 }
