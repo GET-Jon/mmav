@@ -10,6 +10,7 @@ const sections = [
   { href: "/admin/partners", title: "Partners", description: "Manage outside specialists, capabilities, permissions, and operating access.", ready: true },
   { href: "/admin/locations", title: "Locations & Resources", description: "Mindful facilities, partner shops, storage, transport locations, bays, lifts, detail spaces, and other schedulable capacity.", ready: true },
   { href: "/admin/team", title: "Team & Access", description: "Manage internal users, company roles, account status, and administrative access.", ready: true },
+  { href: "/admin/turn14", title: "Turn 14 Distribution", description: "Test the read-only dealer API connection before enabling catalog, fitment, pricing, and inventory lookups.", ready: true },
 ];
 
 export default async function AdminPage() {
@@ -23,7 +24,7 @@ export default async function AdminPage() {
         <div className="mb-6">
           <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Administration</div>
           <h1 className="mt-1 text-[30px] font-black tracking-[-0.035em]">Manage how Lot Logic operates</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">Configure the people, places, resources, and access rules that the operating workflows depend on.</p>
+          <p className="mt-2 max-w-3xl text-slate-600">Configure the people, places, resources, integrations, and access rules that the operating workflows depend on.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sections.map((section) => section.ready ? (
