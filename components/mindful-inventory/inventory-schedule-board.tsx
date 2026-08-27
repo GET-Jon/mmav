@@ -20,8 +20,7 @@ function hours(minutes: number | null) {
 }
 function durationLabel(minutes: number) {
   if (minutes < 60) return `${Math.max(1, Math.round(minutes))} min`;
-  const rounded = Math.round((minutes / 60) * 10) / 10;
-  return `${rounded} hr`;
+  return `${Math.round((minutes / 60) * 10) / 10} hr`;
 }
 function startOfWeek(offset: number) {
   const now = new Date();
@@ -55,9 +54,16 @@ function performerKey(item: InventoryScheduleWork) {
   if (item.assignedUserId) return `user:${item.assignedUserId}`;
   return "unassigned";
 }
+function partsLabel(item: InventoryScheduleWork) {
+  if (item.partsReadiness === "backordered") return "Backordered";
+  if (item.partsReadiness === "ordered") return "Ordered / in transit";
+  if (item.partsReadiness === "ready") return "Parts received";
+  if (item.partsReadiness === "installed") return "Installed";
+  return "Parts needed";
+}
 
 type Conflict = { itemId: string; otherId: string; kind: "performer" | "resource"; label: string };
-type ViewMode = "all" | "conflicts" | "gaps" | "late";
+type ViewMode = "all" | "conflicts" | "gaps" | "late" | "parts";
 type LayoutMode = "calendar" | "technicians" | "resources";
 type ScheduleHealth = null | {
   level: "late_start" | "running_late" | "overdue";
@@ -75,7 +81,6 @@ const SERIOUS_OVERDUE_EXTRA_MINUTES = 60;
 
 function getScheduleHealth(item: InventoryScheduleWork, nowMs: number): ScheduleHealth {
   if (!item.scheduledStartAt || item.status === "complete" || item.status === "cancelled") return null;
-
   const durationMinutes = Math.max(1, item.elapsedMinutes ?? item.legacyDurationMinutes ?? 60);
 
   if (item.status === "in_progress" && item.actualStartAt) {
@@ -84,12 +89,8 @@ function getScheduleHealth(item: InventoryScheduleWork, nowMs: number): Schedule
     const expectedFinish = actualStart + durationMinutes * 60_000;
     const finishBufferMinutes = Math.max(30, Math.round(durationMinutes * 0.15));
     const lateMinutes = Math.floor((nowMs - expectedFinish) / 60_000);
-    if (lateMinutes > finishBufferMinutes + SERIOUS_OVERDUE_EXTRA_MINUTES) {
-      return { level: "overdue", label: `${durationLabel(lateMinutes)} past expected finish` };
-    }
-    if (lateMinutes > finishBufferMinutes) {
-      return { level: "running_late", label: `${durationLabel(lateMinutes)} past expected finish` };
-    }
+    if (lateMinutes > finishBufferMinutes + SERIOUS_OVERDUE_EXTRA_MINUTES) return { level: "overdue", label: `${durationLabel(lateMinutes)} past expected finish` };
+    if (lateMinutes > finishBufferMinutes) return { level: "running_late", label: `${durationLabel(lateMinutes)} past expected finish` };
     return null;
   }
 
@@ -97,14 +98,9 @@ function getScheduleHealth(item: InventoryScheduleWork, nowMs: number): Schedule
     const scheduledStart = new Date(item.scheduledStartAt).getTime();
     if (!Number.isFinite(scheduledStart)) return null;
     const lateMinutes = Math.floor((nowMs - scheduledStart) / 60_000);
-    if (lateMinutes > START_GRACE_MINUTES + SERIOUS_OVERDUE_EXTRA_MINUTES) {
-      return { level: "overdue", label: `${durationLabel(lateMinutes)} late to start` };
-    }
-    if (lateMinutes > START_GRACE_MINUTES) {
-      return { level: "late_start", label: `${durationLabel(lateMinutes)} late to start` };
-    }
+    if (lateMinutes > START_GRACE_MINUTES + SERIOUS_OVERDUE_EXTRA_MINUTES) return { level: "overdue", label: `${durationLabel(lateMinutes)} late to start` };
+    if (lateMinutes > START_GRACE_MINUTES) return { level: "late_start", label: `${durationLabel(lateMinutes)} late to start` };
   }
-
   return null;
 }
 
@@ -124,7 +120,6 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     setScheduleWork(work);
     setSelectedItem((current) => current ? work.find((item) => item.id === current.id) || current : current);
   }, [work]);
-
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
     return () => window.clearInterval(timer);
@@ -147,6 +142,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   const unscheduled = active.filter((item) => !item.scheduledStartAt).sort((a, b) => Number(a.vehiclePriority) - Number(b.vehiclePriority));
   const unassigned = active.filter((item) => !item.performerName);
   const locationTbd = active.filter((item) => !item.locationId);
+  const waitingOnParts = active.filter((item) => !item.partsReadyForExecution);
   const behindSchedule = active.filter((item) => getScheduleHealth(item, nowMs));
   const hasSeriouslyOverdue = behindSchedule.some((item) => getScheduleHealth(item, nowMs)?.level === "overdue");
   const weekWork = scheduleWork.filter((item) => {
@@ -192,6 +188,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     if (viewMode === "conflicts") return conflictsByItem.has(item.id);
     if (viewMode === "gaps") return gapItemIds.has(item.id);
     if (viewMode === "late") return Boolean(getScheduleHealth(item, nowMs));
+    if (viewMode === "parts") return !item.partsReadyForExecution;
     return true;
   }
   function openItem(item: InventoryScheduleWork) {
@@ -202,7 +199,6 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
   function scrollToUnscheduled() {
     document.getElementById("unscheduled-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
-
   function replaceLocalItem(itemId: string, updater: (item: InventoryScheduleWork) => InventoryScheduleWork) {
     setScheduleWork((current) => current.map((item) => item.id === itemId ? updater(item) : item));
     setSelectedItem((current) => current && current.id === itemId ? updater(current) : current);
@@ -218,13 +214,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduledStartAt: new Date(localStart).toISOString() }),
       });
-      const payload = (await response.json()) as {
-        error?: string;
-        scheduled_start_at?: string;
-        scheduled_end_at?: string;
-        status?: string;
-        schedule_source?: string;
-      };
+      const payload = (await response.json()) as { error?: string; scheduled_start_at?: string; scheduled_end_at?: string; status?: string; schedule_source?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to schedule work.");
       replaceLocalItem(item.id, (current) => ({
         ...current,
@@ -298,21 +288,14 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     const durationMinutes = item.elapsedMinutes ?? item.legacyDurationMinutes ?? 60;
     const end = new Date(start.getTime() + Math.max(1, durationMinutes) * 60_000);
     const found: Conflict[] = [];
-
     for (const other of scheduleWork) {
       if (other.id === item.id || other.status === "complete" || other.status === "cancelled" || !other.scheduledStartAt || !other.scheduledEndAt) continue;
       const otherStart = new Date(other.scheduledStartAt);
       const otherEnd = new Date(other.scheduledEndAt);
       if (start.getTime() >= otherEnd.getTime() || end.getTime() <= otherStart.getTime()) continue;
-      if (item.assignedPartnerId && item.assignedPartnerId === other.assignedPartnerId) {
-        found.push({ itemId: item.id, otherId: other.id, kind: "performer", label: item.performerName || other.performerName || "Partner / technician" });
-      }
-      if (item.assignedUserId && item.assignedUserId === other.assignedUserId) {
-        found.push({ itemId: item.id, otherId: other.id, kind: "performer", label: item.performerName || other.performerName || "Team member" });
-      }
-      if (item.resourceId && item.resourceId === other.resourceId) {
-        found.push({ itemId: item.id, otherId: other.id, kind: "resource", label: item.resourceName || other.resourceName || "Resource" });
-      }
+      if (item.assignedPartnerId && item.assignedPartnerId === other.assignedPartnerId) found.push({ itemId: item.id, otherId: other.id, kind: "performer", label: item.performerName || other.performerName || "Partner / technician" });
+      if (item.assignedUserId && item.assignedUserId === other.assignedUserId) found.push({ itemId: item.id, otherId: other.id, kind: "performer", label: item.performerName || other.performerName || "Team member" });
+      if (item.resourceId && item.resourceId === other.resourceId) found.push({ itemId: item.id, otherId: other.id, kind: "resource", label: item.resourceName || other.resourceName || "Resource" });
     }
     return found;
   }
@@ -323,6 +306,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
     const missing = !item.performerName || !item.locationId;
     const complete = item.status === "complete";
     const health = getScheduleHealth(item, nowMs);
+    const waitingParts = !complete && !item.partsReadyForExecution;
     const borderClass = complete
       ? "border-slate-200 opacity-45 hover:opacity-70"
       : itemConflicts.length
@@ -333,9 +317,11 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
             ? "border-orange-300 bg-orange-50/40 ring-1 ring-orange-100 hover:border-orange-500"
             : health?.level === "late_start"
               ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-100 hover:border-amber-500"
-              : missing
-                ? "border-amber-300 hover:border-amber-500"
-                : "border-slate-200 hover:border-slate-400";
+              : waitingParts
+                ? "border-amber-400 bg-amber-50/60 ring-1 ring-amber-100 hover:border-amber-500"
+                : missing
+                  ? "border-amber-300 hover:border-amber-500"
+                  : "border-slate-200 hover:border-slate-400";
 
     return <button type="button" onClick={() => openItem(item)} className={`block w-full rounded-xl border bg-white text-left shadow-sm transition ${compact ? "p-2.5" : "p-3"} ${borderClass}`}>
       <div className="flex items-start justify-between gap-2">
@@ -344,12 +330,14 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           {complete ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">Complete</span> : null}
           {itemConflicts.length ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase text-red-700">Conflict</span> : null}
           {!complete && health ? <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${health.level === "overdue" ? "bg-red-100 text-red-700" : health.level === "running_late" ? "bg-orange-100 text-orange-800" : "bg-amber-100 text-amber-800"}`}>{health.level === "late_start" ? "Late start" : health.level === "running_late" ? "Running late" : "Overdue"}</span> : null}
-          {!complete && !itemConflicts.length && !health && missing ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Missing info</span> : null}
+          {waitingParts ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-900">Waiting on parts</span> : null}
+          {!complete && !itemConflicts.length && !health && !waitingParts && missing ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">Missing info</span> : null}
         </div>
       </div>
       <div className="mt-1 text-xs font-black text-slate-950">{item.inventoryNumber} · {item.vehicleLabel}</div>
       <div className="mt-1 text-sm font-black text-slate-800">{item.title}</div>
       {health ? <div className={`mt-2 text-[10px] font-black ${health.level === "overdue" ? "text-red-700" : health.level === "running_late" ? "text-orange-700" : "text-amber-700"}`}>{health.label}</div> : null}
+      {waitingParts ? <div className="mt-2 text-[10px] font-black text-amber-800">{partsLabel(item)}{item.pendingPartCount ? ` · ${item.pendingPartCount} pending` : ""}{item.partsLatestEtaAt ? ` · ETA ${new Date(item.partsLatestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</div> : null}
       {!compact ? <><div className="mt-2 text-[10px] font-bold text-slate-500">{item.performerName || "Partner / technician TBD"}{item.locationName ? ` · ${item.locationName}` : " · Location TBD"}{item.resourceName ? ` · ${item.resourceName}` : ""}</div><div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black"><span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Labor {hours(item.laborMinutes)}</span><span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Turn {hours(elapsed)}</span></div></> : null}
     </button>;
   }
@@ -368,6 +356,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         <button type="button" onClick={() => setViewMode("all")} className={`rounded-full px-3 py-1.5 text-xs font-black ${viewMode === "all" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>All Work ({active.length})</button>
         <button type="button" onClick={() => setViewMode("conflicts")} className={`rounded-full px-3 py-1.5 text-xs font-black ${conflictItemCount > 0 ? viewMode === "conflicts" ? "bg-red-700 text-white" : "bg-red-100 text-red-700" : viewMode === "conflicts" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Conflicts ({conflictItemCount})</button>
         <button type="button" onClick={() => setViewMode("late")} className={`rounded-full px-3 py-1.5 text-xs font-black ${behindSchedule.length > 0 ? viewMode === "late" ? hasSeriouslyOverdue ? "bg-red-700 text-white" : "bg-amber-600 text-white" : hasSeriouslyOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800" : viewMode === "late" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Behind Schedule ({behindSchedule.length})</button>
+        <button type="button" onClick={() => setViewMode("parts")} className={`rounded-full px-3 py-1.5 text-xs font-black ${waitingOnParts.length > 0 ? viewMode === "parts" ? "bg-amber-700 text-white" : "bg-amber-100 text-amber-900" : viewMode === "parts" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Waiting on Parts ({waitingOnParts.length})</button>
         <button type="button" onClick={() => setViewMode("gaps")} className={`rounded-full px-3 py-1.5 text-xs font-black ${gapItemIds.size > 0 ? viewMode === "gaps" ? "bg-amber-600 text-white" : "bg-amber-100 text-amber-800" : viewMode === "gaps" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600"}`}>Missing Info ({gapItemIds.size})</button>
         <button type="button" onClick={scrollToUnscheduled} className={`rounded-full px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500"}`}>Unscheduled ({unscheduled.length})</button>
       </div>
@@ -404,10 +393,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
           const items = weekWork.filter((item) => performerKey(item) === lane.key && visible(item)).sort((a, b) => new Date(a.scheduledStartAt || 0).getTime() - new Date(b.scheduledStartAt || 0).getTime());
           if (!items.length) return null;
           const labor = items.reduce((sum, item) => sum + (item.status === "complete" ? 0 : item.laborMinutes || 0), 0);
-          return <div key={lane.key} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div><div className="text-sm font-black text-slate-950">{lane.label}</div>{lane.note ? <div className="mt-0.5 text-xs font-semibold text-slate-500">{lane.note}</div> : null}<div className="mt-2 text-xs font-black text-slate-500">{items.length} item{items.length === 1 ? "" : "s"} · {hours(labor)} active labor</div></div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <WorkCard key={item.id} item={item} compact />)}</div>
-          </div>;
+          return <div key={lane.key} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[220px_minmax(0,1fr)]"><div><div className="text-sm font-black text-slate-950">{lane.label}</div>{lane.note ? <div className="mt-0.5 text-xs font-semibold text-slate-500">{lane.note}</div> : null}<div className="mt-2 text-xs font-black text-slate-500">{items.length} item{items.length === 1 ? "" : "s"} · {hours(labor)} active labor</div></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <WorkCard key={item.id} item={item} compact />)}</div></div>;
         })}
       </div> : null}
 
@@ -415,17 +401,14 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         {[...resourceOptions.map((resource) => ({ key: resource.id, label: resource.name, note: locationOptions.find((location) => location.id === resource.locationId)?.name || null })), { key: "none", label: "No resource assigned", note: "Work that does not currently reserve a bay or resource" }].map((lane) => {
           const items = weekWork.filter((item) => (item.resourceId || "none") === lane.key && visible(item)).sort((a, b) => new Date(a.scheduledStartAt || 0).getTime() - new Date(b.scheduledStartAt || 0).getTime());
           if (!items.length) return null;
-          return <div key={lane.key} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div><div className="text-sm font-black text-slate-950">{lane.label}</div>{lane.note ? <div className="mt-0.5 text-xs font-semibold text-slate-500">{lane.note}</div> : null}<div className="mt-2 text-xs font-black text-slate-500">{items.length} scheduled item{items.length === 1 ? "" : "s"}</div></div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <WorkCard key={item.id} item={item} compact />)}</div>
-          </div>;
+          return <div key={lane.key} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[220px_minmax(0,1fr)]"><div><div className="text-sm font-black text-slate-950">{lane.label}</div>{lane.note ? <div className="mt-0.5 text-xs font-semibold text-slate-500">{lane.note}</div> : null}<div className="mt-2 text-xs font-black text-slate-500">{items.length} scheduled item{items.length === 1 ? "" : "s"}</div></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{items.map((item) => <WorkCard key={item.id} item={item} compact />)}</div></div>;
         })}
       </div> : null}
     </section>
 
     <section id="unscheduled-work" className="scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-end justify-between gap-4"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Unscheduled Queue</div><h2 className="mt-1 text-xl font-black text-slate-950">Work waiting for a calendar slot</h2><p className="mt-1 text-xs font-semibold text-slate-500">Highest-urgency vehicles appear first. Suggested scheduling should normally keep this queue small; outside-partner coordination may leave work here temporarily.</p></div><div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{unscheduled.length} waiting</div></div>
-      <div className="mt-4 space-y-2">{unscheduled.filter(visible).map((item) => <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"><div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => openItem(item)} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</button><span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${item.vehiclePriority === "1" ? "bg-red-100 text-red-700" : item.vehiclePriority === "3" ? "bg-slate-100 text-slate-600" : "bg-blue-50 text-blue-700"}`}>P{item.vehiclePriority}</span></div><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-2 text-xs font-bold text-slate-500">{item.performerName || "Partner / technician TBD"} · {item.locationName || "Location TBD"}</div></div><button type="button" onClick={() => openItem(item)} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700">Edit & schedule</button></div>)}{unscheduled.filter(visible).length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">No matching unscheduled work.</div> : null}</div>
+      <div className="mt-4 space-y-2">{unscheduled.filter(visible).map((item) => <div key={item.id} className={`grid gap-3 rounded-xl border p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${item.partsReadyForExecution ? "border-slate-200" : "border-amber-300 bg-amber-50/40"}`}><div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => openItem(item)} className="font-black text-slate-950 hover:underline">{item.inventoryNumber} · {item.vehicleLabel}</button><span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${item.vehiclePriority === "1" ? "bg-red-100 text-red-700" : item.vehiclePriority === "3" ? "bg-slate-100 text-slate-600" : "bg-blue-50 text-blue-700"}`}>P{item.vehiclePriority}</span>{!item.partsReadyForExecution ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">Waiting on parts</span> : null}</div><div className="mt-1 text-sm font-black text-slate-800">{item.title}</div><div className="mt-2 text-xs font-bold text-slate-500">{item.performerName || "Partner / technician TBD"} · {item.locationName || "Location TBD"}</div></div><button type="button" onClick={() => openItem(item)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700">Edit & schedule</button></div>)}{unscheduled.filter(visible).length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">No matching unscheduled work.</div> : null}</div>
     </section>
 
     {selectedItem ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelectedItem(null); }}>
@@ -434,6 +417,7 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
         <div className="space-y-4 p-5">
           {selectedConflicts.length ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-black text-red-900">Conflict: {Array.from(new Set(selectedConflicts.map((conflict) => `${conflict.kind === "performer" ? "Partner / technician" : "Resource"}: ${conflict.label}`))).join(" · ")}</div> : null}
           {selectedHealth ? <div className={`rounded-xl border p-3 text-sm font-black ${selectedHealth.level === "overdue" ? "border-red-200 bg-red-50 text-red-900" : selectedHealth.level === "running_late" ? "border-orange-200 bg-orange-50 text-orange-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{selectedHealth.level === "late_start" ? "Late start" : selectedHealth.level === "running_late" ? "Running late" : "Overdue"}: {selectedHealth.label}</div> : null}
+          {!selectedItem.partsReadyForExecution ? <div className="rounded-xl border border-amber-300 bg-amber-50 p-3"><div className="text-sm font-black text-amber-950">Waiting on parts</div><div className="mt-1 text-xs font-bold text-amber-800">{partsLabel(selectedItem)}{selectedItem.pendingPartCount ? ` · ${selectedItem.pendingPartCount} pending` : ""}{selectedItem.partsLatestEtaAt ? ` · ETA ${new Date(selectedItem.partsLatestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</div><Link href={`/mindful/inventory/${selectedItem.vehicleId}/parts`} className="mt-2 inline-flex text-xs font-black text-amber-900 underline">Manage Parts →</Link></div> : null}
           <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Workload</div><div className="mt-1 text-sm font-black text-slate-900">Labor {hours(selectedItem.laborMinutes)} · Turn {hours(selectedElapsed)}</div></div><div className="rounded-xl bg-slate-50 p-3"><div className="text-[9px] font-black uppercase text-slate-400">Status</div><div className="mt-1 text-sm font-black text-slate-900">{labelize(selectedItem.status)}</div>{selectedItem.actualStartAt ? <div className="mt-1 text-[10px] font-bold text-slate-500">Started {new Date(selectedItem.actualStartAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div> : null}</div></div>
           <div className="rounded-xl border border-slate-200 p-4"><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Execution assignment</div><div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Partner / technician</div><select disabled={workingId === selectedItem.id} value={performerKey(selectedItem)} onChange={(event) => void patchItem(selectedItem, { performerKey: event.target.value }, "Assignment updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="unassigned">Needs assignment</option><optgroup label="Partners">{performerOptions.filter((option) => option.type === "partner").map((option) => <option key={option.key} value={option.key}>{option.displayName}{option.secondaryLabel ? ` · ${option.secondaryLabel}` : ""}</option>)}</optgroup><optgroup label="Mindful Team">{performerOptions.filter((option) => option.type === "internal").map((option) => <option key={option.key} value={option.key}>{option.displayName}</option>)}</optgroup></select></label>
@@ -441,11 +425,11 @@ export function InventoryScheduleBoard({ work, performerOptions, locationOptions
             <label className="sm:col-span-2"><div className="mb-1 text-[10px] font-black uppercase text-slate-400">Resource / bay</div><select disabled={workingId === selectedItem.id || !selectedItem.locationId} value={selectedItem.resourceId || ""} onChange={(event) => void patchItem(selectedItem, { resourceId: event.target.value || null }, "Resource updated.")} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold"><option value="">No resource</option>{selectedResources.map((option) => <option key={option.id} value={option.id}>{option.name} · {labelize(option.resourceType)}</option>)}</select></label>
           </div></div>
           <div className="rounded-xl border border-slate-200 p-4"><label className="block"><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Scheduled start</div><input type="datetime-local" value={starts[selectedItem.id] || localInput(selectedItem.scheduledStartAt)} onChange={(event) => setStarts((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-800" /></label><button type="button" disabled={workingId === selectedItem.id} onClick={() => void schedule(selectedItem)} className="mt-3 w-full rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{workingId === selectedItem.id ? "Saving..." : "Save Schedule"}</button></div>
-          {!["in_progress", "complete", "cancelled"].includes(selectedItem.status) ? <button type="button" disabled={workingId === selectedItem.id} onClick={() => void patchItem(selectedItem, { status: "in_progress" }, "Work started.")} className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-800">Start Work</button> : null}
+          {!["in_progress", "complete", "cancelled"].includes(selectedItem.status) ? <button type="button" disabled={workingId === selectedItem.id || !selectedItem.partsReadyForExecution} onClick={() => void patchItem(selectedItem, { status: "in_progress" }, "Work started.")} className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-800 disabled:border-amber-200 disabled:bg-amber-50 disabled:text-amber-800">{selectedItem.partsReadyForExecution ? "Start Work" : "Waiting on Parts"}</button> : null}
           {selectedItem.status === "in_progress" ? <button type="button" disabled={workingId === selectedItem.id} onClick={() => void patchItem(selectedItem, { status: "complete" }, "Work completed.")} className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800">Mark Complete</button> : null}
-          {message ? <div className={`rounded-lg px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</div> : null}
+          {message ? <div className={`rounded-lg px-3 py-2 text-sm font-bold ${message.toLowerCase().includes("conflict") || message.toLowerCase().includes("failed") || message.toLowerCase().includes("waiting on parts") ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</div> : null}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><div className="text-xs font-semibold text-slate-500">Schedule health updates visually before notifications. Start/complete responsibility can be tightened when partner workflows are added.</div><Link href={`/mindful/inventory/${selectedItem.vehicleId}/work`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">Open full Active Work →</Link></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4"><div className="text-xs font-semibold text-slate-500">Schedule health updates visually before notifications. Parts readiness must be clear before execution begins.</div><Link href={`/mindful/inventory/${selectedItem.vehicleId}/work`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">Open full Active Work →</Link></div>
       </div>
     </div> : null}
   </div>;
