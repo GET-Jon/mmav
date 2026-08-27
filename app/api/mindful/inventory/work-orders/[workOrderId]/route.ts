@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";
 
 const allowedStatuses = new Set(["planned", "ready_to_schedule", "scheduled", "in_progress", "blocked", "complete", "cancelled"]);
 
@@ -39,6 +40,29 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
       .eq("company_id", access.company.companyId)
       .single();
     if (!vehicle) return NextResponse.json({ error: "Work Order is outside the current company." }, { status: 403 });
+
+    if (requestedStatus === "in_progress") {
+      const { data: partRows, error: partsError } = await access.supabase
+        .from("mindful_inventory_work_order_parts")
+        .select("work_order_id,status,eta_at")
+        .eq("work_order_id", workOrderId);
+      if (partsError) throw new Error(partsError.message);
+
+      const parts = summarizePartsReadiness(partRows || []);
+      if (!parts.readyForExecution) {
+        const eta = parts.latestEtaAt
+          ? ` Latest tracked ETA is ${new Date(parts.latestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+          : "";
+        return NextResponse.json(
+          {
+            error: `Waiting on parts: ${parts.pendingPartCount} tracked part${parts.pendingPartCount === 1 ? " is" : "s are"} not yet received.${eta}`,
+            partsReadiness: parts.readiness,
+            pendingPartCount: parts.pendingPartCount,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     const patch: Record<string, unknown> = { updated_by: access.userId, updated_at: new Date().toISOString() };
     const metadata: Record<string, unknown> = {};
