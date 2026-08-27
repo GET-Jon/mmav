@@ -77,12 +77,16 @@ export function Turn14Admin({ configured }: { configured: boolean }) {
           <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">Ordering disabled</div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Credentials</div>
             <div className={`mt-1 text-sm font-black ${configured ? "text-emerald-700" : "text-amber-700"}`}>
               {configured ? "Available to server" : "Not detected"}
             </div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Environment</div>
+            <div className="mt-1 text-sm font-black text-blue-700">Turn 14 test server</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Mode</div>
@@ -105,6 +109,7 @@ export function Turn14Admin({ configured }: { configured: boolean }) {
             </div>
             <div className="mt-1 text-sm font-medium text-slate-600">{diagnostics.message}</div>
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs font-bold text-slate-500">
+              <span>Environment: {diagnostics.environment}</span>
               <span>API: {diagnostics.apiBase}</span>
               {diagnostics.tokenType ? <span>Token: {diagnostics.tokenType}</span> : null}
               {diagnostics.expiresInSeconds ? <span>Expires: {diagnostics.expiresInSeconds}s</span> : null}
@@ -118,19 +123,19 @@ export function Turn14Admin({ configured }: { configured: boolean }) {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Catalog probe</div>
-            <h3 className="mt-1 text-xl font-black text-slate-950">Inspect Turn 14 data</h3>
+            <h3 className="mt-1 text-xl font-black text-slate-950">Inspect Turn 14 test data</h3>
             <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500">
-              These tests issue authenticated GET requests only. No quote, order, purchase, or checkout request can be submitted from this screen.
+              These tests issue authenticated GET requests only against Turn 14&apos;s testing environment. No quote, order, purchase, or checkout request can be submitted from this screen.
             </p>
           </div>
-          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">Read only</span>
+          <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">apitest.turn14.com</span>
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="text-sm font-black text-slate-900">Catalog search probe</div>
             <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-              Starts with Turn 14&apos;s items collection so we can verify the live query contract and inspect returned product fields.
+              Starts with Turn 14&apos;s items collection so we can verify the test query contract and inspect returned product fields.
             </p>
             <input value={query} onChange={(event) => setQuery(event.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="2021 BMW X7 headliner clips" />
             <button type="button" onClick={() => void runCatalogTest("catalog")} disabled={catalogWorking || !query.trim()} className="mt-3 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-40">
@@ -141,7 +146,7 @@ export function Turn14Admin({ configured }: { configured: boolean }) {
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="text-sm font-black text-slate-900">Inventory-by-item probe</div>
             <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-              Once the catalog response gives us an item ID, paste it here to inspect its real-time inventory response.
+              Once the catalog response gives us an item ID, paste it here to inspect its test-environment inventory response.
             </p>
             <input value={itemId} onChange={(event) => setItemId(event.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Turn 14 item ID" />
             <button type="button" onClick={() => void runCatalogTest("inventory")} disabled={catalogWorking || !itemId.trim()} className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800 disabled:opacity-40">
@@ -159,6 +164,7 @@ export function Turn14Admin({ configured }: { configured: boolean }) {
                 HTTP {catalogResult.status}
               </span>
               <span className="text-xs font-black text-slate-500">GET {catalogResult.endpoint}</span>
+              <span className="text-xs font-bold text-slate-400">{catalogResult.environment} environment</span>
               {catalogResult.resultCount !== null ? <span className="text-xs font-bold text-slate-400">{catalogResult.resultCount} returned</span> : null}
             </div>
             <div className="mt-2 text-sm font-semibold text-slate-600">{catalogResult.message}</div>
@@ -171,7 +177,7 @@ export function Turn14Admin({ configured }: { configured: boolean }) {
         <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Safety boundary</div>
         <h3 className="mt-1 text-lg font-black text-slate-950">This phase cannot submit orders</h3>
         <p className="mt-2 max-w-4xl text-sm font-medium leading-6 text-slate-500">
-          The only POST request in the Turn 14 client is the OAuth token exchange required to authenticate. Catalog and inventory tests are GET-only, and there are no quote, order, purchase, checkout, fulfillment, or generic write-request methods in the application client.
+          Testing is the default Turn 14 environment. The only POST request in the Turn 14 client is the OAuth token exchange required to authenticate. Catalog and inventory tests are GET-only, and there are no quote, order, purchase, checkout, fulfillment, or generic write-request methods in the application client.
         </p>
       </section>
     </div>
