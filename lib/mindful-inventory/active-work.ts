@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  summarizePartsReadiness,
+  type InventoryPartsReadiness,
+} from "@/lib/mindful-inventory/parts-readiness";
+
 export type InventoryWorkOrderStatus =
   | "planned"
   | "ready_to_schedule"
@@ -44,6 +49,11 @@ export type InventoryWorkOrderView = {
   locationName: string | null;
   resourceId: string | null;
   resourceName: string | null;
+  partsReadiness: InventoryPartsReadiness;
+  partCount: number;
+  pendingPartCount: number;
+  partsLatestEtaAt: string | null;
+  partsReadyForExecution: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -122,6 +132,26 @@ export async function getInventoryActiveWork(
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
 
+  const workOrderIds = (data || []).map((row) => row.id);
+  const { data: partRows, error: partsError } = workOrderIds.length
+    ? await supabase
+        .from("mindful_inventory_work_order_parts")
+        .select("work_order_id,status,eta_at")
+        .in("work_order_id", workOrderIds)
+    : { data: [], error: null };
+  if (partsError) throw new Error(partsError.message);
+
+  const partsByWorkOrder = new Map<string, Array<{ work_order_id: string; status: string; eta_at: string | null }>>();
+  for (const part of partRows || []) {
+    const current = partsByWorkOrder.get(part.work_order_id) || [];
+    current.push({
+      work_order_id: part.work_order_id,
+      status: part.status,
+      eta_at: part.eta_at,
+    });
+    partsByWorkOrder.set(part.work_order_id, current);
+  }
+
   const partnerIds = Array.from(new Set((data || []).map((row) => row.assigned_partner_id).filter(Boolean))) as string[];
   const locationIds = Array.from(new Set((data || []).map((row) => row.location_id).filter(Boolean))) as string[];
   const resourceIds = Array.from(new Set((data || []).map((row) => row.resource_id).filter(Boolean))) as string[];
@@ -157,6 +187,7 @@ export async function getInventoryActiveWork(
   return (data || []).map((row) => {
     const partner = row.assigned_partner_id ? partners.get(row.assigned_partner_id) || null : null;
     const userName = row.assigned_user_id ? members.get(row.assigned_user_id) || null : null;
+    const parts = summarizePartsReadiness(partsByWorkOrder.get(row.id) || []);
     return {
       id: row.id,
       vehicleId: row.vehicle_id,
@@ -192,6 +223,11 @@ export async function getInventoryActiveWork(
       locationName: row.location_id ? locations.get(row.location_id) || null : null,
       resourceId: row.resource_id,
       resourceName: row.resource_id ? resources.get(row.resource_id) || null : null,
+      partsReadiness: parts.readiness,
+      partCount: parts.partCount,
+      pendingPartCount: parts.pendingPartCount,
+      partsLatestEtaAt: parts.latestEtaAt,
+      partsReadyForExecution: parts.readyForExecution,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
