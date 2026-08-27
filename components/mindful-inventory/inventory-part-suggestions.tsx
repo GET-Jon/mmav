@@ -67,6 +67,10 @@ export function InventoryPartSuggestions({
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(
+    new Set(),
+  );
+  const [otherParts, setOtherParts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setDisplaySuggestions(suggestions);
@@ -163,6 +167,15 @@ export function InventoryPartSuggestions({
     );
   }
 
+  function toggleWorkOrder(workOrderId: string) {
+    setExpandedWorkOrders((current) => {
+      const next = new Set(current);
+      if (next.has(workOrderId)) next.delete(workOrderId);
+      else next.add(workOrderId);
+      return next;
+    });
+  }
+
   async function addPart(
     workOrderId: string,
     description: string,
@@ -209,10 +222,10 @@ export function InventoryPartSuggestions({
             Lot Logic Sourcing
           </div>
           <h2 className="mt-1 text-xl font-black text-slate-950">
-            Recommended Parts & Search Links
+            Recommended Parts
           </h2>
           <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500">
-            Review what each Work Order is likely to need, source it, then add only the parts you plan to track.
+            Open a Work Order to review suggested parts, source them, or add something Lot Logic missed.
           </p>
         </div>
         {aiLoading ? (
@@ -230,21 +243,30 @@ export function InventoryPartSuggestions({
 
       <div className="mt-5 space-y-3">
         {displaySuggestions.map((suggestion) => {
+          const expanded = expandedWorkOrders.has(suggestion.workOrderId);
           const fitment = humanFitmentLabel(suggestion.fitmentLabel);
-          const primaryTracked = trackedParts.has(
-            `${suggestion.workOrderId}:${normalizedPartName(suggestion.partName)}`,
-          );
-          const primarySources = buildPartSearchSources(suggestion.searchQuery);
-          const amazon = primarySources.find((source) => source.key === "amazon");
-          const ebay = primarySources.find((source) => source.key === "ebay");
-          const turn14 = primarySources.find((source) => source.key === "turn14");
+          const trackedCount = parts.filter(
+            (part) =>
+              part.workOrderId === suggestion.workOrderId &&
+              part.status !== "cancelled",
+          ).length;
+          const otherPart = otherParts[suggestion.workOrderId] || "";
+          const otherSearch = `${fitment} ${otherPart}`.replace(/\s+/g, " ").trim();
+          const otherSources = otherSearch
+            ? buildPartSearchSources(otherSearch)
+            : [];
 
           return (
             <article
               key={suggestion.workOrderId}
-              className="rounded-2xl border border-slate-200 px-5 py-4"
+              className="overflow-hidden rounded-2xl border border-slate-200"
             >
-              <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(360px,1.2fr)_auto] lg:items-center">
+              <button
+                type="button"
+                onClick={() => toggleWorkOrder(suggestion.workOrderId)}
+                className="flex w-full items-center justify-between gap-4 bg-white px-5 py-4 text-left hover:bg-slate-50"
+                aria-expanded={expanded}
+              >
                 <div className="min-w-0">
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
                     Work Order
@@ -252,101 +274,160 @@ export function InventoryPartSuggestions({
                   <div className="mt-1 text-lg font-black text-slate-950">
                     {suggestion.workOrderTitle}
                   </div>
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceClass(suggestion.confidence)}`}
                     >
                       {confidenceLabel(suggestion.confidence)}
                     </span>
+                    {suggestion.recommendedParts.length ? (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">
+                        {suggestion.recommendedParts.length} suggested
+                      </span>
+                    ) : null}
+                    {trackedCount ? (
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">
+                        {trackedCount} tracked
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="min-w-0">
+                <span
+                  className={`shrink-0 text-2xl font-black text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                >
+                  ⌄
+                </span>
+              </button>
+
+              {expanded ? (
+                <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-4">
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                    Suggested Search
+                    Suggested Parts
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <div className="min-w-0 flex-1 text-sm font-black leading-5 text-slate-800">
-                      {suggestion.searchQuery}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void copyText(suggestion.workOrderId, suggestion.searchQuery)
-                      }
-                      className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 hover:bg-slate-50"
-                    >
-                      {copiedId === suggestion.workOrderId ? "Copied search" : "Copy search"}
-                    </button>
-                  </div>
-                  {suggestion.alternateQueries.length ? (
-                    <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                      <span className="font-black text-slate-400">Also try:</span>{" "}
-                      {suggestion.alternateQueries.slice(0, 2).join(" · ")}
-                    </div>
-                  ) : null}
-                  {fitment ? (
-                    <div className="mt-2 text-[11px] font-semibold text-slate-400">
-                      Fitment basis: {fitment}
-                    </div>
-                  ) : null}
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  {amazon ? <a href={amazon.url} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Amazon ↗</a> : null}
-                  {ebay ? <a href={ebay.url} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">eBay ↗</a> : null}
-                  {turn14 ? <a href={turn14.url} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">Turn 14 ↗</a> : null}
-                  <button
-                    type="button"
-                    disabled={primaryTracked || workingId === `${suggestion.workOrderId}:primary`}
-                    onClick={() => void addPart(suggestion.workOrderId, suggestion.partName, suggestion.searchQuery, `${suggestion.workOrderId}:primary`)}
-                    className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
-                  >
-                    {primaryTracked ? "Tracked" : workingId === `${suggestion.workOrderId}:primary` ? "Adding..." : "+ Add Part"}
-                  </button>
-                </div>
-              </div>
+                  {suggestion.recommendedParts.length ? (
+                    <div className="mt-2 space-y-2">
+                      {suggestion.recommendedParts.map((part, index) => {
+                        const key = `${suggestion.workOrderId}:${normalizedPartName(part.name)}`;
+                        const tracked = trackedParts.has(key);
+                        const rowKey = `${suggestion.workOrderId}:recommended:${index}`;
+                        const sources = buildPartSearchSources(part.searchQuery);
+                        const recAmazon = sources.find((source) => source.key === "amazon");
+                        const recEbay = sources.find((source) => source.key === "ebay");
+                        const recTurn14 = sources.find((source) => source.key === "turn14");
+                        const copyKey = `${suggestion.workOrderId}:copy:${index}`;
 
-              {suggestion.recommendedParts.length ? (
-                <div className="mt-4 border-t border-slate-100 pt-4">
-                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                    Recommended Parts
-                  </div>
-                  <div className="space-y-2">
-                    {suggestion.recommendedParts.map((part, index) => {
-                      const key = `${suggestion.workOrderId}:${normalizedPartName(part.name)}`;
-                      const tracked = trackedParts.has(key);
-                      const rowKey = `${suggestion.workOrderId}:recommended:${index}`;
-                      const sources = buildPartSearchSources(part.searchQuery);
-                      const recAmazon = sources.find((source) => source.key === "amazon");
-                      const recEbay = sources.find((source) => source.key === "ebay");
-                      const recTurn14 = sources.find((source) => source.key === "turn14");
+                        return (
+                          <div
+                            key={`${part.name}:${index}`}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                          >
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-black text-slate-900">
+                                    {part.name}
+                                  </span>
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[9px] font-black ${recommendationClass(part.need)}`}
+                                  >
+                                    {recommendationLabel(part.need)}
+                                  </span>
+                                </div>
+                                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                                  <span>{part.searchQuery}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => void copyText(copyKey, part.searchQuery)}
+                                    className="font-black text-slate-400 hover:text-slate-700"
+                                  >
+                                    {copiedId === copyKey ? "Copied" : "Copy search"}
+                                  </button>
+                                </div>
+                              </div>
 
-                      return (
-                        <div key={`${part.name}:${index}`} className="flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="text-sm font-black text-slate-800">{part.name}</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${recommendationClass(part.need)}`}>
-                              {recommendationLabel(part.need)}
-                            </span>
-                            <span className="truncate text-[11px] font-semibold text-slate-400">{part.searchQuery}</span>
+                              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                {recAmazon ? (
+                                  <a href={recAmazon.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Amazon ↗</a>
+                                ) : null}
+                                {recEbay ? (
+                                  <a href={recEbay.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">eBay ↗</a>
+                                ) : null}
+                                {recTurn14 ? (
+                                  <a href={recTurn14.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Turn 14 ↗</a>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  disabled={tracked || workingId === rowKey}
+                                  onClick={() => void addPart(suggestion.workOrderId, part.name, part.searchQuery, rowKey)}
+                                  className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
+                                >
+                                  {tracked ? "Tracked" : workingId === rowKey ? "Adding..." : "+ Add"}
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                            {recAmazon ? <a href={recAmazon.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Amazon ↗</a> : null}
-                            {recEbay ? <a href={recEbay.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">eBay ↗</a> : null}
-                            {recTurn14 ? <a href={recTurn14.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Turn 14 ↗</a> : null}
-                            <button
-                              type="button"
-                              disabled={tracked || workingId === rowKey}
-                              onClick={() => void addPart(suggestion.workOrderId, part.name, part.searchQuery, rowKey)}
-                              className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
-                            >
-                              {tracked ? "Tracked" : workingId === rowKey ? "Adding..." : "+ Add"}
-                            </button>
-                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500">
+                      Lot Logic did not identify a specific part for this Work Order.
+                    </div>
+                  )}
+
+                  <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                      Other Part
+                    </div>
+                    <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-center">
+                      <input
+                        value={otherPart}
+                        onChange={(event) =>
+                          setOtherParts((current) => ({
+                            ...current,
+                            [suggestion.workOrderId]: event.target.value,
+                          }))
+                        }
+                        placeholder="Add a part Lot Logic didn't suggest"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+                      />
+                      {otherSearch ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {otherSources.find((source) => source.key === "amazon") ? (
+                            <a href={otherSources.find((source) => source.key === "amazon")?.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Amazon ↗</a>
+                          ) : null}
+                          {otherSources.find((source) => source.key === "ebay") ? (
+                            <a href={otherSources.find((source) => source.key === "ebay")?.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">eBay ↗</a>
+                          ) : null}
+                          {otherSources.find((source) => source.key === "turn14") ? (
+                            <a href={otherSources.find((source) => source.key === "turn14")?.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Turn 14 ↗</a>
+                          ) : null}
+                          <button
+                            type="button"
+                            disabled={!otherPart.trim() || workingId === `${suggestion.workOrderId}:other`}
+                            onClick={() =>
+                              void addPart(
+                                suggestion.workOrderId,
+                                otherPart.trim(),
+                                otherSearch,
+                                `${suggestion.workOrderId}:other`,
+                              ).then(() =>
+                                setOtherParts((current) => ({
+                                  ...current,
+                                  [suggestion.workOrderId]: "",
+                                })),
+                              )
+                            }
+                            className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
+                          >
+                            {workingId === `${suggestion.workOrderId}:other` ? "Adding..." : "+ Add"}
+                          </button>
                         </div>
-                      );
-                    })}
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ) : null}
