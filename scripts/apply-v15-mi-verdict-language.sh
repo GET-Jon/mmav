@@ -21,18 +21,12 @@ def replace_once(old: str, new: str, label: str) -> None:
 
 replace_once(
 '''  const mindfulNegativeEvidence = mindfulIntelligenceDisplay.limitations
-    .filter(
-      (item) =>
-        item.trim().toLowerCase() !== mindfulRationaleNormalized,
-    )
+    .filter((item) => item.trim().toLowerCase() !== mindfulRationaleNormalized)
     .slice(0, 6);
 
   const mindfulConditionalEvidence =''',
 '''  const mindfulNegativeEvidence = mindfulIntelligenceDisplay.limitations
-    .filter(
-      (item) =>
-        item.trim().toLowerCase() !== mindfulRationaleNormalized,
-    )
+    .filter((item) => item.trim().toLowerCase() !== mindfulRationaleNormalized)
     .slice(0, 6);
 
   const mindfulLeadExplanation =
