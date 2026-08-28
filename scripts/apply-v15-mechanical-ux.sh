@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+python - <<'PY'
+from pathlib import Path
+
+path = Path("components/mindful-inventory/inventory-mechanical-inspection.tsx")
+text = path.read_text()
+
+old = '''  const router = useRouter();
+  const discoverySectionRef = useRef<HTMLElement | null>(null);
+  const [inspectionSummary, setInspectionSummary] = useState(data.mechanicalInspection?.summary || "");'''
+new = '''  const router = useRouter();
+  const [showNewFindingModal, setShowNewFindingModal] = useState(false);
+  const [inspectionSummary, setInspectionSummary] = useState(data.mechanicalInspection?.summary || "");'''
+if old not in text:
+    raise SystemExit("PATCH STOPPED: mechanical header state anchor not found")
+text = text.replace(old, new, 1)
+
+old = '''      setFindingTitle(""); setFindingDescription(""); setFindingSeverity(""); setCostLow(""); setCostHigh(""); setDurationHours("");
+      setFindingMessage("Mechanical discovery added.");
+      router.refresh();'''
+new = '''      setFindingTitle(""); setFindingDescription(""); setFindingSeverity(""); setCostLow(""); setCostHigh(""); setDurationHours("");
+      setFindingMessage("New mechanical issue added.");
+      setShowNewFindingModal(false);
+      router.refresh();'''
+if old not in text:
+    raise SystemExit("PATCH STOPPED: add-finding success anchor not found")
+text = text.replace(old, new, 1)
+
+start = text.find('  return (\n    <div className="space-y-5">')
+if start == -1:
+    raise SystemExit("PATCH STOPPED: return block start not found")
+end_marker = '\n    </div>\n  );\n}'
+end = text.rfind(end_marker)
+if end == -1 or end < start:
+    raise SystemExit("PATCH STOPPED: return block end not found")
+end += len(end_marker)
+
+replacement = r'''  const scopeDifferenceCount =
+    (reconciliation.findingCounts.changed || 0) +
+    (reconciliation.findingCounts.not_found || 0) +
+    (reconciliation.upgradeCounts.feasible_with_changes || 0) +
+    (reconciliation.upgradeCounts.not_recommended || 0);
+
+  return (
+    <div className="space-y-5">
+      {inspectionComplete ? (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-black text-emerald-900">Mechanical Inspection completed</div>
+              <div className="mt-0.5 text-sm font-medium text-emerald-700">This inspection is locked and is now view-only. Its findings and validation decisions remain part of vehicle history.</div>
+            </div>
+            <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-emerald-700">View Only</span>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Mechanical Inspection</div>
+              <h2 className="mt-1 text-xl font-black text-slate-950">Scope Validation</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-500">Confirm the preliminary issues and requested upgrades before the Work Plan is built.</p>
+            </div>
+            <span className={`rounded-full px-3 py-1.5 text-xs font-black ${reconciliation.pending > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+              {reconciliation.pending > 0 ? `${reconciliation.pending} needs review` : "Scope validated"}
+            </span>
+          </div>
+
+          <div className="mt-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-black text-slate-950">Known Issues</h3>
+                <p className="mt-1 text-sm text-slate-500">Confirm whether each Lot Logic issue is actually present.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">{aiFindings.length}</span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {aiFindings.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-4 text-sm font-semibold text-slate-400">No imported issues.</div>
+              ) : aiFindings.map((finding) => (
+                <details
+                  key={finding.id}
+                  open={finding.mechanicalValidationStatus === "pending" ? true : undefined}
+                  className="rounded-xl border border-slate-200 bg-white"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <span className="text-sm font-black text-slate-800">{finding.title}</span>
+                      <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-500">Known Issue</span>
+                    </div>
+                    {validationBadge(finding.mechanicalValidationStatus, findingValidationLabels[finding.mechanicalValidationStatus])}
+                  </summary>
+                  <div className="border-t border-slate-100 p-4">
+                    <div className="text-sm text-slate-600">{finding.description || "No description."}</div>
+                    <div className="mt-2 text-xs font-bold text-slate-400">Estimate {money(finding.estimatedCostLow)}–{money(finding.estimatedCostHigh)}</div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-[minmax(220px,0.42fr)_minmax(0,1fr)]">
+                      <label>
+                        <FieldLabel>Status</FieldLabel>
+                        <select disabled={inspectionComplete || validationSavingId === finding.id} className={inputClass} value={finding.mechanicalValidationStatus} onChange={(e) => void saveValidation("finding", finding.id, e.target.value as InventoryFindingMechanicalValidationStatus)}>
+                          {Object.entries(findingValidationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        <FieldLabel>Notes / What Changed</FieldLabel>
+                        <div className="flex gap-2">
+                          <input disabled={inspectionComplete} className={inputClass} value={findingNotes[finding.id] || ""} onChange={(e) => setFindingNotes((current) => ({ ...current, [finding.id]: e.target.value }))} placeholder="Optional when confirmed; explain differences, diagnosis, or why it was not found" />
+                          <button type="button" disabled={inspectionComplete || validationSavingId === finding.id} onClick={() => void saveValidation("finding", finding.id, finding.mechanicalValidationStatus)} className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-50">Save Note</button>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-black text-slate-950">Requested Upgrades</h3>
+                <p className="mt-1 text-sm text-slate-500">Validate build intent with the same priority as the known scope.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">{proposedUpgrades.length}</span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {proposedUpgrades.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-4 text-sm font-semibold text-slate-400">No requested upgrades.</div>
+              ) : proposedUpgrades.map((upgrade) => (
+                <details
+                  key={upgrade.id}
+                  open={upgrade.mechanicalValidationStatus === "pending" ? true : undefined}
+                  className="rounded-xl border border-slate-200 bg-white"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <span className="text-sm font-black text-slate-800">{upgrade.title}</span>
+                      <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-600">Requested Upgrade</span>
+                    </div>
+                    {validationBadge(upgrade.mechanicalValidationStatus, upgradeValidationLabels[upgrade.mechanicalValidationStatus])}
+                  </summary>
+                  <div className="border-t border-slate-100 p-4 text-sm text-slate-600">
+                    <div>{upgrade.description || upgrade.desiredOutcome || "No additional detail."}</div>
+                    <div className="mt-2 text-xs font-bold text-slate-400">{upgrade.manufacturer || "Manufacturer open"}{upgrade.partNumber ? ` · ${upgrade.partNumber}` : ""} · Budget {money(upgrade.estimatedTotalCost)}</div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-[minmax(220px,0.42fr)_minmax(0,1fr)]">
+                      <label>
+                        <FieldLabel>Status</FieldLabel>
+                        <select disabled={inspectionComplete || validationSavingId === upgrade.id} className={inputClass} value={upgrade.mechanicalValidationStatus} onChange={(e) => void saveValidation("upgrade", upgrade.id, e.target.value as InventoryUpgradeMechanicalValidationStatus)}>
+                          {Object.entries(upgradeValidationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        <FieldLabel>Notes / Required Changes</FieldLabel>
+                        <div className="flex gap-2">
+                          <input disabled={inspectionComplete} className={inputClass} value={upgradeNotes[upgrade.id] || ""} onChange={(e) => setUpgradeNotes((current) => ({ ...current, [upgrade.id]: e.target.value }))} placeholder="Compatibility, substitutions, scope changes, or why it is not recommended" />
+                          <button type="button" disabled={inspectionComplete || validationSavingId === upgrade.id} onClick={() => void saveValidation("upgrade", upgrade.id, upgrade.mechanicalValidationStatus)} className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-50">Save Note</button>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <aside className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:self-start xl:sticky xl:top-5">
+          <h3 className="font-black text-slate-950">Intake Reference</h3>
+          <p className="mt-1 text-sm text-slate-500">What the owner and intake process observed when the vehicle arrived.</p>
+          <dl className="mt-4 space-y-4 text-sm">
+            <div><dt className="text-xs font-black uppercase text-slate-400">Mileage</dt><dd className="mt-1 font-semibold text-slate-700">{data.intake?.mileage?.toLocaleString() || vehicle.mileage?.toLocaleString() || "—"}</dd></div>
+            <div><dt className="text-xs font-black uppercase text-slate-400">Visible Damage</dt><dd className="mt-1 font-semibold text-slate-700">{data.intake?.visibleDamageSummary || "None noted"}</dd></div>
+            <div><dt className="text-xs font-black uppercase text-slate-400">Owner / Intake Notes</dt><dd className="mt-1 whitespace-pre-wrap font-semibold text-slate-700">{data.intake?.initialObservations || "None noted"}</dd></div>
+          </dl>
+        </aside>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-base font-black text-slate-950">Mechanic Summary</h3>
+            <p className="mt-1 text-sm text-slate-500">Overall condition, road-test/scan observations, and context that does not belong to one specific scope item.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">{reconciliation.validated}/{reconciliation.total} Validated</span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">{reconciliation.findingCounts.confirmed || 0} Confirmed</span>
+              <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">{scopeDifferenceCount} Changed</span>
+              <span className={`rounded-full px-3 py-1.5 text-xs font-black ${reconciliation.pending > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{reconciliation.pending} Needs Review</span>
+              {validationMessage ? <span className="px-1 py-1.5 text-xs font-semibold text-slate-400">{validationMessage}</span> : null}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-semibold text-slate-500">{inspectionComplete ? "Inspection complete." : inspectionMessage}</span>
+            {inspectionComplete ? (
+              <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-emerald-700">Complete</span>
+            ) : (
+              <>
+                <button type="button" onClick={saveInspectionNow} disabled={inspectionSaving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 disabled:opacity-50">Save Now</button>
+                <button type="button" onClick={completeInspection} disabled={inspectionSaving || reconciliation.pending > 0} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Complete Inspection →</button>
+              </>
+            )}
+          </div>
+        </div>
+        {!inspectionComplete && reconciliation.pending > 0 ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Complete the {reconciliation.pending} remaining scope validation{reconciliation.pending === 1 ? "" : "s"} before closing Mechanical.</div>
+        ) : null}
+        <div className="mt-5">
+          <label>
+            <FieldLabel>Overall Mechanical Notes</FieldLabel>
+            <textarea className={`${inputClass} min-h-28 resize-y`} value={inspectionSummary} disabled={inspectionComplete} onChange={(e) => setInspectionSummary(e.target.value)} placeholder="Overall mechanical condition, road test, scan results, and important context..." />
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-black text-slate-950">New Mechanical Issues</h3>
+            <p className="mt-1 text-sm text-slate-500">Issues found during inspection that were not already represented in the preliminary scope.</p>
+          </div>
+          {!inspectionComplete ? (
+            <button type="button" onClick={() => setShowNewFindingModal(true)} className="shrink-0 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white">+ Add New Mechanical Issue</button>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{mechanicFindings.length} new</span>
+          )}
+        </div>
+        {findingMessage ? <div className="mt-3 text-sm font-semibold text-slate-600">{findingMessage}</div> : null}
+        {mechanicFindings.length > 0 ? (
+          <div className="mt-4 space-y-2">{mechanicFindings.map((finding) => <MechanicalDiscoveryCard key={finding.id} vehicleId={vehicle.id} finding={finding} disabled={inspectionComplete} />)}</div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm font-semibold text-slate-400">No new mechanical issues have been added.</div>
+        )}
+      </section>
+
+      {showNewFindingModal && !inspectionComplete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Mechanical Inspection</div>
+                <h3 className="mt-1 text-xl font-black text-slate-950">Add New Mechanical Issue</h3>
+                <p className="mt-1 text-sm text-slate-500">Record something discovered during inspection that was not already in the preliminary scope.</p>
+              </div>
+              <button type="button" onClick={() => setShowNewFindingModal(false)} className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close new mechanical issue">✕</button>
+            </div>
+
+            <form onSubmit={addFinding} className="grid gap-4 p-6 md:grid-cols-2">
+              <label className="md:col-span-2"><FieldLabel>Issue</FieldLabel><input required className={inputClass} value={findingTitle} onChange={(e) => setFindingTitle(e.target.value)} placeholder="e.g. Left front control arm bushing cracked" /></label>
+              <label><FieldLabel>Category</FieldLabel><select className={inputClass} value={findingCategory} onChange={(e) => setFindingCategory(e.target.value)}><option value="mechanical">Mechanical</option><option value="maintenance">Maintenance</option><option value="cosmetic">Cosmetic</option><option value="inspection">Inspection</option><option value="other">Other</option></select></label>
+              <label><FieldLabel>Severity</FieldLabel><select className={inputClass} value={findingSeverity} onChange={(e) => setFindingSeverity(e.target.value as InventoryFindingSeverity | "")}><option value="">Unrated</option><option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option></select></label>
+              <label className="md:col-span-2"><FieldLabel>Description</FieldLabel><textarea className={`${inputClass} min-h-24 resize-y`} value={findingDescription} onChange={(e) => setFindingDescription(e.target.value)} /></label>
+              <label><FieldLabel>Est. Cost Low</FieldLabel><input className={inputClass} inputMode="decimal" value={costLow} onChange={(e) => setCostLow(e.target.value)} /></label>
+              <label><FieldLabel>Est. Cost High</FieldLabel><input className={inputClass} inputMode="decimal" value={costHigh} onChange={(e) => setCostHigh(e.target.value)} /></label>
+              <label><FieldLabel>Est. Hours</FieldLabel><input className={inputClass} inputMode="decimal" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} /></label>
+              <div className="flex items-end justify-end gap-2">
+                <button type="button" onClick={() => setShowNewFindingModal(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700">Cancel</button>
+                <button disabled={findingSaving} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">{findingSaving ? "Adding..." : "Add Issue"}</button>
+              </div>
+              {findingMessage ? <div className="md:col-span-2 text-sm font-semibold text-slate-600">{findingMessage}</div> : null}
+            </form>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}'''
+
+text = text[:start] + replacement + text[end:]
+path.write_text(text)
+print("✓ Removed redundant black Mechanical hero")
+print("✓ Unified Known Issues and Requested Upgrades under Scope Validation")
+print("✓ Pending scope items open by default; validated items collapse after refresh")
+print("✓ Kept Intake Reference visible beside scope")
+print("✓ Moved reconciliation metrics into compact Mechanic Summary pills")
+print("✓ Renamed Mechanical Discoveries to New Mechanical Issues")
+print("✓ Moved new issue entry into a modal")
+PY
+
+git diff --check
+
+git add components/mindful-inventory/inventory-mechanical-inspection.tsx scripts/apply-v15-mechanical-ux.sh
+git commit -m "Streamline mechanical inspection workflow"
+git push origin v15-inventory-workflow
+
+echo "✓ V15 Mechanical UX committed and pushed"
