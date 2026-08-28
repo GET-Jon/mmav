@@ -713,7 +713,7 @@ export function EvaluationWorkspace({
     "financial" | "enthusiast"
   >("financial");
   const [activeMindfulIntelligenceTab, setActiveMindfulIntelligenceTab] =
-    useState<"perspective" | "thesis" | "checks">("perspective");
+    useState<"verdict" | "thesis" | "checks">("verdict");
   const [aiSummaryError, setAiSummaryError] = useState("");
 
   const [selectedConditions, setSelectedConditions] = useState<string[]>(
@@ -2406,7 +2406,7 @@ export function EvaluationWorkspace({
     setAiSummaryLoadingMode(null);
     setAiSummaryError("");
     setActiveThesisMode("financial");
-    setActiveMindfulIntelligenceTab("perspective");
+    setActiveMindfulIntelligenceTab("verdict");
 
     setVehicleThumbnailUrl("");
     setVehicleThumbnailError("");
@@ -2638,15 +2638,45 @@ export function EvaluationWorkspace({
     },
   };
 
-  const mindfulOpportunityLabel =
-    mindfulIntelligenceDisplay.opportunityTypes[0]?.replaceAll("_", " ") ||
-    dealerFitResult.category ||
-    "General acquisition";
+  const mindfulRecommendation =
+    mindfulIntelligenceDisplay.verdict === "strong_fit"
+      ? "PURSUE"
+      : mindfulIntelligenceDisplay.verdict === "conditional_fit"
+        ? "SELECTIVE"
+        : "AVOID";
 
-  const mindfulOpportunityTone =
-    mindfulOpportunityLabel.toLowerCase() === "avoid"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : "border-slate-200 bg-white text-slate-600";
+  const mindfulRecommendationTone =
+    mindfulRecommendation === "PURSUE"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : mindfulRecommendation === "SELECTIVE"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-red-200 bg-red-50 text-red-700";
+
+  const mindfulRecommendationLead =
+    mindfulRecommendation === "PURSUE"
+      ? "Worth pursuing."
+      : mindfulRecommendation === "SELECTIVE"
+        ? "Proceed selectively."
+        : "Pass on this one.";
+
+  const mindfulRationaleNormalized =
+    mindfulIntelligenceDisplay.rationale.trim().toLowerCase();
+
+  const mindfulPositiveEvidence = mindfulIntelligenceDisplay.strengths
+    .filter((item) => item.trim().toLowerCase() !== mindfulRationaleNormalized)
+    .slice(0, 6);
+
+  const mindfulNegativeEvidence = mindfulIntelligenceDisplay.limitations
+    .filter((item) => item.trim().toLowerCase() !== mindfulRationaleNormalized)
+    .slice(0, 6);
+
+  const mindfulConditionalEvidence = mindfulIntelligenceDisplay.verificationItems
+    .filter(
+      (item) =>
+        item.trim().toLowerCase() !== mindfulRationaleNormalized &&
+        !mindfulNegativeEvidence.includes(item),
+    )
+    .slice(0, 6);
 
   const suggestedBidDisplay = !hasEvaluationData
     ? "—"
@@ -4692,19 +4722,8 @@ export function EvaluationWorkspace({
                     </h2>
 
                     {hasEvaluationData ? (
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-500">
-                          {mindfulIntelligenceDisplay.title} ·{" "}
-                          {mindfulIntelligencePreview
-                            ? "Matched Mindful profile"
-                            : "General dealer-fit profile"}
-                        </span>
-
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize ${mindfulOpportunityTone}`}
-                        >
-                          {mindfulOpportunityLabel}
-                        </span>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">
+                        {mindfulIntelligenceDisplay.title}
                       </div>
                     ) : (
                       <div className="mt-1 text-xs font-semibold text-slate-500">
@@ -4715,6 +4734,12 @@ export function EvaluationWorkspace({
 
                   {hasEvaluationData ? (
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-[10px] font-black ${mindfulRecommendationTone}`}
+                      >
+                        Recommendation: {mindfulRecommendation}
+                      </span>
+
                       <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black text-violet-700">
                         Mindful Fit:{" "}
                         {mindfulIntelligenceDisplay.verdict === "strong_fit"
@@ -4747,8 +4772,8 @@ export function EvaluationWorkspace({
                 >
                   {[
                     {
-                      id: "perspective" as const,
-                      label: "Perspective",
+                      id: "verdict" as const,
+                      label: "Verdict",
                     },
                     {
                       id: "thesis" as const,
@@ -4788,37 +4813,97 @@ export function EvaluationWorkspace({
                 </div>
               </div>
 
-              {activeMindfulIntelligenceTab === "perspective" ? (
+              {activeMindfulIntelligenceTab === "verdict" ? (
                 <div className="px-5 py-5">
                   <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                    Mindful perspective
+                    Mindful verdict
+                  </div>
+
+                  <div
+                    className={`mt-2 text-base font-black ${
+                      mindfulRecommendation === "PURSUE"
+                        ? "text-emerald-700"
+                        : mindfulRecommendation === "SELECTIVE"
+                          ? "text-amber-700"
+                          : "text-red-700"
+                    }`}
+                  >
+                    {mindfulRecommendationLead}
                   </div>
 
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
                     {mindfulIntelligenceDisplay.rationale}
                   </p>
 
-                  {mindfulIntelligenceDisplay.strengths.length ? (
+                  {mindfulNegativeEvidence.length ? (
                     <div className="mt-5">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                        Why it fits
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600">
+                        {mindfulRecommendation === "AVOID"
+                          ? "Why we're passing"
+                          : "What concerns us"}
                       </div>
 
                       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulIntelligenceDisplay.strengths
-                          .slice(0, 6)
-                          .map((item) => (
-                            <li
-                              key={item}
-                              className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                            >
-                              <span
-                                aria-hidden="true"
-                                className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
-                              />
-                              <span>{item}</span>
-                            </li>
-                          ))}
+                        {mindfulNegativeEvidence.map((item) => (
+                          <li
+                            key={item}
+                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"
+                            />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {mindfulPositiveEvidence.length ? (
+                    <div className="mt-5">
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                        What we like
+                      </div>
+
+                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {mindfulPositiveEvidence.map((item) => (
+                          <li
+                            key={item}
+                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                            />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {mindfulConditionalEvidence.length ? (
+                    <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-700">
+                        {mindfulRecommendation === "AVOID"
+                          ? "What could change the verdict"
+                          : "What to verify next"}
+                      </div>
+
+                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {mindfulConditionalEvidence.map((item) => (
+                          <li
+                            key={item}
+                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                            />
+                            <span>{item}</span>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   ) : null}
@@ -4956,7 +5041,7 @@ export function EvaluationWorkspace({
                 <div className="px-5 py-8">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-7 text-center">
                     <div className="text-sm font-bold text-slate-700">
-                      Mindful perspective, deal thesis, and priority checks will
+                      Mindful verdict, deal thesis, and priority checks will
                       appear here after the vehicle and market data are evaluated.
                     </div>
 
