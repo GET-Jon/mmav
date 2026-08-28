@@ -213,7 +213,7 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
 
   if (mindfulAvoidCommodityMakes.some((commodityMake) => make.includes(commodityMake))) {
     score -= 8;
-    reasons.push("Make is more likely to behave like commodity inventory unless the deal is unusually strong.");
+    cautions.push("Make is more likely to behave like commodity inventory unless the deal is unusually strong.");
     cautions.push("Do not buy this only because it is cheap; require a clear resale angle.");
     matchedRules.push("commodity-make");
   }
@@ -222,7 +222,13 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
 
   if (generationMatch) {
     score += generationMatch.points;
-    reasons.push(generationMatch.reason);
+
+    if (generationMatch.points > 0) {
+      reasons.push(generationMatch.reason);
+    } else {
+      cautions.push(generationMatch.reason);
+    }
+
     matchedRules.push(generationMatch.id);
 
     if (generationMatch.caution) {
@@ -236,7 +242,13 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
     }
 
     score += rule.points;
-    reasons.push(rule.reason);
+
+    if (rule.points > 0) {
+      reasons.push(rule.reason);
+    } else {
+      cautions.push(rule.reason);
+    }
+
     matchedRules.push(rule.id);
 
     if (rule.caution) {
@@ -262,12 +274,12 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
       matchedRules.push("acceptable-spread");
     } else if (expectedGrossProfit <= 0) {
       score -= 16;
-      reasons.push("Economics do not currently support taking inventory risk.");
+      cautions.push("Economics do not currently support taking inventory risk.");
       cautions.push("Pass unless the bid drops materially or the retail target is re-supported.");
       matchedRules.push("negative-spread");
     } else {
       score -= 7;
-      reasons.push("Projected spread is thin relative to target profit.");
+      cautions.push("Projected spread is thin relative to target profit.");
       cautions.push("Needs bid discipline; do not stretch for fit alone.");
       matchedRules.push("thin-spread");
     }
