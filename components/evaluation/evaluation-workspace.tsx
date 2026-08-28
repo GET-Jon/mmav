@@ -2670,6 +2670,16 @@ export function EvaluationWorkspace({
     .filter((item) => item.trim().toLowerCase() !== mindfulRationaleNormalized)
     .slice(0, 6);
 
+  const mindfulLeadExplanation =
+    mindfulRecommendation === "PURSUE"
+      ? mindfulIntelligenceDisplay.rationale
+      : mindfulNegativeEvidence[0] || mindfulIntelligenceDisplay.rationale;
+
+  const mindfulSupportingNegativeEvidence = mindfulNegativeEvidence.filter(
+    (item) =>
+      item.trim().toLowerCase() !== mindfulLeadExplanation.trim().toLowerCase(),
+  );
+
   const mindfulConditionalEvidence = mindfulIntelligenceDisplay.verificationItems
     .filter(
       (item) =>
@@ -4741,7 +4751,7 @@ export function EvaluationWorkspace({
                       </span>
 
                       <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black text-violet-700">
-                        Mindful Fit:{" "}
+                        Vehicle Fit:{" "}
                         {mindfulIntelligenceDisplay.verdict === "strong_fit"
                           ? "Strong"
                           : mindfulIntelligenceDisplay.verdict ===
@@ -4832,10 +4842,10 @@ export function EvaluationWorkspace({
                   </div>
 
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
-                    {mindfulIntelligenceDisplay.rationale}
+                    {mindfulLeadExplanation}
                   </p>
 
-                  {mindfulNegativeEvidence.length ? (
+                  {mindfulSupportingNegativeEvidence.length ? (
                     <div className="mt-5">
                       <div className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600">
                         {mindfulRecommendation === "AVOID"
@@ -4844,7 +4854,7 @@ export function EvaluationWorkspace({
                       </div>
 
                       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulNegativeEvidence.map((item) => (
+                        {mindfulSupportingNegativeEvidence.map((item) => (
                           <li
                             key={item}
                             className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
