@@ -10,6 +10,7 @@ export type InventoryPerformerOption = {
   primaryLocationName: string | null;
   capabilityCodes: string[];
   capabilityNames: string[];
+  notes: string | null;
 };
 
 type InventoryMemberRpcRow = {
@@ -26,7 +27,7 @@ export async function getInventoryPerformerOptions(
   const [partnersResult, membersResult] = await Promise.all([
     supabase
       .from("mindful_inventory_partners")
-      .select("id,name,company_name")
+      .select("id,name,company_name,notes")
       .eq("company_id", companyId)
       .eq("active", true)
       .order("name", { ascending: true }),
@@ -118,6 +119,7 @@ export async function getInventoryPerformerOptions(
       primaryLocationName: primaryLocation?.name || null,
       capabilityCodes: partnerCapabilities.map((item) => item.code),
       capabilityNames: partnerCapabilities.map((item) => item.name),
+      notes: partner.notes || null,
     };
   });
 
@@ -132,6 +134,7 @@ export async function getInventoryPerformerOptions(
       primaryLocationName: null,
       capabilityCodes: [],
       capabilityNames: [],
+      notes: null,
     }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
@@ -164,6 +167,18 @@ export function scorePerformerForWork(
 
   if (performer.capabilityCodes.some((code) => code.toLowerCase() === work.category.toLowerCase())) {
     score += 8;
+  }
+
+  // Freeform partner notes are useful for niche specialties that do not yet
+  // deserve a reusable capability. Keep them a weaker signal than explicit
+  // capability assignments so prose cannot outweigh structured configuration.
+  if (performer.notes) {
+    const noteTokens = new Set(normalizedTokens(performer.notes));
+    let noteMatches = 0;
+    for (const token of workTokens) {
+      if (noteTokens.has(token)) noteMatches += 1;
+    }
+    score += Math.min(noteMatches, 6);
   }
 
   return score;

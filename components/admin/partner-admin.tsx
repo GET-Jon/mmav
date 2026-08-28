@@ -84,6 +84,8 @@ export function PartnerAdmin({ partners, capabilities, locations }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active");
+  const [newCapabilityName, setNewCapabilityName] = useState("");
+  const [addingCapability, setAddingCapability] = useState(false);
 
   const filtered = useMemo(() => partners.filter((partner) => filter === "all" || (filter === "active" ? partner.active : !partner.active)), [partners, filter]);
   const allPermissionsSelected = permissionKeys.every((key) => draft.permissions[key]);
@@ -121,6 +123,32 @@ export function PartnerAdmin({ partners, capabilities, locations }: Props) {
       setMessage(error instanceof Error ? error.message : "Failed to save partner.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function addCapability() {
+    const name = newCapabilityName.trim();
+    if (!name) return;
+    setAddingCapability(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const payload = (await response.json()) as { id?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Failed to add capability.");
+      if (payload.id) {
+        setDraft((current) => ({ ...current, capabilityIds: current.capabilityIds.includes(payload.id!) ? current.capabilityIds : [...current.capabilityIds, payload.id!] }));
+      }
+      setNewCapabilityName("");
+      setMessage(`Capability “${name}” added.`);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to add capability.");
+    } finally {
+      setAddingCapability(false);
     }
   }
 
@@ -170,7 +198,7 @@ export function PartnerAdmin({ partners, capabilities, locations }: Props) {
             <label><div className="mb-1 text-xs font-black uppercase text-slate-500">Company / Shop</div><input className={inputClass} value={draft.companyName} onChange={(event) => setDraft((current) => ({ ...current, companyName: event.target.value }))} /></label>
             <label><div className="mb-1 text-xs font-black uppercase text-slate-500">Email</div><input type="email" className={inputClass} value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} /></label>
             <label><div className="mb-1 text-xs font-black uppercase text-slate-500">Phone</div><input className={inputClass} value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} /></label>
-            <label className="sm:col-span-2"><div className="mb-1 text-xs font-black uppercase text-slate-500">Notes</div><textarea className={`${inputClass} min-h-20 resize-y`} value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} /></label>
+            <label className="sm:col-span-2"><div className="mb-1 text-xs font-black uppercase text-slate-500">Notes / Specialties</div><textarea className={`${inputClass} min-h-20 resize-y`} value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="e.g. BMW diagnostics, coding, suspension, bolt-on performance, difficult electrical issues…" /><div className="mt-1 text-[11px] font-semibold text-slate-400">Lot Logic also reads these notes as a secondary matching signal for niche skills. Structured Capabilities remain the stronger signal.</div></label>
           </div>
         </section>
 
@@ -195,8 +223,18 @@ export function PartnerAdmin({ partners, capabilities, locations }: Props) {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="font-black text-slate-950">Capabilities</h3><p className="mt-1 text-sm text-slate-500">Lot Logic uses these to suggest the right partner / technician for a Work Order.</p>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div><h3 className="font-black text-slate-950">Capabilities</h3><p className="mt-1 text-sm text-slate-500">Reusable specialties are the strongest signal Lot Logic uses to suggest the right partner / technician for a Work Order.</p></div>
+          </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{capabilities.filter((capability) => capability.active).map((capability) => <label key={capability.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-700"><input type="checkbox" checked={draft.capabilityIds.includes(capability.id)} onChange={(event) => setDraft((current) => ({ ...current, capabilityIds: event.target.checked ? [...current.capabilityIds, capability.id] : current.capabilityIds.filter((id) => id !== capability.id) }))} />{capability.name}</label>)}</div>
+          <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
+            <div className="text-xs font-black uppercase tracking-[0.08em] text-slate-400">Add reusable capability</div>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input className={inputClass} value={newCapabilityName} onChange={(event) => setNewCapabilityName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addCapability(); } }} placeholder="e.g. Performance Tuning" />
+              <button type="button" disabled={addingCapability || !newCapabilityName.trim()} onClick={() => void addCapability()} className="shrink-0 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-40">{addingCapability ? "Adding…" : "+ Add Capability"}</button>
+            </div>
+            <div className="mt-2 text-[11px] font-semibold text-slate-400">New capabilities become available to every partner and are selected for the current partner automatically.</div>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
