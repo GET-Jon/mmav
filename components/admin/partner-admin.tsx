@@ -7,12 +7,13 @@ import type {
   AdminCapability,
   AdminPartner,
   AdminPartnerPermissionSet,
+  AdminPartnerLocationOption,
   PartnerSchedulingMode,
   PartnerStandardHours,
 } from "@/lib/admin/partners";
 import { defaultPartnerPermissions, defaultPartnerStandardHours } from "@/lib/admin/partners";
 
-type Props = { partners: AdminPartner[]; capabilities: AdminCapability[] };
+type Props = { partners: AdminPartner[]; capabilities: AdminCapability[]; locations: AdminPartnerLocationOption[] };
 type Draft = {
   id: string | null;
   name: string;
@@ -22,6 +23,7 @@ type Draft = {
   notes: string;
   active: boolean;
   schedulingMode: PartnerSchedulingMode;
+  primaryLocationId: string;
   standardHours: PartnerStandardHours;
   capabilityIds: string[];
   permissions: AdminPartnerPermissionSet;
@@ -36,6 +38,7 @@ const blankDraft: Draft = {
   notes: "",
   active: true,
   schedulingMode: "manager_scheduled",
+  primaryLocationId: "",
   standardHours: structuredClone(defaultPartnerStandardHours),
   capabilityIds: [],
   permissions: { ...defaultPartnerPermissions },
@@ -61,6 +64,7 @@ function fromPartner(partner: AdminPartner): Draft {
     notes: partner.notes || "",
     active: partner.active,
     schedulingMode: partner.schedulingMode,
+    primaryLocationId: partner.primaryLocationId || "",
     standardHours: structuredClone(partner.standardHours),
     capabilityIds: partner.capabilities.map((capability) => capability.id),
     permissions: { ...partner.permissions },
@@ -74,7 +78,7 @@ function modeLabel(mode: PartnerSchedulingMode) {
   return "Partner schedules own work";
 }
 
-export function PartnerAdmin({ partners, capabilities }: Props) {
+export function PartnerAdmin({ partners, capabilities, locations }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(blankDraft);
   const [saving, setSaving] = useState(false);
@@ -150,7 +154,7 @@ export function PartnerAdmin({ partners, capabilities }: Props) {
           {filtered.map((partner) => (
             <button key={partner.id} type="button" onClick={() => edit(partner)} className={`w-full rounded-xl border p-4 text-left transition hover:border-slate-400 ${draft.id === partner.id ? "border-slate-950 bg-slate-50" : "border-slate-200 bg-white"}`}>
               <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{partner.name}</div><div className="mt-0.5 text-sm font-semibold text-slate-500">{partner.companyName || "Independent partner"}</div></div><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${partner.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>{partner.active ? "Active" : "Inactive"}</span></div>
-              <div className="mt-2 text-xs font-bold text-slate-500">{modeLabel(partner.schedulingMode)}</div>
+              <div className="mt-2 text-xs font-bold text-slate-500">{modeLabel(partner.schedulingMode)}{partner.primaryLocationName ? ` · ${partner.primaryLocationName}` : " · Location not set"}</div>
               <div className="mt-3 flex flex-wrap gap-1.5">{partner.capabilities.length ? partner.capabilities.map((capability) => <span key={capability.id} className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700">{capability.name}</span>) : <span className="text-xs font-semibold text-amber-700">No capabilities assigned</span>}</div>
             </button>
           ))}
@@ -173,7 +177,10 @@ export function PartnerAdmin({ partners, capabilities }: Props) {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="font-black text-slate-950">Scheduling</h3>
           <p className="mt-1 text-sm text-slate-500">Tell Lot Logic how much control we have over this partner's calendar. Standard hours are interpreted in Mindful's operating time zone.</p>
-          <label className="mt-4 block"><div className="mb-1 text-xs font-black uppercase text-slate-500">Scheduling mode</div><select className={inputClass} value={draft.schedulingMode} onChange={(event) => setDraft((current) => ({ ...current, schedulingMode: event.target.value as PartnerSchedulingMode }))}><option value="manager_scheduled">Lot Logic can schedule directly</option><option value="partner_availability">Schedule within partner hours</option><option value="coordination_required">Coordination required — do not auto-book</option><option value="partner_self_scheduling">Partner schedules their own work</option></select></label>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="block"><div className="mb-1 text-xs font-black uppercase text-slate-500">Scheduling mode</div><select className={inputClass} value={draft.schedulingMode} onChange={(event) => setDraft((current) => ({ ...current, schedulingMode: event.target.value as PartnerSchedulingMode }))}><option value="manager_scheduled">Lot Logic can schedule directly</option><option value="partner_availability">Schedule within partner hours</option><option value="coordination_required">Coordination required — do not auto-book</option><option value="partner_self_scheduling">Partner schedules their own work</option></select></label>
+            <label className="block"><div className="mb-1 text-xs font-black uppercase text-slate-500">Preferred work location</div><select className={inputClass} value={draft.primaryLocationId} onChange={(event) => setDraft((current) => ({ ...current, primaryLocationId: event.target.value }))}><option value="">No default</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select><div className="mt-1 text-[11px] font-semibold text-slate-400">Lot Logic will prefill this location and choose the best matching bay/resource there. You can still override it per job.</div></label>
+          </div>
           <div className="mt-4 space-y-2">
             {dayRows.map(([day, label]) => {
               const hours = draft.standardHours[day];

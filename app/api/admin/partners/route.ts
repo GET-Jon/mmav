@@ -72,6 +72,26 @@ async function validateCapabilityIds(
   return { validIds, error: null as string | null };
 }
 
+async function validatePrimaryLocationId(
+  access: NonNullable<Awaited<ReturnType<typeof requireAdmin>>>,
+  value: unknown,
+) {
+  const locationId = String(value || "").trim();
+  if (!locationId) return { locationId: null as string | null, error: null as string | null };
+  const { data, error } = await access.supabase.from("mindful_inventory_locations").select("id").eq("id", locationId).eq("company_id", access.company.companyId).eq("active", true).maybeSingle();
+  if (error) return { locationId: null as string | null, error: error.message };
+  if (!data) return { locationId: null as string | null, error: "Selected preferred work location is not available for this company." };
+  return { locationId, error: null as string | null };
+}
+
+async function savePrimaryLocation(access: NonNullable<Awaited<ReturnType<typeof requireAdmin>>>, partnerId: string, locationId: string | null) {
+  const { error: deleteError } = await access.supabase.from("mindful_inventory_partner_locations").delete().eq("partner_id", partnerId);
+  if (deleteError) throw new Error(deleteError.message);
+  if (!locationId) return;
+  const { error } = await access.supabase.from("mindful_inventory_partner_locations").insert({ partner_id: partnerId, location_id: locationId, is_primary: true, can_work_mobile: false });
+  if (error) throw new Error(error.message);
+}
+
 export async function POST(request: Request) {
   try {
     const access = await requireAdmin();
@@ -86,6 +106,8 @@ export async function POST(request: Request) {
     const permissions = normalizePermissions(body.permissions);
     const schedulingMode = normalizeSchedulingMode(body.schedulingMode);
     const standardHours = normalizeStandardHours(body.standardHours);
+    const locationValidation = await validatePrimaryLocationId(access, body.primaryLocationId);
+    if (locationValidation.error) return NextResponse.json({ error: locationValidation.error }, { status: 400 });
 
     const { data: partner, error } = await access.supabase
       .from("mindful_inventory_partners")
@@ -113,6 +135,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: capabilityError.message }, { status: 500 });
       }
     }
+
+    await savePrimaryLocation(access, partner.id, locationValidation.locationId);
 
     const { error: permissionError } = await access.supabase.from("mindful_inventory_partner_permissions").insert({ partner_id: partner.id, ...permissions });
     if (permissionError) {
@@ -145,6 +169,8 @@ export async function PATCH(request: Request) {
     const permissions = normalizePermissions(body.permissions);
     const schedulingMode = normalizeSchedulingMode(body.schedulingMode);
     const standardHours = normalizeStandardHours(body.standardHours);
+    const locationValidation = await validatePrimaryLocationId(access, body.primaryLocationId);
+    if (locationValidation.error) return NextResponse.json({ error: locationValidation.error }, { status: 400 });
     const now = new Date().toISOString();
 
     const { error: updateError } = await access.supabase
@@ -163,6 +189,8 @@ export async function PATCH(request: Request) {
       })
       .eq("id", partnerId);
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+    await savePrimaryLocation(access, partnerId, locationValidation.locationId);
 
     const { error: deleteCapabilitiesError } = await access.supabase.from("mindful_inventory_partner_capability_assignments").delete().eq("partner_id", partnerId);
     if (deleteCapabilitiesError) return NextResponse.json({ error: deleteCapabilitiesError.message }, { status: 500 });

@@ -27,7 +27,7 @@ export default async function AdminPartnersPage() {
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm">{data.partners.filter((partner) => partner.active).length} active partners</div>
         </div>
-        <PartnerAdmin partners={data.partners} capabilities={data.capabilities} />
+        <PartnerAdmin partners={data.partners} capabilities={data.capabilities} locations={data.locations} />
       </div>
     </main>
   );

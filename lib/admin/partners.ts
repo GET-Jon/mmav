@@ -41,11 +41,14 @@ export type AdminPartner = {
   schedulingMode: PartnerSchedulingMode;
   standardHours: PartnerStandardHours;
   notes: string | null;
+  primaryLocationId: string | null;
+  primaryLocationName: string | null;
   capabilities: Array<{ id: string; code: string; name: string }>;
   permissions: AdminPartnerPermissionSet;
 };
 
 export type AdminCapability = { id: string; code: string; name: string; active: boolean };
+export type AdminPartnerLocationOption = { id: string; name: string };
 
 export const defaultPartnerPermissions: AdminPartnerPermissionSet = {
   view_assigned_work: true,
@@ -79,7 +82,7 @@ function normalizeHours(value: unknown): PartnerStandardHours {
 }
 
 export async function getAdminPartnerData(supabase: SupabaseClient, companyId: string) {
-  const [partnersResult, capabilityResult] = await Promise.all([
+  const [partnersResult, capabilityResult, locationsResult] = await Promise.all([
     supabase
       .from("mindful_inventory_partners")
       .select("id,name,company_name,email,phone,active,scheduling_mode,standard_hours,notes")
@@ -91,23 +94,34 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
       .select("id,code,name,active")
       .eq("company_id", companyId)
       .order("name", { ascending: true }),
+    supabase
+      .from("mindful_inventory_locations")
+      .select("id,name")
+      .eq("company_id", companyId)
+      .eq("active", true)
+      .order("name", { ascending: true }),
   ]);
 
   if (partnersResult.error) throw new Error(partnersResult.error.message);
   if (capabilityResult.error) throw new Error(capabilityResult.error.message);
+  if (locationsResult.error) throw new Error(locationsResult.error.message);
 
   const partnerIds = (partnersResult.data || []).map((partner) => partner.id);
-  const [assignmentsResult, permissionsResult] = await Promise.all([
+  const [assignmentsResult, permissionsResult, locationLinksResult] = await Promise.all([
     partnerIds.length
       ? supabase.from("mindful_inventory_partner_capability_assignments").select("partner_id,capability_id").in("partner_id", partnerIds)
       : Promise.resolve({ data: [], error: null }),
     partnerIds.length
       ? supabase.from("mindful_inventory_partner_permissions").select("partner_id,view_assigned_work,start_work,complete_work,upload_media,add_notes,report_blocker,update_parts,update_actual_cost,submit_invoice,reschedule_work,add_finding,propose_additional_work,request_plan_change,edit_estimate").in("partner_id", partnerIds)
       : Promise.resolve({ data: [], error: null }),
+    partnerIds.length
+      ? supabase.from("mindful_inventory_partner_locations").select("partner_id,location_id,is_primary").in("partner_id", partnerIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (assignmentsResult.error) throw new Error(assignmentsResult.error.message);
   if (permissionsResult.error) throw new Error(permissionsResult.error.message);
+  if (locationLinksResult.error) throw new Error(locationLinksResult.error.message);
 
   const capabilities = (capabilityResult.data || []) as AdminCapability[];
   const capabilityById = new Map(capabilities.map((capability) => [capability.id, capability]));
@@ -118,6 +132,12 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
     assignments.set(row.partner_id, [...(assignments.get(row.partner_id) || []), capability]);
   }
   const permissions = new Map((permissionsResult.data || []).map((row) => [row.partner_id, row]));
+  const locations = (locationsResult.data || []) as AdminPartnerLocationOption[];
+  const locationNameById = new Map(locations.map((location) => [location.id, location.name]));
+  const primaryLocationByPartner = new Map<string, string>();
+  for (const row of locationLinksResult.data || []) {
+    if (row.is_primary || !primaryLocationByPartner.has(row.partner_id)) primaryLocationByPartner.set(row.partner_id, row.location_id);
+  }
 
   const partners: AdminPartner[] = (partnersResult.data || []).map((partner) => {
     const permissionRow = permissions.get(partner.id);
@@ -131,6 +151,8 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
       schedulingMode: partner.scheduling_mode as PartnerSchedulingMode,
       standardHours: normalizeHours(partner.standard_hours),
       notes: partner.notes,
+      primaryLocationId: primaryLocationByPartner.get(partner.id) || null,
+      primaryLocationName: locationNameById.get(primaryLocationByPartner.get(partner.id) || "") || null,
       capabilities: assignments.get(partner.id) || [],
       permissions: permissionRow
         ? {
@@ -153,5 +175,5 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
     };
   });
 
-  return { partners, capabilities };
+  return { partners, capabilities, locations };
 }
