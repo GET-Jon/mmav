@@ -1,0 +1,126 @@
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import type { PartnerPortalAccess } from "@/lib/partner-portal/access";
+
+export type PartnerWorkItem = {
+  id: string;
+  vehicleId: string;
+  vehicleLabel: string;
+  vin: string | null;
+  stockNumber: string | null;
+  title: string;
+  description: string | null;
+  category: string;
+  subcategory: string | null;
+  status: string;
+  blockerReason: string | null;
+  scheduledStartAt: string | null;
+  scheduledEndAt: string | null;
+  proposedStartAt: string | null;
+  proposedEndAt: string | null;
+  partnerConfirmationStatus: string | null;
+  locationName: string | null;
+  latestEstimate: {
+    id: string;
+    revisionNo: number;
+    quotedCost: number | null;
+    estimatedLaborMinutes: number | null;
+    estimatedElapsedMinutes: number | null;
+    notes: string | null;
+    submittedAt: string;
+  } | null;
+};
+
+function vehicleLabel(row: Record<string, unknown>) {
+  return [row.year, row.make, row.model, row.trim]
+    .filter((value) => value !== null && value !== undefined && String(value).trim())
+    .join(" ");
+}
+
+export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promise<PartnerWorkItem[]> {
+  if (!access.permissions.viewAssignedWork) return [];
+
+  const admin = createSupabaseAdminClient();
+  const { data: workOrders, error: workError } = await admin
+    .from("mindful_inventory_work_orders")
+    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,location_id")
+    .eq("assigned_partner_id", access.partner.id)
+    .not("status", "eq", "cancelled")
+    .order("scheduled_start_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (workError) throw new Error(workError.message);
+  if (!workOrders?.length) return [];
+
+  const vehicleIds = [...new Set(workOrders.map((row) => row.vehicle_id))];
+  const locationIds = [...new Set(workOrders.map((row) => row.location_id).filter(Boolean))] as string[];
+  const workOrderIds = workOrders.map((row) => row.id);
+
+  const [vehiclesResult, locationsResult, estimatesResult] = await Promise.all([
+    admin
+      .from("mindful_inventory_vehicles")
+      .select("id,year,make,model,trim,vin,stock_number")
+      .eq("company_id", access.partner.companyId)
+      .in("id", vehicleIds),
+    locationIds.length
+      ? admin
+          .from("mindful_inventory_locations")
+          .select("id,name")
+          .eq("company_id", access.partner.companyId)
+          .in("id", locationIds)
+      : Promise.resolve({ data: [], error: null }),
+    admin
+      .from("lot_logic_partner_blind_estimates")
+      .select("id,work_order_id,revision_no,quoted_cost,estimated_labor_minutes,estimated_elapsed_minutes,notes,submitted_at")
+      .eq("partner_id", access.partner.id)
+      .in("work_order_id", workOrderIds)
+      .order("revision_no", { ascending: false }),
+  ]);
+
+  if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
+  if (locationsResult.error) throw new Error(locationsResult.error.message);
+  if (estimatesResult.error) throw new Error(estimatesResult.error.message);
+
+  const vehicles = new Map((vehiclesResult.data ?? []).map((row) => [row.id, row]));
+  const locations = new Map((locationsResult.data ?? []).map((row) => [row.id, row.name]));
+  const latestEstimates = new Map<string, (typeof estimatesResult.data)[number]>();
+  for (const row of estimatesResult.data ?? []) {
+    if (!latestEstimates.has(row.work_order_id)) latestEstimates.set(row.work_order_id, row);
+  }
+
+  return workOrders
+    .filter((row) => vehicles.has(row.vehicle_id))
+    .map((row) => {
+      const vehicle = vehicles.get(row.vehicle_id)!;
+      const estimate = latestEstimates.get(row.id);
+      return {
+        id: row.id,
+        vehicleId: row.vehicle_id,
+        vehicleLabel: vehicleLabel(vehicle),
+        vin: vehicle.vin,
+        stockNumber: vehicle.stock_number,
+        title: row.title,
+        description: row.description,
+        category: row.category,
+        subcategory: row.subcategory,
+        status: row.status,
+        blockerReason: row.blocker_reason,
+        scheduledStartAt: row.scheduled_start_at,
+        scheduledEndAt: row.scheduled_end_at,
+        proposedStartAt: row.proposed_start_at,
+        proposedEndAt: row.proposed_end_at,
+        partnerConfirmationStatus: row.partner_confirmation_status,
+        locationName: row.location_id ? locations.get(row.location_id) ?? null : null,
+        latestEstimate: estimate
+          ? {
+              id: estimate.id,
+              revisionNo: estimate.revision_no,
+              quotedCost: estimate.quoted_cost == null ? null : Number(estimate.quoted_cost),
+              estimatedLaborMinutes: estimate.estimated_labor_minutes,
+              estimatedElapsedMinutes: estimate.estimated_elapsed_minutes,
+              notes: estimate.notes,
+              submittedAt: estimate.submitted_at,
+            }
+          : null,
+      } satisfies PartnerWorkItem;
+    });
+}
