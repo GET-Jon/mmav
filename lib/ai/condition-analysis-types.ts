@@ -33,6 +33,7 @@ export type ConditionAnalysisInput = {
   auctionSite?: string | null;
   sourceType?: string | null;
   rawIssueText: string;
+  lotLogicIntelligenceContext?: string[];
 };
 
 export type ConditionAnalysisIssue = {
