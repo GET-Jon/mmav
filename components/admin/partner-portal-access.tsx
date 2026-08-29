@@ -8,7 +8,7 @@ import type { PartnerPortalAdminItem } from "@/lib/partner-portal/admin";
 function statusFor(partner: PartnerPortalAdminItem) {
   if (!partner.accessEnabled && partner.invitedAt) return { label: "Disabled", cls: "bg-slate-200 text-slate-600" };
   if (partner.accessEnabled && partner.profileConfirmedAt) return { label: "Active", cls: "bg-emerald-100 text-emerald-700" };
-  if (partner.accessEnabled && partner.userId) return { label: "Profile pending", cls: "bg-blue-100 text-blue-700" };
+  if (partner.accessEnabled && partner.claimedAt) return { label: "Profile pending", cls: "bg-blue-100 text-blue-700" };
   if (partner.invitedAt) return { label: "Invitation sent", cls: "bg-blue-100 text-blue-700" };
   return { label: "Not invited", cls: "bg-amber-100 text-amber-800" };
 }
