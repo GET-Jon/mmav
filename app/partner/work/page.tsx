@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
 import { PartnerWorkList } from "@/components/partner/partner-work-list";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { getPartnerAssignedWork } from "@/lib/partner-portal/work";
@@ -6,6 +9,8 @@ export const dynamic = "force-dynamic";
 
 export default async function PartnerWorkPage() {
   const access = await requirePartnerPortalAccess();
+  if (!access.partner.profileConfirmedAt) redirect("/partner/profile?onboarding=1");
+
   const workItems = await getPartnerAssignedWork(access);
 
   const openCount = workItems.filter((work) => !["complete", "cancelled"].includes(work.status)).length;
@@ -19,9 +24,12 @@ export default async function PartnerWorkPage() {
             <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Lot Logic Partner Portal</div>
             <div className="mt-0.5 text-lg font-black">My Work</div>
           </div>
-          <div className="text-right">
-            <div className="text-sm font-black">{access.partner.name}</div>
-            <div className="text-xs text-slate-400">{access.partner.companyName || access.userEmail || "Partner"}</div>
+          <div className="flex items-center gap-4">
+            <nav className="flex gap-2"><Link href="/partner/work" className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-black text-white">My Work</Link><Link href="/partner/profile" className="rounded-lg px-3 py-2 text-sm font-black text-slate-600">Profile</Link></nav>
+            <div className="text-right">
+              <div className="text-sm font-black">{access.partner.name}</div>
+              <div className="text-xs text-slate-400">{access.partner.companyName || access.userEmail || "Partner"}</div>
+            </div>
           </div>
         </div>
       </header>
