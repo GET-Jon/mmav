@@ -46,7 +46,10 @@ export type IntelligenceAssertion = {
   requires_validation: boolean;
 };
 
-type IntelligenceSection = "knowledge" | "insights" | "validation" | "policies" | "history";
+type IntelligenceSection = "knowledge" | "insights" | "validation" | "policies" | "history" | "reset";
+type ResetMode = "learning" | "full";
+
+const RESET_CONFIRMATION = "RESET LOT LOGIC INTELLIGENCE";
 
 function confidenceLabel(value: number | null) {
   if (value == null) return "Not scored";
@@ -81,16 +84,20 @@ export function LotLogicIntelligenceCard({
   const [section, setSection] = useState<IntelligenceSection>("validation");
   const [knowledgeSources, setKnowledgeSources] = useState(initialKnowledgeSources);
   const [insights, setInsights] = useState(initialInsights);
+  const [assertions, setAssertions] = useState(initialAssertions);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [resetMode, setResetMode] = useState<ResetMode>("learning");
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const pendingInsights = useMemo(() => insights.filter((item) => item.status === "pending"), [insights]);
   const activePolicies = useMemo(
-    () => initialAssertions.filter((item) => item.assertion_type === "policy" && ["active", "validated"].includes(item.status)),
-    [initialAssertions],
+    () => assertions.filter((item) => item.assertion_type === "policy" && ["active", "validated"].includes(item.status)),
+    [assertions],
   );
 
   async function addKnowledge(event: React.FormEvent) {
@@ -136,6 +143,39 @@ export function LotLogicIntelligenceCard({
     }
   }
 
+  async function resetIntelligence() {
+    if (!canReview || resetConfirmation !== RESET_CONFIRMATION) return;
+    setResetting(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/intelligence/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: resetMode, confirmation: resetConfirmation }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Intelligence reset failed.");
+
+      setInsights([]);
+      if (resetMode === "full") {
+        setKnowledgeSources([]);
+        setAssertions([]);
+      } else {
+        setAssertions((current) => current.filter((item) => item.provenance_type === "explicit"));
+      }
+      setResetConfirmation("");
+      setMessage(
+        resetMode === "full"
+          ? "Lot Logic Intelligence was fully reset. Operational records were preserved."
+          : "Learned/test Intelligence was reset. Explicit company knowledge and all operational records were preserved.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Intelligence reset failed.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -149,7 +189,7 @@ export function LotLogicIntelligenceCard({
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-xl bg-slate-50 px-4 py-3"><div className="text-xl font-black">{knowledgeSources.length}</div><div className="text-[10px] font-black uppercase text-slate-400">Sources</div></div>
           <div className="rounded-xl bg-slate-50 px-4 py-3"><div className="text-xl font-black">{pendingInsights.length}</div><div className="text-[10px] font-black uppercase text-slate-400">Review</div></div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3"><div className="text-xl font-black">{initialAssertions.length}</div><div className="text-[10px] font-black uppercase text-slate-400">Learned</div></div>
+          <div className="rounded-xl bg-slate-50 px-4 py-3"><div className="text-xl font-black">{assertions.length}</div><div className="text-[10px] font-black uppercase text-slate-400">Learned</div></div>
         </div>
       </div>
 
@@ -159,6 +199,7 @@ export function LotLogicIntelligenceCard({
         <button type="button" onClick={() => setSection("validation")} className={tabClass(section === "validation")}>Needs Validation {pendingInsights.length ? `(${pendingInsights.length})` : ""}</button>
         <button type="button" onClick={() => setSection("policies")} className={tabClass(section === "policies")}>Policies</button>
         <button type="button" onClick={() => setSection("history")} className={tabClass(section === "history")}>Learning History</button>
+        {canReview ? <button type="button" onClick={() => setSection("reset")} className={tabClass(section === "reset")}>Testing Reset</button> : null}
       </div>
 
       {message ? <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">{message}</div> : null}
@@ -231,6 +272,35 @@ export function LotLogicIntelligenceCard({
             <div key={insight.id} className="flex flex-col gap-1 rounded-xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"><div><div className="font-black">{insight.title}</div><div className="text-sm text-slate-500">{insight.status.replaceAll("_", " ")}{insight.review_notes ? ` · ${insight.review_notes}` : ""}</div></div><div className="text-xs font-bold text-slate-400">{formatDate(insight.reviewed_at || insight.surfaced_at)}</div></div>
           ))}
           {!insights.length ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">Learning events will accumulate here.</div> : null}
+        </div>
+      ) : null}
+
+      {section === "reset" && canReview ? (
+        <div className="mt-5 rounded-2xl border border-red-200 bg-red-50/40 p-5">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-red-700">Testing / pre-launch</div>
+          <h3 className="mt-1 text-xl font-black">Reset Lot Logic Intelligence</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+            This never deletes Evaluator records, Inventory vehicles, Findings, Work Orders, or operational history. Use it before launch to remove conclusions and prediction evidence created while testing.
+          </p>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-2">
+            <label className={`cursor-pointer rounded-xl border p-4 ${resetMode === "learning" ? "border-slate-950 bg-white" : "border-slate-200 bg-white/70"}`}>
+              <input type="radio" name="resetMode" value="learning" checked={resetMode === "learning"} onChange={() => setResetMode("learning")} className="mr-2" />
+              <span className="font-black">Reset learned/test intelligence</span>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Clears predictions, outcomes, blind test estimates, issue relationships, insights, decisions, and learned assertions. Preserves explicit company knowledge and knowledge sources.</p>
+            </label>
+            <label className={`cursor-pointer rounded-xl border p-4 ${resetMode === "full" ? "border-red-500 bg-white" : "border-slate-200 bg-white/70"}`}>
+              <input type="radio" name="resetMode" value="full" checked={resetMode === "full"} onChange={() => setResetMode("full")} className="mr-2" />
+              <span className="font-black">Full Intelligence reset</span>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Also removes explicit company knowledge and all Intelligence assertions. Operational source records still remain untouched.</p>
+            </label>
+          </div>
+
+          <label className="mt-5 block text-xs font-black text-slate-700">Type {RESET_CONFIRMATION} to confirm</label>
+          <input value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} className="mt-1 w-full max-w-xl rounded-lg border border-red-200 bg-white px-3 py-2 font-mono text-sm outline-none focus:border-red-500" />
+          <button type="button" disabled={resetting || resetConfirmation !== RESET_CONFIRMATION} onClick={() => void resetIntelligence()} className="mt-3 rounded-lg bg-red-700 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-35">
+            {resetting ? "Resetting…" : resetMode === "full" ? "Fully Reset Intelligence" : "Reset Learned Intelligence"}
+          </button>
         </div>
       ) : null}
     </section>
