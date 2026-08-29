@@ -82,7 +82,8 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
 
   const vehicles = new Map((vehiclesResult.data ?? []).map((row) => [row.id, row]));
   const locations = new Map((locationsResult.data ?? []).map((row) => [row.id, row.name]));
-  const latestEstimates = new Map<string, (typeof estimatesResult.data)[number]>();
+  type EstimateRow = NonNullable<typeof estimatesResult.data>[number];
+  const latestEstimates = new Map<string, EstimateRow>();
   for (const row of estimatesResult.data ?? []) {
     if (!latestEstimates.has(row.work_order_id)) latestEstimates.set(row.work_order_id, row);
   }
