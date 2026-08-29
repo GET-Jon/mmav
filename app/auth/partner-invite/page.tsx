@@ -9,9 +9,14 @@ export default function PartnerInviteLandingPage() {
   useEffect(() => {
     async function finish() {
       const url = new URL(window.location.href);
+      const partnerId = url.searchParams.get("partner") || "";
+      const claimPath = `/auth/partner-claim${partnerId ? `?partner=${encodeURIComponent(partnerId)}` : ""}`;
       const code = url.searchParams.get("code");
+
       if (code) {
-        window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent("/partner/profile?onboarding=1")}`);
+        window.location.replace(
+          `/auth/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent(claimPath)}`,
+        );
         return;
       }
 
@@ -31,7 +36,7 @@ export default function PartnerInviteLandingPage() {
           setMessage(error.message);
           return;
         }
-        window.location.replace("/partner/profile?onboarding=1");
+        window.location.replace(claimPath);
         return;
       }
 
