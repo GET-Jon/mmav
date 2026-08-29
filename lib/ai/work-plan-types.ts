@@ -7,6 +7,8 @@ export type WorkPlanFindingInput = {
   severity: string | null;
   confidence: string | null;
   certainty: string | null;
+  mechanicalValidationStatus: "pending" | "confirmed" | "changed" | "needs_diagnosis";
+  mechanicalValidationNotes: string | null;
   estimatedCostLow: number | null;
   estimatedCostHigh: number | null;
   estimatedDurationHours: number | null;
