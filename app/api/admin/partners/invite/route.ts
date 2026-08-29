@@ -37,50 +37,35 @@ export async function POST(request: Request) {
     const email = normalizedEmail(body.email || partner.email);
     if (!email) return NextResponse.json({ error: "Add a valid partner email before sending an invitation." }, { status: 400 });
 
-    const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (usersError) throw new Error(usersError.message);
-    let authUser = usersData.users.find((candidate) => candidate.email?.trim().toLowerCase() === email) ?? null;
-    const existingAccount = Boolean(authUser);
-
     const requestUrl = new URL(request.url);
-    const redirectTo = `${requestUrl.origin}/auth/partner-invite`;
+    const redirectTo = `${requestUrl.origin}/auth/partner-invite?partner=${encodeURIComponent(partner.id)}`;
 
-    if (authUser) {
-      const { error: magicError } = await admin.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: redirectTo,
-        },
-      });
-      if (magicError) throw new Error(`Partner sign-in email could not be sent: ${magicError.message}`);
-    } else {
-      const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
+    const { error: magicError } = await admin.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: redirectTo,
         data: {
+          invited_as: "partner",
           partner_id: partner.id,
           company_id: access.company.companyId,
-          invited_as: "partner",
         },
-      });
-      if (inviteError) throw new Error(`Partner invitation could not be sent: ${inviteError.message}`);
-      authUser = inviteData.user;
-    }
-
-    if (!authUser) throw new Error("Supabase did not return the invited user.");
+      },
+    });
+    if (magicError) throw new Error(`Partner invitation could not be sent: ${magicError.message}`);
 
     const now = new Date().toISOString();
-    const sameUser = partner.user_id === authUser.id;
+    const sameEmail = normalizedEmail(partner.email) === email;
     const { error: updateError } = await admin
       .from("mindful_inventory_partners")
       .update({
-        user_id: authUser.id,
         email,
         portal_invited_at: now,
         portal_invited_email: email,
         portal_access_enabled: true,
-        portal_claimed_at: sameUser ? partner.portal_claimed_at : null,
-        portal_profile_confirmed_at: sameUser ? partner.portal_profile_confirmed_at : null,
+        user_id: sameEmail ? partner.user_id : null,
+        portal_claimed_at: sameEmail ? partner.portal_claimed_at : null,
+        portal_profile_confirmed_at: sameEmail ? partner.portal_profile_confirmed_at : null,
         updated_by: access.userId,
         updated_at: now,
       })
@@ -91,8 +76,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       partnerId: partner.id,
       email,
-      existingAccount,
-      profileConfirmed: sameUser && Boolean(partner.portal_profile_confirmed_at),
       sent: true,
     });
   } catch (error) {
