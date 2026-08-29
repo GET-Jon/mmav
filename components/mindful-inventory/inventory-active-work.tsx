@@ -111,7 +111,7 @@ export function InventoryActiveWork({ vehicleId, vehicle, workOrders, performerO
     "",
     `We'd like to coordinate the following work for our ${vehicleLabel}${vehicle.vin ? ` (VIN ${vehicle.vin})` : vehicle.stockNumber ? ` (Stock #${vehicle.stockNumber})` : ""}:`,
     "",
-    ...emailWork.map((work) => `• ${work.title}${work.description ? ` — ${work.description}` : ""}${work.estimatedElapsedMinutes ? ` (${hours(work.estimatedElapsedMinutes)} estimated turnaround)` : ""}`),
+    ...emailWork.map((work) => `• ${work.title}${work.description ? ` — ${work.description}` : ""}`),
     "",
     earliestProposal ? `Would ${dateTimeLabel(earliestProposal)}${latestProposalEnd ? ` through about ${dateTimeLabel(latestProposalEnd)}` : ""} work for you? If not, please let us know the nearest time that does.` : "Please let us know your next available time for this work.",
     "",
