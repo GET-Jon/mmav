@@ -77,13 +77,12 @@ export async function POST(
         initialObservations: intakeInspection.intake?.initialObservations || null,
       },
       mechanicalInspectionSummary: intakeInspection.mechanicalInspection.summary,
-      findings: intakeInspection.findings
-        .filter(
-          (finding) =>
-            finding.status === "open" &&
-            finding.mechanicalValidationStatus !== "not_found",
-        )
-        .map((finding) => ({
+      findings: intakeInspection.findings.flatMap((finding) => {
+        if (finding.status !== "open" || finding.mechanicalValidationStatus === "not_found") {
+          return [];
+        }
+
+        return [{
           id: finding.id,
           source: finding.source,
           title: finding.title,
@@ -97,7 +96,8 @@ export async function POST(
           estimatedCostLow: finding.estimatedCostLow,
           estimatedCostHigh: finding.estimatedCostHigh,
           estimatedDurationHours: finding.estimatedDurationHours,
-        })),
+        }];
+      }),
       upgrades: overview.upgrades
         .filter((upgrade) => upgrade.status === "proposed")
         .map((upgrade) => ({
