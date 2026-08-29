@@ -55,6 +55,24 @@ export async function POST(request: Request) {
     const supabase = createSupabaseAdminClient();
     const companyId = company.companyId;
     const deleted: Record<string, number> = {};
+    const resetAt = new Date().toISOString();
+
+    // Establish a new learning epoch first. Historical test operations remain in the
+    // operational system but future learners ignore evidence from before this point.
+    const { error: stateError } = await supabase
+      .from("lot_logic_intelligence_company_state")
+      .upsert(
+        {
+          company_id: companyId,
+          learning_started_at: resetAt,
+          last_reset_at: resetAt,
+          reset_by: user.id,
+          reset_mode: mode,
+          updated_at: resetAt,
+        },
+        { onConflict: "company_id" },
+      );
+    if (stateError) throw new Error(`lot_logic_intelligence_company_state: ${stateError.message}`);
 
     // Delete dependents before parents. This affects Intelligence records only;
     // Evaluator, Inventory, Work Orders, Findings, History, and source operations remain intact.
@@ -113,6 +131,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       mode,
+      learningStartedAt: resetAt,
       deleted,
       preserved:
         mode === "learning"
