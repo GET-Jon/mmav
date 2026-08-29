@@ -6,6 +6,14 @@ import {
   getCurrentUser,
 } from "@/lib/supabase/server-auth";
 
+type JsonRecord = Record<string, unknown>;
+
+function toRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : {};
+}
+
 function toNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -30,18 +38,20 @@ async function recordEvaluationPredictions(args: {
   companyId: string;
   userId: string;
   evaluationId: string;
-  body: Record<string, any>;
-  row: Record<string, any>;
+  body: JsonRecord;
+  row: JsonRecord;
 }) {
   const { supabase, companyId, userId, evaluationId, body, row } = args;
-  const valuation = body.valuation || {};
-  const valuationInput = body.valuationInput || {};
-  const conditionAnalysis = body.conditionAnalysis || {};
+  const valuation = toRecord(body.valuation);
+  const valuationInput = toRecord(body.valuationInput);
+  const conditionAnalysis = toRecord(body.conditionAnalysis);
   const modelName = (process.env.AI_MODEL ?? "gemini-3.1-flash-lite")
     .trim()
     .replace(/^["']|["']$/g, "")
     .replace(/^models\//, "");
 
+  const make = toStringOrNull(row.make);
+  const model = toStringOrNull(row.model);
   const contextSnapshot = {
     source: "evaluator_save",
     vehicle: {
@@ -70,7 +80,7 @@ async function recordEvaluationPredictions(args: {
         companyId,
         evaluationId,
         predictionType: "bid",
-        subjectKey: evaluationSubjectKey("bid", row.make, row.model),
+        subjectKey: evaluationSubjectKey("bid", make, model),
         predictedValue: {
           safeBid: toNumber(valuation.safeBid),
           maxSmartBid: toNumber(valuation.maxSmartBid),
@@ -105,7 +115,7 @@ async function recordEvaluationPredictions(args: {
         companyId,
         evaluationId,
         predictionType: "recon_total",
-        subjectKey: evaluationSubjectKey("recon", row.make, row.model),
+        subjectKey: evaluationSubjectKey("recon", make, model),
         predictedCostLow: reconLow ?? reconPlanning,
         predictedCostHigh: reconHigh ?? reconPlanning,
         predictedElapsedMinutes:
@@ -138,34 +148,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = toRecord(await request.json());
 
     const supabase = await createSupabaseServerAuthClient();
     const company = await getCurrentCompanyForUser(supabase, user.id);
 
     const id = toStringOrNull(body.id);
 
-    const decodedVehicle = body.decodedVehicle || {};
-    const manualVehicle = body.manualVehicle || {};
-    const valuationInput = body.valuationInput || {};
-    const valuation = body.valuation || {};
+    const decodedVehicle = toRecord(body.decodedVehicle);
+    const manualVehicle = toRecord(body.manualVehicle);
+    const valuationInput = toRecord(body.valuationInput);
+    const valuation = toRecord(body.valuation);
 
-    const row = {
+    const row: JsonRecord = {
       company_id: company.companyId,
-      status: body.status || "watching",
+      status: toStringOrNull(body.status) ?? "watching",
 
-      vin: toStringOrNull(decodedVehicle.vin || body.vin),
+      vin: toStringOrNull(decodedVehicle.vin ?? body.vin),
       vehicle_title: toStringOrNull(body.vehicleTitle),
 
-      year: toInteger(decodedVehicle.year || manualVehicle.year),
-      make: toStringOrNull(decodedVehicle.make || manualVehicle.make),
-      model: toStringOrNull(decodedVehicle.model || manualVehicle.model),
-      trim: toStringOrNull(decodedVehicle.trim || manualVehicle.trim),
+      year: toInteger(decodedVehicle.year ?? manualVehicle.year),
+      make: toStringOrNull(decodedVehicle.make ?? manualVehicle.make),
+      model: toStringOrNull(decodedVehicle.model ?? manualVehicle.model),
+      trim: toStringOrNull(decodedVehicle.trim ?? manualVehicle.trim),
       mileage: toInteger(body.targetMileage),
 
       auction_site: toStringOrNull(body.auctionSite),
       auction_url: toStringOrNull(body.auctionUrl),
-      auction_ends_at: body.auctionEndsAt || null,
+      auction_ends_at: body.auctionEndsAt ?? null,
 
       current_bid: toNumber(valuationInput.currentBid),
       target_resale_used: toNumber(valuationInput.targetResaleUsed),
