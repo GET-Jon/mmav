@@ -144,7 +144,7 @@ export function PartnerWorkList({ workItems, permissions }: { workItems: Partner
           <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4">
             <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">Independent estimate</div>
             <h3 className="mt-1 text-lg font-black">Your price and timing</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Enter your own estimate based on the scope above. Lot Logic's internal planning estimate is intentionally not shown so your quote remains independent.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Enter your own estimate based on the scope above. Lot Logic&apos;s internal planning estimate is intentionally not shown so your quote remains independent.</p>
 
             {work.latestEstimate && editingId !== work.id ? <div className="mt-4 rounded-xl border border-blue-100 bg-white p-4">
               <div className="flex items-center justify-between gap-3"><div className="font-black">Latest estimate</div><div className="text-xs font-bold text-slate-400">Revision {work.latestEstimate.revisionNo}</div></div>
