@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PartnerAdmin } from "@/components/admin/partner-admin";
+import { PartnerPortalAccess } from "@/components/admin/partner-portal-access";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { getAdminPartnerData } from "@/lib/admin/partners";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
@@ -23,11 +24,12 @@ export default async function AdminPartnersPage() {
             <Link href="/admin" className="text-xs font-black text-slate-500 hover:text-slate-950">← Administration</Link>
             <div className="mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Administration / Partners</div>
             <h1 className="mt-1 text-[30px] font-black tracking-[-0.035em]">Partner Management</h1>
-            <p className="mt-2 max-w-3xl text-slate-600">Create and maintain the specialists Lot Logic can assign, schedule, and eventually give limited partner access.</p>
+            <p className="mt-2 max-w-3xl text-slate-600">Create and maintain the specialists Lot Logic can assign, schedule, and give limited partner access.</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm">{data.partners.filter((partner) => partner.active).length} active partners</div>
         </div>
         <PartnerAdmin partners={data.partners} capabilities={data.capabilities} locations={data.locations} />
+        <PartnerPortalAccess partners={data.partners} />
       </div>
     </main>
   );
