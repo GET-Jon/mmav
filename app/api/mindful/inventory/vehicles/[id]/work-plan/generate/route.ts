@@ -78,7 +78,11 @@ export async function POST(
       },
       mechanicalInspectionSummary: intakeInspection.mechanicalInspection.summary,
       findings: intakeInspection.findings
-        .filter((finding) => finding.status === "open")
+        .filter(
+          (finding) =>
+            finding.status === "open" &&
+            finding.mechanicalValidationStatus !== "not_found",
+        )
         .map((finding) => ({
           id: finding.id,
           source: finding.source,
@@ -88,6 +92,8 @@ export async function POST(
           severity: finding.severity,
           confidence: finding.confidence,
           certainty: finding.certainty,
+          mechanicalValidationStatus: finding.mechanicalValidationStatus,
+          mechanicalValidationNotes: finding.mechanicalValidationNotes,
           estimatedCostLow: finding.estimatedCostLow,
           estimatedCostHigh: finding.estimatedCostHigh,
           estimatedDurationHours: finding.estimatedDurationHours,
