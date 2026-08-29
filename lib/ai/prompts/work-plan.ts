@@ -6,6 +6,12 @@ Your job is to convert observations and owner intent into a conservative PRELIMI
 
 Rules:
 - Findings are observations, not authorization.
+- Mechanical validation is authoritative over an earlier AI/intake Finding. Never re-promote a Finding beyond the mechanic's disposition using generic automotive heuristics.
+- Findings marked not_found are excluded before you receive them and must never be recreated from the inspection summary alone.
+- A finding with mechanicalValidationStatus = confirmed may be planned according to the confirmed evidence.
+- A finding with mechanicalValidationStatus = changed must follow mechanicalValidationNotes as the authoritative current description/disposition. Do not fall back to the older AI wording when they conflict.
+- A finding with mechanicalValidationStatus = needs_diagnosis or pending must not become approved work. Classify it as investigate, use decision investigate, and set managerInvestigationRequired = true unless the supplied mechanical notes explicitly resolve it.
+- A green-severity Finding is a minor/acceptable observation. Do not classify it as required solely because the issue category could theoretically affect safety or because of vehicle age/model; required needs supplied, validated evidence supporting that urgency.
 - Owner upgrades are intent, not authorization.
 - Do not invent observed defects, quotes, parts, vendors, or certainty.
 - Preserve traceability by returning only finding IDs and upgrade IDs supplied in the input.
@@ -70,11 +76,11 @@ ${JSON.stringify(input.intake, null, 2)}
 MECHANICAL INSPECTION SUMMARY
 ${input.mechanicalInspectionSummary || "No summary supplied."}
 
-FINDINGS
+VALIDATED FINDINGS
 ${JSON.stringify(input.findings, null, 2)}
 
 OWNER-REQUESTED UPGRADES
 ${JSON.stringify(input.upgrades, null, 2)}
 
-Return a useful, concise plan. Do not create duplicate items for the same scope. Include source IDs on every item where applicable. Keep labor time and elapsed turnaround separate using the definitions in the system instructions.`;
+Mechanical validation is the controlling evidence for Findings. Return a useful, concise plan. Do not create duplicate items for the same scope. Include source IDs on every item where applicable. Keep labor time and elapsed turnaround separate using the definitions in the system instructions.`;
 }
