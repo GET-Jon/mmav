@@ -6,6 +6,7 @@ import { PartnerPortalAccess } from "@/components/admin/partner-portal-access";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { getAdminPartnerData } from "@/lib/admin/partners";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { getPartnerPortalAdminItems } from "@/lib/partner-portal/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,10 @@ export default async function AdminPartnersPage() {
   const access = await getMindfulInventoryAccess();
   if (!access || access.company.role !== "company_admin") notFound();
 
-  const data = await getAdminPartnerData(access.supabase, access.company.companyId);
+  const [data, portalPartners] = await Promise.all([
+    getAdminPartnerData(access.supabase, access.company.companyId),
+    getPartnerPortalAdminItems(access.company.companyId),
+  ]);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -24,12 +28,12 @@ export default async function AdminPartnersPage() {
             <Link href="/admin" className="text-xs font-black text-slate-500 hover:text-slate-950">← Administration</Link>
             <div className="mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Administration / Partners</div>
             <h1 className="mt-1 text-[30px] font-black tracking-[-0.035em]">Partner Management</h1>
-            <p className="mt-2 max-w-3xl text-slate-600">Create and maintain the specialists Lot Logic can assign, schedule, and give limited partner access.</p>
+            <p className="mt-2 max-w-3xl text-slate-600">Create and maintain specialists, then invite them into their limited Lot Logic Partner Portal.</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm">{data.partners.filter((partner) => partner.active).length} active partners</div>
         </div>
         <PartnerAdmin partners={data.partners} capabilities={data.capabilities} locations={data.locations} />
-        <PartnerPortalAccess partners={data.partners} />
+        <PartnerPortalAccess partners={portalPartners} />
       </div>
     </main>
   );
