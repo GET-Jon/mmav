@@ -33,7 +33,7 @@ export async function getPartnerProfileData(access: PartnerPortalAccess): Promis
   const [{ data: partner, error: partnerError }, { data: capabilities, error: capabilityError }, { data: assignments, error: assignmentError }] = await Promise.all([
     admin
       .from("mindful_inventory_partners")
-      .select("name,company_name,email,phone,location_text,scheduling_mode,standard_hours,portal_profile_confirmed_at")
+      .select("name,company_name,email,phone,location_text,scheduling_mode,standard_hours,portal_claimed_at,portal_profile_confirmed_at")
       .eq("id", access.partner.id)
       .single(),
     admin
@@ -50,6 +50,16 @@ export async function getPartnerProfileData(access: PartnerPortalAccess): Promis
   if (partnerError) throw new Error(partnerError.message);
   if (capabilityError) throw new Error(capabilityError.message);
   if (assignmentError) throw new Error(assignmentError.message);
+
+  if (!partner.portal_claimed_at) {
+    const { error: claimError } = await admin
+      .from("mindful_inventory_partners")
+      .update({ portal_claimed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", access.partner.id)
+      .eq("user_id", access.userId)
+      .eq("portal_access_enabled", true);
+    if (claimError) throw new Error(claimError.message);
+  }
 
   const selected = new Set((assignments ?? []).map((row) => row.capability_id));
   return {
