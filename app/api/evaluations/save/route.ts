@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordPrediction } from "@/lib/lot-logic-intelligence";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
   createSupabaseServerAuthClient,
@@ -18,6 +19,115 @@ function toInteger(value: unknown) {
 function toStringOrNull(value: unknown) {
   const clean = String(value || "").trim();
   return clean || null;
+}
+
+function evaluationSubjectKey(prefix: string, make: string | null, model: string | null) {
+  return [prefix, make || "unknown_make", model || "unknown_model"].join("_");
+}
+
+async function recordEvaluationPredictions(args: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerAuthClient>>;
+  companyId: string;
+  userId: string;
+  evaluationId: string;
+  body: Record<string, any>;
+  row: Record<string, any>;
+}) {
+  const { supabase, companyId, userId, evaluationId, body, row } = args;
+  const valuation = body.valuation || {};
+  const valuationInput = body.valuationInput || {};
+  const conditionAnalysis = body.conditionAnalysis || {};
+  const modelName = (process.env.AI_MODEL ?? "gemini-3.1-flash-lite")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^models\//, "");
+
+  const contextSnapshot = {
+    source: "evaluator_save",
+    vehicle: {
+      year: row.year,
+      make: row.make,
+      model: row.model,
+      trim: row.trim,
+      mileage: row.mileage,
+      vin: row.vin,
+    },
+    auctionSite: row.auction_site,
+    currentBid: toNumber(valuationInput.currentBid),
+    targetRetail: toNumber(valuationInput.targetResaleUsed),
+    riskGrade: row.risk_grade,
+  };
+
+  const writes: Promise<unknown>[] = [];
+
+  if (
+    toNumber(valuation.safeBid) !== null ||
+    toNumber(valuation.maxSmartBid) !== null ||
+    toNumber(valuation.stretchBid) !== null
+  ) {
+    writes.push(
+      recordPrediction(supabase, {
+        companyId,
+        evaluationId,
+        predictionType: "bid",
+        subjectKey: evaluationSubjectKey("bid", row.make, row.model),
+        predictedValue: {
+          safeBid: toNumber(valuation.safeBid),
+          maxSmartBid: toNumber(valuation.maxSmartBid),
+          stretchBid: toNumber(valuation.stretchBid),
+          expectedGrossProfit: toNumber(valuation.expectedGrossProfit),
+          decision: toStringOrNull(valuation.decision),
+          riskGrade: toStringOrNull(valuation.riskGrade),
+          finalRetailTarget: toNumber(
+            body.finalRetailTarget ?? valuationInput.targetResaleUsed,
+          ),
+        },
+        modelProvider: process.env.AI_PROVIDER ?? "google",
+        modelName,
+        promptVersion: "evaluator-v15-intelligence-1",
+        contextSnapshot,
+        createdBy: userId,
+      }),
+    );
+  }
+
+  const reconPlanning = toNumber(
+    conditionAnalysis.planningEstimate ??
+      body.conditionAnalysisPlanningEstimate ??
+      body.reconditioningCost,
+  );
+  const reconLow = toNumber(conditionAnalysis.estimatedCostLow);
+  const reconHigh = toNumber(conditionAnalysis.estimatedCostHigh);
+
+  if (reconPlanning !== null || reconLow !== null || reconHigh !== null) {
+    writes.push(
+      recordPrediction(supabase, {
+        companyId,
+        evaluationId,
+        predictionType: "recon_total",
+        subjectKey: evaluationSubjectKey("recon", row.make, row.model),
+        predictedCostLow: reconLow ?? reconPlanning,
+        predictedCostHigh: reconHigh ?? reconPlanning,
+        predictedElapsedMinutes:
+          toNumber(conditionAnalysis.estimatedReadyDaysHigh) !== null
+            ? Math.round(Number(conditionAnalysis.estimatedReadyDaysHigh) * 24 * 60)
+            : null,
+        predictedValue: {
+          planningEstimate: reconPlanning,
+          readyDaysLow: toNumber(conditionAnalysis.estimatedReadyDaysLow),
+          readyDaysHigh: toNumber(conditionAnalysis.estimatedReadyDaysHigh),
+          applied: body.conditionAnalysisApplied === true,
+        },
+        modelProvider: process.env.AI_PROVIDER ?? "google",
+        modelName,
+        promptVersion: "condition-analysis-v15-intelligence-1",
+        contextSnapshot,
+        createdBy: userId,
+      }),
+    );
+  }
+
+  if (writes.length) await Promise.all(writes);
 }
 
 export async function POST(request: Request) {
@@ -86,6 +196,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      try {
+        await recordEvaluationPredictions({
+          supabase,
+          companyId: company.companyId,
+          userId: user.id,
+          evaluationId: data.id,
+          body,
+          row,
+        });
+      } catch (error) {
+        console.warn("Evaluation saved but intelligence snapshot failed:", error);
+      }
+
       return NextResponse.json({
         id: data.id,
         savedAt: data.updated_at,
@@ -104,6 +227,19 @@ export async function POST(request: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    try {
+      await recordEvaluationPredictions({
+        supabase,
+        companyId: company.companyId,
+        userId: user.id,
+        evaluationId: data.id,
+        body,
+        row,
+      });
+    } catch (error) {
+      console.warn("Evaluation saved but intelligence snapshot failed:", error);
     }
 
     return NextResponse.json({
