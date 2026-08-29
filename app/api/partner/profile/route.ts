@@ -34,7 +34,7 @@ export async function PUT(request: Request) {
     const companyName = clean(body.companyName);
     const standardHours = normalizeHours(body.standardHours);
     const capabilityIds = Array.isArray(body.capabilityIds)
-      ? Array.from(new Set(body.capabilityIds.filter((id): id is string => typeof id === "string" && id.trim())))
+      ? Array.from(new Set(body.capabilityIds.filter((id: unknown): id is string => typeof id === "string" && Boolean(id.trim()))))
       : [];
 
     if (!name) return NextResponse.json({ error: "Name is required." }, { status: 400 });
