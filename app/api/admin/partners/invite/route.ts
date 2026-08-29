@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     const { data: partner, error: partnerError } = await admin
       .from("mindful_inventory_partners")
-      .select("id,name,email,user_id,company_id,portal_profile_confirmed_at")
+      .select("id,name,email,user_id,company_id,portal_claimed_at,portal_profile_confirmed_at")
       .eq("id", partnerId)
       .eq("company_id", access.company.companyId)
       .eq("active", true)
@@ -79,6 +79,7 @@ export async function POST(request: Request) {
         portal_invited_at: now,
         portal_invited_email: email,
         portal_access_enabled: true,
+        portal_claimed_at: sameUser ? partner.portal_claimed_at : null,
         portal_profile_confirmed_at: sameUser ? partner.portal_profile_confirmed_at : null,
         updated_by: access.userId,
         updated_at: now,
