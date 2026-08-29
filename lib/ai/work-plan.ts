@@ -14,6 +14,8 @@ const decisions = ["approved", "declined", "investigate", "monitor"] as const;
 const priorities = ["1", "2", "3"] as const;
 const costSources = ["known_quote", "historical_actual", "catalog_parts_cost", "comparable_vehicle", "ai_estimate", "unknown"] as const;
 
+type FindingValidationStatus = PreliminaryWorkPlanInput["findings"][number]["mechanicalValidationStatus"];
+
 function getGoogleClient() {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) throw new Error("Missing Gemini API key. Set GEMINI_API_KEY or GOOGLE_API_KEY.");
@@ -55,7 +57,7 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], fall
 
 function normalizeItem(
   value: unknown,
-  allowedFindingIds: Set<string>,
+  findingValidationById: Map<string, FindingValidationStatus>,
   allowedUpgradeIds: Set<string>,
 ): PreliminaryWorkPlanItem | null {
   if (!value || typeof value !== "object") return null;
@@ -84,10 +86,24 @@ function normalizeItem(
   }
 
   const findingIds = Array.isArray(item.findingIds)
-    ? Array.from(new Set(item.findingIds.filter((id): id is string => typeof id === "string" && allowedFindingIds.has(id))))
+    ? Array.from(new Set(item.findingIds.filter((id): id is string => typeof id === "string" && findingValidationById.has(id))))
     : [];
   const rawUpgradeId = typeof item.upgradeId === "string" ? item.upgradeId : null;
   const upgradeId = rawUpgradeId && allowedUpgradeIds.has(rawUpgradeId) ? rawUpgradeId : null;
+
+  // AI-generated Work Plan scope must remain traceable to supplied, eligible evidence.
+  // This prevents a mechanically dismissed Finding from being recreated from free-text summaries.
+  if (findingIds.length === 0 && !upgradeId) return null;
+
+  const hasUnresolvedMechanicalFinding = findingIds.some((id) => {
+    const status = findingValidationById.get(id);
+    return status === "pending" || status === "needs_diagnosis";
+  });
+  if (hasUnresolvedMechanicalFinding) {
+    classification = "investigate";
+    decision = "investigate";
+    managerInvestigationRequired = true;
+  }
 
   const confidenceRaw = nullableNumber(item.confidence);
   const confidence = confidenceRaw === null ? null : Math.min(1, confidenceRaw);
@@ -138,10 +154,10 @@ export async function generatePreliminaryWorkPlan(input: PreliminaryWorkPlanInpu
   const parsed = parseJsonResponse(result.text);
   if (!parsed || typeof parsed !== "object") throw new Error("AI preliminary Work Plan was not an object.");
   const object = parsed as Record<string, unknown>;
-  const findingIds = new Set(input.findings.map((finding) => finding.id));
+  const findingValidationById = new Map(input.findings.map((finding) => [finding.id, finding.mechanicalValidationStatus]));
   const upgradeIds = new Set(input.upgrades.map((upgrade) => upgrade.id));
   const items = Array.isArray(object.items)
-    ? object.items.slice(0, 30).map((item) => normalizeItem(item, findingIds, upgradeIds)).filter((item): item is PreliminaryWorkPlanItem => Boolean(item))
+    ? object.items.slice(0, 30).map((item) => normalizeItem(item, findingValidationById, upgradeIds)).filter((item): item is PreliminaryWorkPlanItem => Boolean(item))
     : [];
 
   if (items.length === 0 && (input.findings.length > 0 || input.upgrades.length > 0)) {
