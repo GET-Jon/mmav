@@ -33,6 +33,7 @@ export const defaultPartnerStandardHours: PartnerStandardHours = {
 
 export type AdminPartner = {
   id: string;
+  userId: string | null;
   name: string;
   companyName: string | null;
   email: string | null;
@@ -85,7 +86,7 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
   const [partnersResult, capabilityResult, locationsResult] = await Promise.all([
     supabase
       .from("mindful_inventory_partners")
-      .select("id,name,company_name,email,phone,active,scheduling_mode,standard_hours,notes")
+      .select("id,user_id,name,company_name,email,phone,active,scheduling_mode,standard_hours,notes")
       .eq("company_id", companyId)
       .order("active", { ascending: false })
       .order("name", { ascending: true }),
@@ -143,6 +144,7 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
     const permissionRow = permissions.get(partner.id);
     return {
       id: partner.id,
+      userId: partner.user_id,
       name: partner.name,
       companyName: partner.company_name,
       email: partner.email,
