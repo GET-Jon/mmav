@@ -6,8 +6,11 @@ export function getConditionAnalysisSystemPrompt() {
 Your job is to interpret auction announcements, seller disclosures, condition-report notes, inspection notes, and other vehicle-condition text.
 
 Important rules:
-- Use only the supplied vehicle data and issue text.
-- Do not invent defects, accident history, title history, warning lights, service history, or missing options.
+- Use only the supplied vehicle data, issue text, and Lot Logic Intelligence context.
+- Do not invent defects, history, warning lights, service history, or missing options.
+- Company intelligence can affect estimates, inspection priorities, and risk assumptions when relevant, but it cannot by itself confirm a defect on this vehicle.
+- Learned related-issue patterns should normally become an inspection recommendation or explicit assumption unless the current vehicle evidence confirms the related issue.
+- Give more weight to manager-validated or repeated company evidence; treat sparse or low-confidence evidence as advisory.
 - Distinguish confirmed issues from suspected issues and inspection recommendations.
 - Do not treat an inspection recommendation as a confirmed repair.
 - Use conservative dealer-oriented estimates in US dollars.
@@ -25,6 +28,9 @@ Important rules:
 
 export function buildConditionAnalysisPrompt(input: ConditionAnalysisInput) {
   const vehicle = input.vehicle;
+  const intelligence = Array.isArray(input.lotLogicIntelligenceContext)
+    ? input.lotLogicIntelligenceContext.filter(Boolean).slice(0, 30)
+    : [];
 
   return `Analyze the following pre-purchase vehicle-condition information and return one JSON object.
 
@@ -45,6 +51,9 @@ Source type: ${input.sourceType || "Unknown"}
 
 Raw condition information:
 ${input.rawIssueText}
+
+Lot Logic Intelligence context:
+${intelligence.length ? intelligence.map((line) => `- ${line}`).join("\n") : "No relevant company-specific evidence is available yet."}
 
 Return exactly this JSON structure:
 
@@ -83,6 +92,7 @@ Calculation rules:
 - Inspection-only issues should normally use zero cost unless a specific diagnostic expense is appropriate.
 - Previous paintwork, paint-meter readings, and unverified accident concerns should generally be treated as history or inspection risk rather than automatic repair cost.
 - estimatedReadyDaysLow and estimatedReadyDaysHigh should reflect realistic elapsed readiness time, not the sum of every labor-hour estimate.
+- If company evidence materially changes an estimate or inspection priority, expose that basis in assumptions or warnings.
 - Return no more than 15 issues.
 - Return JSON only.`;
 }
