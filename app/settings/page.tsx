@@ -3,14 +3,16 @@ import { redirect } from "next/navigation";
 
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
+import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
+import { listIntelligenceSettingsData } from "@/lib/lot-logic-intelligence/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
-type SettingsTab = "account" | "api" | "organization";
+type SettingsTab = "account" | "api" | "organization" | "intelligence";
 
 type SettingsPageProps = {
   searchParams?: Promise<{
@@ -20,7 +22,7 @@ type SettingsPageProps = {
 
 function normalizeTab(value: string | string[] | undefined): SettingsTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === "account" || raw === "api" || raw === "organization") return raw;
+  if (raw === "account" || raw === "api" || raw === "organization" || raw === "intelligence") return raw;
   return "account";
 }
 
@@ -37,16 +39,20 @@ async function loadSettingsContext(userId: string) {
   const supabase = createSupabaseAdminClient();
   const company = await getCurrentCompanyForUser(supabase, userId);
 
-  const { count, error } = await supabase
-    .from("company_memberships")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", company.companyId);
+  const [{ count, error }, intelligence] = await Promise.all([
+    supabase
+      .from("company_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", company.companyId),
+    listIntelligenceSettingsData(supabase, company.companyId),
+  ]);
 
   if (error) throw new Error(error.message);
 
   return {
     company,
     memberCount: count || 0,
+    intelligence,
   };
 }
 
@@ -75,7 +81,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
         <div className="mb-6">
           <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">Settings</h1>
-          <p className="mt-1 text-slate-600">Manage your account, API usage, and organization information.</p>
+          <p className="mt-1 text-slate-600">Manage your account, organization, integrations, and Lot Logic Intelligence.</p>
         </div>
 
         {loadError ? (
@@ -88,6 +94,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <Link href="/settings?tab=account" className={tabClass(activeTab === "account")}>Account</Link>
           <Link href="/settings?tab=api" className={tabClass(activeTab === "api")}>API Usage</Link>
           <Link href="/settings?tab=organization" className={tabClass(activeTab === "organization")}>Organization</Link>
+          <Link href="/settings?tab=intelligence" className={tabClass(activeTab === "intelligence")}>Lot Logic Intelligence</Link>
         </div>
 
         {activeTab === "account" ? (
@@ -111,7 +118,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-5">
               <h2 className="text-xl font-bold">Organization</h2>
-              <p className="mt-1 max-w-3xl text-sm text-slate-600">Your current Mindful Motor Co. organization context.</p>
+              <p className="mt-1 max-w-3xl text-sm text-slate-600">Your current organization context.</p>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Company</div><div className="mt-2 text-lg font-black">{company?.companyName || "—"}</div></div>
@@ -125,6 +132,15 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </div>
             ) : null}
           </section>
+        ) : null}
+
+        {activeTab === "intelligence" && companyContext ? (
+          <LotLogicIntelligenceCard
+            canReview={companyContext.company.role === "company_admin"}
+            initialKnowledgeSources={companyContext.intelligence.knowledgeSources}
+            initialInsights={companyContext.intelligence.insights}
+            initialAssertions={companyContext.intelligence.assertions}
+          />
         ) : null}
       </div>
     </main>
