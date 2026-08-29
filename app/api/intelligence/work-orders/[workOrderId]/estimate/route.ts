@@ -61,6 +61,19 @@ export async function POST(
       return NextResponse.json({ error: "You are not the assigned partner for this work order." }, { status: 403 });
     }
 
+    const { data: permissions, error: permissionsError } = await admin
+      .from("mindful_inventory_partner_permissions")
+      .select("edit_estimate")
+      .eq("partner_id", partner.id)
+      .maybeSingle();
+
+    if (permissionsError) {
+      return NextResponse.json({ error: permissionsError.message }, { status: 500 });
+    }
+    if (!permissions?.edit_estimate) {
+      return NextResponse.json({ error: "Estimate entry is not enabled for this partner." }, { status: 403 });
+    }
+
     const body = await request.json().catch(() => ({}));
     const quotedCost = optionalNonNegativeNumber(body.quotedCost);
     const estimatedLaborMinutes = optionalMinutes(body.estimatedLaborMinutes);
