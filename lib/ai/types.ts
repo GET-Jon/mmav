@@ -62,6 +62,7 @@ export type EvaluationSummaryInput = {
   mindfulIntelligenceVerificationItems?: string[];
   mindfulIntelligenceSourceSection?: string | null;
 
+  lotLogicIntelligenceContext?: string[];
   selectedConditionRules?: string[];
   notes?: string | null;
 };
