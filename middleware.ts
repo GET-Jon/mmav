@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/partner-invite", "/auth/partner-claim"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(
@@ -66,6 +66,21 @@ export async function middleware(request: NextRequest) {
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (user) {
+    const invitedAs = user.user_metadata?.invited_as;
+    const partnerId = user.user_metadata?.partner_id;
+    const isPartnerRoute = pathname === "/partner" || pathname.startsWith("/partner/");
+    const isPartnerAuthRoute = pathname === "/auth/partner-invite" || pathname === "/auth/partner-claim";
+
+    if (invitedAs === "partner" && typeof partnerId === "string" && partnerId && !isPartnerRoute && !isPartnerAuthRoute) {
+      const claimUrl = request.nextUrl.clone();
+      claimUrl.pathname = "/auth/partner-claim";
+      claimUrl.search = "";
+      claimUrl.searchParams.set("partner", partnerId);
+      return NextResponse.redirect(claimUrl);
+    }
   }
 
   if (user && pathname === "/login") {
