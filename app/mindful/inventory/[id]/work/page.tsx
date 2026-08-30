@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work";
+import { PartnerEstimateReviewPanel, type PartnerEstimateReviewItem } from "@/components/mindful-inventory/partner-estimate-review-panel";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryActiveWork, getInventorySchedulingOptions, type InventoryWorkOrderView } from "@/lib/mindful-inventory/active-work";
 import { getInventoryPerformerOptions } from "@/lib/mindful-inventory/performers";
@@ -44,6 +45,65 @@ function lateLabel(work: InventoryWorkOrderView, nowMs: number) {
   return null;
 }
 
+async function getPartnerEstimateReviews(
+  supabase: Awaited<ReturnType<typeof getMindfulInventoryAccess>> extends infer T
+    ? T extends { supabase: infer S } ? S : never
+    : never,
+  vehicleId: string,
+): Promise<PartnerEstimateReviewItem[]> {
+  const { data: reviewWork, error: workError } = await supabase
+    .from("mindful_inventory_work_orders")
+    .select("id,title,assigned_partner_id")
+    .eq("vehicle_id", vehicleId)
+    .eq("partner_estimate_status", "awaiting_review")
+    .not("assigned_partner_id", "is", null);
+  if (workError) throw new Error(workError.message);
+  if (!reviewWork?.length) return [];
+
+  const workIds = reviewWork.map((row) => row.id);
+  const partnerIds = [...new Set(reviewWork.map((row) => row.assigned_partner_id).filter(Boolean))] as string[];
+
+  const [estimatesResult, partnersResult] = await Promise.all([
+    supabase
+      .from("lot_logic_partner_blind_estimates")
+      .select("id,work_order_id,partner_id,revision_no,quoted_cost,estimated_labor_minutes,estimated_elapsed_minutes,notes,submitted_at")
+      .in("work_order_id", workIds)
+      .order("revision_no", { ascending: false }),
+    supabase
+      .from("mindful_inventory_partners")
+      .select("id,name,company_name")
+      .in("id", partnerIds),
+  ]);
+  if (estimatesResult.error) throw new Error(estimatesResult.error.message);
+  if (partnersResult.error) throw new Error(partnersResult.error.message);
+
+  const latestByWork = new Map<string, NonNullable<typeof estimatesResult.data>[number]>();
+  for (const estimate of estimatesResult.data ?? []) {
+    if (!latestByWork.has(estimate.work_order_id)) latestByWork.set(estimate.work_order_id, estimate);
+  }
+  const partnerNames = new Map((partnersResult.data ?? []).map((partner) => [
+    partner.id,
+    partner.company_name ? `${partner.name} · ${partner.company_name}` : partner.name,
+  ]));
+
+  return reviewWork.flatMap((work) => {
+    const estimate = latestByWork.get(work.id);
+    if (!estimate || !work.assigned_partner_id) return [];
+    return [{
+      workOrderId: work.id,
+      title: work.title,
+      partnerName: partnerNames.get(work.assigned_partner_id) || "Partner",
+      estimateId: estimate.id,
+      revisionNo: estimate.revision_no,
+      quotedCost: estimate.quoted_cost == null ? null : Number(estimate.quoted_cost),
+      estimatedLaborMinutes: estimate.estimated_labor_minutes,
+      estimatedElapsedMinutes: estimate.estimated_elapsed_minutes,
+      notes: estimate.notes,
+      submittedAt: estimate.submitted_at,
+    } satisfies PartnerEstimateReviewItem];
+  });
+}
+
 export default async function InventoryWorkPage({ params }: { params: Promise<{ id: string }> }) {
   const access = await getMindfulInventoryAccess();
   if (!access) notFound();
@@ -53,10 +113,11 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
   const vehicle = dashboard.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
 
-  const [workOrders, performerOptions, schedulingOptions] = await Promise.all([
+  const [workOrders, performerOptions, schedulingOptions, partnerEstimateReviews] = await Promise.all([
     getInventoryActiveWork(access.supabase, vehicle.id),
     getInventoryPerformerOptions(access.supabase, access.company.companyId),
     getInventorySchedulingOptions(access.supabase, access.company.companyId),
+    getPartnerEstimateReviews(access.supabase, vehicle.id),
   ]);
 
   const waitingOnParts = workOrders.filter(
@@ -72,6 +133,8 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-4">
+      <PartnerEstimateReviewPanel items={partnerEstimateReviews} />
+
       {behindSchedule.length ? (
         <section className="rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
