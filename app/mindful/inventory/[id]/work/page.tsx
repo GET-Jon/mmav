@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work";
 import { PartnerEstimateReviewPanel, type PartnerEstimateReviewItem } from "@/components/mindful-inventory/partner-estimate-review-panel";
@@ -46,9 +47,7 @@ function lateLabel(work: InventoryWorkOrderView, nowMs: number) {
 }
 
 async function getPartnerEstimateReviews(
-  supabase: Awaited<ReturnType<typeof getMindfulInventoryAccess>> extends infer T
-    ? T extends { supabase: infer S } ? S : never
-    : never,
+  supabase: SupabaseClient,
   vehicleId: string,
 ): Promise<PartnerEstimateReviewItem[]> {
   const { data: reviewWork, error: workError } = await supabase
@@ -153,10 +152,7 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
                 ))}
               </div>
             </div>
-            <Link
-              href="/mindful/inventory/schedule"
-              className="shrink-0 rounded-xl bg-red-700 px-4 py-2 text-xs font-black text-white"
-            >
+            <Link href="/mindful/inventory/schedule" className="shrink-0 rounded-xl bg-red-700 px-4 py-2 text-xs font-black text-white">
               Open Schedule →
             </Link>
           </div>
@@ -167,9 +163,7 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
         <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">
-                Parts readiness
-              </div>
+              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">Parts readiness</div>
               <div className="mt-0.5 text-sm font-black text-slate-950">
                 {waitingOnParts.length} Work Order{waitingOnParts.length === 1 ? " is" : "s are"} waiting on parts.
               </div>
@@ -178,17 +172,12 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
                   <span key={work.id}>
                     <span className="font-black">{work.title}</span> · {partsLabel(work.partsReadiness)}
                     {work.pendingPartCount ? ` (${work.pendingPartCount})` : ""}
-                    {work.partsLatestEtaAt
-                      ? ` · ETA ${new Date(work.partsLatestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                      : ""}
+                    {work.partsLatestEtaAt ? ` · ETA ${new Date(work.partsLatestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
                   </span>
                 ))}
               </div>
             </div>
-            <Link
-              href={`/mindful/inventory/${vehicle.id}/parts`}
-              className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 text-xs font-black text-white"
-            >
+            <Link href={`/mindful/inventory/${vehicle.id}/parts`} className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 text-xs font-black text-white">
               Manage Parts →
             </Link>
           </div>
