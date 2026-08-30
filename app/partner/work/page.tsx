@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { PartnerWorkList } from "@/components/partner/partner-work-list";
+import { PartnerWorkListV2 } from "@/components/partner/partner-work-list-v2";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { getPartnerAssignedWork } from "@/lib/partner-portal/work";
 
@@ -43,7 +43,7 @@ export default async function PartnerWorkPage() {
           <div>
             <h1 className="text-[30px] font-black tracking-[-0.035em]">Assigned Work</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Review assigned scope, confirm your schedule, submit an independent estimate when requested, and begin work after approval.
+              Review logistics, confirm your schedule, submit a labor estimate when requested, and begin work after approval.
             </p>
           </div>
           <div className="flex gap-2">
@@ -52,7 +52,7 @@ export default async function PartnerWorkPage() {
           </div>
         </div>
 
-        <PartnerWorkList workItems={workItems} permissions={access.permissions} />
+        <PartnerWorkListV2 workItems={workItems} permissions={access.permissions} />
       </div>
     </main>
   );
