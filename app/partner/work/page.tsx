@@ -14,7 +14,11 @@ export default async function PartnerWorkPage() {
   const workItems = await getPartnerAssignedWork(access);
 
   const openCount = workItems.filter((work) => !["complete", "cancelled"].includes(work.status)).length;
-  const estimateNeeded = workItems.filter((work) => !work.latestEstimate && !["complete", "cancelled"].includes(work.status)).length;
+  const estimateNeeded = workItems.filter((work) =>
+    !["complete", "cancelled"].includes(work.status) &&
+    access.permissions.editEstimate &&
+    (!work.latestEstimate || ["awaiting_estimate", "revision_requested"].includes(work.partnerEstimateStatus || "awaiting_estimate")),
+  ).length;
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -39,7 +43,7 @@ export default async function PartnerWorkPage() {
           <div>
             <h1 className="text-[30px] font-black tracking-[-0.035em]">Assigned Work</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Review assigned scope, submit your independent estimate, and update work status when enabled by the dealer.
+              Review assigned scope, confirm your schedule, submit an independent estimate when requested, and begin work after approval.
             </p>
           </div>
           <div className="flex gap-2">
