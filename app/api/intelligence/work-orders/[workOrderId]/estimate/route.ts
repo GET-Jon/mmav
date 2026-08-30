@@ -37,7 +37,7 @@ export async function POST(
 
     const { data: workOrder, error: workOrderError } = await admin
       .from("mindful_inventory_work_orders")
-      .select("id,assigned_partner_id")
+      .select("id,assigned_partner_id,approved_budget,status")
       .eq("id", workOrderId)
       .maybeSingle();
 
@@ -46,6 +46,9 @@ export async function POST(
     }
     if (!workOrder?.assigned_partner_id) {
       return NextResponse.json({ error: "This work order is not assigned to a partner." }, { status: 404 });
+    }
+    if (["in_progress", "complete", "cancelled"].includes(workOrder.status)) {
+      return NextResponse.json({ error: "Estimate revisions are closed after work begins." }, { status: 409 });
     }
 
     const { data: partner, error: partnerError } = await admin
@@ -106,11 +109,31 @@ export async function POST(
       submittedByUserId: user.id,
     });
 
+    const hiddenApprovalCeiling = Number(workOrder.approved_budget || 0);
+    const autoApproved = quotedCost !== null && hiddenApprovalCeiling > 0 && quotedCost <= hiddenApprovalCeiling;
+    const now = new Date().toISOString();
+    const { error: gateError } = await admin
+      .from("mindful_inventory_work_orders")
+      .update({
+        partner_estimate_status: autoApproved ? "approved" : "awaiting_review",
+        approved_partner_estimate_id: autoApproved ? result.id : null,
+        partner_estimate_reviewed_at: autoApproved ? now : null,
+        partner_estimate_reviewed_by: null,
+        current_forecast: quotedCost ?? workOrder.approved_budget,
+        updated_at: now,
+        updated_by: user.id,
+      })
+      .eq("id", workOrderId)
+      .eq("assigned_partner_id", partner.id);
+
+    if (gateError) throw new Error(gateError.message);
+
     return NextResponse.json(
       {
         id: result.id,
         revisionNo: result.revision_no,
         submittedAt: result.submitted_at,
+        approvalStatus: autoApproved ? "approved" : "awaiting_review",
       },
       { status: 201 },
     );
