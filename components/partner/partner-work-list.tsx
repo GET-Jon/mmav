@@ -254,7 +254,7 @@ export function PartnerWorkList({ workItems, permissions }: { workItems: Partner
                       {scheduleConfirmed ? <div className="mt-2 text-xs font-black text-emerald-700">{confirmedDiffers ? `Confirmed schedule: ${dateTime(work.scheduledStartAt)} → ${dateTime(work.scheduledEndAt)}` : "Schedule confirmed"}</div> : <div className="mt-2 text-xs font-bold text-amber-700">Waiting for your confirmation</div>}
                     </div>
                     {permissions.rescheduleWork && !["in_progress", "complete", "cancelled"].includes(work.status) ? <div className="flex shrink-0 gap-2">
-                      {!scheduleConfirmed ? <button disabled={workingId === work.id} onClick={() => void confirmRequestedSchedule(work)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Confirm</button> : null}
+                      {!scheduleConfirmed ? <button disabled={workingId === work.id} onClick={() => void confirmRequestedSchedule(work)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40">Confirm</button> : <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">✓ Confirmed</span>}
                       <button onClick={() => setEditingScheduleId(editingScheduleId === work.id ? null : work.id)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black">Adjust</button>
                     </div> : null}
                   </div>
