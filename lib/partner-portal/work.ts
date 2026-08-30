@@ -33,6 +33,10 @@ export type PartnerWorkItem = {
   partnerConfirmationStatus: string | null;
   partnerEstimateStatus: string | null;
   locationName: string | null;
+  partnerLocationConfirmationStatus: string | null;
+  partnerLocationRequest: string | null;
+  partnerPartsConfirmationStatus: string | null;
+  partnerPartsNote: string | null;
   parts: Array<{
     id: string;
     description: string;
@@ -81,7 +85,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
   const admin = createSupabaseAdminClient();
   const { data: workOrders, error: workError } = await admin
     .from("mindful_inventory_work_orders")
-    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,location_id")
+    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,location_id,partner_location_confirmation_status,partner_location_request,partner_parts_confirmation_status,partner_parts_note")
     .eq("assigned_partner_id", access.partner.id)
     .not("status", "eq", "cancelled")
     .order("scheduled_start_at", { ascending: true, nullsFirst: false })
@@ -185,6 +189,10 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
         partnerConfirmationStatus: row.partner_confirmation_status,
         partnerEstimateStatus: row.partner_estimate_status,
         locationName: row.location_id ? locations.get(row.location_id) ?? null : null,
+        partnerLocationConfirmationStatus: row.partner_location_confirmation_status,
+        partnerLocationRequest: row.partner_location_request,
+        partnerPartsConfirmationStatus: row.partner_parts_confirmation_status,
+        partnerPartsNote: row.partner_parts_note,
         parts: partsByWorkOrder.get(row.id) ?? [],
         latestEstimate: estimate
           ? {
