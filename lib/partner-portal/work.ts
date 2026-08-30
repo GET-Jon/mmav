@@ -33,6 +33,14 @@ export type PartnerWorkItem = {
   partnerConfirmationStatus: string | null;
   partnerEstimateStatus: string | null;
   locationName: string | null;
+  parts: Array<{
+    id: string;
+    description: string;
+    quantity: number | null;
+    partNumber: string | null;
+    status: string;
+    etaAt: string | null;
+  }>;
   latestEstimate: {
     id: string;
     revisionNo: number;
@@ -86,7 +94,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
   const locationIds = [...new Set(workOrders.map((row) => row.location_id).filter(Boolean))] as string[];
   const workOrderIds = workOrders.map((row) => row.id);
 
-  const [vehiclesResult, locationsResult, estimatesResult] = await Promise.all([
+  const [vehiclesResult, locationsResult, estimatesResult, partsResult] = await Promise.all([
     admin
       .from("mindful_inventory_vehicles")
       .select("id,year,make,model,trim,vin,stock_number,mileage,source_snapshot")
@@ -105,11 +113,17 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
       .eq("partner_id", access.partner.id)
       .in("work_order_id", workOrderIds)
       .order("revision_no", { ascending: false }),
+    admin
+      .from("mindful_inventory_work_order_parts")
+      .select("id,work_order_id,description,quantity,part_number,status,eta_at")
+      .in("work_order_id", workOrderIds)
+      .order("created_at", { ascending: true }),
   ]);
 
   if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
   if (locationsResult.error) throw new Error(locationsResult.error.message);
   if (estimatesResult.error) throw new Error(estimatesResult.error.message);
+  if (partsResult.error) throw new Error(partsResult.error.message);
 
   const vehicles = new Map((vehiclesResult.data ?? []).map((row) => [row.id, row]));
   const locations = new Map((locationsResult.data ?? []).map((row) => [row.id, row.name]));
@@ -117,6 +131,20 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
   const latestEstimates = new Map<string, EstimateRow>();
   for (const row of estimatesResult.data ?? []) {
     if (!latestEstimates.has(row.work_order_id)) latestEstimates.set(row.work_order_id, row);
+  }
+
+  const partsByWorkOrder = new Map<string, PartnerWorkItem["parts"]>();
+  for (const row of partsResult.data ?? []) {
+    const current = partsByWorkOrder.get(row.work_order_id) ?? [];
+    current.push({
+      id: row.id,
+      description: row.description,
+      quantity: row.quantity == null ? null : Number(row.quantity),
+      partNumber: row.part_number,
+      status: row.status,
+      etaAt: row.eta_at,
+    });
+    partsByWorkOrder.set(row.work_order_id, current);
   }
 
   return workOrders
@@ -157,6 +185,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
         partnerConfirmationStatus: row.partner_confirmation_status,
         partnerEstimateStatus: row.partner_estimate_status,
         locationName: row.location_id ? locations.get(row.location_id) ?? null : null,
+        parts: partsByWorkOrder.get(row.id) ?? [],
         latestEstimate: estimate
           ? {
               id: estimate.id,
