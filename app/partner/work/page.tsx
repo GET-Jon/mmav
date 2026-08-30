@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { PartnerWorkListV2 } from "@/components/partner/partner-work-list-v2";
+import { PartnerWorkListV3 } from "@/components/partner/partner-work-list-v3";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { getPartnerAssignedWork } from "@/lib/partner-portal/work";
 
@@ -52,7 +52,7 @@ export default async function PartnerWorkPage() {
           </div>
         </div>
 
-        <PartnerWorkListV2 workItems={workItems} permissions={access.permissions} />
+        <PartnerWorkListV3 workItems={workItems} permissions={access.permissions} />
       </div>
     </main>
   );
