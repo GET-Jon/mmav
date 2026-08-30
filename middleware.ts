@@ -71,10 +71,18 @@ export async function middleware(request: NextRequest) {
   if (user) {
     const invitedAs = user.user_metadata?.invited_as;
     const partnerId = user.user_metadata?.partner_id;
-    const isPartnerRoute = pathname === "/partner" || pathname.startsWith("/partner/");
+    const isPartnerPageRoute = pathname === "/partner" || pathname.startsWith("/partner/");
+    const isPartnerApiRoute = pathname.startsWith("/api/partner/");
     const isPartnerAuthRoute = pathname === "/auth/partner-invite" || pathname === "/auth/partner-claim";
 
-    if (invitedAs === "partner" && typeof partnerId === "string" && partnerId && !isPartnerRoute && !isPartnerAuthRoute) {
+    if (
+      invitedAs === "partner" &&
+      typeof partnerId === "string" &&
+      partnerId &&
+      !isPartnerPageRoute &&
+      !isPartnerApiRoute &&
+      !isPartnerAuthRoute
+    ) {
       const claimUrl = request.nextUrl.clone();
       claimUrl.pathname = "/auth/partner-claim";
       claimUrl.search = "";
