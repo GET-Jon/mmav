@@ -20,23 +20,38 @@ export default function PartnerInviteLandingPage() {
         return;
       }
 
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        setMessage("Lot Logic authentication is not configured correctly.");
+        return;
+      }
+
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const accessToken = hash.get("access_token");
       const refreshToken = hash.get("refresh_token");
+
       if (accessToken && refreshToken) {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        if (!supabaseUrl || !supabaseAnonKey) {
-          setMessage("Lot Logic authentication is not configured correctly.");
-          return;
-        }
-        const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
         const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
         if (error) {
           setMessage(error.message);
           return;
         }
         window.location.replace(claimPath);
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const metadataPartnerId = typeof user.user_metadata?.partner_id === "string"
+          ? user.user_metadata.partner_id
+          : "";
+        const recoveredClaimPath = `/auth/partner-claim${partnerId || metadataPartnerId ? `?partner=${encodeURIComponent(partnerId || metadataPartnerId)}` : ""}`;
+        window.location.replace(recoveredClaimPath);
         return;
       }
 
