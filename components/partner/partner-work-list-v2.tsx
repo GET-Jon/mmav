@@ -69,6 +69,8 @@ export function PartnerWorkListV2({ workItems, permissions }: { workItems: Partn
   const router = useRouter();
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [editingLogistics, setEditingLogistics] = useState<{ workId: string; kind: "location" | "parts" } | null>(null);
+  const [logisticsNotes, setLogisticsNotes] = useState<Record<string, string>>({});
   const [vehicleModalId, setVehicleModalId] = useState<string | null>(null);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState<Record<string, string>>({});
@@ -89,6 +91,10 @@ export function PartnerWorkListV2({ workItems, permissions }: { workItems: Partn
       startAt: localInputValue(work.scheduledStartAt || work.proposedStartAt),
       endAt: localInputValue(work.scheduledEndAt || work.proposedEndAt),
     };
+  }
+
+  function logisticsKey(work: PartnerWorkItem, kind: "location" | "parts") {
+    return `${work.id}:${kind}`;
   }
 
   function updateDraft(work: PartnerWorkItem, key: "cost" | "laborHours" | "elapsedHours" | "notes", value: string) {
@@ -171,6 +177,34 @@ export function PartnerWorkListV2({ workItems, permissions }: { workItems: Partn
     await saveScheduleValues(work, draft.startAt, draft.endAt, "Schedule updated and confirmed.");
   }
 
+  async function updateLogistics(work: PartnerWorkItem, kind: "location" | "parts", action: "confirm" | "adjust") {
+    const key = logisticsKey(work, kind);
+    const note = logisticsNotes[key] || "";
+    setWorkingId(work.id);
+    setMessage((current) => ({ ...current, [work.id]: "" }));
+    try {
+      const response = await fetch(`/api/partner/work-orders/${work.id}/logistics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, action, note }),
+      });
+      const payload = await responsePayload(response);
+      if (!response.ok) throw new Error(String(payload.error || `Could not update ${kind} (${response.status}).`));
+      setEditingLogistics(null);
+      setMessage((current) => ({
+        ...current,
+        [work.id]: action === "confirm"
+          ? `${kind === "location" ? "Work location" : "Parts"} confirmed.`
+          : `${kind === "location" ? "Location change" : "Parts issue"} sent to the dealer.`,
+      }));
+      router.refresh();
+    } catch (error) {
+      setMessage((current) => ({ ...current, [work.id]: error instanceof Error ? error.message : `Could not update ${kind}.` }));
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
   async function setStatus(work: PartnerWorkItem, status: "in_progress" | "complete") {
     setWorkingId(work.id);
     setMessage((current) => ({ ...current, [work.id]: "" }));
@@ -205,6 +239,10 @@ export function PartnerWorkListV2({ workItems, permissions }: { workItems: Partn
         const requestedEnd = work.proposedEndAt || work.scheduledEndAt;
         const scheduleConfirmed = work.partnerConfirmationStatus === "confirmed";
         const confirmedDiffers = Boolean(scheduleConfirmed && work.proposedStartAt && work.scheduledStartAt && work.scheduledStartAt !== work.proposedStartAt);
+        const locationConfirmed = work.partnerLocationConfirmationStatus === "confirmed";
+        const locationAdjustmentRequested = work.partnerLocationConfirmationStatus === "adjustment_requested";
+        const partsConfirmed = work.partnerPartsConfirmationStatus === "confirmed";
+        const partsIssueReported = work.partnerPartsConfirmationStatus === "issue_reported";
         const estimateGate = work.partnerEstimateStatus || (permissions.editEstimate ? "awaiting_estimate" : "not_required");
         const estimateApproved = estimateGate === "approved" || estimateGate === "not_required";
         const needsEstimate = permissions.editEstimate && (!work.latestEstimate || estimateGate === "awaiting_estimate" || estimateGate === "revision_requested");
@@ -212,17 +250,31 @@ export function PartnerWorkListV2({ workItems, permissions }: { workItems: Partn
         const canStart = permissions.startWork && estimateApproved && !["in_progress", "complete", "cancelled"].includes(work.status);
         const canComplete = permissions.completeWork && work.status === "in_progress";
         const hasParts = work.parts.length > 0;
+        const locationKey = logisticsKey(work, "location");
+        const partsKey = logisticsKey(work, "parts");
 
         return <section key={work.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <button onClick={() => setVehicleModalId(work.id)} className="text-left text-[10px] font-black uppercase tracking-[0.12em] text-blue-700 hover:underline">{work.vehicleLabel} · VIN …{work.vin?.slice(-8) || "—"} · View vehicle</button>
-                <h2 className="mt-1 text-xl font-black">{work.title}</h2>
+                <h2 className="text-xl font-black">{work.title}</h2>
                 {work.description ? <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{work.description}</p> : null}
               </div>
               <span className="self-start rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm">{label(work.status)}</span>
             </div>
+          </div>
+
+          <div className="grid gap-3 px-5 pt-5 sm:grid-cols-2">
+            <button onClick={() => setVehicleModalId(work.id)} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-blue-300">
+              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Vehicle</div>
+              <div className="mt-1 text-sm font-black text-blue-700">{work.vehicleLabel}</div>
+              <div className="mt-1 text-xs text-slate-500">{mileage(work.mileage)}{work.stockNumber ? ` · Stock ${work.stockNumber}` : ""} · View details</div>
+            </button>
+            <button onClick={() => setVehicleModalId(work.id)} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-blue-300">
+              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">VIN</div>
+              <div className="mt-1 font-mono text-sm font-black">{work.vin || "—"}</div>
+              <div className="mt-1 text-xs text-slate-500">View full vehicle details</div>
+            </button>
           </div>
 
           <div className="grid gap-5 p-5 xl:grid-cols-2">
@@ -248,14 +300,36 @@ export function PartnerWorkListV2({ workItems, permissions }: { workItems: Partn
               </div>
 
               <div className="rounded-xl border border-slate-200 p-4">
-                <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Location</div>
-                <div className="mt-1 text-sm font-black">{work.locationName || "Work location not yet set"}</div>
-                <div className="mt-1 text-xs text-slate-500">Where this work is expected to be performed.</div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Location</div>
+                    <div className="mt-1 text-sm font-black">{work.locationName || "Work location not yet set"}</div>
+                    <div className="mt-1 text-xs text-slate-500">Where this work is expected to be performed.</div>
+                    {locationConfirmed ? <div className="mt-2 text-xs font-black text-emerald-700">Location confirmed</div> : locationAdjustmentRequested ? <div className="mt-2 text-xs font-black text-amber-700">Change requested</div> : <div className="mt-2 text-xs font-bold text-amber-700">Waiting for your confirmation</div>}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    {!locationConfirmed ? <button disabled={workingId === work.id || !work.locationName} onClick={() => void updateLogistics(work, "location", "confirm")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-40">Confirm</button> : <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">✓ Confirmed</span>}
+                    <button onClick={() => setEditingLogistics(editingLogistics?.workId === work.id && editingLogistics.kind === "location" ? null : { workId: work.id, kind: "location" })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black">Adjust</button>
+                  </div>
+                </div>
+                {editingLogistics?.workId === work.id && editingLogistics.kind === "location" ? <div className="mt-4 border-t border-slate-200 pt-4"><label className="text-xs font-black text-slate-600">What location should change?<textarea rows={2} value={logisticsNotes[locationKey] ?? work.partnerLocationRequest ?? ""} onChange={(event) => setLogisticsNotes((current) => ({ ...current, [locationKey]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold" placeholder="Example: Please schedule this at my shop instead." /></label><div className="mt-3 flex gap-2"><button disabled={workingId === work.id} onClick={() => void updateLogistics(work, "location", "adjust")} className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white disabled:opacity-40">Send Request</button><button onClick={() => setEditingLogistics(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-black">Cancel</button></div></div> : null}
               </div>
 
               <div className={`rounded-xl border p-4 ${hasParts ? "border-slate-200" : "border-slate-200 bg-slate-50 opacity-55"}`}>
-                <div className="flex items-center justify-between gap-3"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Parts</div><div className="text-[10px] font-black uppercase text-slate-400">{hasParts ? `${work.parts.length} tracked` : "None"}</div></div>
-                {hasParts ? <div className="mt-3 space-y-2">{work.parts.map((part) => <div key={part.id} className="rounded-lg bg-slate-50 px-3 py-2"><div className="flex items-start justify-between gap-3"><div className="text-sm font-black">{part.description}{part.quantity && part.quantity !== 1 ? ` × ${part.quantity}` : ""}</div><div className="text-[10px] font-black uppercase text-slate-500">{label(part.status)}</div></div>{part.partNumber || part.etaAt ? <div className="mt-1 text-xs text-slate-500">{part.partNumber ? `Part ${part.partNumber}` : ""}{part.partNumber && part.etaAt ? " · " : ""}{part.etaAt ? `ETA ${dateTime(part.etaAt)}` : ""}</div> : null}</div>)}</div> : <div className="mt-2 text-sm font-semibold text-slate-400">No parts are currently tracked for this work.</div>}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Parts</div>
+                    <div className="mt-1 text-sm font-black">{hasParts ? `${work.parts.length} tracked part${work.parts.length === 1 ? "" : "s"}` : "No parts required"}</div>
+                    {hasParts ? <div className="mt-1 text-xs text-slate-500">Review the parts expected for this work.</div> : <div className="mt-1 text-xs text-slate-400">Nothing to confirm for this job.</div>}
+                    {hasParts ? (partsConfirmed ? <div className="mt-2 text-xs font-black text-emerald-700">Parts confirmed</div> : partsIssueReported ? <div className="mt-2 text-xs font-black text-amber-700">Issue reported</div> : <div className="mt-2 text-xs font-bold text-amber-700">Waiting for your confirmation</div>) : null}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    {hasParts && !partsConfirmed ? <button disabled={workingId === work.id} onClick={() => void updateLogistics(work, "parts", "confirm")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-40">Confirm</button> : hasParts && partsConfirmed ? <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">✓ Confirmed</span> : <button disabled className="rounded-lg bg-slate-200 px-3 py-2 text-xs font-black text-slate-400">Confirm</button>}
+                    <button disabled={!hasParts} onClick={() => setEditingLogistics(editingLogistics?.workId === work.id && editingLogistics.kind === "parts" ? null : { workId: work.id, kind: "parts" })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black disabled:bg-slate-100 disabled:text-slate-400">Adjust</button>
+                  </div>
+                </div>
+                {hasParts ? <div className="mt-3 space-y-2">{work.parts.map((part) => <div key={part.id} className="rounded-lg bg-slate-50 px-3 py-2"><div className="flex items-start justify-between gap-3"><div className="text-sm font-black">{part.description}{part.quantity && part.quantity !== 1 ? ` × ${part.quantity}` : ""}</div><div className="text-[10px] font-black uppercase text-slate-500">{label(part.status)}</div></div>{part.partNumber || part.etaAt ? <div className="mt-1 text-xs text-slate-500">{part.partNumber ? `Part ${part.partNumber}` : ""}{part.partNumber && part.etaAt ? " · " : ""}{part.etaAt ? `ETA ${dateTime(part.etaAt)}` : ""}</div> : null}</div>)}</div> : null}
+                {editingLogistics?.workId === work.id && editingLogistics.kind === "parts" && hasParts ? <div className="mt-4 border-t border-slate-200 pt-4"><label className="text-xs font-black text-slate-600">What needs attention?<textarea rows={2} value={logisticsNotes[partsKey] ?? work.partnerPartsNote ?? ""} onChange={(event) => setLogisticsNotes((current) => ({ ...current, [partsKey]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold" placeholder="Example: Wrong part number, missing hardware, or part not received." /></label><div className="mt-3 flex gap-2"><button disabled={workingId === work.id} onClick={() => void updateLogistics(work, "parts", "adjust")} className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white disabled:opacity-40">Report Issue</button><button onClick={() => setEditingLogistics(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-black">Cancel</button></div></div> : null}
               </div>
 
               {work.blockerReason ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"><span className="font-black">Blocked:</span> {work.blockerReason}</div> : null}
