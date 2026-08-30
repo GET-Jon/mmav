@@ -7,6 +7,19 @@ export type PartnerWorkItem = {
   vehicleLabel: string;
   vin: string | null;
   stockNumber: string | null;
+  mileage: number | null;
+  vehicleDetails: {
+    year: number | null;
+    make: string | null;
+    model: string | null;
+    trim: string | null;
+    bodyClass: string | null;
+    fuelType: string | null;
+    driveType: string | null;
+    displacementL: string | null;
+    engineCylinders: string | null;
+    plantCountry: string | null;
+  };
   title: string;
   description: string | null;
   category: string;
@@ -18,6 +31,7 @@ export type PartnerWorkItem = {
   proposedStartAt: string | null;
   proposedEndAt: string | null;
   partnerConfirmationStatus: string | null;
+  partnerEstimateStatus: string | null;
   locationName: string | null;
   latestEstimate: {
     id: string;
@@ -36,13 +50,30 @@ function vehicleLabel(row: Record<string, unknown>) {
     .join(" ");
 }
 
+function decodedVehicle(snapshot: unknown) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return {} as Record<string, unknown>;
+  const root = snapshot as Record<string, unknown>;
+  const lotLogic = root.lotLogicEvaluationSnapshot;
+  if (!lotLogic || typeof lotLogic !== "object" || Array.isArray(lotLogic)) return {} as Record<string, unknown>;
+  const payload = (lotLogic as Record<string, unknown>).payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {} as Record<string, unknown>;
+  const decoded = (payload as Record<string, unknown>).decodedVehicle;
+  return decoded && typeof decoded === "object" && !Array.isArray(decoded)
+    ? decoded as Record<string, unknown>
+    : {} as Record<string, unknown>;
+}
+
+function optionalString(value: unknown) {
+  return value == null || String(value).trim() === "" ? null : String(value);
+}
+
 export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promise<PartnerWorkItem[]> {
   if (!access.permissions.viewAssignedWork) return [];
 
   const admin = createSupabaseAdminClient();
   const { data: workOrders, error: workError } = await admin
     .from("mindful_inventory_work_orders")
-    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,location_id")
+    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,location_id")
     .eq("assigned_partner_id", access.partner.id)
     .not("status", "eq", "cancelled")
     .order("scheduled_start_at", { ascending: true, nullsFirst: false })
@@ -58,7 +89,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
   const [vehiclesResult, locationsResult, estimatesResult] = await Promise.all([
     admin
       .from("mindful_inventory_vehicles")
-      .select("id,year,make,model,trim,vin,stock_number")
+      .select("id,year,make,model,trim,vin,stock_number,mileage,source_snapshot")
       .eq("company_id", access.partner.companyId)
       .in("id", vehicleIds),
     locationIds.length
@@ -92,6 +123,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
     .filter((row) => vehicles.has(row.vehicle_id))
     .map((row) => {
       const vehicle = vehicles.get(row.vehicle_id)!;
+      const decoded = decodedVehicle(vehicle.source_snapshot);
       const estimate = latestEstimates.get(row.id);
       return {
         id: row.id,
@@ -99,6 +131,19 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
         vehicleLabel: vehicleLabel(vehicle),
         vin: vehicle.vin,
         stockNumber: vehicle.stock_number,
+        mileage: vehicle.mileage,
+        vehicleDetails: {
+          year: vehicle.year ?? null,
+          make: optionalString(vehicle.make),
+          model: optionalString(vehicle.model),
+          trim: optionalString(vehicle.trim),
+          bodyClass: optionalString(decoded.bodyClass),
+          fuelType: optionalString(decoded.fuelType),
+          driveType: optionalString(decoded.driveType),
+          displacementL: optionalString(decoded.displacementL),
+          engineCylinders: optionalString(decoded.engineCylinders),
+          plantCountry: optionalString(decoded.plantCountry),
+        },
         title: row.title,
         description: row.description,
         category: row.category,
@@ -110,6 +155,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
         proposedStartAt: row.proposed_start_at,
         proposedEndAt: row.proposed_end_at,
         partnerConfirmationStatus: row.partner_confirmation_status,
+        partnerEstimateStatus: row.partner_estimate_status,
         locationName: row.location_id ? locations.get(row.location_id) ?? null : null,
         latestEstimate: estimate
           ? {
