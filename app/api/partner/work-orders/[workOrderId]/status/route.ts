@@ -28,7 +28,7 @@ export async function POST(
     const admin = createSupabaseAdminClient();
     const { data: work, error: workError } = await admin
       .from("mindful_inventory_work_orders")
-      .select("id,status,assigned_partner_id,actual_start_at")
+      .select("id,status,assigned_partner_id,actual_start_at,partner_estimate_status")
       .eq("id", workOrderId)
       .maybeSingle();
 
@@ -67,6 +67,13 @@ export async function POST(
 
     if (["complete", "cancelled"].includes(work.status)) {
       return NextResponse.json({ error: "This Work Order is already closed." }, { status: 409 });
+    }
+
+    if (status === "in_progress" && !["approved", "not_required"].includes(work.partner_estimate_status || "")) {
+      return NextResponse.json(
+        { error: "Work cannot begin until the estimate is approved." },
+        { status: 409 },
+      );
     }
 
     const now = new Date().toISOString();
