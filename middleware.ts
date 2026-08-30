@@ -9,6 +9,13 @@ function isPublicPath(pathname: string) {
   );
 }
 
+function isPartnerEstimateApiRoute(pathname: string) {
+  return (
+    pathname.startsWith("/api/intelligence/work-orders/") &&
+    pathname.endsWith("/estimate")
+  );
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request,
@@ -73,6 +80,7 @@ export async function middleware(request: NextRequest) {
     const partnerId = user.user_metadata?.partner_id;
     const isPartnerPageRoute = pathname === "/partner" || pathname.startsWith("/partner/");
     const isPartnerApiRoute = pathname.startsWith("/api/partner/");
+    const isPartnerEstimateRoute = isPartnerEstimateApiRoute(pathname);
     const isPartnerAuthRoute = pathname === "/auth/partner-invite" || pathname === "/auth/partner-claim";
 
     if (
@@ -81,6 +89,7 @@ export async function middleware(request: NextRequest) {
       partnerId &&
       !isPartnerPageRoute &&
       !isPartnerApiRoute &&
+      !isPartnerEstimateRoute &&
       !isPartnerAuthRoute
     ) {
       const claimUrl = request.nextUrl.clone();
