@@ -42,6 +42,28 @@ function mileage(value: number | null) {
   return value == null ? "—" : `${new Intl.NumberFormat("en-US").format(value)} mi`;
 }
 
+function scheduleDurationMinutes(work: PartnerWorkItem) {
+  if (work.latestEstimate?.estimatedElapsedMinutes && work.latestEstimate.estimatedElapsedMinutes > 0) {
+    return work.latestEstimate.estimatedElapsedMinutes;
+  }
+
+  const start = work.proposedStartAt || work.scheduledStartAt;
+  const end = work.proposedEndAt || work.scheduledEndAt;
+  if (start && end) {
+    const duration = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60_000);
+    if (Number.isFinite(duration) && duration > 0) return duration;
+  }
+
+  return 60;
+}
+
+function endFromStart(startValue: string, durationMinutes: number) {
+  if (!startValue) return "";
+  const start = new Date(startValue);
+  if (Number.isNaN(start.getTime())) return "";
+  return localInputValue(new Date(start.getTime() + durationMinutes * 60_000).toISOString());
+}
+
 export function PartnerWorkList({ workItems, permissions }: { workItems: PartnerWorkItem[]; permissions: PartnerPortalPermissions }) {
   const router = useRouter();
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
@@ -72,8 +94,16 @@ export function PartnerWorkList({ workItems, permissions }: { workItems: Partner
     setDrafts((current) => ({ ...current, [work.id]: { ...draftFor(work), [key]: value } }));
   }
 
-  function updateScheduleDraft(work: PartnerWorkItem, key: "startAt" | "endAt", value: string) {
-    setScheduleDrafts((current) => ({ ...current, [work.id]: { ...scheduleDraftFor(work), [key]: value } }));
+  function updateScheduleStart(work: PartnerWorkItem, value: string) {
+    const durationMinutes = scheduleDurationMinutes(work);
+    setScheduleDrafts((current) => ({
+      ...current,
+      [work.id]: {
+        ...scheduleDraftFor(work),
+        startAt: value,
+        endAt: endFromStart(value, durationMinutes),
+      },
+    }));
   }
 
   async function submitEstimate(work: PartnerWorkItem) {
@@ -108,26 +138,45 @@ export function PartnerWorkList({ workItems, permissions }: { workItems: Partner
     }
   }
 
-  async function saveSchedule(work: PartnerWorkItem) {
-    const draft = scheduleDraftFor(work);
+  async function saveScheduleValues(work: PartnerWorkItem, startAt: string, endAt: string, successMessage: string) {
     setWorkingId(work.id);
     setMessage((current) => ({ ...current, [work.id]: "" }));
     try {
       const response = await fetch(`/api/partner/work-orders/${work.id}/schedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startAt: draft.startAt, endAt: draft.endAt }),
+        body: JSON.stringify({ startAt, endAt }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Schedule could not be updated.");
       setEditingScheduleId(null);
-      setMessage((current) => ({ ...current, [work.id]: "Schedule confirmed." }));
+      setScheduleDrafts((current) => {
+        const next = { ...current };
+        delete next[work.id];
+        return next;
+      });
+      setMessage((current) => ({ ...current, [work.id]: successMessage }));
       router.refresh();
     } catch (error) {
       setMessage((current) => ({ ...current, [work.id]: error instanceof Error ? error.message : "Schedule could not be updated." }));
     } finally {
       setWorkingId(null);
     }
+  }
+
+  async function confirmRequestedSchedule(work: PartnerWorkItem) {
+    const startAt = localInputValue(work.proposedStartAt || work.scheduledStartAt);
+    const endAt = localInputValue(work.proposedEndAt || work.scheduledEndAt);
+    if (!startAt || !endAt) {
+      setMessage((current) => ({ ...current, [work.id]: "There is no complete requested schedule to confirm yet." }));
+      return;
+    }
+    await saveScheduleValues(work, startAt, endAt, "Requested schedule confirmed.");
+  }
+
+  async function saveSchedule(work: PartnerWorkItem) {
+    const draft = scheduleDraftFor(work);
+    await saveScheduleValues(work, draft.startAt, draft.endAt, "Schedule updated and confirmed.");
   }
 
   async function setStatus(work: PartnerWorkItem, status: "in_progress" | "complete") {
@@ -165,8 +214,15 @@ export function PartnerWorkList({ workItems, permissions }: { workItems: Partner
       {workItems.map((work) => {
         const draft = draftFor(work);
         const scheduleDraft = scheduleDraftFor(work);
-        const preferredStart = work.proposedStartAt || work.scheduledStartAt;
-        const preferredEnd = work.proposedEndAt || work.scheduledEndAt;
+        const requestedStart = work.proposedStartAt || work.scheduledStartAt;
+        const requestedEnd = work.proposedEndAt || work.scheduledEndAt;
+        const scheduleConfirmed = work.partnerConfirmationStatus === "confirmed";
+        const confirmedDiffers = Boolean(
+          scheduleConfirmed &&
+          work.proposedStartAt &&
+          work.scheduledStartAt &&
+          work.scheduledStartAt !== work.proposedStartAt,
+        );
         const estimateGate = work.partnerEstimateStatus || (permissions.editEstimate ? "awaiting_estimate" : "not_required");
         const estimateApproved = estimateGate === "approved" || estimateGate === "not_required";
         const needsEstimate = permissions.editEstimate && (!work.latestEstimate || estimateGate === "awaiting_estimate" || estimateGate === "revision_requested");
@@ -190,18 +246,25 @@ export function PartnerWorkList({ workItems, permissions }: { workItems: Partner
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 p-3 sm:col-span-2">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <div className="text-[10px] font-black uppercase text-slate-400">Preferred timing</div>
-                      <div className="mt-1 text-sm font-black">{dateTime(preferredStart)}</div>
-                      {preferredEnd ? <div className="mt-1 text-xs text-slate-500">Preferred completion: {dateTime(preferredEnd)}</div> : null}
-                      {work.proposedStartAt && work.scheduledStartAt && work.scheduledStartAt !== work.proposedStartAt ? <div className="mt-2 text-xs font-bold text-blue-700">Your confirmed start: {dateTime(work.scheduledStartAt)}</div> : null}
+                      <div className="text-[10px] font-black uppercase text-slate-400">Requested timing</div>
+                      <div className="mt-1 text-sm font-black">{dateTime(requestedStart)}</div>
+                      {requestedEnd ? <div className="mt-1 text-xs text-slate-500">Requested completion: {dateTime(requestedEnd)}</div> : null}
+                      {scheduleConfirmed ? <div className="mt-2 text-xs font-black text-emerald-700">{confirmedDiffers ? `Confirmed schedule: ${dateTime(work.scheduledStartAt)} → ${dateTime(work.scheduledEndAt)}` : "Schedule confirmed"}</div> : <div className="mt-2 text-xs font-bold text-amber-700">Waiting for your confirmation</div>}
                     </div>
-                    {permissions.rescheduleWork && !["in_progress", "complete", "cancelled"].includes(work.status) ? <button onClick={() => setEditingScheduleId(editingScheduleId === work.id ? null : work.id)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black">Confirm / Adjust</button> : null}
+                    {permissions.rescheduleWork && !["in_progress", "complete", "cancelled"].includes(work.status) ? <div className="flex shrink-0 gap-2">
+                      {!scheduleConfirmed ? <button disabled={workingId === work.id} onClick={() => void confirmRequestedSchedule(work)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Confirm</button> : null}
+                      <button onClick={() => setEditingScheduleId(editingScheduleId === work.id ? null : work.id)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black">Adjust</button>
+                    </div> : null}
                   </div>
                   {editingScheduleId === work.id ? <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2">
-                    <label className="text-xs font-black text-slate-600">Planned start<input type="datetime-local" value={scheduleDraft.startAt} onChange={(event) => updateScheduleDraft(work, "startAt", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold" /></label>
-                    <label className="text-xs font-black text-slate-600">Expected completion<input type="datetime-local" value={scheduleDraft.endAt} onChange={(event) => updateScheduleDraft(work, "endAt", event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold" /></label>
+                    <label className="text-xs font-black text-slate-600">Planned start<input type="datetime-local" value={scheduleDraft.startAt} onChange={(event) => updateScheduleStart(work, event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold" /></label>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="text-xs font-black text-slate-600">Projected completion</div>
+                      <div className="mt-1 text-sm font-black text-slate-950">{scheduleDraft.endAt ? dateTime(new Date(scheduleDraft.endAt).toISOString()) : "Choose a start time"}</div>
+                      <div className="mt-1 text-[11px] leading-4 text-slate-500">Automatically based on {hours(scheduleDurationMinutes(work))} expected turnaround. Turnaround can be revised with your estimate.</div>
+                    </div>
                     <div className="flex gap-2 sm:col-span-2"><button disabled={workingId === work.id} onClick={() => void saveSchedule(work)} className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white disabled:opacity-40">Save Schedule</button><button onClick={() => setEditingScheduleId(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-black">Cancel</button></div>
                   </div> : null}
                 </div>
