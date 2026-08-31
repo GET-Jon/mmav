@@ -57,6 +57,11 @@ function wallClockToIso(value: unknown, timeZone: string) {
   return Number.isNaN(result.getTime()) ? undefined : result.toISOString();
 }
 
+function sameInstant(a: string | null, b: string | null) {
+  if (!a || !b) return a === b;
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ workOrderId: string }> },
@@ -72,7 +77,7 @@ export async function POST(
 
     const { data: work, error: workError } = await admin
       .from("mindful_inventory_work_orders")
-      .select("id,status,assigned_partner_id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at")
+      .select("id,vehicle_id,status,assigned_partner_id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at")
       .eq("id", workOrderId)
       .maybeSingle();
     if (workError) throw new Error(workError.message);
@@ -83,7 +88,7 @@ export async function POST(
 
     const { data: partner, error: partnerError } = await admin
       .from("mindful_inventory_partners")
-      .select("id,user_id,active,company_id")
+      .select("id,user_id,active,company_id,name,company_name")
       .eq("id", work.assigned_partner_id)
       .maybeSingle();
     if (partnerError) throw new Error(partnerError.message);
@@ -120,11 +125,15 @@ export async function POST(
     }
 
     const now = new Date().toISOString();
+    const requestedStartAt = work.proposed_start_at || work.scheduled_start_at;
+    const requestedEndAt = work.proposed_end_at || work.scheduled_end_at;
+    const scheduleChanged = !sameInstant(requestedStartAt, startAt) || !sameInstant(requestedEndAt, endAt);
+
     const { data: updated, error: updateError } = await admin
       .from("mindful_inventory_work_orders")
       .update({
-        proposed_start_at: work.proposed_start_at || work.scheduled_start_at,
-        proposed_end_at: work.proposed_end_at || work.scheduled_end_at,
+        proposed_start_at: requestedStartAt,
+        proposed_end_at: requestedEndAt,
         scheduled_start_at: startAt,
         scheduled_end_at: endAt,
         partner_confirmation_status: "confirmed",
@@ -139,7 +148,33 @@ export async function POST(
       .single();
     if (updateError) throw new Error(updateError.message);
 
-    return NextResponse.json({ ...updated, timezone: timeZone });
+    if (scheduleChanged) {
+      const partnerLabel = partner.company_name ? `${partner.name} · ${partner.company_name}` : partner.name;
+      const { error: historyError } = await admin.from("mindful_inventory_history").insert({
+        company_id: partner.company_id,
+        vehicle_id: work.vehicle_id,
+        event_type: "partner_schedule_changed",
+        entity_type: "work_order",
+        entity_id: workOrderId,
+        actor_user_id: user.id,
+        summary: `${partnerLabel} changed the proposed work schedule.`,
+        metadata: {
+          partnerId: partner.id,
+          partnerName: partnerLabel,
+          requestedStartAt,
+          requestedEndAt,
+          previousScheduledStartAt: work.scheduled_start_at,
+          previousScheduledEndAt: work.scheduled_end_at,
+          partnerScheduledStartAt: startAt,
+          partnerScheduledEndAt: endAt,
+          automaticallyAccepted: true,
+          timezone: timeZone,
+        },
+      });
+      if (historyError) throw new Error(historyError.message);
+    }
+
+    return NextResponse.json({ ...updated, timezone: timeZone, scheduleChanged });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Schedule could not be updated." },
