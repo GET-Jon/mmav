@@ -22,6 +22,33 @@ function normalizeHours(value: unknown) {
   return result;
 }
 
+function capabilityCode(name: string) {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+}
+
+function normalizeNewCapabilities(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const name = raw.trim().replace(/\s+/g, " ");
+    if (!name || name.length > 80) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+    if (names.length >= 20) break;
+  }
+  return names;
+}
+
 export async function PUT(request: Request) {
   try {
     const access = await getPartnerPortalAccess();
@@ -36,6 +63,7 @@ export async function PUT(request: Request) {
     const capabilityIds = Array.isArray(body.capabilityIds)
       ? Array.from(new Set(body.capabilityIds.filter((id: unknown): id is string => typeof id === "string" && Boolean(id.trim()))))
       : [];
+    const newCapabilityNames = normalizeNewCapabilities(body.newCapabilityNames);
 
     if (!name) return NextResponse.json({ error: "Name is required." }, { status: 400 });
     if (!phone) return NextResponse.json({ error: "Phone is required." }, { status: 400 });
@@ -43,6 +71,8 @@ export async function PUT(request: Request) {
     if (!standardHours) return NextResponse.json({ error: "Availability hours are required." }, { status: 400 });
 
     const admin = createSupabaseAdminClient();
+    const selectedCapabilityIds = new Set(capabilityIds);
+
     if (capabilityIds.length) {
       const { data: allowed, error: allowedError } = await admin
         .from("mindful_inventory_partner_capabilities")
@@ -54,6 +84,46 @@ export async function PUT(request: Request) {
       if ((allowed ?? []).length !== capabilityIds.length) {
         return NextResponse.json({ error: "One or more selected capabilities are not available." }, { status: 400 });
       }
+    }
+
+    for (const capabilityName of newCapabilityNames) {
+      const code = capabilityCode(capabilityName);
+      if (!code) continue;
+
+      const { data: existing, error: existingError } = await admin
+        .from("mindful_inventory_partner_capabilities")
+        .select("id,active")
+        .eq("company_id", access.partner.companyId)
+        .eq("code", code)
+        .maybeSingle();
+      if (existingError) throw new Error(existingError.message);
+
+      if (existing) {
+        if (!existing.active) {
+          const { error: reactivateError } = await admin
+            .from("mindful_inventory_partner_capabilities")
+            .update({ active: true, updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
+          if (reactivateError) throw new Error(reactivateError.message);
+        }
+        selectedCapabilityIds.add(existing.id);
+        continue;
+      }
+
+      const { data: created, error: createError } = await admin
+        .from("mindful_inventory_partner_capabilities")
+        .insert({
+          company_id: access.partner.companyId,
+          code,
+          name: capabilityName,
+          active: true,
+          source: "partner",
+          created_by_partner_id: access.partner.id,
+        })
+        .select("id")
+        .single();
+      if (createError) throw new Error(createError.message);
+      selectedCapabilityIds.add(created.id);
     }
 
     const now = new Date().toISOString();
@@ -80,14 +150,19 @@ export async function PUT(request: Request) {
       .eq("partner_id", access.partner.id);
     if (deleteError) throw new Error(deleteError.message);
 
-    if (capabilityIds.length) {
+    const finalCapabilityIds = Array.from(selectedCapabilityIds);
+    if (finalCapabilityIds.length) {
       const { error: insertError } = await admin
         .from("mindful_inventory_partner_capability_assignments")
-        .insert(capabilityIds.map((capabilityId) => ({ partner_id: access.partner.id, capability_id: capabilityId })));
+        .insert(finalCapabilityIds.map((capabilityId) => ({ partner_id: access.partner.id, capability_id: capabilityId })));
       if (insertError) throw new Error(insertError.message);
     }
 
-    return NextResponse.json({ saved: true, firstConfirmation: !access.partner.profileConfirmedAt });
+    return NextResponse.json({
+      saved: true,
+      firstConfirmation: !access.partner.profileConfirmedAt,
+      addedCapabilities: newCapabilityNames.length,
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Partner profile could not be saved." },
