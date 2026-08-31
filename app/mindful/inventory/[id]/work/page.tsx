@@ -5,21 +5,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work";
 import { PartnerEstimateReviewPanel, type PartnerEstimateReviewItem } from "@/components/mindful-inventory/partner-estimate-review-panel";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
-import { getInventoryActiveWork, getInventorySchedulingOptions, type InventoryWorkOrderView } from "@/lib/mindful-inventory/active-work";
+import { getInventorySchedulingOptions, type InventoryWorkOrderView } from "@/lib/mindful-inventory/active-work";
+import { buildPartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
+import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";
 import { getInventoryPerformerOptions } from "@/lib/mindful-inventory/performers";
 import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
 
-function partsLabel(value: string) {
-  if (value === "backordered") return "Backordered";
-  if (value === "ordered") return "Ordered / in transit";
-  return "Parts needed";
-}
-
 function lateLabel(work: InventoryWorkOrderView, nowMs: number) {
   if (!work.scheduledStartAt || ["complete", "cancelled"].includes(work.status)) return null;
-
   const durationMinutes = Math.max(1, work.estimatedElapsedMinutes ?? work.estimatedDurationMinutes ?? 60);
-
   if (work.status === "in_progress" && work.actualStartAt) {
     const actualStartMs = new Date(work.actualStartAt).getTime();
     if (!Number.isFinite(actualStartMs)) return null;
@@ -27,34 +21,21 @@ function lateLabel(work: InventoryWorkOrderView, nowMs: number) {
     const bufferMinutes = Math.max(30, Math.round(durationMinutes * 0.15));
     const lateMinutes = Math.floor((nowMs - expectedFinishMs) / 60_000);
     if (lateMinutes <= bufferMinutes) return null;
-    const displayMinutes = Math.max(1, lateMinutes);
-    return displayMinutes >= 60
-      ? `${Math.round((displayMinutes / 60) * 10) / 10} hr past expected finish`
-      : `${displayMinutes} min past expected finish`;
+    return lateMinutes >= 60 ? `${Math.round((lateMinutes / 60) * 10) / 10} hr past expected finish` : `${lateMinutes} min past expected finish`;
   }
-
   if (work.status !== "in_progress" && !work.actualStartAt) {
     const startMs = new Date(work.scheduledStartAt).getTime();
     if (!Number.isFinite(startMs)) return null;
     const lateMinutes = Math.floor((nowMs - startMs) / 60_000);
     if (lateMinutes <= 30) return null;
-    return lateMinutes >= 60
-      ? `${Math.round((lateMinutes / 60) * 10) / 10} hr late to start`
-      : `${lateMinutes} min late to start`;
+    return lateMinutes >= 60 ? `${Math.round((lateMinutes / 60) * 10) / 10} hr late to start` : `${lateMinutes} min late to start`;
   }
-
   return null;
 }
 
 function shortDateTime(value: string | null) {
   if (!value) return "unspecified";
-  return new Date(value).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return new Date(value).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 type PartnerScheduleChange = {
@@ -67,10 +48,7 @@ type PartnerScheduleChange = {
   changedAt: string;
 };
 
-async function getPartnerScheduleChanges(
-  supabase: SupabaseClient,
-  vehicleId: string,
-): Promise<PartnerScheduleChange[]> {
+async function getPartnerScheduleChanges(supabase: SupabaseClient, vehicleId: string): Promise<PartnerScheduleChange[]> {
   const { data: events, error } = await supabase
     .from("mindful_inventory_history")
     .select("entity_id,metadata,created_at")
@@ -81,15 +59,10 @@ async function getPartnerScheduleChanges(
     .limit(20);
   if (error) throw new Error(error.message);
   if (!events?.length) return [];
-
   const workOrderIds = [...new Set(events.map((event) => event.entity_id).filter(Boolean))] as string[];
-  const { data: workOrders, error: workError } = await supabase
-    .from("mindful_inventory_work_orders")
-    .select("id,title")
-    .in("id", workOrderIds);
+  const { data: workOrders, error: workError } = await supabase.from("mindful_inventory_work_orders").select("id,title").in("id", workOrderIds);
   if (workError) throw new Error(workError.message);
   const titles = new Map((workOrders ?? []).map((work) => [work.id, work.title]));
-
   const latestByWork = new Map<string, PartnerScheduleChange>();
   for (const event of events) {
     if (!event.entity_id || latestByWork.has(event.entity_id)) continue;
@@ -104,14 +77,10 @@ async function getPartnerScheduleChanges(
       changedAt: event.created_at,
     });
   }
-
   return Array.from(latestByWork.values());
 }
 
-async function getPartnerEstimateReviews(
-  supabase: SupabaseClient,
-  vehicleId: string,
-): Promise<PartnerEstimateReviewItem[]> {
+async function getPartnerEstimateReviews(supabase: SupabaseClient, vehicleId: string): Promise<PartnerEstimateReviewItem[]> {
   const { data: reviewWork, error: workError } = await supabase
     .from("mindful_inventory_work_orders")
     .select("id,title,assigned_partner_id")
@@ -120,162 +89,64 @@ async function getPartnerEstimateReviews(
     .not("assigned_partner_id", "is", null);
   if (workError) throw new Error(workError.message);
   if (!reviewWork?.length) return [];
-
   const workIds = reviewWork.map((row) => row.id);
   const partnerIds = [...new Set(reviewWork.map((row) => row.assigned_partner_id).filter(Boolean))] as string[];
-
   const [estimatesResult, partnersResult] = await Promise.all([
-    supabase
-      .from("lot_logic_partner_blind_estimates")
-      .select("id,work_order_id,partner_id,revision_no,quoted_cost,estimated_labor_minutes,estimated_elapsed_minutes,notes,submitted_at")
-      .in("work_order_id", workIds)
-      .order("revision_no", { ascending: false }),
-    supabase
-      .from("mindful_inventory_partners")
-      .select("id,name,company_name")
-      .in("id", partnerIds),
+    supabase.from("lot_logic_partner_blind_estimates").select("id,work_order_id,partner_id,revision_no,quoted_cost,estimated_labor_minutes,estimated_elapsed_minutes,notes,submitted_at").in("work_order_id", workIds).order("revision_no", { ascending: false }),
+    supabase.from("mindful_inventory_partners").select("id,name,company_name").in("id", partnerIds),
   ]);
   if (estimatesResult.error) throw new Error(estimatesResult.error.message);
   if (partnersResult.error) throw new Error(partnersResult.error.message);
-
   const latestByWork = new Map<string, NonNullable<typeof estimatesResult.data>[number]>();
-  for (const estimate of estimatesResult.data ?? []) {
-    if (!latestByWork.has(estimate.work_order_id)) latestByWork.set(estimate.work_order_id, estimate);
-  }
-  const partnerNames = new Map((partnersResult.data ?? []).map((partner) => [
-    partner.id,
-    partner.company_name ? `${partner.name} · ${partner.company_name}` : partner.name,
-  ]));
-
+  for (const estimate of estimatesResult.data ?? []) if (!latestByWork.has(estimate.work_order_id)) latestByWork.set(estimate.work_order_id, estimate);
+  const partnerNames = new Map((partnersResult.data ?? []).map((partner) => [partner.id, partner.company_name ? `${partner.name} · ${partner.company_name}` : partner.name]));
   return reviewWork.flatMap((work) => {
     const estimate = latestByWork.get(work.id);
     if (!estimate || !work.assigned_partner_id) return [];
-    return [{
-      workOrderId: work.id,
-      title: work.title,
-      partnerName: partnerNames.get(work.assigned_partner_id) || "Partner",
-      estimateId: estimate.id,
-      revisionNo: estimate.revision_no,
-      quotedCost: estimate.quoted_cost == null ? null : Number(estimate.quoted_cost),
-      estimatedLaborMinutes: estimate.estimated_labor_minutes,
-      estimatedElapsedMinutes: estimate.estimated_elapsed_minutes,
-      notes: estimate.notes,
-      submittedAt: estimate.submitted_at,
-    } satisfies PartnerEstimateReviewItem];
+    return [{ workOrderId: work.id, title: work.title, partnerName: partnerNames.get(work.assigned_partner_id) || "Partner", estimateId: estimate.id, revisionNo: estimate.revision_no, quotedCost: estimate.quoted_cost == null ? null : Number(estimate.quoted_cost), estimatedLaborMinutes: estimate.estimated_labor_minutes, estimatedElapsedMinutes: estimate.estimated_elapsed_minutes, notes: estimate.notes, submittedAt: estimate.submitted_at } satisfies PartnerEstimateReviewItem];
   });
 }
 
 export default async function InventoryWorkPage({ params }: { params: Promise<{ id: string }> }) {
   const access = await getMindfulInventoryAccess();
   if (!access) notFound();
-
   const { id } = await params;
   const dashboard = await getInventoryDashboardData(access.supabase, access.company.companyId);
   const vehicle = dashboard.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
 
-  const [workOrders, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges] = await Promise.all([
-    getInventoryActiveWork(access.supabase, vehicle.id),
+  const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges] = await Promise.all([
+    getInventoryPartsTransportData(access.supabase, access.company.companyId, vehicle.id),
     getInventoryPerformerOptions(access.supabase, access.company.companyId),
     getInventorySchedulingOptions(access.supabase, access.company.companyId),
     getPartnerEstimateReviews(access.supabase, vehicle.id),
     getPartnerScheduleChanges(access.supabase, vehicle.id),
   ]);
-
-  const waitingOnParts = workOrders.filter(
-    (work) =>
-      !["complete", "cancelled"].includes(work.status) &&
-      !work.partsReadyForExecution,
-  );
+  const workOrders = partsData.workOrders;
+  const partSuggestions = workOrders.filter((work) => !["complete", "cancelled"].includes(work.status)).map((work) => buildPartSearchSuggestion(vehicle, work));
 
   const nowMs = Date.now();
-  const behindSchedule = workOrders
-    .map((work) => ({ work, label: lateLabel(work, nowMs) }))
-    .filter((item): item is { work: InventoryWorkOrderView; label: string } => Boolean(item.label));
+  const behindSchedule = workOrders.map((work) => ({ work, label: lateLabel(work, nowMs) })).filter((item): item is { work: InventoryWorkOrderView; label: string } => Boolean(item.label));
 
-  return (
-    <div className="space-y-4">
-      <PartnerEstimateReviewPanel items={partnerEstimateReviews} />
+  return <div className="space-y-4">
+    <PartnerEstimateReviewPanel items={partnerEstimateReviews} />
 
-      {partnerScheduleChanges.length ? (
-        <section className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Partner updates</div>
-          <div className="mt-1 space-y-1.5 text-xs text-slate-700">
-            {partnerScheduleChanges.slice(0, 4).map((change) => (
-              <div key={change.workOrderId}>
-                <span className="font-black">{change.partnerName}</span> changed <span className="font-black">{change.workTitle}</span> · Mindful suggested {shortDateTime(change.requestedStartAt)} → partner scheduled {shortDateTime(change.partnerScheduledStartAt)}
-                {change.automaticallyAccepted ? <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">Auto-accepted</span> : null}
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+    {partnerScheduleChanges.length ? <section className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Partner updates</div>
+      <div className="mt-1 space-y-1.5 text-xs text-slate-700">{partnerScheduleChanges.slice(0, 4).map((change) => <div key={change.workOrderId}><span className="font-black">{change.partnerName}</span> changed <span className="font-black">{change.workTitle}</span> · Mindful suggested {shortDateTime(change.requestedStartAt)} → partner scheduled {shortDateTime(change.partnerScheduledStartAt)}{change.automaticallyAccepted ? <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">Auto-accepted</span> : null}</div>)}</div>
+    </section> : null}
 
-      {behindSchedule.length ? (
-        <section className="rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-700">
-                Behind schedule
-              </div>
-              <div className="mt-0.5 text-sm font-black text-slate-950">
-                {behindSchedule.length} Work Order{behindSchedule.length === 1 ? " is" : "s are"} behind schedule.
-              </div>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-red-800">
-                {behindSchedule.map(({ work, label }) => (
-                  <span key={work.id}>
-                    <span className="font-black">{work.title}</span> · {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <Link href="/mindful/inventory/schedule" className="shrink-0 rounded-xl bg-red-700 px-4 py-2 text-xs font-black text-white">
-              Open Schedule →
-            </Link>
-          </div>
-        </section>
-      ) : null}
+    {behindSchedule.length ? <section className="rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-700">Behind schedule</div><div className="mt-0.5 text-sm font-black">{behindSchedule.length} Work Order{behindSchedule.length === 1 ? " is" : "s are"} behind schedule.</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-red-800">{behindSchedule.map(({ work, label }) => <span key={work.id}><span className="font-black">{work.title}</span> · {label}</span>)}</div></div><Link href="/mindful/inventory/schedule" className="shrink-0 rounded-xl bg-red-700 px-4 py-2 text-xs font-black text-white">Open Schedule →</Link></div></section> : null}
 
-      {waitingOnParts.length ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">Parts readiness</div>
-              <div className="mt-0.5 text-sm font-black text-slate-950">
-                {waitingOnParts.length} Work Order{waitingOnParts.length === 1 ? " is" : "s are"} waiting on parts.
-              </div>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
-                {waitingOnParts.slice(0, 4).map((work) => (
-                  <span key={work.id}>
-                    <span className="font-black">{work.title}</span> · {partsLabel(work.partsReadiness)}
-                    {work.pendingPartCount ? ` (${work.pendingPartCount})` : ""}
-                    {work.partsLatestEtaAt ? ` · ETA ${new Date(work.partsLatestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <Link href={`/mindful/inventory/${vehicle.id}/parts`} className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 text-xs font-black text-white">
-              Manage Parts →
-            </Link>
-          </div>
-        </section>
-      ) : null}
-
-      <InventoryActiveWork
-        vehicleId={vehicle.id}
-        vehicle={{
-          year: vehicle.year,
-          make: vehicle.make,
-          model: vehicle.model,
-          trim: vehicle.trim,
-          vin: vehicle.vin,
-          stockNumber: vehicle.stockNumber,
-        }}
-        workOrders={workOrders}
-        performerOptions={performerOptions}
-        locationOptions={schedulingOptions.locations}
-        resourceOptions={schedulingOptions.resources}
-      />
-    </div>
-  );
+    <InventoryActiveWork
+      vehicleId={vehicle.id}
+      vehicle={{ year: vehicle.year, make: vehicle.make, model: vehicle.model, trim: vehicle.trim, vin: vehicle.vin, stockNumber: vehicle.stockNumber }}
+      workOrders={workOrders}
+      performerOptions={performerOptions}
+      locationOptions={schedulingOptions.locations}
+      resourceOptions={schedulingOptions.resources}
+      parts={partsData.parts}
+      partSuggestions={partSuggestions}
+    />
+  </div>;
 }
