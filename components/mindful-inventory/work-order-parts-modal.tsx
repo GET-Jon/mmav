@@ -19,10 +19,19 @@ function localDateTime(value: string | null) {
 
 async function payload(response: Response) {
   const text = await response.text();
-  if (!text.trim()) return {} as { error?: string };
-  try { return JSON.parse(text) as { error?: string }; }
+  if (!text.trim()) return {} as { error?: string; id?: string };
+  try { return JSON.parse(text) as { error?: string; id?: string }; }
   catch { throw new Error(`Request failed (${response.status}).`); }
 }
+
+type PurchaseDraft = {
+  supplier: string;
+  price: string;
+  eta: string;
+  url: string;
+};
+
+const EMPTY_PURCHASE: PurchaseDraft = { supplier: "", price: "", eta: "", url: "" };
 
 export function WorkOrderPartsModal({
   vehicleId,
@@ -48,7 +57,9 @@ export function WorkOrderPartsModal({
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [newPart, setNewPart] = useState("");
-  const [purchaseDrafts, setPurchaseDrafts] = useState<Record<string, { supplier: string; price: string; eta: string }>>({});
+  const [purchaseDrafts, setPurchaseDrafts] = useState<Record<string, PurchaseDraft>>({});
+  const [addingSuggestionKey, setAddingSuggestionKey] = useState<string | null>(null);
+  const [suggestionDraft, setSuggestionDraft] = useState<PurchaseDraft>(EMPTY_PURCHASE);
 
   const tracked = useMemo(() => parts.filter((part) => part.workOrderId === workOrderId && part.status !== "cancelled"), [parts, workOrderId]);
 
@@ -82,7 +93,7 @@ export function WorkOrderPartsModal({
 
   const sourceLinks = buildPartSearchSources(normalizedQuery);
 
-  async function addPart(description: string, searchQuery: string) {
+  async function addNeededPart(description: string, searchQuery: string) {
     const clean = description.trim();
     if (!clean) return;
     setWorkingId(`add:${clean}`);
@@ -100,6 +111,45 @@ export function WorkOrderPartsModal({
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to add part.");
+    } finally { setWorkingId(null); }
+  }
+
+  async function saveSuggestedPurchase(part: RecommendedPartSuggestion, key: string) {
+    setWorkingId(`purchase:${key}`);
+    setMessage("");
+    try {
+      const createResponse = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/parts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderId,
+          description: part.name,
+          quantity: 1,
+          supplier: suggestionDraft.supplier || null,
+          quotedUnitPrice: suggestionDraft.price || null,
+          etaAt: suggestionDraft.eta ? new Date(suggestionDraft.eta).toISOString() : null,
+          sourceUrl: suggestionDraft.url || null,
+          sourceType: suggestionDraft.url ? "marketplace" : "other",
+          notes: `Lot Logic sourcing suggestion: ${part.searchQuery}. Verify fitment before ordering.`,
+        }),
+      });
+      const created = await payload(createResponse);
+      if (!createResponse.ok || !created.id) throw new Error(created.error || "Failed to add part.");
+
+      const purchaseResponse = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/parts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partId: created.id, status: "ordered" }),
+      });
+      const purchased = await payload(purchaseResponse);
+      if (!purchaseResponse.ok) throw new Error(purchased.error || "Part was added but could not be marked ordered.");
+
+      setAddingSuggestionKey(null);
+      setSuggestionDraft(EMPTY_PURCHASE);
+      setMessage(`${part.name} saved and marked Ordered.`);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to save purchase.");
     } finally { setWorkingId(null); }
   }
 
@@ -122,12 +172,14 @@ export function WorkOrderPartsModal({
   }
 
   async function markPurchased(part: InventoryPartView) {
-    const draft = purchaseDrafts[part.id] || { supplier: part.supplier || "", price: part.quotedUnitPrice?.toString() || "", eta: localDateTime(part.etaAt) };
+    const draft = purchaseDrafts[part.id] || { supplier: part.supplier || "", price: part.quotedUnitPrice?.toString() || "", eta: localDateTime(part.etaAt), url: part.sourceUrl || "" };
     await updatePart(part.id, {
       status: "ordered",
       supplier: draft.supplier || null,
       quotedUnitPrice: draft.price || null,
       etaAt: draft.eta ? new Date(draft.eta).toISOString() : null,
+      sourceUrl: draft.url || null,
+      sourceType: draft.url ? "marketplace" : part.sourceType,
     }, `${part.description} marked purchased.`);
   }
 
@@ -150,13 +202,27 @@ export function WorkOrderPartsModal({
             {(recommended.length ? recommended : [{ name: suggestion.partName, need: "possible" as const, searchQuery: normalizedQuery }]).map((part, index) => {
               const alreadyTracked = tracked.some((item) => item.description.trim().toLowerCase() === part.name.trim().toLowerCase());
               const links = buildPartSearchSources(part.searchQuery);
-              return <div key={`${part.name}:${index}`} className="flex flex-col gap-3 rounded-xl bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div><div className="text-sm font-black">{part.name}</div><div className="mt-1 text-[11px] text-slate-500">{part.searchQuery}</div></div>
-                <div className="flex flex-wrap gap-1.5">{links.map((source) => <a key={source.key} href={source.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">{source.key === "turn14" ? "Turn 14" : source.label} ↗</a>)}<button disabled={alreadyTracked || workingId === `add:${part.name}`} onClick={() => void addPart(part.name, part.searchQuery)} className="rounded-md bg-slate-950 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{alreadyTracked ? "Tracked" : "+ Add"}</button></div>
+              const rowKey = `${part.name}:${index}`;
+              const expanding = addingSuggestionKey === rowKey;
+              return <div key={rowKey} className="rounded-xl bg-slate-50 px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div><div className="text-sm font-black">{part.name}</div><div className="mt-1 text-[11px] text-slate-500">{part.searchQuery}</div></div>
+                  <div className="flex flex-wrap gap-1.5">{links.map((source) => <a key={source.key} href={source.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">{source.key === "turn14" ? "Turn 14" : source.label} ↗</a>)}<button disabled={alreadyTracked} onClick={() => { setAddingSuggestionKey(expanding ? null : rowKey); setSuggestionDraft(EMPTY_PURCHASE); }} className="rounded-md bg-slate-950 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{alreadyTracked ? "Tracked" : expanding ? "Cancel" : "+ Add"}</button></div>
+                </div>
+                {expanding && !alreadyTracked ? <div className="mt-3 border-t border-slate-200 pt-3">
+                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Purchase details</div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">Supplier<input value={suggestionDraft.supplier} onChange={(e) => setSuggestionDraft((d) => ({ ...d, supplier: e.target.value }))} placeholder="Amazon, FCP Euro, local supplier…" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs normal-case font-medium" /></label>
+                    <label className="text-[10px] font-black uppercase text-slate-500">Purchase price<input value={suggestionDraft.price} onChange={(e) => setSuggestionDraft((d) => ({ ...d, price: e.target.value }))} type="number" min="0" step="0.01" placeholder="$0.00" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs normal-case font-medium" /></label>
+                    <label className="text-[10px] font-black uppercase text-slate-500">Expected arrival<input value={suggestionDraft.eta} onChange={(e) => setSuggestionDraft((d) => ({ ...d, eta: e.target.value }))} type="datetime-local" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs normal-case font-medium" /></label>
+                    <label className="text-[10px] font-black uppercase text-slate-500">Part URL <span className="font-medium normal-case text-slate-400">optional</span><input value={suggestionDraft.url} onChange={(e) => setSuggestionDraft((d) => ({ ...d, url: e.target.value }))} type="url" placeholder="https://…" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs normal-case font-medium" /></label>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3"><div className="text-[10px] font-semibold text-slate-400">Order date is recorded automatically when saved.</div><button disabled={workingId === `purchase:${rowKey}`} onClick={() => void saveSuggestedPurchase(part, rowKey)} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{workingId === `purchase:${rowKey}` ? "Saving…" : "Save & Track"}</button></div>
+                </div> : null}
               </div>;
             })}
           </div>
-          <form onSubmit={(event: FormEvent) => { event.preventDefault(); void addPart(newPart, `${suggestion.fitmentLabel} ${newPart}`.trim()); }} className="mt-3 flex gap-2">
+          <form onSubmit={(event: FormEvent) => { event.preventDefault(); void addNeededPart(newPart, `${suggestion.fitmentLabel} ${newPart}`.trim()); }} className="mt-3 flex gap-2">
             <input value={newPart} onChange={(event) => setNewPart(event.target.value)} placeholder="Add a part Lot Logic missed" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" />
             <button disabled={!newPart.trim()} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black disabled:opacity-40">Add Part</button>
           </form>
@@ -166,11 +232,11 @@ export function WorkOrderPartsModal({
           <div className="flex items-center justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Tracked parts</div><div className="mt-1 text-sm font-black">{tracked.length ? `${tracked.length} part${tracked.length === 1 ? "" : "s"}` : "No parts tracked yet"}</div></div></div>
           <div className="mt-3 space-y-3">
             {tracked.map((part) => {
-              const draft = purchaseDrafts[part.id] || { supplier: part.supplier || "", price: part.quotedUnitPrice?.toString() || "", eta: localDateTime(part.etaAt) };
+              const draft = purchaseDrafts[part.id] || { supplier: part.supplier || "", price: part.quotedUnitPrice?.toString() || "", eta: localDateTime(part.etaAt), url: part.sourceUrl || "" };
               const setDraft = (patch: Partial<typeof draft>) => setPurchaseDrafts((current) => ({ ...current, [part.id]: { ...draft, ...patch } }));
               return <div key={part.id} className="rounded-xl border border-slate-200 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-sm font-black">{part.description}</div><div className="mt-1 text-xs text-slate-500">Qty {part.quantity} · {labelize(part.status)}{part.partNumber ? ` · ${part.partNumber}` : ""}</div></div><div className="flex gap-2">{part.status !== "received" && part.status !== "installed" ? <button disabled={workingId === part.id} onClick={() => void updatePart(part.id, { status: "received" }, `${part.description} marked received.`)} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">Mark Received</button> : <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-[10px] font-black text-emerald-800">✓ {labelize(part.status)}</span>}</div></div>
-                {part.status === "needed" || part.status === "backordered" ? <div className="mt-3 grid gap-2 sm:grid-cols-3"><input value={draft.supplier} onChange={(event) => setDraft({ supplier: event.target.value })} placeholder="Supplier" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><input value={draft.price} onChange={(event) => setDraft({ price: event.target.value })} placeholder="Purchase price" type="number" min="0" step="0.01" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><input value={draft.eta} onChange={(event) => setDraft({ eta: event.target.value })} type="datetime-local" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><button disabled={workingId === part.id} onClick={() => void markPurchased(part)} className="sm:col-span-3 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white">Mark Purchased / Ordered</button></div> : <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3"><div><span className="font-black">Supplier:</span> {part.supplier || "—"}</div><div><span className="font-black">Price:</span> {part.quotedUnitPrice == null ? "—" : `$${part.quotedUnitPrice}`}</div><div><span className="font-black">ETA:</span> {part.etaAt ? new Date(part.etaAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}</div></div>}
+                {part.status === "needed" || part.status === "backordered" ? <div className="mt-3 grid gap-2 sm:grid-cols-2"><input value={draft.supplier} onChange={(event) => setDraft({ supplier: event.target.value })} placeholder="Supplier" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><input value={draft.price} onChange={(event) => setDraft({ price: event.target.value })} placeholder="Purchase price" type="number" min="0" step="0.01" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><input value={draft.eta} onChange={(event) => setDraft({ eta: event.target.value })} type="datetime-local" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><input value={draft.url} onChange={(event) => setDraft({ url: event.target.value })} placeholder="Part URL (optional)" type="url" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" /><button disabled={workingId === part.id} onClick={() => void markPurchased(part)} className="sm:col-span-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white">Mark Purchased / Ordered</button></div> : <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-4"><div><span className="font-black">Supplier:</span> {part.supplier || "—"}</div><div><span className="font-black">Price:</span> {part.quotedUnitPrice == null ? "—" : `$${part.quotedUnitPrice}`}</div><div><span className="font-black">ETA:</span> {part.etaAt ? new Date(part.etaAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}</div><div>{part.sourceUrl ? <a href={part.sourceUrl} target="_blank" rel="noreferrer" className="font-black text-blue-700">Part link ↗</a> : <span><span className="font-black">Link:</span> —</span>}</div></div>}
               </div>;
             })}
           </div>
