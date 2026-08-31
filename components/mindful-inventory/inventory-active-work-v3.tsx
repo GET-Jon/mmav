@@ -68,7 +68,10 @@ export function InventoryActiveWork({ vehicleId, vehicle: _vehicle, workOrders, 
   const blocked = openWork.filter((work) => work.status === "blocked");
   const setupReady = openWork.length > 0 && setupIncomplete.length === 0;
   const executionReady = setupReady && openWork.every((work) => work.partsReadyForExecution) && estimateOutstanding.length === 0 && blocked.length === 0;
-  const nextWork = useMemo(() => [...openWork].sort((a, b) => { const at = a.scheduledStartAt || a.proposedStartAt; const bt = b.scheduledStartAt || b.proposedStartAt; if (!at) return 1; if (!bt) return -1; return new Date(at).getTime() - new Date(bt).getTime(); })[0] || null, [openWork]);
+  const sortedOpenWork = useMemo(() => [...openWork].sort((a, b) => { const at = a.scheduledStartAt || a.proposedStartAt; const bt = b.scheduledStartAt || b.proposedStartAt; if (!at) return 1; if (!bt) return -1; return new Date(at).getTime() - new Date(bt).getTime(); }), [openWork]);
+  const inProgressWork = sortedOpenWork.find((work) => work.status === "in_progress") || null;
+  const nextReadyWork = sortedOpenWork.find((work) => stateFor(work).label === "Ready") || null;
+  const statusCounts = openWork.reduce<Record<string, number>>((counts, work) => { const label = stateFor(work).label; counts[label] = (counts[label] || 0) + 1; return counts; }, {});
   const awaitingConfirmationCount = openWork.filter((w) => w.partnerConfirmationStatus === "awaiting_partner").length;
   const needsTimeCount = openWork.filter((w) => w.partnerConfirmationStatus !== "awaiting_partner" && !w.scheduledStartAt).length;
   const needsAssignmentCount = openWork.filter((w) => !w.performerName).length;
@@ -92,8 +95,23 @@ export function InventoryActiveWork({ vehicleId, vehicle: _vehicle, workOrders, 
 
   if (!workOrders.length) return <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Active Work</div><h2 className="mt-1 text-2xl font-black">No Work Orders yet</h2><p className="mt-2 text-sm text-slate-500">Approve the Work Plan first.</p></section>;
 
+  const statusFocus = inProgressWork || nextReadyWork;
+  const statusHeading = inProgressWork ? "Work in progress" : nextReadyWork ? "Next ready to start" : openWork.length ? "Work waiting on action" : "Execution complete";
+
   return <div className="space-y-4">
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Active Work</div>{nextWork ? <><div className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Next work</div><div className="mt-1 text-lg font-black">{nextWork.title}</div><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold text-slate-600"><span>{dateTimeLabel(nextWork.scheduledStartAt || nextWork.proposedStartAt)}</span><span>{nextWork.performerName || "Performer not assigned"}</span><span>{nextWork.locationName || "Location not selected"}</span></div></> : <div className="mt-2 text-lg font-black">All authorized work is complete.</div>}</div><div className="flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">{completed}/{workOrders.length} complete</span><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">{hours(totalLabor)} labor</span><span className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white">{money(activeBudget)} budget</span></div></div>{message ? <div className="mt-3 text-sm font-bold text-slate-600">{message}</div> : null}</section>
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Work Status</div>
+          <div className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{statusHeading}</div>
+          {statusFocus ? <>
+            <div className="mt-1 text-lg font-black">{statusFocus.title}</div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold text-slate-600"><span>{dateTimeLabel(statusFocus.scheduledStartAt || statusFocus.proposedStartAt)}</span><span>{statusFocus.performerName || "Performer not assigned"}</span><span>{statusFocus.locationName || "Location not selected"}</span></div>
+          </> : openWork.length ? <div className="mt-2 flex flex-wrap gap-2">{Object.entries(statusCounts).map(([label, count]) => <span key={label} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">{count} {label.toLowerCase()}</span>)}</div> : <div className="mt-1 text-lg font-black">All authorized work is complete.</div>}
+        </div>
+        <div className="flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">{completed}/{workOrders.length} complete</span><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">{hours(totalLabor)} labor</span><span className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white">{money(activeBudget)} budget</span></div>
+      </div>
+    </section>
 
     {openWork.length && !setupReady ? <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">Finish work setup</div><div className="mt-1 text-sm font-black">{setupIncomplete.length} Work Order{setupIncomplete.length === 1 ? " needs" : "s need"} attention.</div></div><div className="flex flex-wrap gap-2">{awaitingConfirmationCount ? <span className="rounded-full bg-blue-100 px-3 py-1 text-[10px] font-black text-blue-800">{awaitingConfirmationCount} awaiting confirmation</span> : null}{needsTimeCount ? <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black text-amber-800">{needsTimeCount} need time</span> : null}{needsAssignmentCount ? <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black text-amber-800">{needsAssignmentCount} unassigned</span> : null}{needsLocationCount ? <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black text-amber-800">{needsLocationCount} need location</span> : null}</div></div></section> : null}
 
