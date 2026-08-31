@@ -174,7 +174,22 @@ export function PartnerWorkGrouped({
           </button>
           {completedOpen ? (
             <div className="border-t border-slate-200 bg-slate-50/50 p-4 sm:p-5">
-              <PartnerWorkListV3 workItems={completedItems} permissions={permissions} />
+              <div className="space-y-2">
+                {completedItems.map((work) => (
+                  <div key={work.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-black text-slate-900">{work.title}</div>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">Complete</span>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">
+                        {work.vehicleLabel} · {shortDate(work.scheduledStartAt || work.proposedStartAt)}
+                      </div>
+                    </div>
+                    {work.vin ? <div className="text-xs font-bold text-slate-400">VIN …{work.vin.slice(-8)}</div> : null}
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
         </section>
