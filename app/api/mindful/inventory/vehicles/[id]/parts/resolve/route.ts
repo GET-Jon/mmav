@@ -18,6 +18,49 @@ const statusForResolution: Record<string, string> = {
   not_required: "cancelled",
 };
 
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const access = await getMindfulInventoryAccess();
+    if (!access) return NextResponse.json({ error: "Mindful Inventory access denied." }, { status: 403 });
+
+    const { id } = await context.params;
+    const vehicleId = String(id || "").trim();
+    const url = new URL(request.url);
+    const workOrderId = String(url.searchParams.get("workOrderId") || "").trim();
+    if (!workOrderId) return NextResponse.json({ error: "Work Order id is required." }, { status: 400 });
+
+    const { data: work } = await access.supabase
+      .from("mindful_inventory_work_orders")
+      .select("id")
+      .eq("id", workOrderId)
+      .eq("vehicle_id", vehicleId)
+      .maybeSingle();
+    if (!work) return NextResponse.json({ error: "Work Order not found for this vehicle." }, { status: 404 });
+
+    const { data, error } = await access.supabase
+      .from("mindful_inventory_work_order_parts")
+      .select("id,dependency_resolution,dependency_resolved_at")
+      .eq("work_order_id", workOrderId);
+    if (error) throw new Error(error.message);
+
+    return NextResponse.json({
+      items: (data || []).map((row) => ({
+        partId: row.id,
+        resolution: row.dependency_resolution,
+        resolvedAt: row.dependency_resolved_at,
+      })),
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load dependency resolutions." },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
