@@ -76,6 +76,13 @@ export async function POST(
       );
     }
 
+    if (status === "complete" && work.status !== "in_progress") {
+      return NextResponse.json(
+        { error: "Work must be started before it can be marked complete." },
+        { status: 409 },
+      );
+    }
+
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = {
       status,
