@@ -137,14 +137,14 @@ export async function POST(
         scheduled_start_at: startAt,
         scheduled_end_at: endAt,
         partner_confirmation_status: "confirmed",
-        schedule_source: "manual",
+        schedule_source: scheduleChanged ? "partner" : "manual",
         status: work.status === "ready_to_schedule" ? "scheduled" : work.status,
         updated_at: now,
         updated_by: user.id,
       })
       .eq("id", workOrderId)
       .eq("assigned_partner_id", partner.id)
-      .select("id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status")
+      .select("id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source")
       .single();
     if (updateError) throw new Error(updateError.message);
 
