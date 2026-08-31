@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { PartnerWorkListV3 } from "@/components/partner/partner-work-list-v3";
+import { PartnerWorkGrouped } from "@/components/partner/partner-work-grouped";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { getPartnerAssignedWork } from "@/lib/partner-portal/work";
 
@@ -43,7 +43,7 @@ export default async function PartnerWorkPage() {
           <div>
             <h1 className="text-[30px] font-black tracking-[-0.035em]">Assigned Work</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Review logistics, confirm your schedule, submit a labor estimate when requested, and begin work after approval.
+              Work is grouped by vehicle. Open the car you are working on, confirm logistics, submit any required labor estimate, and begin work after approval.
             </p>
           </div>
           <div className="flex gap-2">
@@ -52,7 +52,7 @@ export default async function PartnerWorkPage() {
           </div>
         </div>
 
-        <PartnerWorkListV3 workItems={workItems} permissions={access.permissions} />
+        <PartnerWorkGrouped workItems={workItems} permissions={access.permissions} />
       </div>
     </main>
   );
