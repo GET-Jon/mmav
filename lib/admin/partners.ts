@@ -20,6 +20,7 @@ export type AdminPartnerPermissionSet = {
 export type PartnerSchedulingMode = "manager_scheduled" | "partner_availability" | "coordination_required" | "partner_self_scheduling";
 export type PartnerDayHours = { enabled: boolean; start: string; end: string };
 export type PartnerStandardHours = Record<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun", PartnerDayHours>;
+export type CapabilitySource = "admin" | "partner";
 
 export const defaultPartnerStandardHours: PartnerStandardHours = {
   mon: { enabled: true, start: "09:00", end: "17:00" },
@@ -44,11 +45,11 @@ export type AdminPartner = {
   notes: string | null;
   primaryLocationId: string | null;
   primaryLocationName: string | null;
-  capabilities: Array<{ id: string; code: string; name: string }>;
+  capabilities: Array<{ id: string; code: string; name: string; source: CapabilitySource }>;
   permissions: AdminPartnerPermissionSet;
 };
 
-export type AdminCapability = { id: string; code: string; name: string; active: boolean };
+export type AdminCapability = { id: string; code: string; name: string; active: boolean; source: CapabilitySource };
 export type AdminPartnerLocationOption = { id: string; name: string };
 
 export const defaultPartnerPermissions: AdminPartnerPermissionSet = {
@@ -92,7 +93,7 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
       .order("name", { ascending: true }),
     supabase
       .from("mindful_inventory_partner_capabilities")
-      .select("id,code,name,active")
+      .select("id,code,name,active,source")
       .eq("company_id", companyId)
       .order("name", { ascending: true }),
     supabase
@@ -124,7 +125,13 @@ export async function getAdminPartnerData(supabase: SupabaseClient, companyId: s
   if (permissionsResult.error) throw new Error(permissionsResult.error.message);
   if (locationLinksResult.error) throw new Error(locationLinksResult.error.message);
 
-  const capabilities = (capabilityResult.data || []) as AdminCapability[];
+  const capabilities: AdminCapability[] = (capabilityResult.data || []).map((row) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    active: row.active === true,
+    source: row.source === "partner" ? "partner" : "admin",
+  }));
   const capabilityById = new Map(capabilities.map((capability) => [capability.id, capability]));
   const assignments = new Map<string, AdminPartner["capabilities"]>();
   for (const row of assignmentsResult.data || []) {
