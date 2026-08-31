@@ -46,6 +46,68 @@ function lateLabel(work: InventoryWorkOrderView, nowMs: number) {
   return null;
 }
 
+function shortDateTime(value: string | null) {
+  if (!value) return "unspecified";
+  return new Date(value).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+type PartnerScheduleChange = {
+  workOrderId: string;
+  workTitle: string;
+  partnerName: string;
+  requestedStartAt: string | null;
+  partnerScheduledStartAt: string | null;
+  automaticallyAccepted: boolean;
+  changedAt: string;
+};
+
+async function getPartnerScheduleChanges(
+  supabase: SupabaseClient,
+  vehicleId: string,
+): Promise<PartnerScheduleChange[]> {
+  const { data: events, error } = await supabase
+    .from("mindful_inventory_history")
+    .select("entity_id,metadata,created_at")
+    .eq("vehicle_id", vehicleId)
+    .eq("entity_type", "work_order")
+    .eq("event_type", "partner_schedule_changed")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(error.message);
+  if (!events?.length) return [];
+
+  const workOrderIds = [...new Set(events.map((event) => event.entity_id).filter(Boolean))] as string[];
+  const { data: workOrders, error: workError } = await supabase
+    .from("mindful_inventory_work_orders")
+    .select("id,title")
+    .in("id", workOrderIds);
+  if (workError) throw new Error(workError.message);
+  const titles = new Map((workOrders ?? []).map((work) => [work.id, work.title]));
+
+  const latestByWork = new Map<string, PartnerScheduleChange>();
+  for (const event of events) {
+    if (!event.entity_id || latestByWork.has(event.entity_id)) continue;
+    const metadata = (event.metadata && typeof event.metadata === "object" ? event.metadata : {}) as Record<string, unknown>;
+    latestByWork.set(event.entity_id, {
+      workOrderId: event.entity_id,
+      workTitle: titles.get(event.entity_id) || "Work Order",
+      partnerName: String(metadata.partnerName || "Partner"),
+      requestedStartAt: metadata.requestedStartAt ? String(metadata.requestedStartAt) : null,
+      partnerScheduledStartAt: metadata.partnerScheduledStartAt ? String(metadata.partnerScheduledStartAt) : null,
+      automaticallyAccepted: metadata.automaticallyAccepted === true,
+      changedAt: event.created_at,
+    });
+  }
+
+  return Array.from(latestByWork.values());
+}
+
 async function getPartnerEstimateReviews(
   supabase: SupabaseClient,
   vehicleId: string,
@@ -112,11 +174,12 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
   const vehicle = dashboard.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
 
-  const [workOrders, performerOptions, schedulingOptions, partnerEstimateReviews] = await Promise.all([
+  const [workOrders, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges] = await Promise.all([
     getInventoryActiveWork(access.supabase, vehicle.id),
     getInventoryPerformerOptions(access.supabase, access.company.companyId),
     getInventorySchedulingOptions(access.supabase, access.company.companyId),
     getPartnerEstimateReviews(access.supabase, vehicle.id),
+    getPartnerScheduleChanges(access.supabase, vehicle.id),
   ]);
 
   const waitingOnParts = workOrders.filter(
@@ -133,6 +196,20 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
   return (
     <div className="space-y-4">
       <PartnerEstimateReviewPanel items={partnerEstimateReviews} />
+
+      {partnerScheduleChanges.length ? (
+        <section className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Partner updates</div>
+          <div className="mt-1 space-y-1.5 text-xs text-slate-700">
+            {partnerScheduleChanges.slice(0, 4).map((change) => (
+              <div key={change.workOrderId}>
+                <span className="font-black">{change.partnerName}</span> changed <span className="font-black">{change.workTitle}</span> · Mindful suggested {shortDateTime(change.requestedStartAt)} → partner scheduled {shortDateTime(change.partnerScheduledStartAt)}
+                {change.automaticallyAccepted ? <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">Auto-accepted</span> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {behindSchedule.length ? (
         <section className="rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3">
