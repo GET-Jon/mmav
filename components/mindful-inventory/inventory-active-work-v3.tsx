@@ -29,7 +29,13 @@ function setupIssues(work: InventoryWorkOrderView) {
 function executionIssues(work: InventoryWorkOrderView) {
   if (["complete", "cancelled"].includes(work.status)) return [];
   const issues = [...setupIssues(work)]; const estimate = estimateIssue(work); if (estimate) issues.push(estimate);
-  if (!work.partsReadyForExecution) issues.push(work.pendingPartCount ? `${work.pendingPartCount} tracked part${work.pendingPartCount === 1 ? " is" : "s are"} not ready` : "Parts are not ready");
+  if (!work.partsReadyForExecution) {
+    if (work.partsLatestEtaAt) {
+      issues.push(work.pendingPartCount > 1 ? `${work.pendingPartCount} parts pending · latest ETA ${dateTimeLabel(work.partsLatestEtaAt)}` : `Part ETA: ${dateTimeLabel(work.partsLatestEtaAt)}`);
+    } else {
+      issues.push(work.pendingPartCount > 1 ? `${work.pendingPartCount} parts pending · ETA not entered` : "Part ETA not entered");
+    }
+  }
   if (work.status === "blocked") issues.push(work.blockerReason ? `Blocked: ${work.blockerReason}` : "Work Order is blocked");
   return issues;
 }
