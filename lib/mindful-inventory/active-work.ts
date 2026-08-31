@@ -33,6 +33,7 @@ export type InventoryWorkOrderView = {
   proposedStartAt: string | null;
   proposedEndAt: string | null;
   partnerConfirmationStatus: "awaiting_partner" | "confirmed" | "declined" | null;
+  partnerEstimateStatus: string | null;
   scheduleSource: "suggested" | "manual" | null;
   actualStartAt: string | null;
   actualEndAt: string | null;
@@ -125,7 +126,7 @@ export async function getInventoryActiveWork(
 
   const { data, error } = await supabase
     .from("mindful_inventory_work_orders")
-    .select("id,vehicle_id,plan_item_id,plan_version_id,title,description,category,classification,status,blocker_reason,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source,actual_start_at,actual_end_at,approved_budget,current_forecast,actual_cost,assigned_partner_id,assigned_user_id,location_id,resource_id,created_at,updated_at")
+    .select("id,vehicle_id,plan_item_id,plan_version_id,title,description,category,classification,status,blocker_reason,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,schedule_source,actual_start_at,actual_end_at,approved_budget,current_forecast,actual_cost,assigned_partner_id,assigned_user_id,location_id,resource_id,created_at,updated_at")
     .eq("vehicle_id", vehicleId)
     .order("scheduled_start_at", { ascending: true, nullsFirst: false })
     .order("proposed_start_at", { ascending: true, nullsFirst: false })
@@ -207,6 +208,7 @@ export async function getInventoryActiveWork(
       proposedStartAt: row.proposed_start_at,
       proposedEndAt: row.proposed_end_at,
       partnerConfirmationStatus: row.partner_confirmation_status as InventoryWorkOrderView["partnerConfirmationStatus"],
+      partnerEstimateStatus: row.partner_estimate_status || null,
       scheduleSource: row.schedule_source as "suggested" | "manual" | null,
       actualStartAt: row.actual_start_at,
       actualEndAt: row.actual_end_at,
