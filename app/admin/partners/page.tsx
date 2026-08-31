@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CompanyCapabilityCatalog } from "@/components/admin/company-capability-catalog";
 import { PartnerAdmin } from "@/components/admin/partner-admin";
 import { PartnerPortalAccess } from "@/components/admin/partner-portal-access";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
@@ -33,6 +34,7 @@ export default async function AdminPartnersPage() {
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm">{data.partners.filter((partner) => partner.active).length} active partners</div>
         </div>
         <PartnerAdmin partners={data.partners} capabilities={data.capabilities} locations={data.locations} />
+        <CompanyCapabilityCatalog capabilities={data.capabilities} partners={data.partners} />
         <PartnerPortalAccess partners={portalPartners} />
       </div>
     </main>
