@@ -121,7 +121,7 @@ export function InventoryIntakeGuide({ vehicleId, initialConfirmations }: Props)
           const element = findVerificationCard(label);
           return element ? { key, label, element } : null;
         })
-        .filter((item): item is VerifyTarget => Boolean(item));
+        .filter((item): item is NonNullable<typeof item> => item !== null);
       setTargets(next);
     };
 
