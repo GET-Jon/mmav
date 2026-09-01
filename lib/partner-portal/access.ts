@@ -31,6 +31,7 @@ export type PartnerPortalAccess = {
     email: string | null;
     profileConfirmedAt: string | null;
     accessEnabled: boolean;
+    mechanicalInspectionEligible: boolean;
   };
   permissions: PartnerPortalPermissions;
 };
@@ -61,7 +62,7 @@ export async function getPartnerPortalAccess(): Promise<PartnerPortalAccess | nu
   const admin = createSupabaseAdminClient();
   const { data: partner, error: partnerError } = await admin
     .from("mindful_inventory_partners")
-    .select("id,company_id,user_id,name,company_name,email,active,portal_profile_confirmed_at,portal_access_enabled")
+    .select("id,company_id,user_id,name,company_name,email,active,portal_profile_confirmed_at,portal_access_enabled,mechanical_inspection_eligible")
     .eq("user_id", user.id)
     .eq("active", true)
     .eq("portal_access_enabled", true)
@@ -90,6 +91,7 @@ export async function getPartnerPortalAccess(): Promise<PartnerPortalAccess | nu
       email: partner.email,
       profileConfirmedAt: partner.portal_profile_confirmed_at,
       accessEnabled: partner.portal_access_enabled === true,
+      mechanicalInspectionEligible: partner.mechanical_inspection_eligible === true,
     },
     permissions: normalizePermissions(permissions as Record<string, unknown> | null),
   };
