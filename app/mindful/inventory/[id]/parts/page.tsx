@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { InventoryPartSuggestions } from "@/components/mindful-inventory/inventory-part-suggestions";
 import { InventoryPartsTransport } from "@/components/mindful-inventory/inventory-parts-transport";
+import { TrackedPartDetailsEditor } from "@/components/mindful-inventory/tracked-part-details-editor";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { buildPartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
 import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";
@@ -42,6 +43,7 @@ export default async function InventoryPartsPage({
         suggestions={suggestions}
         parts={data.parts}
       />
+      <TrackedPartDetailsEditor vehicleId={vehicle.id} parts={data.parts} />
       <InventoryPartsTransport vehicleId={vehicle.id} data={data} />
     </div>
   );
