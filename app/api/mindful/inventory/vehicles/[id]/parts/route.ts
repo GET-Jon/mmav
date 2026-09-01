@@ -119,6 +119,7 @@ export async function POST(
       );
     }
 
+    const expectedArrival = optionalText(body.etaAt);
     const { data, error } = await access.supabase
       .from("mindful_inventory_work_order_parts")
       .insert({
@@ -134,7 +135,7 @@ export async function POST(
         actual_unit_price: nullableNumber(body.actualUnitPrice),
         shipping_cost: nullableNumber(body.shippingCost),
         tracking_reference: optionalText(body.trackingReference),
-        eta_at: optionalText(body.etaAt),
+        eta_at: expectedArrival,
         notes: optionalText(body.notes),
         status: "needed",
         created_by: access.userId,
@@ -159,6 +160,7 @@ export async function POST(
         workOrderId,
         supplier: optionalText(body.supplier),
         sourceType: optionalSourceType(body.sourceType),
+        expectedArrival,
       },
     });
 
@@ -284,7 +286,12 @@ export async function PATCH(
       summary: status
         ? `${part.description}: ${status.replaceAll("_", " ")}`
         : `${part.description}: part details updated`,
-      metadata: status ? { status } : {},
+      metadata: {
+        ...(status ? { status } : {}),
+        ...(body.etaAt !== undefined ? { expectedArrival: optionalText(body.etaAt) } : {}),
+        ...(body.trackingReference !== undefined ? { trackingReference: optionalText(body.trackingReference) } : {}),
+        ...(body.supplier !== undefined ? { supplier: optionalText(body.supplier) } : {}),
+      },
     });
 
     return NextResponse.json({ id: partId, status });
