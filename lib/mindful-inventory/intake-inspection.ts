@@ -12,6 +12,11 @@ export type InventoryFindingMechanicalValidationStatus =
   | "changed"
   | "needs_diagnosis";
 
+export type IntakeFieldConfirmation = {
+  confirmedAt: string;
+  value: unknown;
+};
+
 export type InventoryIntakeView = {
   id: string;
   status: InventoryIntakeStatus;
@@ -20,6 +25,7 @@ export type InventoryIntakeView = {
   visibleDamageSummary: string | null;
   initialObservations: string | null;
   preliminaryGrade: "a" | "b" | "c" | "d" | "e" | null;
+  fieldConfirmations: Record<string, IntakeFieldConfirmation>;
   startedAt: string | null;
   completedAt: string | null;
 };
@@ -71,6 +77,11 @@ function toNullableNumber(value: number | string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeConfirmations(value: unknown): Record<string, IntakeFieldConfirmation> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, IntakeFieldConfirmation>;
+}
+
 export async function getInventoryIntakeInspectionData(
   supabase: SupabaseClient,
   vehicleId: string,
@@ -78,7 +89,7 @@ export async function getInventoryIntakeInspectionData(
   const [intakeResult, inspectionResult, findingsResult] = await Promise.all([
     supabase
       .from("mindful_inventory_intakes")
-      .select("id,status,mileage,keys_count,visible_damage_summary,initial_observations,preliminary_grade,started_at,completed_at")
+      .select("id,status,mileage,keys_count,visible_damage_summary,initial_observations,preliminary_grade,field_confirmations,started_at,completed_at")
       .eq("vehicle_id", vehicleId)
       .maybeSingle(),
     supabase
@@ -112,6 +123,7 @@ export async function getInventoryIntakeInspectionData(
         visibleDamageSummary: intakeRow.visible_damage_summary,
         initialObservations: intakeRow.initial_observations,
         preliminaryGrade: intakeRow.preliminary_grade,
+        fieldConfirmations: normalizeConfirmations(intakeRow.field_confirmations),
         startedAt: intakeRow.started_at,
         completedAt: intakeRow.completed_at,
       }
