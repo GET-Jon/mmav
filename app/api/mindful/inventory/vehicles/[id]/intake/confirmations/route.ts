@@ -49,8 +49,17 @@ export async function PATCH(
       return NextResponse.json({ error: existingError.message }, { status: 500 });
     }
 
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Save Intake before confirming individual fields." },
+        { status: 409 },
+      );
+    }
+
     const confirmations =
-      existing?.field_confirmations && typeof existing.field_confirmations === "object" && !Array.isArray(existing.field_confirmations)
+      existing.field_confirmations &&
+      typeof existing.field_confirmations === "object" &&
+      !Array.isArray(existing.field_confirmations)
         ? { ...(existing.field_confirmations as Record<string, unknown>) }
         : {};
 
@@ -63,23 +72,14 @@ export async function PATCH(
       };
     }
 
-    const now = new Date().toISOString();
-    const row = existing
-      ? { field_confirmations: confirmations, updated_at: now }
-      : {
-          vehicle_id: vehicleId,
-          performed_by_user_id: access.userId,
-          status: "draft",
-          started_at: now,
-          field_confirmations: confirmations,
-          updated_at: now,
-        };
+    const { error } = await access.supabase
+      .from("mindful_inventory_intakes")
+      .update({
+        field_confirmations: confirmations,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
 
-    const mutation = existing
-      ? access.supabase.from("mindful_inventory_intakes").update(row).eq("id", existing.id)
-      : access.supabase.from("mindful_inventory_intakes").insert(row);
-
-    const { error } = await mutation;
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -89,7 +89,7 @@ export async function PATCH(
       vehicle_id: vehicleId,
       event_type: body.confirmed === false ? "intake_field_reopened" : "intake_field_confirmed",
       entity_type: "intake",
-      entity_id: existing?.id || null,
+      entity_id: existing.id,
       actor_user_id: access.userId,
       summary:
         body.confirmed === false
