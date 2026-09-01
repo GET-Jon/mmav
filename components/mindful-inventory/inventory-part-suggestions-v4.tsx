@@ -307,7 +307,7 @@ export function InventoryPartSuggestionsV4({ vehicleId, suggestions, parts }: {
           return <button key={choice.value} type="button" onClick={() => openOrder(args.orderKeyValue, args.part)} className={`rounded-full px-3 py-1.5 text-[10px] font-black ${active ? "border-2 border-slate-950 bg-slate-50 text-slate-950" : "bg-slate-950 text-white"}`}>{orderKey === args.orderKeyValue ? "Close Order" : active && args.editing ? "Order ✓" : "Order"}</button>;
         }
         const key = `quick:${args.workOrderId}:${args.description}:${choice.value}`;
-        return <button key={choice.value} type="button" disabled={working !== null} onClick={() => void quickResolve({ ...args, resolution: choice.value })} className={`rounded-full px-3 py-1.5 text-[10px] font-black disabled:opacity-50 ${active ? "border-2 border-slate-950 bg-slate-50 text-slate-950" : "border border-slate-200 bg-white text-slate-700 hover:border-slate-400"}`}>{working === key ? "Saving…" : `${choice.label}${active ? " ✓" : ""}`}</button>;
+        return <button key={choice.value} type="button" disabled={working !== null} onClick={() => void quickResolve({ ...args, resolution: choice.value as QuickResolution })} className={`rounded-full px-3 py-1.5 text-[10px] font-black disabled:opacity-50 ${active ? "border-2 border-slate-950 bg-slate-50 text-slate-950" : "border border-slate-200 bg-white text-slate-700 hover:border-slate-400"}`}>{working === key ? "Saving…" : `${choice.label}${active ? " ✓" : ""}`}</button>;
       })}
     </div>;
   }
