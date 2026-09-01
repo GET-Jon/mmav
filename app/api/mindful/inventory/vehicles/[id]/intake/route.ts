@@ -9,7 +9,8 @@ function optionalText(value: unknown) {
 
 function nullableNonNegativeInteger(value: unknown, label: string) {
   if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(value);
+  const cleaned = typeof value === "string" ? value.replace(/[^0-9-]/g, "") : value;
+  const parsed = Number(cleaned);
   if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative whole number.`);
   return parsed;
 }
