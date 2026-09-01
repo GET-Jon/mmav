@@ -44,6 +44,7 @@ export type PartnerWorkItem = {
     partNumber: string | null;
     status: string;
     etaAt: string | null;
+    dependencyResolution: string | null;
   }>;
   latestEstimate: {
     id: string;
@@ -119,7 +120,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
       .order("revision_no", { ascending: false }),
     admin
       .from("mindful_inventory_work_order_parts")
-      .select("id,work_order_id,description,quantity,part_number,status,eta_at")
+      .select("id,work_order_id,description,quantity,part_number,status,eta_at,dependency_resolution")
       .in("work_order_id", workOrderIds)
       .order("created_at", { ascending: true }),
   ]);
@@ -147,6 +148,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
       partNumber: row.part_number,
       status: row.status,
       etaAt: row.eta_at,
+      dependencyResolution: row.dependency_resolution,
     });
     partsByWorkOrder.set(row.work_order_id, current);
   }
