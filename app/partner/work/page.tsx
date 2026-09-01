@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PartnerDetailingList } from "@/components/partner/partner-detailing-list";
 import { PartnerWorkGrouped } from "@/components/partner/partner-work-grouped";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
+import { getPartnerDetailingAssignments } from "@/lib/partner-portal/detailing";
 import { getPartnerAssignedWork } from "@/lib/partner-portal/work";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +13,12 @@ export default async function PartnerWorkPage() {
   const access = await requirePartnerPortalAccess();
   if (!access.partner.profileConfirmedAt) redirect("/partner/profile?onboarding=1");
 
-  const workItems = await getPartnerAssignedWork(access);
+  const [workItems, detailingItems] = await Promise.all([
+    getPartnerAssignedWork(access),
+    getPartnerDetailingAssignments(access),
+  ]);
 
-  const openCount = workItems.filter((work) => !["complete", "cancelled"].includes(work.status)).length;
+  const openCount = workItems.filter((work) => !["complete", "cancelled"].includes(work.status)).length + detailingItems.length;
   const estimateNeeded = workItems.filter((work) =>
     !["complete", "cancelled"].includes(work.status) &&
     access.permissions.editEstimate &&
@@ -43,7 +48,7 @@ export default async function PartnerWorkPage() {
           <div>
             <h1 className="text-[30px] font-black tracking-[-0.035em]">Assigned Work</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Work is grouped by vehicle. Open the car you are working on, confirm logistics, submit any required labor estimate, and begin work after approval.
+              Work is grouped by vehicle. Dedicated sale-prep detailing assignments appear first; other repair, cosmetic, and specialty jobs remain in the normal work queue.
             </p>
           </div>
           <div className="flex gap-2">
@@ -52,6 +57,7 @@ export default async function PartnerWorkPage() {
           </div>
         </div>
 
+        <PartnerDetailingList items={detailingItems} />
         <PartnerWorkGrouped workItems={workItems} permissions={access.permissions} />
       </div>
     </main>
