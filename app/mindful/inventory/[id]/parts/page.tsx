@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { InventoryPartSuggestions } from "@/components/mindful-inventory/inventory-part-suggestions";
+import { InventoryPartSuggestionsV2 } from "@/components/mindful-inventory/inventory-part-suggestions-v2";
 import { InventoryTransportOnly } from "@/components/mindful-inventory/inventory-transport-only";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { buildPartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
@@ -23,7 +23,7 @@ export default async function InventoryPartsPage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-6">
-      <InventoryPartSuggestions vehicleId={vehicle.id} suggestions={suggestions} parts={data.parts} />
+      <InventoryPartSuggestionsV2 vehicleId={vehicle.id} suggestions={suggestions} parts={data.parts} />
       <InventoryTransportOnly vehicleId={vehicle.id} data={data} />
     </div>
   );
