@@ -4,6 +4,7 @@ export type InventoryVehiclePhase =
   | "inspection"
   | "planning"
   | "reconditioning"
+  | "detailing"
   | "final_qc"
   | "merchandising"
   | "ready";
