@@ -15,430 +15,120 @@ function confidenceClass(value: PartSearchSuggestion["confidence"]) {
   if (value === "verify") return "bg-amber-50 text-amber-800";
   return "bg-blue-50 text-blue-700";
 }
-
 function confidenceLabel(value: PartSearchSuggestion["confidence"]) {
   if (value === "high") return "High confidence";
   if (value === "verify") return "Verify fitment";
   return "Good starting point";
 }
-
 function recommendationLabel(value: RecommendedPartNeed) {
   if (value === "likely_required") return "Likely required";
   if (value === "consumable") return "Consumable";
   return "Possible";
 }
-
 function recommendationClass(value: RecommendedPartNeed) {
   if (value === "likely_required") return "bg-emerald-50 text-emerald-700";
   if (value === "consumable") return "bg-violet-50 text-violet-700";
   return "bg-slate-100 text-slate-600";
 }
-
+function normalizedPartName(value: string) { return value.trim().toLowerCase().replace(/\s+/g, " "); }
 function humanFitmentLabel(value: string) {
-  return value
-    .replace(/Sport Utility Vehicle \[SUV\]\/Multipurpose Vehicle \[MPV\]/gi, "")
-    .replace(/Sport Utility Vehicle/gi, "")
-    .replace(/Multipurpose Vehicle/gi, "")
-    .replace(/\[[^\]]+\]/g, "")
-    .replace(/\b\d\.\dL\b/gi, "")
-    .replace(/\bI\d\b/gi, "")
-    .replace(/\bV\d\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return value.replace(/Sport Utility Vehicle \[SUV\]\/Multipurpose Vehicle \[MPV\]/gi, "").replace(/Sport Utility Vehicle/gi, "").replace(/Multipurpose Vehicle/gi, "").replace(/\[[^\]]+\]/g, "").replace(/\b\d\.\dL\b/gi, "").replace(/\bI\d\b/gi, "").replace(/\bV\d\b/gi, "").replace(/\s+/g, " ").trim();
+}
+function localDateTime(value: string | null) {
+  if (!value) return "";
+  const d = new Date(value); const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function shortDate(value: string | null) { return value ? new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Not entered"; }
+function money(value: number | null) { return value == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
+function labelize(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+
+type Draft = { supplier: string; price: string; eta: string; url: string; tracking: string; status: string };
+function draftFromPart(part?: InventoryPartView | null): Draft {
+  return { supplier: part?.supplier || "", price: part?.quotedUnitPrice?.toString() || "", eta: localDateTime(part?.etaAt || null), url: part?.sourceUrl || "", tracking: part?.trackingReference || "", status: part?.status || "needed" };
 }
 
-function normalizedPartName(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-export function InventoryPartSuggestions({
-  vehicleId,
-  suggestions,
-  parts,
-}: {
-  vehicleId: string;
-  suggestions: PartSearchSuggestion[];
-  parts: InventoryPartView[];
-}) {
+export function InventoryPartSuggestions({ vehicleId, suggestions, parts }: { vehicleId: string; suggestions: PartSearchSuggestion[]; parts: InventoryPartView[] }) {
   const router = useRouter();
   const normalizedOnce = useRef(false);
   const [displaySuggestions, setDisplaySuggestions] = useState(suggestions);
   const [aiLoading, setAiLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(
-    new Set(),
-  );
-  const [otherParts, setOtherParts] = useState<Record<string, string>>({});
+  const [expandedWorkOrders, setExpandedWorkOrders] = useState<Set<string>>(() => {
+    const attention = suggestions.find((s) => parts.some((p) => p.workOrderId === s.workOrderId && p.status !== "cancelled" && !["received", "installed"].includes(p.status)));
+    return new Set(attention ? [attention.workOrderId] : suggestions[0] ? [suggestions[0].workOrderId] : []);
+  });
+  const [expandedPartKey, setExpandedPartKey] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [otherNames, setOtherNames] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    setDisplaySuggestions(suggestions);
-  }, [suggestions]);
-
+  useEffect(() => setDisplaySuggestions(suggestions), [suggestions]);
   useEffect(() => {
     if (normalizedOnce.current || suggestions.length === 0) return;
-    normalizedOnce.current = true;
-    let cancelled = false;
-
+    normalizedOnce.current = true; let cancelled = false;
     async function normalize() {
       setAiLoading(true);
       try {
-        const response = await fetch(
-          `/api/mindful/inventory/vehicles/${vehicleId}/part-suggestions`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              items: suggestions.map((suggestion) => ({
-                workOrderId: suggestion.workOrderId,
-                workOrderTitle: suggestion.workOrderTitle,
-                partName: suggestion.partName,
-                fitmentLabel: suggestion.fitmentLabel,
-              })),
-            }),
-          },
-        );
-        const payload = (await response.json()) as {
-          error?: string;
-          items?: Array<{
-            workOrderId: string;
-            partName: string;
-            searchQuery: string;
-            alternateQueries?: string[];
-            recommendedParts?: Array<{
-              name: string;
-              need: RecommendedPartNeed;
-              searchQuery: string;
-            }>;
-          }>;
-        };
-        if (!response.ok) {
-          throw new Error(payload.error || "AI search normalization failed.");
+        const response = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/part-suggestions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: suggestions.map((s) => ({ workOrderId: s.workOrderId, workOrderTitle: s.workOrderTitle, partName: s.partName, fitmentLabel: s.fitmentLabel })) }) });
+        const data = await response.json() as { items?: Array<{ workOrderId: string; partName: string; searchQuery: string; alternateQueries?: string[]; recommendedParts?: PartSearchSuggestion["recommendedParts"] }> };
+        if (!cancelled && response.ok && data.items) {
+          const byId = new Map(data.items.map((item) => [item.workOrderId, item]));
+          setDisplaySuggestions((current) => current.map((s) => { const n = byId.get(s.workOrderId); return n ? { ...s, partName: n.partName, searchQuery: n.searchQuery, alternateQueries: n.alternateQueries || [], recommendedParts: n.recommendedParts || [], sources: buildPartSearchSources(n.searchQuery), aiNormalized: true } : s; }));
         }
-        if (cancelled || !payload.items?.length) return;
-
-        const normalized = new Map(
-          payload.items.map((item) => [item.workOrderId, item]),
-        );
-        setDisplaySuggestions((current) =>
-          current.map((suggestion) => {
-            const improved = normalized.get(suggestion.workOrderId);
-            if (!improved) return suggestion;
-            return {
-              ...suggestion,
-              partName: improved.partName,
-              searchQuery: improved.searchQuery,
-              alternateQueries: improved.alternateQueries || [],
-              recommendedParts: improved.recommendedParts || [],
-              aiNormalized: true,
-              sources: buildPartSearchSources(improved.searchQuery),
-            };
-          }),
-        );
-      } catch (error) {
-        console.warn("Using fallback part searches:", error);
-      } finally {
-        if (!cancelled) setAiLoading(false);
-      }
+      } finally { if (!cancelled) setAiLoading(false); }
     }
-
-    void normalize();
-    return () => {
-      cancelled = true;
-    };
+    void normalize(); return () => { cancelled = true; };
   }, [suggestions, vehicleId]);
 
-  const trackedParts = useMemo(() => {
-    const active = parts.filter((part) => part.status !== "cancelled");
-    return new Set(
-      active.map(
-        (part) => `${part.workOrderId}:${normalizedPartName(part.description)}`,
-      ),
-    );
-  }, [parts]);
+  const activeParts = useMemo(() => parts.filter((p) => p.status !== "cancelled"), [parts]);
+  function toggleWorkOrder(id: string) { setExpandedWorkOrders((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+  function openEditor(key: string, part?: InventoryPartView | null) { setDrafts((d) => ({ ...d, [key]: d[key] || draftFromPart(part) })); setExpandedPartKey((current) => current === key ? null : key); }
 
-  async function copyText(id: string, text: string) {
-    await navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    window.setTimeout(
-      () => setCopiedId((current) => (current === id ? null : current)),
-      1400,
-    );
-  }
-
-  function toggleWorkOrder(workOrderId: string) {
-    setExpandedWorkOrders((current) => {
-      const next = new Set(current);
-      if (next.has(workOrderId)) next.delete(workOrderId);
-      else next.add(workOrderId);
-      return next;
-    });
-  }
-
-  async function addPart(
-    workOrderId: string,
-    description: string,
-    searchQuery: string,
-    workingKey: string,
-  ) {
-    setWorkingId(workingKey);
-    setMessage("");
+  async function savePart(workOrderId: string, description: string, searchQuery: string, key: string, existing?: InventoryPartView | null) {
+    const draft = drafts[key] || draftFromPart(existing); setWorkingId(key); setMessage("");
     try {
-      const response = await fetch(
-        `/api/mindful/inventory/vehicles/${vehicleId}/parts`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            workOrderId,
-            description,
-            quantity: 1,
-            sourceType: "other",
-            notes: `Lot Logic recommended sourcing search: ${searchQuery}. Verify exact fitment before ordering.`,
-          }),
-        },
-      );
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to add part.");
-      }
-      setMessage(`${description} added to Parts as Needed.`);
-      router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to add part.");
-    } finally {
-      setWorkingId(null);
-    }
+      const body = { supplier: draft.supplier || null, quotedUnitPrice: draft.price || null, etaAt: draft.eta ? new Date(draft.eta).toISOString() : null, sourceUrl: draft.url || null, sourceType: draft.url ? "marketplace" : "other", trackingReference: draft.tracking || null, status: draft.status };
+      const response = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/parts`, { method: existing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(existing ? { partId: existing.id, ...body } : { workOrderId, description, quantity: 1, notes: `Lot Logic sourcing search: ${searchQuery}. Verify exact fitment before ordering.`, ...body }) });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Failed to save part.");
+      setMessage(`${description} ${existing ? "updated" : "added and tracked"}.`); setExpandedPartKey(null); router.refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Failed to save part."); }
+    finally { setWorkingId(null); }
   }
 
-  if (displaySuggestions.length === 0) return null;
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
-            Lot Logic Sourcing
-          </div>
-          <h2 className="mt-1 text-xl font-black text-slate-950">
-            Recommended Parts
-          </h2>
-          <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500">
-            Open a Work Order to review suggested parts, source them, or add something Lot Logic missed.
-          </p>
-        </div>
-        {aiLoading ? (
-          <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
-            Building parts lists…
-          </div>
-        ) : null}
+  function Editor({ partKey, part, workOrderId, description, searchQuery }: { partKey: string; part?: InventoryPartView | null; workOrderId: string; description: string; searchQuery: string }) {
+    const draft = drafts[partKey] || draftFromPart(part);
+    const set = (patch: Partial<Draft>) => setDrafts((current) => ({ ...current, [partKey]: { ...draft, ...patch } }));
+    return <div className="mt-3 border-t border-slate-200 pt-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <input value={draft.supplier} onChange={(e) => set({ supplier: e.target.value })} placeholder="Supplier" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
+        <input type="number" min="0" step="0.01" value={draft.price} onChange={(e) => set({ price: e.target.value })} placeholder="Price" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
+        <input type="datetime-local" value={draft.eta} onChange={(e) => set({ eta: e.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
+        <input value={draft.tracking} onChange={(e) => set({ tracking: e.target.value })} placeholder="Tracking #" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
+        <input type="url" value={draft.url} onChange={(e) => set({ url: e.target.value })} placeholder="Part URL" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
+        <select value={draft.status} onChange={(e) => set({ status: e.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold"><option value="needed">Needed</option><option value="ordered">Ordered</option><option value="backordered">Backordered</option><option value="received">Received</option><option value="installed">Installed</option></select>
       </div>
+      <div className="mt-3 flex justify-end"><button disabled={workingId === partKey} onClick={() => void savePart(workOrderId, description, searchQuery, partKey, part)} className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{workingId === partKey ? "Saving…" : part ? "Save Changes" : "Save & Track"}</button></div>
+    </div>;
+  }
 
-      {message ? (
-        <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
-          {message}
-        </div>
-      ) : null}
-
-      <div className="mt-5 space-y-3">
-        {displaySuggestions.map((suggestion) => {
-          const expanded = expandedWorkOrders.has(suggestion.workOrderId);
-          const fitment = humanFitmentLabel(suggestion.fitmentLabel);
-          const trackedCount = parts.filter(
-            (part) =>
-              part.workOrderId === suggestion.workOrderId &&
-              part.status !== "cancelled",
-          ).length;
-          const otherPart = otherParts[suggestion.workOrderId] || "";
-          const otherSearch = `${fitment} ${otherPart}`.replace(/\s+/g, " ").trim();
-          const otherSources = otherSearch
-            ? buildPartSearchSources(otherSearch)
-            : [];
-
-          return (
-            <article
-              key={suggestion.workOrderId}
-              className="overflow-hidden rounded-2xl border border-slate-200"
-            >
-              <button
-                type="button"
-                onClick={() => toggleWorkOrder(suggestion.workOrderId)}
-                className="flex w-full items-center justify-between gap-4 bg-white px-5 py-4 text-left hover:bg-slate-50"
-                aria-expanded={expanded}
-              >
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                    Work Order
-                  </div>
-                  <div className="mt-1 text-lg font-black text-slate-950">
-                    {suggestion.workOrderTitle}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceClass(suggestion.confidence)}`}
-                    >
-                      {confidenceLabel(suggestion.confidence)}
-                    </span>
-                    {suggestion.recommendedParts.length ? (
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">
-                        {suggestion.recommendedParts.length} suggested
-                      </span>
-                    ) : null}
-                    {trackedCount ? (
-                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">
-                        {trackedCount} tracked
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                <span
-                  className={`shrink-0 text-2xl font-black text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-                  aria-hidden="true"
-                >
-                  ⌄
-                </span>
-              </button>
-
-              {expanded ? (
-                <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-4">
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                    Suggested Parts
-                  </div>
-
-                  {suggestion.recommendedParts.length ? (
-                    <div className="mt-2 space-y-2">
-                      {suggestion.recommendedParts.map((part, index) => {
-                        const key = `${suggestion.workOrderId}:${normalizedPartName(part.name)}`;
-                        const tracked = trackedParts.has(key);
-                        const rowKey = `${suggestion.workOrderId}:recommended:${index}`;
-                        const sources = buildPartSearchSources(part.searchQuery);
-                        const recAmazon = sources.find((source) => source.key === "amazon");
-                        const recEbay = sources.find((source) => source.key === "ebay");
-                        const recTurn14 = sources.find((source) => source.key === "turn14");
-                        const copyKey = `${suggestion.workOrderId}:copy:${index}`;
-
-                        return (
-                          <div
-                            key={`${part.name}:${index}`}
-                            className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-                          >
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-black text-slate-900">
-                                    {part.name}
-                                  </span>
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-[9px] font-black ${recommendationClass(part.need)}`}
-                                  >
-                                    {recommendationLabel(part.need)}
-                                  </span>
-                                </div>
-                                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
-                                  <span>{part.searchQuery}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => void copyText(copyKey, part.searchQuery)}
-                                    className="font-black text-slate-400 hover:text-slate-700"
-                                  >
-                                    {copiedId === copyKey ? "Copied" : "Copy search"}
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                                {recAmazon ? (
-                                  <a href={recAmazon.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Amazon ↗</a>
-                                ) : null}
-                                {recEbay ? (
-                                  <a href={recEbay.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">eBay ↗</a>
-                                ) : null}
-                                {recTurn14 ? (
-                                  <a href={recTurn14.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Turn 14 ↗</a>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  disabled={tracked || workingId === rowKey}
-                                  onClick={() => void addPart(suggestion.workOrderId, part.name, part.searchQuery, rowKey)}
-                                  className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
-                                >
-                                  {tracked ? "Tracked" : workingId === rowKey ? "Adding..." : "+ Add"}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500">
-                      Lot Logic did not identify a specific part for this Work Order.
-                    </div>
-                  )}
-
-                  <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3">
-                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                      Other Part
-                    </div>
-                    <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-center">
-                      <input
-                        value={otherPart}
-                        onChange={(event) =>
-                          setOtherParts((current) => ({
-                            ...current,
-                            [suggestion.workOrderId]: event.target.value,
-                          }))
-                        }
-                        placeholder="Add a part Lot Logic didn't suggest"
-                        className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
-                      />
-                      {otherSearch ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {otherSources.find((source) => source.key === "amazon") ? (
-                            <a href={otherSources.find((source) => source.key === "amazon")?.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Amazon ↗</a>
-                          ) : null}
-                          {otherSources.find((source) => source.key === "ebay") ? (
-                            <a href={otherSources.find((source) => source.key === "ebay")?.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">eBay ↗</a>
-                          ) : null}
-                          {otherSources.find((source) => source.key === "turn14") ? (
-                            <a href={otherSources.find((source) => source.key === "turn14")?.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">Turn 14 ↗</a>
-                          ) : null}
-                          <button
-                            type="button"
-                            disabled={!otherPart.trim() || workingId === `${suggestion.workOrderId}:other`}
-                            onClick={() =>
-                              void addPart(
-                                suggestion.workOrderId,
-                                otherPart.trim(),
-                                otherSearch,
-                                `${suggestion.workOrderId}:other`,
-                              ).then(() =>
-                                setOtherParts((current) => ({
-                                  ...current,
-                                  [suggestion.workOrderId]: "",
-                                })),
-                              )
-                            }
-                            className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
-                          >
-                            {workingId === `${suggestion.workOrderId}:other` ? "Adding..." : "+ Add"}
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </article>
-          );
+  if (!displaySuggestions.length) return null;
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Parts by Work Order</div><h2 className="mt-1 text-xl font-black">Parts & sourcing</h2><p className="mt-1 text-sm font-medium text-slate-500">Each Work Order contains its suggested and tracked parts. Add, edit, source, and update arrival details in place.</p></div>{aiLoading ? <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">Building parts lists…</div> : null}</div>
+    {message ? <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">{message}</div> : null}
+    <div className="mt-5 space-y-3">{displaySuggestions.map((suggestion) => {
+      const expanded = expandedWorkOrders.has(suggestion.workOrderId); const fitment = humanFitmentLabel(suggestion.fitmentLabel); const workParts = activeParts.filter((p) => p.workOrderId === suggestion.workOrderId); const suggestedNames = new Set(suggestion.recommendedParts.map((p) => normalizedPartName(p.name))); const unmatchedTracked = workParts.filter((p) => !suggestedNames.has(normalizedPartName(p.description))); const attention = workParts.filter((p) => !["received", "installed"].includes(p.status)).length;
+      return <article key={suggestion.workOrderId} className="overflow-hidden rounded-2xl border border-slate-200">
+        <button type="button" onClick={() => toggleWorkOrder(suggestion.workOrderId)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Work Order</div><div className="mt-1 text-lg font-black">{suggestion.workOrderTitle}</div><div className="mt-2 flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceClass(suggestion.confidence)}`}>{confidenceLabel(suggestion.confidence)}</span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">{suggestion.recommendedParts.length} suggested</span><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">{workParts.length} tracked</span>{attention ? <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-800">{attention} need attention</span> : null}</div></div><span className={`text-2xl font-black text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}>⌄</span></button>
+        {expanded ? <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-4"><div className="space-y-2">{suggestion.recommendedParts.map((rec, index) => {
+          const existing = workParts.find((p) => normalizedPartName(p.description) === normalizedPartName(rec.name)) || null; const partKey = `${suggestion.workOrderId}:rec:${index}`; const sources = buildPartSearchSources(rec.searchQuery); const editing = expandedPartKey === partKey;
+          return <div key={partKey} className="rounded-xl border border-slate-200 bg-white px-4 py-3"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-black">{rec.name}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${recommendationClass(rec.need)}`}>{recommendationLabel(rec.need)}</span>{existing ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black text-blue-700">{labelize(existing.status)}</span> : null}</div><div className="mt-1.5 text-[11px] font-semibold text-slate-500">{existing ? `${existing.supplier || "Source not entered"} · ETA ${shortDate(existing.etaAt)} · ${money(existing.quotedUnitPrice)}` : rec.searchQuery}</div></div><div className="flex flex-wrap gap-1.5">{sources.map((s) => <a key={s.key} href={s.url} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600">{s.key === "turn14" ? "Turn 14" : s.label} ↗</a>)}<button onClick={() => openEditor(partKey, existing)} className="rounded-md bg-slate-950 px-3 py-1.5 text-[11px] font-black text-white">{editing ? "Close" : existing ? "Edit" : "+ Add"}</button></div></div>{editing ? <Editor partKey={partKey} part={existing} workOrderId={suggestion.workOrderId} description={rec.name} searchQuery={rec.searchQuery} /> : null}</div>;
         })}
-      </div>
-
-      <div className="mt-4 text-[11px] font-semibold leading-5 text-slate-400">
-        Recommendations are planning suggestions, not verified-fit guarantees. Add only the items you intend to source. Turn 14 currently opens the dealer portal; direct catalog results will replace this once API access is connected.
-      </div>
-    </section>
-  );
+        {unmatchedTracked.map((part) => { const partKey = `${suggestion.workOrderId}:tracked:${part.id}`; const editing = expandedPartKey === partKey; const query = `${fitment} ${part.description}`.trim(); return <div key={part.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3"><div className="flex items-center justify-between gap-3"><div><div className="flex items-center gap-2"><span className="text-sm font-black">{part.description}</span><span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black text-blue-700">{labelize(part.status)}</span></div><div className="mt-1.5 text-[11px] font-semibold text-slate-500">{part.supplier || "Source not entered"} · ETA {shortDate(part.etaAt)} · {money(part.quotedUnitPrice)}</div></div><button onClick={() => openEditor(partKey, part)} className="rounded-md bg-slate-950 px-3 py-1.5 text-[11px] font-black text-white">{editing ? "Close" : "Edit"}</button></div>{editing ? <Editor partKey={partKey} part={part} workOrderId={suggestion.workOrderId} description={part.description} searchQuery={query} /> : null}</div>; })}
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Other Part</div><div className="mt-2 flex gap-2"><input value={otherNames[suggestion.workOrderId] || ""} onChange={(e) => setOtherNames((current) => ({ ...current, [suggestion.workOrderId]: e.target.value }))} placeholder="Add a part Lot Logic didn't suggest" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button disabled={!(otherNames[suggestion.workOrderId] || "").trim()} onClick={() => { const key = `${suggestion.workOrderId}:other`; setDrafts((d) => ({ ...d, [key]: d[key] || draftFromPart(null) })); setExpandedPartKey(key); }} className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white disabled:bg-slate-200">+ Add</button></div>{expandedPartKey === `${suggestion.workOrderId}:other` && (otherNames[suggestion.workOrderId] || "").trim() ? <Editor partKey={`${suggestion.workOrderId}:other`} workOrderId={suggestion.workOrderId} description={(otherNames[suggestion.workOrderId] || "").trim()} searchQuery={`${fitment} ${(otherNames[suggestion.workOrderId] || "").trim()}`} /> : null}</div>
+        </div></div> : null}
+      </article>;
+    })}</div>
+  </section>;
 }
