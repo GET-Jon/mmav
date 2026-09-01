@@ -121,6 +121,45 @@ function getLabel(score: number): DealerFitLabel {
   return "Avoid";
 }
 
+function hasHardRisk(financial: DealerFitInput["financial"]) {
+  const decision = normalize(financial?.decision);
+  const riskGrade = normalize(financial?.riskGrade);
+
+  return (
+    decision === "pass" ||
+    decision.includes("watch stretch") ||
+    riskGrade.includes("avoid")
+  );
+}
+
+function hasExceptionalEconomics(financial: DealerFitInput["financial"]) {
+  const expectedGrossProfit = Number(financial?.expectedGrossProfit || 0);
+  const targetProfit = Number(financial?.targetProfit || 0);
+  const finalRetailTarget = Number(financial?.finalRetailTarget || 0);
+  const currentBid = Number(financial?.currentBid || 0);
+
+  if (!Number.isFinite(expectedGrossProfit) || expectedGrossProfit < 12000) {
+    return false;
+  }
+
+  if (hasHardRisk(financial)) {
+    return false;
+  }
+
+  const profitToTarget =
+    targetProfit > 0 ? expectedGrossProfit / targetProfit : 0;
+  const profitToRetail =
+    finalRetailTarget > 0 ? expectedGrossProfit / finalRetailTarget : 0;
+  const profitToCurrentBid =
+    currentBid > 0 ? expectedGrossProfit / currentBid : 0;
+
+  return (
+    profitToTarget >= 2 ||
+    profitToRetail >= 0.2 ||
+    profitToCurrentBid >= 0.5
+  );
+}
+
 function getCategory({
   score,
   vehicle,
@@ -136,6 +175,10 @@ function getCategory({
   matchedRuleIds: string[];
   categoryHint?: DealerFitCategory | null;
 }): DealerFitCategory {
+  if (matchedRuleIds.includes("exceptional-economic-override")) {
+    return "Easy Flip";
+  }
+
   if (score < 40) {
     return "Avoid";
   }
@@ -299,6 +342,18 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
     score -= 12;
     cautions.push("Risk grade is already in avoid territory; fit should be treated as secondary.");
     matchedRules.push("avoid-risk-grade");
+  }
+
+  const exceptionalEconomics = hasExceptionalEconomics(financial);
+  if (exceptionalEconomics) {
+    score = Math.max(score, 76);
+    reasons.unshift(
+      "Exceptional projected economics outweigh the vehicle's weaker design/curation fit for this acquisition."
+    );
+    cautions.unshift(
+      "Treat this as a profit-led inventory buy rather than a design-led Mindful showcase vehicle."
+    );
+    matchedRules.push("exceptional-economic-override");
   }
 
   if (!vehicleText) {
