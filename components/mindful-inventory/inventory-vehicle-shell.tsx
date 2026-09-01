@@ -16,11 +16,11 @@ const phases = [
   { value: "inspection", label: "Mechanical Inspection", short: "Mechanical" },
   { value: "planning", label: "Work Plan Review", short: "Plan" },
   { value: "reconditioning", label: "Active Work", short: "Work" },
+  { value: "detailing", label: "Detailing", short: "Detail" },
   { value: "final_qc", label: "Final Quality Check", short: "QC" },
   { value: "merchandising", label: "Merchandising", short: "Merchandise" },
   { value: "ready", label: "Ready for Sale", short: "Ready" },
 ] as const;
-
 
 export function InventoryVehicleShell({ vehicle, children }: Props) {
   const pathname = usePathname();
@@ -36,6 +36,7 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
     { label: "Work Plan", href: `${base}/car-plan` },
     { label: "Active Work", href: `${base}/work` },
     { label: "Parts / Transport", href: `${base}/parts` },
+    { label: "Detailing", href: `${base}/detailing` },
     { label: "QC", href: `${base}/qc` },
     { label: "Media", href: `${base}/media` },
     { label: "History", href: `${base}/history` },
