@@ -1,0 +1,70 @@
+import { NextResponse } from "next/server";
+
+import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+
+const validationStatuses = new Set(["confirmed", "not_found", "changed", "needs_diagnosis"]);
+
+function optionalText(value: unknown) {
+  const clean = String(value ?? "").trim();
+  return clean || null;
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ inspectionId: string }> }) {
+  try {
+    const access = await requirePartnerPortalAccess();
+    if (!access.partner.mechanicalInspectionEligible) return NextResponse.json({ error: "Mechanical inspection access is not enabled." }, { status: 403 });
+
+    const { inspectionId } = await context.params;
+    const admin = createSupabaseAdminClient();
+    const { data: inspection, error: inspectionError } = await admin
+      .from("mindful_inventory_inspections")
+      .select("id,vehicle_id,status,requested_start_at")
+      .eq("id", inspectionId)
+      .eq("performed_by_partner_id", access.partner.id)
+      .eq("inspection_type", "mechanical")
+      .maybeSingle();
+    if (inspectionError) throw new Error(inspectionError.message);
+    if (!inspection) return NextResponse.json({ error: "Inspection assignment not found." }, { status: 404 });
+
+    const body = await request.json().catch(() => ({}));
+    const action = String(body.action || "").trim();
+    const now = new Date().toISOString();
+
+    if (action === "confirm") {
+      const scheduledStartAt = optionalText(body.scheduledStartAt) || inspection.requested_start_at || now;
+      const durationHours = Number(body.durationHours || 1.5);
+      const scheduledEndAt = new Date(new Date(scheduledStartAt).getTime() + Math.max(durationHours, 0.25) * 3600000).toISOString();
+      const { error } = await admin.from("mindful_inventory_inspections").update({ status: "confirmed", partner_confirmation_status: "confirmed", scheduled_start_at: scheduledStartAt, scheduled_end_at: scheduledEndAt, updated_at: now }).eq("id", inspection.id);
+      if (error) throw new Error(error.message);
+    } else if (action === "start") {
+      if (!["confirmed", "revision_requested"].includes(inspection.status)) return NextResponse.json({ error: "Confirm the inspection before starting it." }, { status: 409 });
+      const { error } = await admin.from("mindful_inventory_inspections").update({ status: "in_progress", started_at: now, revision_notes: null, updated_at: now }).eq("id", inspection.id);
+      if (error) throw new Error(error.message);
+    } else if (action === "submit") {
+      if (inspection.status !== "in_progress") return NextResponse.json({ error: "Start the inspection before submitting it." }, { status: 409 });
+      const { error } = await admin.from("mindful_inventory_inspections").update({ status: "submitted", summary: optionalText(body.summary), submitted_at: now, owner_review_status: "pending", updated_at: now }).eq("id", inspection.id);
+      if (error) throw new Error(error.message);
+    } else if (action === "validate_finding") {
+      if (!["in_progress", "revision_requested"].includes(inspection.status)) return NextResponse.json({ error: "This inspection is not editable." }, { status: 409 });
+      const findingId = String(body.findingId || "").trim();
+      const status = String(body.status || "").trim();
+      if (!findingId || !validationStatuses.has(status)) return NextResponse.json({ error: "Invalid finding validation." }, { status: 400 });
+      const { error } = await admin.from("mindful_inventory_findings").update({ mechanical_validation_status: status, mechanical_validation_notes: optionalText(body.notes), updated_at: now }).eq("id", findingId).eq("vehicle_id", inspection.vehicle_id).eq("source", "ai");
+      if (error) throw new Error(error.message);
+    } else if (action === "add_finding") {
+      if (!["in_progress", "revision_requested"].includes(inspection.status)) return NextResponse.json({ error: "This inspection is not editable." }, { status: 409 });
+      const title = String(body.title || "").trim();
+      if (!title) return NextResponse.json({ error: "Finding title is required." }, { status: 400 });
+      const { error } = await admin.from("mindful_inventory_findings").insert({ vehicle_id: inspection.vehicle_id, inspection_id: inspection.id, source: "partner", source_user_id: access.userId, source_partner_id: access.partner.id, title, description: optionalText(body.description), category: String(body.category || "mechanical"), severity: body.severity || null, estimated_duration_hours: body.estimatedDurationHours || null, status: "open", mechanical_validation_status: "confirmed", mechanical_validation_notes: optionalText(body.notes) });
+      if (error) throw new Error(error.message);
+    } else {
+      return NextResponse.json({ error: "Unsupported inspection action." }, { status: 400 });
+    }
+
+    await admin.from("mindful_inventory_history").insert({ company_id: access.partner.companyId, vehicle_id: inspection.vehicle_id, event_type: `partner_inspection_${action}`, entity_type: "inspection", entity_id: inspection.id, actor_user_id: access.userId, summary: `${access.partner.name} updated mechanical inspection: ${action}.`, metadata: { action } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update inspection." }, { status: 500 });
+  }
+}
