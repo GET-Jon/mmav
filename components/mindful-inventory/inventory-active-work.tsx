@@ -1,1 +1,1 @@
-export { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work-v3";
+export { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work-v4";
