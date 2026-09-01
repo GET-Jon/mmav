@@ -166,7 +166,16 @@ export function InventoryIntakeGuide({ vehicleId, initialConfirmations }: Props)
           return element ? { ...definition, element } : null;
         })
         .filter((item): item is NonNullable<typeof item> => item !== null);
-      setTargets(next);
+
+      setTargets((previous) => {
+        const unchanged =
+          previous.length === next.length &&
+          previous.every(
+            (target, index) =>
+              target.key === next[index]?.key && target.element === next[index]?.element,
+          );
+        return unchanged ? previous : next;
+      });
     };
 
     discover();
