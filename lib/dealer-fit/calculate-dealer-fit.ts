@@ -334,7 +334,9 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
 
   if (financial.compConfidence === "Low") {
     score -= 6;
-    cautions.push("Low comp confidence means the fit score should not override market uncertainty.");
+    cautions.push(
+      "Validate the resale target with a stronger same-generation comp set before relying on the bid guidance."
+    );
     matchedRules.push("low-comp-confidence");
   }
 
@@ -361,6 +363,17 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
     reasons.push("Vehicle details are still limited, so fit is only a neutral placeholder.");
     cautions.push("Decode VIN or enter make/model/trim before relying on dealer fit.");
     matchedRules.push("limited-vehicle-data");
+  } else {
+    const dueDiligenceChecks = [
+      "Confirm the VIN, exact trim, drivetrain, mileage, and material options match the vehicles supporting the resale target.",
+      "Verify title brand, accident or structural disclosures, mileage history, and all auction announcements before bidding.",
+      "Review the condition report and photos for warning lights, leaks, tire or brake wear, body, glass, wheel, and interior damage not already covered by the recon reserve.",
+    ];
+
+    for (const check of dueDiligenceChecks) {
+      if (cautions.length >= 5) break;
+      cautions.push(check);
+    }
   }
 
   const finalScore = clampScore(score);
