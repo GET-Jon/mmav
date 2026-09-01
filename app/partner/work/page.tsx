@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PartnerDetailingList } from "@/components/partner/partner-detailing-list";
-import { PartnerWorkGrouped } from "@/components/partner/partner-work-grouped";
+import { PartnerWorkGroupedV2 } from "@/components/partner/partner-work-grouped-v2";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { getPartnerDetailingAssignments } from "@/lib/partner-portal/detailing";
 import { getPartnerAssignedWork } from "@/lib/partner-portal/work";
@@ -48,7 +48,7 @@ export default async function PartnerWorkPage() {
           <div>
             <h1 className="text-[30px] font-black tracking-[-0.035em]">Assigned Work</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Work is grouped by vehicle. Dedicated sale-prep detailing assignments appear first; other repair, cosmetic, and specialty jobs remain in the normal work queue.
+              Work is grouped by vehicle. Open only the job you are working on, confirm setup, review parts, submit any required labor estimate, and begin once approved.
             </p>
           </div>
           <div className="flex gap-2">
@@ -58,7 +58,7 @@ export default async function PartnerWorkPage() {
         </div>
 
         <PartnerDetailingList items={detailingItems} />
-        <PartnerWorkGrouped workItems={workItems} permissions={access.permissions} />
+        <PartnerWorkGroupedV2 workItems={workItems} permissions={access.permissions} />
       </div>
     </main>
   );
