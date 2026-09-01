@@ -48,7 +48,7 @@ export async function PATCH(
 
     if (vehicleError || !vehicle) return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
 
-    const updateRow: Record<string, number | string> = {
+    const updateRow = {
       [column]: value,
       updated_by: access.userId,
       updated_at: new Date().toISOString(),
@@ -56,7 +56,7 @@ export async function PATCH(
 
     const { error } = await access.supabase
       .from("mindful_inventory_vehicles")
-      .update(updateRow)
+      .update(updateRow as never)
       .eq("id", vehicleId)
       .eq("company_id", access.company.companyId);
 
