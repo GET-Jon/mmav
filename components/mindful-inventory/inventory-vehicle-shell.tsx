@@ -28,7 +28,24 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
   const vehicleName = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
     .filter(Boolean)
     .join(" ");
-  const currentPhaseIndex = Math.max(0, phases.findIndex((phase) => phase.value === vehicle.phase));
+
+  const databasePhaseIndex = Math.max(0, phases.findIndex((phase) => phase.value === vehicle.phase));
+  const pagePhaseIndex = pathname === base
+    ? 1
+    : pathname.startsWith(`${base}/intake`)
+      ? 2
+      : pathname.startsWith(`${base}/car-plan`)
+        ? 3
+        : pathname.startsWith(`${base}/work`)
+          ? 4
+          : pathname.startsWith(`${base}/detailing`)
+            ? 5
+            : pathname.startsWith(`${base}/qc`)
+              ? 6
+              : pathname.startsWith(`${base}/media`)
+                ? 7
+                : databasePhaseIndex;
+  const currentPhaseIndex = Math.max(databasePhaseIndex, pagePhaseIndex);
 
   const sections = [
     { label: "Overview / Intake", href: base },
@@ -66,10 +83,16 @@ export function InventoryVehicleShell({ vehicle, children }: Props) {
                   const active = index === currentPhaseIndex;
                   return (
                     <div key={phase.value} className="flex items-center gap-1">
-                      <span className={`whitespace-nowrap rounded-lg px-2 py-1 text-[10px] font-black ${active ? "bg-slate-950 text-white" : complete ? "bg-emerald-50 text-emerald-700" : "text-slate-400"}`}>
+                      <span className={`whitespace-nowrap rounded-lg px-2 py-1 text-[10px] font-black transition ${
+                        active
+                          ? "border-2 border-emerald-500 bg-white text-emerald-700"
+                          : complete
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-400"
+                      }`}>
                         {complete ? "✓ " : ""}{phase.short}
                       </span>
-                      {index < phases.length - 1 ? <span className="text-[10px] font-black text-slate-300">→</span> : null}
+                      {index < phases.length - 1 ? <span className={`text-[10px] font-black ${complete ? "text-emerald-300" : "text-slate-300"}`}>→</span> : null}
                     </div>
                   );
                 })}
