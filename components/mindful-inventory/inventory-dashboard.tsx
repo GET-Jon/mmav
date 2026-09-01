@@ -16,11 +16,12 @@ const phaseLabels: Record<InventoryVehiclePhase, string> = {
   inspection: "Mechanical",
   planning: "Work Plan",
   reconditioning: "Active Work",
+  detailing: "Detailing",
   final_qc: "Final QC",
   merchandising: "Media",
   ready: "Ready",
 };
-const phaseOrder: Record<InventoryVehiclePhase, number> = { purchased: 0, intake: 1, inspection: 2, planning: 3, reconditioning: 4, final_qc: 5, merchandising: 6, ready: 7 };
+const phaseOrder: Record<InventoryVehiclePhase, number> = { purchased: 0, intake: 1, inspection: 2, planning: 3, reconditioning: 4, detailing: 5, final_qc: 6, merchandising: 7, ready: 8 };
 const healthLabels: Record<InventoryVehicleHealth, string> = { on_track: "On Track", at_risk: "At Risk", behind: "Behind", blocked: "Blocked" };
 const priorityLabels: Record<InventoryVehiclePriority, { label: string; note: string }> = {
   "1": { label: "High", note: "Move first / time-sensitive" },
@@ -73,7 +74,15 @@ function MetricCard({ label, value, note, emphasis = "neutral" }: { label: strin
 }
 function PhasePill({ phase }: { phase: InventoryVehiclePhase }) {
   const classes: Record<InventoryVehiclePhase, string> = {
-    purchased: "border-slate-200 bg-slate-100 text-slate-700", intake: "border-blue-200 bg-blue-50 text-blue-700", inspection: "border-cyan-200 bg-cyan-50 text-cyan-700", planning: "border-violet-200 bg-violet-50 text-violet-700", reconditioning: "border-indigo-200 bg-indigo-50 text-indigo-700", final_qc: "border-amber-200 bg-amber-50 text-amber-800", merchandising: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700", ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    purchased: "border-slate-200 bg-slate-100 text-slate-700",
+    intake: "border-blue-200 bg-blue-50 text-blue-700",
+    inspection: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    planning: "border-violet-200 bg-violet-50 text-violet-700",
+    reconditioning: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    detailing: "border-teal-200 bg-teal-50 text-teal-800",
+    final_qc: "border-amber-200 bg-amber-50 text-amber-800",
+    merchandising: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
+    ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
   };
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${classes[phase]}`}>{phaseLabels[phase]}</span>;
 }
