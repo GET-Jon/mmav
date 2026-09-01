@@ -81,8 +81,18 @@ function formatMileageField() {
 
 function tightenPageCopy() {
   const heading = findExactText("What we know about this car");
+  const actionSection = heading?.closest<HTMLElement>("section");
   if (heading?.parentElement) {
     heading.parentElement.style.display = "none";
+  }
+  if (actionSection) {
+    actionSection.style.paddingTop = "0.75rem";
+    actionSection.style.paddingBottom = "0.75rem";
+    const proceedButton = Array.from(actionSection.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("Proceed to Mechanical"));
+    if (proceedButton?.parentElement) {
+      proceedButton.parentElement.style.marginLeft = "auto";
+    }
   }
 
   const currentRecon = findExactText("Current Recon");
@@ -184,6 +194,8 @@ export function InventoryIntakeGuide({ vehicleId, initialConfirmations }: Props)
       };
       if (!response.ok) throw new Error(payload.error || "Failed to confirm intake field.");
       setConfirmations(payload.fieldConfirmations || {});
+    } catch (error) {
+      console.error("Failed to confirm intake field:", error);
     } finally {
       setSavingKey(null);
     }
