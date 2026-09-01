@@ -39,7 +39,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
     }
 
-    const { data: existing, error: existingError } = await access.supabase
+    let { data: existing, error: existingError } = await access.supabase
       .from("mindful_inventory_intakes")
       .select("id,field_confirmations")
       .eq("vehicle_id", vehicleId)
@@ -50,10 +50,30 @@ export async function PATCH(
     }
 
     if (!existing) {
-      return NextResponse.json(
-        { error: "Save Intake before confirming individual fields." },
-        { status: 409 },
-      );
+      const now = new Date().toISOString();
+      const insertPayload = {
+        vehicle_id: vehicleId,
+        performed_by_user_id: access.userId,
+        status: "draft",
+        started_at: now,
+        field_confirmations: {},
+        updated_at: now,
+      };
+
+      const { data: created, error: createError } = await access.supabase
+        .from("mindful_inventory_intakes")
+        .insert(insertPayload as never)
+        .select("id,field_confirmations")
+        .single();
+
+      if (createError || !created) {
+        return NextResponse.json(
+          { error: createError?.message || "Failed to initialize Intake." },
+          { status: 500 },
+        );
+      }
+
+      existing = created;
     }
 
     const confirmations =
