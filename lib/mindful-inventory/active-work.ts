@@ -50,6 +50,8 @@ export type InventoryWorkOrderView = {
   locationName: string | null;
   resourceId: string | null;
   resourceName: string | null;
+  partsReviewStatus: "pending" | "resolved";
+  partsReviewComplete: boolean;
   partsReadiness: InventoryPartsReadiness;
   partCount: number;
   pendingPartCount: number;
@@ -126,7 +128,7 @@ export async function getInventoryActiveWork(
 
   const { data, error } = await supabase
     .from("mindful_inventory_work_orders")
-    .select("id,vehicle_id,plan_item_id,plan_version_id,title,description,category,classification,status,blocker_reason,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,schedule_source,actual_start_at,actual_end_at,approved_budget,current_forecast,actual_cost,assigned_partner_id,assigned_user_id,location_id,resource_id,created_at,updated_at")
+    .select("id,vehicle_id,plan_item_id,plan_version_id,title,description,category,classification,status,blocker_reason,estimated_duration_minutes,estimated_labor_minutes,estimated_elapsed_minutes,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,schedule_source,actual_start_at,actual_end_at,approved_budget,current_forecast,actual_cost,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,created_at,updated_at")
     .eq("vehicle_id", vehicleId)
     .order("scheduled_start_at", { ascending: true, nullsFirst: false })
     .order("proposed_start_at", { ascending: true, nullsFirst: false })
@@ -145,11 +147,7 @@ export async function getInventoryActiveWork(
   const partsByWorkOrder = new Map<string, Array<{ work_order_id: string; status: string; eta_at: string | null }>>();
   for (const part of partRows || []) {
     const current = partsByWorkOrder.get(part.work_order_id) || [];
-    current.push({
-      work_order_id: part.work_order_id,
-      status: part.status,
-      eta_at: part.eta_at,
-    });
+    current.push({ work_order_id: part.work_order_id, status: part.status, eta_at: part.eta_at });
     partsByWorkOrder.set(part.work_order_id, current);
   }
 
@@ -159,9 +157,7 @@ export async function getInventoryActiveWork(
   const assignedUserIds = new Set((data || []).map((row) => row.assigned_user_id).filter(Boolean) as string[]);
 
   const [partnersResult, locationsResult, resourcesResult, membersResult] = await Promise.all([
-    partnerIds.length
-      ? supabase.from("mindful_inventory_partners").select("id,name,company_name,email,scheduling_mode").in("id", partnerIds)
-      : Promise.resolve({ data: [], error: null }),
+    partnerIds.length ? supabase.from("mindful_inventory_partners").select("id,name,company_name,email,scheduling_mode").in("id", partnerIds) : Promise.resolve({ data: [], error: null }),
     locationIds.length ? supabase.from("mindful_inventory_locations").select("id,name").in("id", locationIds) : Promise.resolve({ data: [], error: null }),
     resourceIds.length ? supabase.from("mindful_inventory_resources").select("id,name").in("id", resourceIds) : Promise.resolve({ data: [], error: null }),
     supabase.rpc("get_inventory_company_members", { requested_company_id: vehicle.company_id }),
@@ -189,6 +185,7 @@ export async function getInventoryActiveWork(
     const partner = row.assigned_partner_id ? partners.get(row.assigned_partner_id) || null : null;
     const userName = row.assigned_user_id ? members.get(row.assigned_user_id) || null : null;
     const parts = summarizePartsReadiness(partsByWorkOrder.get(row.id) || []);
+    const partsReviewStatus = row.parts_review_status === "resolved" ? "resolved" : "pending";
     return {
       id: row.id,
       vehicleId: row.vehicle_id,
@@ -225,11 +222,13 @@ export async function getInventoryActiveWork(
       locationName: row.location_id ? locations.get(row.location_id) || null : null,
       resourceId: row.resource_id,
       resourceName: row.resource_id ? resources.get(row.resource_id) || null : null,
+      partsReviewStatus,
+      partsReviewComplete: partsReviewStatus === "resolved",
       partsReadiness: parts.readiness,
       partCount: parts.partCount,
       pendingPartCount: parts.pendingPartCount,
       partsLatestEtaAt: parts.latestEtaAt,
-      partsReadyForExecution: parts.readyForExecution,
+      partsReadyForExecution: partsReviewStatus === "resolved" && parts.readyForExecution,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
