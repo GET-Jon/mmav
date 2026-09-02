@@ -35,9 +35,19 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
   const pendingFindingReviews = submittedFindings.filter((finding) => finding.status === "open" && (!finding.mechanicalOwnerReviewStatus || finding.mechanicalOwnerReviewStatus === "clarification_requested")).length;
   const pendingUpgradeReviews = overview.upgrades.filter((upgrade) => upgrade.status === "proposed" && upgrade.mechanicalValidationStatus === "pending").length;
 
+  const inspectorAssignment = (
+    <MechanicalInspectorAssignment
+      vehicleId={vehicle.id}
+      options={inspectorOptions}
+      inspection={inspection}
+      pendingFindingReviews={pendingFindingReviews}
+      pendingUpgradeReviews={pendingUpgradeReviews}
+    />
+  );
+
   return (
     <div className="space-y-5">
-      <MechanicalInspectorAssignment vehicleId={vehicle.id} options={inspectorOptions} inspection={inspection} pendingFindingReviews={pendingFindingReviews} pendingUpgradeReviews={pendingUpgradeReviews} />
+      {!submittedForOwner ? inspectorAssignment : null}
 
       {submittedForOwner ? (
         <>
@@ -48,6 +58,7 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
             <MechanicalOwnerFindingReview vehicleId={vehicle.id} findings={submittedFindings} />
           </section>
           <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />
+          {inspectorAssignment}
         </>
       ) : null}
 
