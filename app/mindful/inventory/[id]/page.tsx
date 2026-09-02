@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { InventoryIntakeGuideV2 } from "@/components/mindful-inventory/inventory-intake-guide-v2";
+import { InventoryIntakeGuideV3 } from "@/components/mindful-inventory/inventory-intake-guide-v3";
 import { InventoryOverviewIntake } from "@/components/mindful-inventory/inventory-overview-intake";
 import type { InventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
@@ -108,7 +108,7 @@ export default async function MindfulInventoryVehiclePage({ params }: { params: 
   return (
     <>
       <InventoryOverviewIntake vehicle={vehicle} overview={overview} intakeData={intakeData} />
-      <InventoryIntakeGuideV2
+      <InventoryIntakeGuideV3
         vehicleId={vehicle.id}
         initialConfirmations={rawIntakeData.intake?.fieldConfirmations || {}}
       />
