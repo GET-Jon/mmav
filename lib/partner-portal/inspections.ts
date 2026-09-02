@@ -23,6 +23,10 @@ export type PartnerInspectionItem = {
     severity: string | null;
     validationStatus: string;
     validationNotes: string | null;
+    recommendedAction: string | null;
+    partsRequired: string | null;
+    canPerform: boolean | null;
+    laborHours: number | null;
   }>;
 };
 
@@ -49,7 +53,7 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
   const vehicleIds = [...new Set(inspections.map((row) => row.vehicle_id))];
   const [vehiclesResult, findingsResult] = await Promise.all([
     admin.from("mindful_inventory_vehicles").select("id,year,make,model,trim,vin,mileage").in("id", vehicleIds),
-    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes").in("vehicle_id", vehicleIds).eq("status", "open"),
+    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_can_perform,mechanical_labor_hours").in("vehicle_id", vehicleIds).eq("status", "open"),
   ]);
   if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
   if (findingsResult.error) throw new Error(findingsResult.error.message);
@@ -72,13 +76,17 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
       summary: row.summary,
       revisionNotes: row.revision_notes,
       ownerReviewStatus: row.owner_review_status,
-      findings: (findingsResult.data || []).filter((finding) => finding.vehicle_id === row.vehicle_id && finding.source === "ai").map((finding) => ({
+      findings: (findingsResult.data || []).filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => ({
         id: finding.id,
         title: finding.title,
         description: finding.description,
         severity: finding.severity,
         validationStatus: finding.mechanical_validation_status || "pending",
         validationNotes: finding.mechanical_validation_notes,
+        recommendedAction: finding.mechanical_recommended_action,
+        partsRequired: finding.mechanical_parts_required,
+        canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
+        laborHours: numberOrNull(finding.mechanical_labor_hours),
       })),
     };
   });
