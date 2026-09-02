@@ -135,7 +135,9 @@ export function InventoryIntakeGuideV2({ vehicleId, initialConfirmations }: Prop
         const divs = Array.from(card.children).filter((node): node is HTMLElement => node instanceof HTMLElement);
         const valueElement = divs[1];
         if (!valueElement) return;
-        if (!nextValues[definition.key]) nextValues[definition.key] = numericText(valueElement.textContent || "");
+        if (!nextValues[definition.key]) {
+          nextValues[definition.key] = displayNumber(definition.key, valueElement.textContent || "");
+        }
         valueElement.style.visibility = "hidden";
         card.classList.add("relative");
         found.push({ ...definition, element: card, valueElement });
@@ -157,6 +159,11 @@ export function InventoryIntakeGuideV2({ vehicleId, initialConfirmations }: Prop
 
       const titleCard = findCard("Title Status");
       titleCard?.classList.add("relative");
+      const titleSelect = titleCard?.querySelector<HTMLSelectElement>("select");
+      if (titleSelect) {
+        titleSelect.style.appearance = "none";
+        titleSelect.style.paddingRight = "4.5rem";
+      }
     };
 
     discover();
@@ -218,7 +225,7 @@ export function InventoryIntakeGuideV2({ vehicleId, initialConfirmations }: Prop
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to save Intake value.");
-      setValues((previous) => ({ ...previous, [key]: clean }));
+      setValues((previous) => ({ ...previous, [key]: displayNumber(key, clean) }));
       return true;
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Failed to save Intake value.");
@@ -296,6 +303,9 @@ export function InventoryIntakeGuideV2({ vehicleId, initialConfirmations }: Prop
               inputMode={target.key === "purchase_mileage" ? "numeric" : "decimal"}
               disabled={confirmed || savingField === target.key}
               value={values[target.key]}
+              onFocus={(event) => {
+                if (!confirmed) event.currentTarget.value = numericText(values[target.key]);
+              }}
               onChange={(event) => setValues((previous) => ({ ...previous, [target.key]: event.target.value }))}
               onBlur={() => {
                 if (!confirmed) void saveNumeric(target.key, values[target.key]);
@@ -336,21 +346,29 @@ export function InventoryIntakeGuideV2({ vehicleId, initialConfirmations }: Prop
         const confirmed = Boolean(confirmations.title_status);
         const active = activeKey === "title_status";
         return createPortal(
-          <button
-            type="button"
-            title={confirmed ? "Confirmed — click to edit" : active ? "Confirm this status" : "Confirm prior item first"}
-            onClick={() => void confirmTitle()}
-            disabled={savingField === "title_status" || (!confirmed && !active)}
-            className={`absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-full text-xs font-black transition ${
-              confirmed
-                ? "bg-emerald-600 text-white"
-                : active
-                  ? "border-2 border-emerald-500 bg-white text-emerald-700"
-                  : "border border-slate-200 bg-white text-slate-300"
-            }`}
-          >
-            {confirmed ? "✓" : "→"}
-          </button>,
+          <>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-11 top-2 z-10 grid h-7 w-7 place-items-center text-base font-black text-slate-700"
+            >
+              ▾
+            </span>
+            <button
+              type="button"
+              title={confirmed ? "Confirmed — click to edit" : active ? "Confirm this status" : "Confirm prior item first"}
+              onClick={() => void confirmTitle()}
+              disabled={savingField === "title_status" || (!confirmed && !active)}
+              className={`absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-full text-xs font-black transition ${
+                confirmed
+                  ? "bg-emerald-600 text-white"
+                  : active
+                    ? "border-2 border-emerald-500 bg-white text-emerald-700"
+                    : "border border-slate-200 bg-white text-slate-300"
+              }`}
+            >
+              {confirmed ? "✓" : "→"}
+            </button>
+          </>,
           titleCard,
         );
       })()}
