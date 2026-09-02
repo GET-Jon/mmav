@@ -8,6 +8,24 @@ export type MechanicalPartSuggestion = {
   notes: string | null;
 };
 
+export type PartnerInspectionUpgrade = {
+  id: string;
+  title: string;
+  description: string | null;
+  desiredOutcome: string | null;
+  manufacturer: string | null;
+  partNumber: string | null;
+  quantity: number;
+  preferredVendor: string | null;
+  validationStatus: string;
+  validationNotes: string | null;
+  recommendedAction: string | null;
+  partSuggestions: MechanicalPartSuggestion[];
+  canPerform: boolean | null;
+  laborHours: number | null;
+  proposedLaborPrice: number | null;
+};
+
 export type PartnerInspectionItem = {
   id: string;
   vehicleId: string;
@@ -36,7 +54,10 @@ export type PartnerInspectionItem = {
     canPerform: boolean | null;
     laborHours: number | null;
     proposedLaborPrice: number | null;
+    ownerReviewStatus: string | null;
+    ownerReviewNotes: string | null;
   }>;
+  upgrades: PartnerInspectionUpgrade[];
 };
 
 function numberOrNull(value: unknown) {
@@ -48,15 +69,15 @@ function numberOrNull(value: unknown) {
 function partsOrEmpty(value: unknown): MechanicalPartSuggestion[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((raw) => {
-    if (!raw || typeof raw !== "object") return [];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
     const row = raw as Record<string, unknown>;
-    const name = String(row.name ?? "").trim();
+    const name = String(row.name ?? row.description ?? "").trim();
     if (!name) return [];
     return [{
       name,
       quantity: numberOrNull(row.quantity) || 1,
-      partNumber: row.partNumber ? String(row.partNumber) : null,
-      notes: row.notes ? String(row.notes) : null,
+      partNumber: String(row.partNumber ?? row.part_number ?? "").trim() || null,
+      notes: String(row.notes || "").trim() || null,
     }];
   });
 }
@@ -76,12 +97,14 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
   if (!inspections?.length) return [];
 
   const vehicleIds = [...new Set(inspections.map((row) => row.vehicle_id))];
-  const [vehiclesResult, findingsResult] = await Promise.all([
+  const [vehiclesResult, findingsResult, upgradesResult] = await Promise.all([
     admin.from("mindful_inventory_vehicles").select("id,year,make,model,trim,vin,mileage").in("id", vehicleIds),
-    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price").in("vehicle_id", vehicleIds).eq("status", "open"),
+    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_owner_review_status,mechanical_owner_review_notes").in("vehicle_id", vehicleIds).eq("status", "open"),
+    admin.from("mindful_inventory_upgrades").select("id,vehicle_id,title,description,desired_outcome,manufacturer,part_number,quantity,preferred_vendor,status,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price").in("vehicle_id", vehicleIds).eq("status", "proposed"),
   ]);
   if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
   if (findingsResult.error) throw new Error(findingsResult.error.message);
+  if (upgradesResult.error) throw new Error(upgradesResult.error.message);
 
   const vehicles = new Map((vehiclesResult.data || []).map((row) => [row.id, row]));
   return inspections.map((row) => {
@@ -114,6 +137,25 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
         canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
         laborHours: numberOrNull(finding.mechanical_labor_hours),
         proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
+        ownerReviewStatus: finding.mechanical_owner_review_status,
+        ownerReviewNotes: finding.mechanical_owner_review_notes,
+      })),
+      upgrades: (upgradesResult.data || []).filter((upgrade) => upgrade.vehicle_id === row.vehicle_id).map((upgrade) => ({
+        id: upgrade.id,
+        title: upgrade.title,
+        description: upgrade.description,
+        desiredOutcome: upgrade.desired_outcome,
+        manufacturer: upgrade.manufacturer,
+        partNumber: upgrade.part_number,
+        quantity: numberOrNull(upgrade.quantity) || 1,
+        preferredVendor: upgrade.preferred_vendor,
+        validationStatus: upgrade.mechanical_validation_status || "pending",
+        validationNotes: upgrade.mechanical_validation_notes,
+        recommendedAction: upgrade.mechanical_recommended_action,
+        partSuggestions: partsOrEmpty(upgrade.mechanical_part_suggestions),
+        canPerform: typeof upgrade.mechanical_can_perform === "boolean" ? upgrade.mechanical_can_perform : null,
+        laborHours: numberOrNull(upgrade.mechanical_labor_hours),
+        proposedLaborPrice: numberOrNull(upgrade.mechanical_proposed_labor_price),
       })),
     };
   });
