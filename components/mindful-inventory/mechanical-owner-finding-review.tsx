@@ -60,7 +60,7 @@ export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleI
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-500">{finding.source}</span>
             <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700">{finding.mechanicalValidationStatus.replaceAll("_", " ")}</span>
-            {needsDifferentPartner ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase text-amber-800">Needs different partner</span> : null}
+            {needsDifferentPartner ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase text-amber-800">Requires different partner</span> : null}
             {finding.mechanicalOwnerReviewStatus ? <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${accepted ? "bg-emerald-100 text-emerald-700" : dismissed ? "bg-slate-200 text-slate-600" : "bg-amber-100 text-amber-800"}`}>{accepted ? "Owner accepted" : dismissed ? "Owner dismissed" : "Clarification requested"}</span> : null}
           </div>
         </div>
@@ -73,8 +73,9 @@ export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleI
             <div><div className="text-[10px] font-black uppercase text-slate-400">Recommended action</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalRecommendedAction || "—"}</div></div>
             <div><div className="text-[10px] font-black uppercase text-slate-400">Labor</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalLaborHours === null ? "—" : `${finding.mechanicalLaborHours} hr`}</div></div>
             <div><div className="text-[10px] font-black uppercase text-slate-400">Proposed labor price</div><div className="mt-1 font-semibold text-slate-800">{money(finding.mechanicalProposedLaborPrice)}</div></div>
-            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspector can perform</div><div className={`mt-1 font-black ${needsDifferentPartner ? "text-amber-800" : "text-slate-800"}`}>{finding.mechanicalCanPerform === null ? "—" : finding.mechanicalCanPerform ? "Yes" : "No — assign another partner"}</div></div>
+            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspector can perform</div><div className={`mt-1 font-black ${needsDifferentPartner ? "text-amber-800" : "text-slate-800"}`}>{finding.mechanicalCanPerform === null ? "—" : finding.mechanicalCanPerform ? "Yes" : "No — Owner assigns another partner in Work Plan"}</div></div>
           </div>
+          {needsDifferentPartner ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">If you accept this finding, it will continue into planning without assigning the repair to this inspector. The Owner will choose a qualified partner when the resulting work is set up.</div> : null}
           {finding.mechanicalSuggestedParts.length ? <div className="mt-3 border-t border-slate-200 pt-3"><div className="text-[10px] font-black uppercase text-slate-400">Suggested parts</div><div className="mt-2 space-y-1.5">{finding.mechanicalSuggestedParts.map((part, index) => <div key={`${part.description}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700"><span className="font-black">{part.quantity}× {part.description}</span>{part.partNumber ? ` · Part # ${part.partNumber}` : ""}{part.notes ? ` · ${part.notes}` : ""}</div>)}</div></div> : finding.mechanicalPartsRequired ? <div className="mt-3 border-t border-slate-200 pt-3"><div className="text-[10px] font-black uppercase text-slate-400">Parts needed</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalPartsRequired}</div></div> : null}
         </div> : null}
 
