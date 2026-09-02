@@ -59,7 +59,7 @@ export function PartnerEstimateReviewPanel({ items }: { items: PartnerEstimateRe
   }
 
   return (
-    <section className="rounded-2xl border-2 border-blue-300 bg-blue-50 p-4">
+    <section id="partner-estimate-review" className="scroll-mt-4 rounded-2xl border-2 border-blue-300 bg-blue-50 p-4">
       <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">Action required</div>
       <h2 className="mt-1 text-xl font-black text-slate-950">Partner estimate review</h2>
       <p className="mt-1 text-sm text-slate-600">These quotes exceeded the automatic approval rules or otherwise require a manager decision. Internal thresholds remain hidden from the partner.</p>
