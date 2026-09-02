@@ -1,3 +1,10 @@
+export type WorkPlanPartSuggestionInput = {
+  description: string;
+  quantity: number;
+  partNumber: string | null;
+  notes: string | null;
+};
+
 export type WorkPlanFindingInput = {
   id: string;
   source: string;
@@ -9,6 +16,11 @@ export type WorkPlanFindingInput = {
   certainty: string | null;
   mechanicalValidationStatus: "pending" | "confirmed" | "changed" | "needs_diagnosis";
   mechanicalValidationNotes: string | null;
+  mechanicalRecommendedAction: string | null;
+  mechanicalCanPerform: boolean | null;
+  mechanicalLaborHours: number | null;
+  mechanicalProposedLaborPrice: number | null;
+  mechanicalSuggestedParts: WorkPlanPartSuggestionInput[];
   estimatedCostLow: number | null;
   estimatedCostHigh: number | null;
   estimatedDurationHours: number | null;
@@ -26,6 +38,13 @@ export type WorkPlanUpgradeInput = {
   estimatedLaborCost: number | null;
   estimatedTotalCost: number | null;
   notes: string | null;
+  mechanicalValidationStatus: "pending" | "feasible" | "feasible_with_changes" | "not_recommended" | "needs_info";
+  mechanicalValidationNotes: string | null;
+  mechanicalRecommendedAction: string | null;
+  mechanicalCanPerform: boolean | null;
+  mechanicalLaborHours: number | null;
+  mechanicalProposedLaborPrice: number | null;
+  mechanicalSuggestedParts: WorkPlanPartSuggestionInput[];
 };
 
 export type PreliminaryWorkPlanInput = {
