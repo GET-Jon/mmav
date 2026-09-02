@@ -5,24 +5,58 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 const validationStatuses = new Set(["confirmed", "not_found", "changed", "needs_diagnosis"]);
 
+type PartSuggestion = {
+  name: string;
+  quantity: number;
+  partNumber: string | null;
+  notes: string | null;
+};
+
 function optionalText(value: unknown) {
   const clean = String(value ?? "").trim();
   return clean || null;
 }
 
-function optionalNonNegativeNumber(value: unknown) {
+function optionalNonNegativeNumber(value: unknown, label = "Value") {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Labor hours must be a non-negative number.");
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative number.`);
   return parsed;
 }
 
+function partSuggestions(value: unknown): PartSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((raw) => {
+      if (!raw || typeof raw !== "object") return null;
+      const row = raw as Record<string, unknown>;
+      const name = String(row.name ?? "").trim();
+      if (!name) return null;
+      const quantityValue = Number(row.quantity ?? 1);
+      return {
+        name,
+        quantity: Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1,
+        partNumber: optionalText(row.partNumber),
+        notes: optionalText(row.notes),
+      } satisfies PartSuggestion;
+    })
+    .filter((row): row is PartSuggestion => Boolean(row));
+}
+
 function recommendationPatch(body: Record<string, unknown>) {
+  const suggestions = partSuggestions(body.partSuggestions);
+  const legacyParts = optionalText(body.partsRequired);
+  const summary = suggestions.length
+    ? suggestions.map((part) => `${part.quantity > 1 ? `${part.quantity}x ` : ""}${part.name}${part.partNumber ? ` (${part.partNumber})` : ""}`).join(", ")
+    : legacyParts;
+
   return {
     mechanical_recommended_action: optionalText(body.recommendedAction),
-    mechanical_parts_required: optionalText(body.partsRequired),
+    mechanical_parts_required: summary,
+    mechanical_part_suggestions: suggestions,
     mechanical_can_perform: typeof body.canPerform === "boolean" ? body.canPerform : null,
-    mechanical_labor_hours: optionalNonNegativeNumber(body.laborHours),
+    mechanical_labor_hours: optionalNonNegativeNumber(body.laborHours, "Labor hours"),
+    mechanical_proposed_labor_price: optionalNonNegativeNumber(body.proposedLaborPrice, "Proposed labor price"),
   };
 }
 
@@ -81,13 +115,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
         vehicle_id: inspection.vehicle_id,
         inspection_id: inspection.id,
         source: "partner",
-        source_user_id: access.userId,
+        source_user_id: null,
         source_partner_id: access.partner.id,
         title,
         description: optionalText(body.description),
         category: String(body.category || "mechanical"),
         severity: body.severity || null,
-        estimated_duration_hours: optionalNonNegativeNumber(body.laborHours),
+        estimated_duration_hours: optionalNonNegativeNumber(body.laborHours, "Labor hours"),
         status: "open",
         mechanical_validation_status: "confirmed",
         mechanical_validation_notes: optionalText(body.notes),
