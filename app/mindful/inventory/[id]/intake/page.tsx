@@ -4,6 +4,7 @@ import { InventoryMechanicalInspection } from "@/components/mindful-inventory/in
 import { InventoryMechanicalNextStep } from "@/components/mindful-inventory/inventory-mechanical-next-step";
 import { MechanicalInspectorAssignment } from "@/components/mindful-inventory/mechanical-inspector-assignment";
 import { MechanicalOwnerFindingReview } from "@/components/mindful-inventory/mechanical-owner-finding-review";
+import { MechanicalOwnerUpgradeReview } from "@/components/mindful-inventory/mechanical-owner-upgrade-review";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import { getMechanicalInspectorOptions } from "@/lib/mindful-inventory/mechanical-assignment";
@@ -37,19 +38,22 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
       <MechanicalInspectorAssignment vehicleId={vehicle.id} options={inspectorOptions} inspection={inspection} />
 
       {submittedForOwner ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>
-          <h2 className="mt-1 text-xl font-black text-slate-950">Validate the mechanic&apos;s findings</h2>
-          <p className="mt-1 text-sm text-slate-500">Accept or dismiss each finding before accepting the inspection. This validates the diagnostic scope only; it does not create or assign repair Work Orders.</p>
-          <MechanicalOwnerFindingReview vehicleId={vehicle.id} findings={submittedFindings} />
-        </section>
+        <>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Validate the mechanic&apos;s findings</h2>
+            <p className="mt-1 text-sm text-slate-500">Accept, request clarification, or dismiss each finding before accepting the inspection. Accepting the diagnosis does not assign the resulting repair to the inspector.</p>
+            <MechanicalOwnerFindingReview vehicleId={vehicle.id} findings={submittedFindings} />
+          </section>
+          <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />
+        </>
       ) : null}
 
       {partnerFlowStatus ? (
         !submittedForOwner ? <section className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-5 shadow-sm">
           <div className="text-xs font-black uppercase tracking-[0.1em] text-blue-600">Inspection with partner</div>
           <h2 className="mt-1 text-xl font-black text-slate-950">Waiting for the mechanic to submit</h2>
-          <p className="mt-1 text-sm font-medium text-slate-600">Lot Logic findings are locked on the Owner side while the assigned mechanic performs the inspection. When submitted, the findings return here for final Owner validation before Work Plan generation.</p>
+          <p className="mt-1 text-sm font-medium text-slate-600">Lot Logic findings and requested upgrades are locked on the Owner side while the assigned mechanic performs the inspection. When submitted, both return here for final Owner review before Work Plan generation.</p>
         </section> : null
       ) : (
         <InventoryMechanicalInspection vehicle={vehicle} data={inspectionData} overview={overview} />
