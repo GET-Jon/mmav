@@ -33,14 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const requestedStartAt = optionalText(body.requestedStartAt);
     const inspectionFee = body.inspectionFee === "" || body.inspectionFee === null || body.inspectionFee === undefined ? partner.default_inspection_fee : Number(body.inspectionFee);
 
-    const { data: existing } = await access.supabase
-      .from("mindful_inventory_inspections")
-      .select("id,status")
-      .eq("vehicle_id", vehicleId)
-      .eq("inspection_type", "mechanical")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: existing } = await access.supabase.from("mindful_inventory_inspections").select("id,status").eq("vehicle_id", vehicleId).eq("inspection_type", "mechanical").order("created_at", { ascending: false }).limit(1).maybeSingle();
 
     let inspectionId: string;
     if (existing && !["complete", "cancelled"].includes(existing.status)) {
@@ -54,7 +47,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     await access.supabase.from("mindful_inventory_history").insert({ company_id: access.company.companyId, vehicle_id: vehicleId, event_type: "mechanical_inspection_assigned", entity_type: "inspection", entity_id: inspectionId, actor_user_id: access.userId, summary: `Mechanical inspection assigned to ${partner.name}.`, metadata: { partnerId: partner.id, requestedStartAt, inspectionFee } });
-
     return NextResponse.json({ inspectionId, partnerId: partner.id, assigned: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to assign mechanical inspection." }, { status: 500 });
@@ -76,6 +68,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!inspection || inspection.status !== "submitted") return NextResponse.json({ error: "No submitted inspection is awaiting review." }, { status: 409 });
 
     if (decision === "accept") {
+      const { data: pendingFindings, error: findingsError } = await access.supabase
+        .from("mindful_inventory_findings")
+        .select("id")
+        .eq("vehicle_id", vehicleId)
+        .eq("status", "open")
+        .in("source", ["ai", "partner"])
+        .is("mechanical_owner_review_status", null);
+      if (findingsError) throw new Error(findingsError.message);
+      if ((pendingFindings || []).length > 0) return NextResponse.json({ error: `Review all mechanical findings before accepting the inspection (${pendingFindings?.length || 0} remaining).` }, { status: 409 });
+
       const { error: updateError } = await access.supabase.from("mindful_inventory_inspections").update({ status: "complete", completed_at: now, owner_review_status: "accepted", owner_reviewed_at: now, owner_reviewed_by_user_id: access.userId, revision_notes: null, updated_at: now }).eq("id", inspection.id);
       if (updateError) throw new Error(updateError.message);
     } else if (decision === "revision") {
