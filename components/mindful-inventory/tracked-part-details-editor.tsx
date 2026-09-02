@@ -94,9 +94,11 @@ export function TrackedPartDetailsEditor({ vehicleId, parts, compact = false }: 
     }
   }
 
-  if (!activeParts.length) return null;
+  // Active Work previously used compact mode as a second parts editor. The shared
+  // Work Order parts experience is now the single source of truth there.
+  if (compact || !activeParts.length) return null;
 
-  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${compact ? "p-4" : "p-5"}`}>
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="flex items-start justify-between gap-3">
       <div>
         <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Tracked part details</div>
