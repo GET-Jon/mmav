@@ -47,6 +47,12 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
                   <div className="flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-500">{finding.source}</span><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700">{finding.mechanicalValidationStatus.replaceAll("_", " ")}</span></div>
                 </div>
                 {finding.mechanicalValidationNotes ? <div className="mt-2 text-sm font-semibold text-slate-500">Mechanic notes: {finding.mechanicalValidationNotes}</div> : null}
+                {(finding.mechanicalRecommendedAction || finding.mechanicalPartsRequired || finding.mechanicalLaborHours !== null || finding.mechanicalCanPerform !== null) ? <div className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <div><div className="text-[10px] font-black uppercase text-slate-400">Recommended action</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalRecommendedAction || "—"}</div></div>
+                  <div><div className="text-[10px] font-black uppercase text-slate-400">Parts needed</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalPartsRequired || "—"}</div></div>
+                  <div><div className="text-[10px] font-black uppercase text-slate-400">Labor</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalLaborHours === null ? "—" : `${finding.mechanicalLaborHours} hr`}</div></div>
+                  <div><div className="text-[10px] font-black uppercase text-slate-400">Inspector can perform</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalCanPerform === null ? "—" : finding.mechanicalCanPerform ? "Yes" : "No"}</div></div>
+                </div> : null}
               </div>
             ))}
           </div>
