@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { createSupabaseServerAuthClient } from "@/lib/supabase/server-auth";
 
@@ -9,14 +10,8 @@ export async function POST(
 ) {
   try {
     const authClient = await createSupabaseServerAuthClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await authClient.auth.getUser();
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-    }
+    const { data: { user }, error: userError } = await authClient.auth.getUser();
+    if (userError || !user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
     const { workOrderId } = await context.params;
     const body = await request.json().catch(() => ({}));
@@ -28,21 +23,17 @@ export async function POST(
     const admin = createSupabaseAdminClient();
     const { data: work, error: workError } = await admin
       .from("mindful_inventory_work_orders")
-      .select("id,status,assigned_partner_id,actual_start_at,partner_estimate_status")
+      .select("id,status,assigned_partner_id,actual_start_at,partner_estimate_status,parts_review_status,location_id,scheduled_start_at")
       .eq("id", workOrderId)
       .maybeSingle();
-
     if (workError) throw new Error(workError.message);
-    if (!work?.assigned_partner_id) {
-      return NextResponse.json({ error: "Assigned partner Work Order not found." }, { status: 404 });
-    }
+    if (!work?.assigned_partner_id) return NextResponse.json({ error: "Assigned partner Work Order not found." }, { status: 404 });
 
     const { data: partner, error: partnerError } = await admin
       .from("mindful_inventory_partners")
       .select("id,user_id,active")
       .eq("id", work.assigned_partner_id)
       .maybeSingle();
-
     if (partnerError) throw new Error(partnerError.message);
     if (!partner || !partner.active || partner.user_id !== user.id) {
       return NextResponse.json({ error: "You are not the assigned partner for this Work Order." }, { status: 403 });
@@ -53,43 +44,38 @@ export async function POST(
       .select("view_assigned_work,start_work,complete_work")
       .eq("partner_id", partner.id)
       .maybeSingle();
-
     if (permissionsError) throw new Error(permissionsError.message);
-    if (!permissions?.view_assigned_work) {
-      return NextResponse.json({ error: "Assigned Work access is disabled." }, { status: 403 });
-    }
-    if (status === "in_progress" && !permissions.start_work) {
-      return NextResponse.json({ error: "Starting Work Orders is not enabled for this partner." }, { status: 403 });
-    }
-    if (status === "complete" && !permissions.complete_work) {
-      return NextResponse.json({ error: "Completing Work Orders is not enabled for this partner." }, { status: 403 });
-    }
+    if (!permissions?.view_assigned_work) return NextResponse.json({ error: "Assigned Work access is disabled." }, { status: 403 });
+    if (status === "in_progress" && !permissions.start_work) return NextResponse.json({ error: "Starting Work Orders is not enabled for this partner." }, { status: 403 });
+    if (status === "complete" && !permissions.complete_work) return NextResponse.json({ error: "Completing Work Orders is not enabled for this partner." }, { status: 403 });
 
-    if (["complete", "cancelled"].includes(work.status)) {
-      return NextResponse.json({ error: "This Work Order is already closed." }, { status: 409 });
-    }
+    if (["complete", "cancelled"].includes(work.status)) return NextResponse.json({ error: "This Work Order is already closed." }, { status: 409 });
 
-    if (status === "in_progress" && !["approved", "not_required"].includes(work.partner_estimate_status || "")) {
-      return NextResponse.json(
-        { error: "Work cannot begin until the estimate is approved." },
-        { status: 409 },
-      );
+    if (status === "in_progress") {
+      if (work.parts_review_status !== "resolved") return NextResponse.json({ error: "Parts Review has not been completed by the vehicle Owner." }, { status: 409 });
+      if (!work.location_id) return NextResponse.json({ error: "Work location must be confirmed before work can begin." }, { status: 409 });
+      if (!work.scheduled_start_at) return NextResponse.json({ error: "This Work Order must be scheduled before work can begin." }, { status: 409 });
+      if (!["approved", "not_required"].includes(work.partner_estimate_status || "")) {
+        return NextResponse.json({ error: "Work cannot begin until the estimate is approved." }, { status: 409 });
+      }
+
+      const { data: partRows, error: partsError } = await admin
+        .from("mindful_inventory_work_order_parts")
+        .select("work_order_id,status,eta_at")
+        .eq("work_order_id", workOrderId);
+      if (partsError) throw new Error(partsError.message);
+      const parts = summarizePartsReadiness(partRows || []);
+      if (!parts.readyForExecution) {
+        return NextResponse.json({ error: "Work cannot begin until all required parts are received." }, { status: 409 });
+      }
     }
 
     if (status === "complete" && work.status !== "in_progress") {
-      return NextResponse.json(
-        { error: "Work must be started before it can be marked complete." },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "Work must be started before it can be marked complete." }, { status: 409 });
     }
 
     const now = new Date().toISOString();
-    const patch: Record<string, unknown> = {
-      status,
-      updated_at: now,
-      updated_by: user.id,
-    };
-
+    const patch: Record<string, unknown> = { status, updated_at: now, updated_by: user.id };
     if (status === "in_progress") {
       patch.actual_start_at = work.actual_start_at || now;
     } else {
@@ -106,13 +92,9 @@ export async function POST(
       .eq("assigned_partner_id", partner.id)
       .select("id,status,actual_start_at,actual_end_at")
       .single();
-
     if (updateError) throw new Error(updateError.message);
     return NextResponse.json(updated);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Work Order status could not be updated." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Work Order status could not be updated." }, { status: 500 });
   }
 }
