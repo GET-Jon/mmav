@@ -68,15 +68,30 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!inspection || inspection.status !== "submitted") return NextResponse.json({ error: "No submitted inspection is awaiting review." }, { status: 409 });
 
     if (decision === "accept") {
-      const { data: pendingFindings, error: findingsError } = await access.supabase
-        .from("mindful_inventory_findings")
-        .select("id")
-        .eq("vehicle_id", vehicleId)
-        .eq("status", "open")
-        .in("source", ["ai", "partner"])
-        .is("mechanical_owner_review_status", null);
-      if (findingsError) throw new Error(findingsError.message);
-      if ((pendingFindings || []).length > 0) return NextResponse.json({ error: `Review all mechanical findings before accepting the inspection (${pendingFindings?.length || 0} remaining).` }, { status: 409 });
+      const [findingsResult, upgradesResult] = await Promise.all([
+        access.supabase
+          .from("mindful_inventory_findings")
+          .select("id")
+          .eq("vehicle_id", vehicleId)
+          .eq("status", "open")
+          .in("source", ["ai", "partner"])
+          .or("mechanical_owner_review_status.is.null,mechanical_owner_review_status.eq.clarification_requested"),
+        access.supabase
+          .from("mindful_inventory_upgrades")
+          .select("id")
+          .eq("vehicle_id", vehicleId)
+          .eq("status", "proposed")
+          .eq("mechanical_validation_status", "pending"),
+      ]);
+      if (findingsResult.error) throw new Error(findingsResult.error.message);
+      if (upgradesResult.error) throw new Error(upgradesResult.error.message);
+      const pendingFindings = findingsResult.data?.length || 0;
+      const pendingUpgrades = upgradesResult.data?.length || 0;
+      if (pendingFindings || pendingUpgrades) {
+        return NextResponse.json({
+          error: `Resolve all submitted findings and requested upgrade reviews before accepting this inspection (${pendingFindings} finding${pendingFindings === 1 ? "" : "s"}, ${pendingUpgrades} upgrade${pendingUpgrades === 1 ? "" : "s"} remaining).`,
+        }, { status: 409 });
+      }
 
       const { error: updateError } = await access.supabase.from("mindful_inventory_inspections").update({ status: "complete", completed_at: now, owner_review_status: "accepted", owner_reviewed_at: now, owner_reviewed_by_user_id: access.userId, revision_notes: null, updated_at: now }).eq("id", inspection.id);
       if (updateError) throw new Error(updateError.message);
