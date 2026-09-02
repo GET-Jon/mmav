@@ -10,6 +10,22 @@ function optionalText(value: unknown) {
   return clean || null;
 }
 
+function optionalNonNegativeNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Labor hours must be a non-negative number.");
+  return parsed;
+}
+
+function recommendationPatch(body: Record<string, unknown>) {
+  return {
+    mechanical_recommended_action: optionalText(body.recommendedAction),
+    mechanical_parts_required: optionalText(body.partsRequired),
+    mechanical_can_perform: typeof body.canPerform === "boolean" ? body.canPerform : null,
+    mechanical_labor_hours: optionalNonNegativeNumber(body.laborHours),
+  };
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ inspectionId: string }> }) {
   try {
     const access = await requirePartnerPortalAccess();
@@ -27,7 +43,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
     if (inspectionError) throw new Error(inspectionError.message);
     if (!inspection) return NextResponse.json({ error: "Inspection assignment not found." }, { status: 404 });
 
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const action = String(body.action || "").trim();
     const now = new Date().toISOString();
 
@@ -50,13 +66,33 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
       const findingId = String(body.findingId || "").trim();
       const status = String(body.status || "").trim();
       if (!findingId || !validationStatuses.has(status)) return NextResponse.json({ error: "Invalid finding validation." }, { status: 400 });
-      const { error } = await admin.from("mindful_inventory_findings").update({ mechanical_validation_status: status, mechanical_validation_notes: optionalText(body.notes), updated_at: now }).eq("id", findingId).eq("vehicle_id", inspection.vehicle_id).eq("source", "ai");
+      const { error } = await admin.from("mindful_inventory_findings").update({
+        mechanical_validation_status: status,
+        mechanical_validation_notes: optionalText(body.notes),
+        ...recommendationPatch(body),
+        updated_at: now,
+      }).eq("id", findingId).eq("vehicle_id", inspection.vehicle_id).in("source", ["ai", "partner"]);
       if (error) throw new Error(error.message);
     } else if (action === "add_finding") {
       if (!["in_progress", "revision_requested"].includes(inspection.status)) return NextResponse.json({ error: "This inspection is not editable." }, { status: 409 });
       const title = String(body.title || "").trim();
       if (!title) return NextResponse.json({ error: "Finding title is required." }, { status: 400 });
-      const { error } = await admin.from("mindful_inventory_findings").insert({ vehicle_id: inspection.vehicle_id, inspection_id: inspection.id, source: "partner", source_user_id: access.userId, source_partner_id: access.partner.id, title, description: optionalText(body.description), category: String(body.category || "mechanical"), severity: body.severity || null, estimated_duration_hours: body.estimatedDurationHours || null, status: "open", mechanical_validation_status: "confirmed", mechanical_validation_notes: optionalText(body.notes) });
+      const { error } = await admin.from("mindful_inventory_findings").insert({
+        vehicle_id: inspection.vehicle_id,
+        inspection_id: inspection.id,
+        source: "partner",
+        source_user_id: access.userId,
+        source_partner_id: access.partner.id,
+        title,
+        description: optionalText(body.description),
+        category: String(body.category || "mechanical"),
+        severity: body.severity || null,
+        estimated_duration_hours: optionalNonNegativeNumber(body.laborHours),
+        status: "open",
+        mechanical_validation_status: "confirmed",
+        mechanical_validation_notes: optionalText(body.notes),
+        ...recommendationPatch(body),
+      });
       if (error) throw new Error(error.message);
     } else {
       return NextResponse.json({ error: "Unsupported inspection action." }, { status: 400 });
