@@ -57,9 +57,9 @@ export async function getMechanicalInspectorOptions(supabase: SupabaseClient, co
       .from("mindful_inventory_work_orders")
       .select("assigned_partner_id,status,scheduled_start_at,scheduled_end_at")
       .in("assigned_partner_id", ids)
+      .in("status", ["planned", "ready_to_schedule", "scheduled", "in_progress", "blocked"])
       .not("scheduled_start_at", "is", null)
-      .not("scheduled_end_at", "is", null)
-      .not("status", "in", "(complete,cancelled)"),
+      .not("scheduled_end_at", "is", null),
   ]);
   if (inspectionsResult.error) throw new Error(inspectionsResult.error.message);
   if (workOrdersResult.error) throw new Error(workOrdersResult.error.message);
