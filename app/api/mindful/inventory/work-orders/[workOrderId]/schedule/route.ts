@@ -39,7 +39,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
       return NextResponse.json({ error: "Complete Parts Review before scheduling this Work Order." }, { status: 409 });
     }
     if (!existing.assigned_partner_id && !existing.assigned_user_id) {
-      return NextResponse.json({ error: "Assign the performer before scheduling this Work Order." }, { status: 409 });
+      return NextResponse.json({ error: "Assign the Partner before scheduling this Work Order." }, { status: 409 });
     }
     if (!existing.location_id) {
       return NextResponse.json({ error: "Choose the work location before scheduling this Work Order." }, { status: 409 });
@@ -86,33 +86,50 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
     }
 
     const now = new Date().toISOString();
+    const isPartnerWork = Boolean(existing.assigned_partner_id);
+    const update = isPartnerWork
+      ? {
+          proposed_start_at: start.toISOString(),
+          proposed_end_at: end.toISOString(),
+          scheduled_start_at: null,
+          scheduled_end_at: null,
+          partner_confirmation_status: "awaiting_partner",
+          schedule_source: "suggested",
+          status: "ready_to_schedule",
+          updated_by: access.userId,
+          updated_at: now,
+        }
+      : {
+          scheduled_start_at: start.toISOString(),
+          scheduled_end_at: end.toISOString(),
+          proposed_start_at: null,
+          proposed_end_at: null,
+          partner_confirmation_status: null,
+          schedule_source: "manual",
+          status: existing.status === "complete" ? "complete" : "scheduled",
+          updated_by: access.userId,
+          updated_at: now,
+        };
+
     const { data: updated, error: updateError } = await access.supabase
       .from("mindful_inventory_work_orders")
-      .update({
-        scheduled_start_at: start.toISOString(),
-        scheduled_end_at: end.toISOString(),
-        proposed_start_at: null,
-        proposed_end_at: null,
-        partner_confirmation_status: existing.assigned_partner_id ? "confirmed" : null,
-        schedule_source: "manual",
-        status: existing.status === "complete" ? "complete" : "scheduled",
-        updated_by: access.userId,
-        updated_at: now,
-      })
+      .update(update)
       .eq("id", workOrderId)
-      .select("id,scheduled_start_at,scheduled_end_at,status,schedule_source")
+      .select("id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,status,schedule_source")
       .single();
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
     await access.supabase.from("mindful_inventory_history").insert({
       company_id: access.company.companyId,
       vehicle_id: existing.vehicle_id,
-      event_type: "work_order_scheduled",
+      event_type: isPartnerWork ? "work_order_schedule_proposed" : "work_order_scheduled",
       entity_type: "work_order",
       entity_id: workOrderId,
       actor_user_id: access.userId,
-      summary: "Work Order scheduled after parts, performer, and location readiness were confirmed.",
-      metadata: { scheduledStartAt: updated.scheduled_start_at, scheduledEndAt: updated.scheduled_end_at, elapsedMinutes: safeDuration, scheduleSource: "manual" },
+      summary: isPartnerWork
+        ? "Work time proposed to the assigned partner for confirmation."
+        : "Work Order scheduled after parts, Partner, and location readiness were confirmed.",
+      metadata: { proposedStartAt: isPartnerWork ? start.toISOString() : null, scheduledStartAt: isPartnerWork ? null : start.toISOString(), endAt: end.toISOString(), elapsedMinutes: safeDuration },
     });
 
     return NextResponse.json(updated);
