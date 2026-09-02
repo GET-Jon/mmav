@@ -1,6 +1,13 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { PartnerPortalAccess } from "@/lib/partner-portal/access";
 
+export type MechanicalPartSuggestion = {
+  name: string;
+  quantity: number;
+  partNumber: string | null;
+  notes: string | null;
+};
+
 export type PartnerInspectionItem = {
   id: string;
   vehicleId: string;
@@ -25,8 +32,10 @@ export type PartnerInspectionItem = {
     validationNotes: string | null;
     recommendedAction: string | null;
     partsRequired: string | null;
+    partSuggestions: MechanicalPartSuggestion[];
     canPerform: boolean | null;
     laborHours: number | null;
+    proposedLaborPrice: number | null;
   }>;
 };
 
@@ -34,6 +43,22 @@ function numberOrNull(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function partsOrEmpty(value: unknown): MechanicalPartSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const row = raw as Record<string, unknown>;
+    const name = String(row.name ?? "").trim();
+    if (!name) return [];
+    return [{
+      name,
+      quantity: numberOrNull(row.quantity) || 1,
+      partNumber: row.partNumber ? String(row.partNumber) : null,
+      notes: row.notes ? String(row.notes) : null,
+    }];
+  });
 }
 
 export async function getPartnerInspectionAssignments(access: PartnerPortalAccess): Promise<PartnerInspectionItem[]> {
@@ -53,7 +78,7 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
   const vehicleIds = [...new Set(inspections.map((row) => row.vehicle_id))];
   const [vehiclesResult, findingsResult] = await Promise.all([
     admin.from("mindful_inventory_vehicles").select("id,year,make,model,trim,vin,mileage").in("id", vehicleIds),
-    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_can_perform,mechanical_labor_hours").in("vehicle_id", vehicleIds).eq("status", "open"),
+    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price").in("vehicle_id", vehicleIds).eq("status", "open"),
   ]);
   if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
   if (findingsResult.error) throw new Error(findingsResult.error.message);
@@ -85,8 +110,10 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
         validationNotes: finding.mechanical_validation_notes,
         recommendedAction: finding.mechanical_recommended_action,
         partsRequired: finding.mechanical_parts_required,
+        partSuggestions: partsOrEmpty(finding.mechanical_part_suggestions),
         canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
         laborHours: numberOrNull(finding.mechanical_labor_hours),
+        proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
       })),
     };
   });
