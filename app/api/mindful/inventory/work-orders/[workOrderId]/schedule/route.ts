@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";
 
 function parseDateTime(value: unknown) {
   const clean = String(value ?? "").trim();
@@ -21,13 +22,42 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
 
     const { data: existing, error: existingError } = await access.supabase
       .from("mindful_inventory_work_orders")
-      .select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,resource_id")
+      .select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status")
       .eq("id", workOrderId)
       .single();
     if (existingError || !existing) return NextResponse.json({ error: "Work Order not found." }, { status: 404 });
 
-    const { data: vehicle } = await access.supabase.from("mindful_inventory_vehicles").select("id").eq("id", existing.vehicle_id).eq("company_id", access.company.companyId).single();
+    const { data: vehicle } = await access.supabase
+      .from("mindful_inventory_vehicles")
+      .select("id")
+      .eq("id", existing.vehicle_id)
+      .eq("company_id", access.company.companyId)
+      .single();
     if (!vehicle) return NextResponse.json({ error: "Work Order is outside the current company." }, { status: 403 });
+
+    if (existing.parts_review_status !== "resolved") {
+      return NextResponse.json({ error: "Complete Parts Review before scheduling this Work Order." }, { status: 409 });
+    }
+    if (!existing.assigned_partner_id && !existing.assigned_user_id) {
+      return NextResponse.json({ error: "Assign the performer before scheduling this Work Order." }, { status: 409 });
+    }
+    if (!existing.location_id) {
+      return NextResponse.json({ error: "Choose the work location before scheduling this Work Order." }, { status: 409 });
+    }
+    if (existing.assigned_partner_id && !["approved", "not_required"].includes(existing.partner_estimate_status || "")) {
+      return NextResponse.json({ error: "Approve the partner labor estimate before scheduling this Work Order." }, { status: 409 });
+    }
+
+    const { data: partRows, error: partsError } = await access.supabase
+      .from("mindful_inventory_work_order_parts")
+      .select("work_order_id,status,eta_at")
+      .eq("work_order_id", workOrderId);
+    if (partsError) throw new Error(partsError.message);
+    const parts = summarizePartsReadiness(partRows || []);
+    if (!parts.readyForExecution) {
+      const eta = parts.latestEtaAt ? ` Latest tracked ETA is ${new Date(parts.latestEtaAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.` : "";
+      return NextResponse.json({ error: `Wait for all required parts to arrive before scheduling.${eta}`, partsReadiness: parts.readiness, pendingPartCount: parts.pendingPartCount }, { status: 409 });
+    }
 
     const duration = Number(existing.estimated_elapsed_minutes ?? existing.estimated_duration_minutes ?? 60);
     const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 60;
@@ -81,7 +111,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
       entity_type: "work_order",
       entity_id: workOrderId,
       actor_user_id: access.userId,
-      summary: "Work Order schedule manually set or adjusted.",
+      summary: "Work Order scheduled after parts, performer, and location readiness were confirmed.",
       metadata: { scheduledStartAt: updated.scheduled_start_at, scheduledEndAt: updated.scheduled_end_at, elapsedMinutes: safeDuration, scheduleSource: "manual" },
     });
 
