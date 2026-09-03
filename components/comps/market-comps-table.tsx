@@ -26,33 +26,76 @@ function formatNumber(value: number) {
 }
 
 function displayValue(value: unknown) {
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
-  }
-
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value);
 }
 
-function DetailItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: unknown;
-}) {
+function DetailItem({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-      <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
-        {label}
-      </dt>
-      <dd className="mt-1 break-words text-sm font-bold text-slate-800">
-        {displayValue(value)}
-      </dd>
+      <dt className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-bold text-slate-800">{displayValue(value)}</dd>
     </div>
+  );
+}
+
+function fitLabel(score: number) {
+  if (score >= 85) return "Excellent match";
+  if (score >= 70) return "Strong match";
+  if (score >= 60) return "Usable match";
+  return "Weak match";
+}
+
+function CompFitExplanation({ comp, targetMileage }: { comp: MarketComp; targetMileage: number }) {
+  const factors = comp.marketCheckDetails?.compFitFactors;
+  const targetYear = comp.marketCheckDetails?.targetYear;
+  const mileageDelta = factors?.mileageDelta;
+  const confidence = comp.marketCheckDetails?.listingConfidence || "—";
+
+  return (
+    <section className="mb-6 rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">Why this comp ranks here</div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-3xl font-black text-slate-950">{comp.qualityScore}</span>
+            <span className="text-sm font-black text-slate-500">/ 100 Comp Fit</span>
+          </div>
+          <div className="mt-1 text-sm font-bold text-blue-900">{fitLabel(comp.qualityScore)}</div>
+        </div>
+        <div className="rounded-xl border border-blue-100 bg-white px-4 py-3">
+          <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Listing confidence</div>
+          <div className="mt-1 text-sm font-black text-slate-900">{confidence}</div>
+          <div className="mt-1 max-w-52 text-xs font-medium text-slate-500">Confidence describes listing-data completeness; it is separate from how well the vehicle matches.</div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl bg-white px-3 py-3">
+          <div className="text-[9px] font-black uppercase text-slate-400">Model year</div>
+          <div className="mt-1 text-sm font-black text-slate-900">{factors?.yearPreference || (targetYear ? `${comp.year} vs ${targetYear}` : comp.year)}</div>
+          {targetYear ? <div className="mt-1 text-xs font-semibold text-slate-500">Target: {targetYear}</div> : null}
+        </div>
+        <div className="rounded-xl bg-white px-3 py-3">
+          <div className="text-[9px] font-black uppercase text-slate-400">Mileage similarity</div>
+          <div className="mt-1 text-sm font-black text-slate-900">{mileageDelta === null || mileageDelta === undefined ? "Not available" : `${formatNumber(mileageDelta)} mi difference`}</div>
+          <div className="mt-1 text-xs font-semibold text-slate-500">Target: {formatNumber(targetMileage)} mi</div>
+        </div>
+        <div className="rounded-xl bg-white px-3 py-3">
+          <div className="text-[9px] font-black uppercase text-slate-400">Market distance</div>
+          <div className="mt-1 text-sm font-black text-slate-900">{formatNumber(comp.distance)} mi</div>
+          <div className="mt-1 text-xs font-semibold text-slate-500">Closer listings receive less geographic penalty.</div>
+        </div>
+        <div className="rounded-xl bg-white px-3 py-3">
+          <div className="text-[9px] font-black uppercase text-slate-400">Trim data</div>
+          <div className="mt-1 text-sm font-black text-slate-900">{comp.trim ? comp.trim : "Unavailable"}</div>
+          <div className="mt-1 text-xs font-semibold text-slate-500">Trim mismatch and missing listing data can reduce fit.</div>
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs font-semibold leading-5 text-blue-900/80">Lot Logic strongly prefers exact-year comps, then vehicles within ±1 and ±2 model years. Vehicles farther than two years away can still appear when useful, but receive a materially larger fit penalty rather than being automatically excluded.</p>
+    </section>
   );
 }
 
@@ -67,10 +110,7 @@ export function MarketCompsTable({
   assumptions: Assumptions;
   onToggleIncluded: (id: string) => void;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "qualityScore", desc: true },
-  ]);
-
+  const [sorting, setSorting] = useState<SortingState>([{ id: "qualityScore", desc: true }]);
   const [selectedComp, setSelectedComp] = useState<MarketComp | null>(null);
 
   const columns = useMemo<ColumnDef<MarketComp>[]>(
@@ -96,11 +136,14 @@ export function MarketCompsTable({
         accessorFn: (row) => [row.year, row.model].filter(Boolean).join(" "),
         cell: ({ row }) => (
           <div className="min-w-[180px]">
-            <div className="font-bold text-slate-950">
-              {[row.original.year, row.original.model]
-                .filter(Boolean)
-                .join(" ")}
-            </div>
+            <div className="font-bold text-slate-950">{[row.original.year, row.original.model].filter(Boolean).join(" ")}</div>
+            {row.original.marketCheckDetails?.compFitFactors?.yearPreference ? (
+              <div className={`mt-0.5 text-[10px] font-black ${
+                (row.original.marketCheckDetails.compFitFactors.yearDelta ?? 99) <= 2 ? "text-emerald-700" : "text-amber-700"
+              }`}>
+                {row.original.marketCheckDetails.compFitFactors.yearPreference}
+              </div>
+            ) : null}
           </div>
         ),
       },
@@ -109,9 +152,7 @@ export function MarketCompsTable({
         header: "Trim",
         cell: ({ row }) => (
           <div className="min-w-[120px] max-w-[190px]">
-            <span className="block truncate font-semibold text-slate-700">
-              {row.original.trim || "Unavailable"}
-            </span>
+            <span className="block truncate font-semibold text-slate-700">{row.original.trim || "Unavailable"}</span>
           </div>
         ),
       },
@@ -121,84 +162,46 @@ export function MarketCompsTable({
         accessorFn: (row) => row.source,
         cell: ({ row }) => (
           <div className="min-w-[120px]">
-            <div className="font-semibold text-slate-900">
-              {row.original.source}
-            </div>
-            <div className="mt-0.5 text-xs text-slate-500">
-              {row.original.region || "Region unavailable"}
-            </div>
+            <div className="font-semibold text-slate-900">{row.original.source}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{row.original.region || "Region unavailable"}</div>
           </div>
         ),
       },
       {
         accessorKey: "askingPrice",
         header: "Asking",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap font-bold text-slate-950">
-            {formatMoney(row.original.askingPrice)}
-          </span>
-        ),
+        cell: ({ row }) => <span className="whitespace-nowrap font-bold text-slate-950">{formatMoney(row.original.askingPrice)}</span>,
       },
       {
         accessorKey: "mileage",
         header: "Mileage",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap">
-            {formatNumber(row.original.mileage)}
-          </span>
-        ),
+        cell: ({ row }) => <span className="whitespace-nowrap">{formatNumber(row.original.mileage)}</span>,
       },
       {
         accessorKey: "distance",
         header: "Distance",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap">
-            {formatNumber(row.original.distance)} mi
-          </span>
-        ),
+        cell: ({ row }) => <span className="whitespace-nowrap">{formatNumber(row.original.distance)} mi</span>,
       },
       {
         id: "adjustedPrice",
         header: "Adjusted",
-        accessorFn: (row) =>
-          calculateAdjustedCompPrice({
-            comp: row,
-            targetMileage,
-            assumptions,
-          }),
+        accessorFn: (row) => calculateAdjustedCompPrice({ comp: row, targetMileage, assumptions }),
         cell: ({ row }) => {
-          const adjusted = calculateAdjustedCompPrice({
-            comp: row.original,
-            targetMileage,
-            assumptions,
-          });
-
-          return (
-            <span className="whitespace-nowrap font-extrabold text-blue-700">
-              {formatMoney(adjusted)}
-            </span>
-          );
+          const adjusted = calculateAdjustedCompPrice({ comp: row.original, targetMileage, assumptions });
+          return <span className="whitespace-nowrap font-extrabold text-blue-700">{formatMoney(adjusted)}</span>;
         },
       },
       {
         accessorKey: "qualityScore",
-        header: "Score",
+        header: "Comp Fit",
         cell: ({ row }) => {
           const score = row.original.qualityScore;
-
-          const tone =
-            score >= 70
-              ? "bg-emerald-100 text-emerald-700"
-              : score >= 60
-                ? "bg-amber-100 text-amber-700"
-                : "bg-red-100 text-red-700";
-
+          const tone = score >= 85 ? "bg-emerald-100 text-emerald-700" : score >= 70 ? "bg-blue-100 text-blue-700" : score >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
           return (
-            <span
-              className={`inline-flex min-w-9 justify-center rounded-full px-2 py-1 text-xs font-black ${tone}`}
-            >
-              {score}
-            </span>
+            <div className="min-w-[88px]">
+              <span title="Open Details to see why this comp received its score" className={`inline-flex min-w-9 justify-center rounded-full px-2 py-1 text-xs font-black ${tone}`}>{score}</span>
+              <div className="mt-1 text-[9px] font-bold text-slate-400">{row.original.marketCheckDetails?.listingConfidence || "—"} confidence</div>
+            </div>
           );
         },
       },
@@ -206,11 +209,7 @@ export function MarketCompsTable({
         id: "details",
         header: "",
         enableSorting: false,
-        cell: () => (
-          <span className="whitespace-nowrap text-xs font-black text-blue-700">
-            Details →
-          </span>
-        ),
+        cell: () => <span className="whitespace-nowrap text-xs font-black text-blue-700">Why? →</span>,
       },
     ],
     [assumptions, onToggleIncluded, targetMileage],
@@ -229,12 +228,8 @@ export function MarketCompsTable({
     return (
       <div className="flex min-h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center">
         <div>
-          <div className="text-sm font-extrabold text-slate-800">
-            No comparable vehicles loaded
-          </div>
-          <div className="mt-1 text-sm text-slate-500">
-            Run the evaluation to search for a usable comp set.
-          </div>
+          <div className="text-sm font-extrabold text-slate-800">No comparable vehicles loaded</div>
+          <div className="mt-1 text-sm text-slate-500">Run the evaluation to search for a usable comp set.</div>
         </div>
       </div>
     );
@@ -242,6 +237,10 @@ export function MarketCompsTable({
 
   return (
     <>
+      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+        <span className="font-black text-slate-900">Comp Fit</span> ranks how closely each vehicle matches the evaluation. Exact year is preferred first, then ±1 and ±2 years; farther model years remain available as fallback evidence. Listing confidence is shown separately.
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <table className="min-w-[1120px] w-full text-left text-sm">
           <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
@@ -250,31 +249,11 @@ export function MarketCompsTable({
                 {headerGroup.headers.map((header) => {
                   const sorted = header.column.getIsSorted();
                   const canSort = header.column.getCanSort();
-
                   return (
-                    <th
-                      key={header.id}
-                      className={`whitespace-nowrap px-3 py-3 ${
-                        canSort ? "cursor-pointer select-none" : ""
-                      }`}
-                      onClick={
-                        canSort
-                          ? header.column.getToggleSortingHandler()
-                          : undefined
-                      }
-                    >
+                    <th key={header.id} className={`whitespace-nowrap px-3 py-3 ${canSort ? "cursor-pointer select-none" : ""}`} onClick={canSort ? header.column.getToggleSortingHandler() : undefined}>
                       <div className="flex items-center gap-1">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                        <span className="text-slate-400">
-                          {sorted === "asc"
-                            ? "↑"
-                            : sorted === "desc"
-                              ? "↓"
-                              : ""}
-                        </span>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        <span className="text-slate-400">{sorted === "asc" ? "↑" : sorted === "desc" ? "↓" : ""}</span>
                       </div>
                     </th>
                   );
@@ -296,17 +275,9 @@ export function MarketCompsTable({
                     setSelectedComp(row.original);
                   }
                 }}
-                className={
-                  row.original.included
-                    ? "cursor-pointer transition hover:bg-blue-50/50 focus:bg-blue-50/50 focus:outline-none"
-                    : "cursor-pointer bg-slate-50/70 text-slate-400 transition hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
-                }
+                className={row.original.included ? "cursor-pointer transition hover:bg-blue-50/50 focus:bg-blue-50/50 focus:outline-none" : "cursor-pointer bg-slate-50/70 text-slate-400 transition hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"}
               >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-3 py-3">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
+                {row.getVisibleCells().map((cell) => <td key={cell.id} className="px-3 py-3">{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
               </tr>
             ))}
           </tbody>
@@ -314,54 +285,24 @@ export function MarketCompsTable({
       </div>
 
       {selectedComp ? (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm"
-          onClick={() => setSelectedComp(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Comparable vehicle details"
-            className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm" onClick={() => setSelectedComp(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Comparable vehicle details" className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
               <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
-                  MarketCheck Comparable
-                </div>
-                <h2 className="mt-1 text-xl font-black text-slate-950">
-                  {selectedComp.year} {selectedComp.model}
-                </h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">
-                  {selectedComp.trim || "Trim unavailable"}
-                </p>
+                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">MarketCheck Comparable</div>
+                <h2 className="mt-1 text-xl font-black text-slate-950">{selectedComp.year} {selectedComp.model}</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{selectedComp.trim || "Trim unavailable"}</p>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedComp(null)}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Close comparable details"
-              >
-                ✕
-              </button>
+              <button type="button" onClick={() => setSelectedComp(null)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-800" aria-label="Close comparable details">✕</button>
             </div>
 
             <div className="max-h-[calc(90vh-92px)] overflow-y-auto px-6 py-5">
-              {selectedComp.imageUrl ? (
-                <img
-                  src={selectedComp.imageUrl}
-                  alt={`${selectedComp.year} ${selectedComp.model}`}
-                  className="mb-5 h-56 w-full rounded-2xl bg-slate-100 object-cover"
-                />
-              ) : null}
+              <CompFitExplanation comp={selectedComp} targetMileage={targetMileage} />
+
+              {selectedComp.imageUrl ? <img src={selectedComp.imageUrl} alt={`${selectedComp.year} ${selectedComp.model}`} className="mb-5 h-56 w-full rounded-2xl bg-slate-100 object-cover" /> : null}
 
               <section>
-                <h3 className="text-sm font-black text-slate-950">
-                  Vehicle and listing
-                </h3>
-
+                <h3 className="text-sm font-black text-slate-950">Vehicle and listing</h3>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <DetailItem label="VIN" value={selectedComp.marketCheckDetails?.vin} />
                   <DetailItem label="Trim" value={selectedComp.trim} />
@@ -379,10 +320,7 @@ export function MarketCompsTable({
               </section>
 
               <section className="mt-6">
-                <h3 className="text-sm font-black text-slate-950">
-                  Seller and location
-                </h3>
-
+                <h3 className="text-sm font-black text-slate-950">Seller and location</h3>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <DetailItem label="Dealer" value={selectedComp.marketCheckDetails?.dealerName} />
                   <DetailItem label="Seller Type" value={selectedComp.marketCheckDetails?.sellerType} />
@@ -393,57 +331,28 @@ export function MarketCompsTable({
                   <DetailItem label="Distance" value={`${formatNumber(selectedComp.distance)} mi`} />
                   <DetailItem label="Search Region" value={selectedComp.region} />
                 </dl>
-
-                {selectedComp.marketCheckDetails?.listingUrl ? (
-                  <a
-                    href={selectedComp.marketCheckDetails.listingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-4 inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-white hover:bg-blue-800"
-                  >
-                    Open original listing ↗
-                  </a>
-                ) : null}
+                {selectedComp.marketCheckDetails?.listingUrl ? <a href={selectedComp.marketCheckDetails.listingUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-white hover:bg-blue-800">Open original listing ↗</a> : null}
               </section>
 
               <section className="mt-6">
-                <h3 className="text-sm font-black text-slate-950">
-                  Market and Lot Logic
-                </h3>
-
+                <h3 className="text-sm font-black text-slate-950">Market and Lot Logic</h3>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <DetailItem label="Dealer Days" value={selectedComp.dealerDays} />
                   <DetailItem label="Market Days" value={selectedComp.marketDays} />
                   <DetailItem label="Listing Date" value={selectedComp.marketCheckDetails?.listingDate} />
                   <DetailItem label="Last Seen" value={selectedComp.marketCheckDetails?.lastSeenDate} />
-                  <DetailItem label="Quality Score" value={selectedComp.qualityScore} />
+                  <DetailItem label="Comp Fit" value={`${selectedComp.qualityScore} / 100`} />
+                  <DetailItem label="Listing Confidence" value={selectedComp.marketCheckDetails?.listingConfidence} />
                   <DetailItem label="Included" value={selectedComp.included} />
-                  <DetailItem
-                    label="Adjusted Value"
-                    value={formatMoney(
-                      calculateAdjustedCompPrice({
-                        comp: selectedComp,
-                        targetMileage,
-                        assumptions,
-                      }),
-                    )}
-                  />
+                  <DetailItem label="Adjusted Value" value={formatMoney(calculateAdjustedCompPrice({ comp: selectedComp, targetMileage, assumptions }))} />
                   <DetailItem label="Target Mileage" value={`${formatNumber(targetMileage)} mi`} />
                 </dl>
               </section>
 
               {selectedComp.marketCheckDetails?.raw ? (
                 <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50">
-                  <summary className="cursor-pointer px-4 py-3 text-sm font-black text-slate-700">
-                    View raw MarketCheck response
-                  </summary>
-                  <pre className="max-h-96 overflow-auto border-t border-slate-200 p-4 text-xs leading-5 text-slate-600">
-                    {JSON.stringify(
-                      selectedComp.marketCheckDetails.raw,
-                      null,
-                      2,
-                    )}
-                  </pre>
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-black text-slate-700">View raw MarketCheck response</summary>
+                  <pre className="max-h-96 overflow-auto border-t border-slate-200 p-4 text-xs leading-5 text-slate-600">{JSON.stringify(selectedComp.marketCheckDetails.raw, null, 2)}</pre>
                 </details>
               ) : null}
             </div>
