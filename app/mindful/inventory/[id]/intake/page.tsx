@@ -9,6 +9,7 @@ import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import { getMechanicalInspectorOptions } from "@/lib/mindful-inventory/mechanical-assignment";
 import { getInventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview-intake";
+import { getInventoryPerformerOptions } from "@/lib/mindful-inventory/performers";
 import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
 
 export default async function InventoryMechanicalInspectionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,10 +21,11 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
   const vehicle = dashboard.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
 
-  const [inspectionData, overview, inspectorOptions] = await Promise.all([
+  const [inspectionData, overview, inspectorOptions, performerOptions] = await Promise.all([
     getInventoryIntakeInspectionData(access.supabase, vehicle.id),
     getInventoryOverviewIntakeData(access.supabase, access.company.companyId, vehicle.id),
     getMechanicalInspectorOptions(access.supabase, access.company.companyId),
+    getInventoryPerformerOptions(access.supabase, access.company.companyId),
   ]);
 
   const inspection = inspectionData.mechanicalInspection;
@@ -34,6 +36,9 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
   const submittedFindings = inspectionData.findings.filter((finding) => finding.status === "open" || finding.mechanicalOwnerReviewStatus === "dismissed");
   const pendingFindingReviews = submittedFindings.filter((finding) => finding.status === "open" && (!finding.mechanicalOwnerReviewStatus || finding.mechanicalOwnerReviewStatus === "clarification_requested")).length;
   const pendingUpgradeReviews = overview.upgrades.filter((upgrade) => upgrade.status === "proposed" && upgrade.mechanicalValidationStatus === "pending").length;
+  const ownerReviewPartners = performerOptions
+    .filter((option) => option.type === "partner")
+    .map((option) => ({ id: option.id, displayName: option.displayName, secondaryLabel: option.secondaryLabel }));
 
   const inspectorAssignment = (
     <MechanicalInspectorAssignment
@@ -54,8 +59,13 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">Validate the mechanic&apos;s findings</h2>
-            <p className="mt-1 text-sm text-slate-500">Accept, request clarification, or dismiss each finding before accepting the inspection. Accepting the diagnosis does not assign the resulting repair to the inspector.</p>
-            <MechanicalOwnerFindingReview vehicleId={vehicle.id} findings={submittedFindings} />
+            <p className="mt-1 text-sm text-slate-500">Accept, request clarification, or dismiss each finding before accepting the inspection. When the inspector cannot perform accepted work, choose the intended alternate partner here so the routing carries forward into planning.</p>
+            <MechanicalOwnerFindingReview
+              vehicleId={vehicle.id}
+              findings={submittedFindings}
+              partnerOptions={ownerReviewPartners}
+              inspectorPartnerId={inspection?.performedByPartnerId || null}
+            />
           </section>
           <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />
           {inspectorAssignment}
