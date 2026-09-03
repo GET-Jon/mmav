@@ -37,6 +37,17 @@ export type MarketComp = {
     cylinders?: number | null;
     listingDate?: string | null;
     lastSeenDate?: string | null;
+    targetYear?: number | null;
+    listingConfidence?: "Low" | "Medium" | "High";
+    compFitFactors?: {
+      yearDelta?: number | null;
+      yearPreference?: string | null;
+      yearPenalty?: number | null;
+      mileageDelta?: number | null;
+      distanceMiles?: number | null;
+      trimAvailable?: boolean;
+      originalScore?: number | null;
+    };
     raw?: Record<string, unknown>;
   };
 };
