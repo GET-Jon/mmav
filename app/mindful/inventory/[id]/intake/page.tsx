@@ -58,8 +58,8 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
         <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>
-            <h2 className="mt-1 text-xl font-black text-slate-950">Validate the mechanic&apos;s findings</h2>
-            <p className="mt-1 text-sm text-slate-500">Accept, request clarification, or dismiss each finding before accepting the inspection. When the inspector cannot perform accepted work, choose the intended alternate partner here so the routing carries forward into planning.</p>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Review the mechanic&apos;s findings</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">Resolve the open findings below. If the inspector cannot perform the work, choose who should handle it before moving on.</p>
             <MechanicalOwnerFindingReview
               vehicleId={vehicle.id}
               findings={submittedFindings}
