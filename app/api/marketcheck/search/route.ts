@@ -16,13 +16,8 @@ function canonicalizeMercedesSearch(body: Record<string, unknown>) {
     normalizedMake === "mercedes benz" ||
     normalizedMake === "mercedesbenz";
 
-  if (!isMercedes) {
-    return body;
-  }
+  if (!isMercedes) return body;
 
-  // Normalize only the manufacturer name here. Keep the evaluator's model
-  // identity intact so the strict search layer can apply its existing model
-  // aliases without bouncing C-Class -> C300 -> C-Class.
   return {
     ...body,
     make: "Mercedes-Benz",
@@ -42,6 +37,19 @@ type RankedComp = {
   [key: string]: unknown;
 };
 
+type TargetIdentity = {
+  year: number;
+  make: string;
+  model: string;
+  trim: string;
+  fuelType: string;
+  mileage: number;
+};
+
+function hasValue(value: unknown) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
 function listingConfidence(comp: RankedComp) {
   const details = comp.marketCheckDetails || {};
   const usefulFields = [
@@ -56,7 +64,7 @@ function listingConfidence(comp: RankedComp) {
     details.state,
     details.listingDate,
   ];
-  const present = usefulFields.filter((value) => value !== null && value !== undefined && String(value).trim() !== "").length;
+  const present = usefulFields.filter(hasValue).length;
   if (present >= 8) return "High";
   if (present >= 5) return "Medium";
   return "Low";
@@ -69,21 +77,16 @@ function yearPenalty(yearDelta: number) {
   return Math.min(36, 24 + Math.max(0, yearDelta - 3) * 3);
 }
 
-function rerankByCompFit(payload: Record<string, unknown>, targetYear: number, targetMileage: number) {
-  if (!Array.isArray(payload.comps) || !targetYear) return payload;
+function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentity) {
+  if (!Array.isArray(payload.comps) || !target.year) return payload;
 
   const original = payload.comps as RankedComp[];
   const originalIncludedCount = original.filter((comp) => comp.included === true).length;
 
   const ranked = original.map((comp) => {
     const compYear = Number(comp.year || 0);
-    const delta = compYear && targetYear ? Math.abs(compYear - targetYear) : 99;
+    const delta = compYear && target.year ? Math.abs(compYear - target.year) : 99;
     const currentScore = Number(comp.qualityScore || 40);
-
-    // The strict search historically used a flat 20-point penalty for every
-    // non-exact year. Replace that flat penalty with a graduated model-year
-    // preference: exact, +/-1, +/-2, then a materially larger penalty beyond
-    // two years. This remains a preference rather than a hard exclusion.
     const previousYearPenalty = delta === 0 ? 0 : 20;
     const fitScore = Math.max(
       30,
@@ -91,7 +94,7 @@ function rerankByCompFit(payload: Record<string, unknown>, targetYear: number, t
     );
 
     const mileage = Number(comp.mileage || 0);
-    const mileageDelta = targetMileage && mileage ? Math.abs(mileage - targetMileage) : null;
+    const mileageDelta = target.mileage && mileage ? Math.abs(mileage - target.mileage) : null;
     const details = comp.marketCheckDetails || {};
 
     return {
@@ -99,7 +102,12 @@ function rerankByCompFit(payload: Record<string, unknown>, targetYear: number, t
       qualityScore: fitScore,
       marketCheckDetails: {
         ...details,
-        targetYear,
+        targetYear: target.year,
+        targetMake: target.make,
+        targetModel: target.model,
+        targetTrim: target.trim,
+        targetFuelType: target.fuelType,
+        targetMileage: target.mileage,
         listingConfidence: listingConfidence(comp),
         compFitFactors: {
           yearDelta: delta === 99 ? null : delta,
@@ -122,8 +130,8 @@ function rerankByCompFit(payload: Record<string, unknown>, targetYear: number, t
   });
 
   ranked.sort((a, b) => {
-    const aDelta = Math.abs(Number(a.year || 0) - targetYear);
-    const bDelta = Math.abs(Number(b.year || 0) - targetYear);
+    const aDelta = Math.abs(Number(a.year || 0) - target.year);
+    const bDelta = Math.abs(Number(b.year || 0) - target.year);
     const aPreferred = aDelta <= 2 ? 0 : 1;
     const bPreferred = bDelta <= 2 ? 0 : 1;
 
@@ -135,9 +143,6 @@ function rerankByCompFit(payload: Record<string, unknown>, targetYear: number, t
     return Number(a.distance || 0) - Number(b.distance || 0);
   });
 
-  // Preserve the strict search's decision about how many comps can be trusted,
-  // but make sure those automatic inclusions are the best-ranked fits after the
-  // +/-2-year preference is applied.
   const withInclusions = ranked.map((comp, index) => ({
     ...comp,
     included: originalIncludedCount > 0 ? index < originalIncludedCount : false,
@@ -160,9 +165,14 @@ export async function POST(request: Request) {
   if (!response.ok) return response;
 
   const payload = (await response.json()) as Record<string, unknown>;
-  const targetYear = Number(normalizedBody.year || 0);
-  const targetMileage = Number(normalizedBody.targetMileage || 0);
-  const rankedPayload = rerankByCompFit(payload, targetYear, targetMileage);
+  const rankedPayload = rerankByCompFit(payload, {
+    year: Number(normalizedBody.year || 0),
+    make: String(normalizedBody.make || "").trim(),
+    model: String(normalizedBody.model || "").trim(),
+    trim: String(normalizedBody.trim || "").trim(),
+    fuelType: String(normalizedBody.fuelType || "").trim(),
+    mileage: Number(normalizedBody.targetMileage || 0),
+  });
 
   return Response.json(rankedPayload, { status: response.status });
 }
