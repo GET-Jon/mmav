@@ -38,6 +38,11 @@ export type MarketComp = {
     listingDate?: string | null;
     lastSeenDate?: string | null;
     targetYear?: number | null;
+    targetMake?: string | null;
+    targetModel?: string | null;
+    targetTrim?: string | null;
+    targetFuelType?: string | null;
+    targetMileage?: number | null;
     listingConfidence?: "Low" | "Medium" | "High";
     compFitFactors?: {
       yearDelta?: number | null;
