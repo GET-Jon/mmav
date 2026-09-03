@@ -21,7 +21,9 @@ function money(value: number | null) {
 }
 
 function sourceLabel(source: string) {
-  return source.toLowerCase() === "ai" ? "AI finding" : source.replaceAll("_", " ");
+  return source.toLowerCase() === "ai"
+    ? "AI finding"
+    : source.replaceAll("_", " ");
 }
 
 export function MechanicalOwnerFindingReview({
@@ -39,19 +41,30 @@ export function MechanicalOwnerFindingReview({
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      findings.map((finding) => [finding.id, finding.mechanicalOwnerReviewNotes || ""]),
+      findings.map((finding) => [
+        finding.id,
+        finding.mechanicalOwnerReviewNotes || "",
+      ]),
     ),
   );
-  const [alternatePartners, setAlternatePartners] = useState<Record<string, string>>(() =>
+  const [alternatePartners, setAlternatePartners] = useState<
+    Record<string, string>
+  >(() =>
     Object.fromEntries(
-      findings.map((finding) => [finding.id, finding.ownerPreferredPartnerId || ""]),
+      findings.map((finding) => [
+        finding.id,
+        finding.ownerPreferredPartnerId || "",
+      ]),
     ),
   );
   const [openNotes, setOpenNotes] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
       findings.map((finding) => [
         finding.id,
-        Boolean(finding.mechanicalOwnerReviewStatus === "clarification_requested" || finding.mechanicalOwnerReviewNotes),
+        Boolean(
+          finding.mechanicalOwnerReviewStatus === "clarification_requested" ||
+            finding.mechanicalOwnerReviewNotes,
+        ),
       ]),
     ),
   );
@@ -68,7 +81,9 @@ export function MechanicalOwnerFindingReview({
 
     if (decision === "clarification" && !(notes[finding.id] || "").trim()) {
       setOpenNotes((current) => ({ ...current, [finding.id]: true }));
-      setMessage("Add the question or clarification you want the inspector to answer.");
+      setMessage(
+        "Add the question or clarification you want the inspector to answer.",
+      );
       return;
     }
 
@@ -77,7 +92,9 @@ export function MechanicalOwnerFindingReview({
       needsDifferentPartner &&
       !(alternatePartners[finding.id] || "").trim()
     ) {
-      setMessage(`Choose who should handle ${finding.title} before routing the work.`);
+      setMessage(
+        `Choose who should handle ${finding.title} before routing the work.`,
+      );
       return;
     }
 
@@ -118,7 +135,9 @@ export function MechanicalOwnerFindingReview({
       router.refresh();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Finding review could not be saved.",
+        error instanceof Error
+          ? error.message
+          : "Finding review could not be saved.",
       );
     } finally {
       setWorkingId(null);
@@ -149,7 +168,13 @@ export function MechanicalOwnerFindingReview({
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-100 py-3 text-xs font-semibold text-slate-600">
         <span>
           <span className="text-slate-400">Inspector can perform:</span>{" "}
-          <span className={needsDifferentPartner ? "font-black text-amber-800" : "font-black text-slate-800"}>
+          <span
+            className={
+              needsDifferentPartner
+                ? "font-black text-amber-800"
+                : "font-black text-slate-800"
+            }
+          >
             {finding.mechanicalCanPerform === null
               ? "Unknown"
               : finding.mechanicalCanPerform
@@ -227,6 +252,7 @@ export function MechanicalOwnerFindingReview({
       finding.mechanicalCanPerform === false &&
       finding.mechanicalValidationStatus !== "not_found";
     const noteOpen = Boolean(openNotes[finding.id]);
+    const selectedAlternatePartner = alternatePartners[finding.id] || "";
 
     return (
       <article
@@ -235,7 +261,13 @@ export function MechanicalOwnerFindingReview({
           clarification ? "border-amber-300" : "border-slate-200"
         }`}
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div
+          className={`grid gap-4 ${
+            needsDifferentPartner
+              ? "lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start"
+              : "sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+          }`}
+        >
           <div className="min-w-0">
             <h4 className="text-base font-black leading-6 text-slate-950">
               {finding.title}
@@ -253,15 +285,85 @@ export function MechanicalOwnerFindingReview({
             </div>
           </div>
 
-          <span
-            className={`shrink-0 self-start rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.06em] ${
-              clarification
-                ? "bg-amber-100 text-amber-800"
-                : "bg-blue-50 text-blue-700"
-            }`}
-          >
-            {clarification ? "Clarification pending" : "Needs owner decision"}
-          </span>
+          {needsDifferentPartner ? (
+            <div
+              className={`rounded-xl border p-3 ${
+                selectedAlternatePartner
+                  ? "border-emerald-200 bg-emerald-50/70"
+                  : "border-amber-200 bg-amber-50/70"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div
+                  className={`text-[10px] font-black uppercase tracking-[0.07em] ${
+                    selectedAlternatePartner
+                      ? "text-emerald-700"
+                      : "text-amber-800"
+                  }`}
+                >
+                  {selectedAlternatePartner
+                    ? "Ready to route"
+                    : "Alternate partner required"}
+                </div>
+                {!selectedAlternatePartner ? (
+                  <span className="text-[10px] font-bold text-amber-700">
+                    Required
+                  </span>
+                ) : null}
+              </div>
+              <select
+                value={selectedAlternatePartner}
+                onChange={(event) =>
+                  setAlternatePartners((current) => ({
+                    ...current,
+                    [finding.id]: event.target.value,
+                  }))
+                }
+                className={`mt-2 w-full rounded-lg border bg-white px-3 py-2 text-sm font-bold text-slate-800 ${
+                  selectedAlternatePartner
+                    ? "border-emerald-300"
+                    : "border-amber-300"
+                }`}
+              >
+                <option value="">Choose alternate partner</option>
+                {availablePartners.map((partner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName}
+                    {partner.secondaryLabel
+                      ? ` · ${partner.secondaryLabel}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+              <div
+                className={`mt-1.5 text-[10px] font-semibold leading-4 ${
+                  selectedAlternatePartner
+                    ? "text-emerald-700"
+                    : "text-amber-800"
+                }`}
+              >
+                {selectedAlternatePartner
+                  ? "This partner will carry into the Work Plan and Active Work."
+                  : "The inspector cannot perform this work."}
+              </div>
+              {!availablePartners.length ? (
+                <div className="mt-2 text-xs font-bold text-red-700">
+                  No other active partners are available. Add or enable a partner
+                  in Admin → Partners before routing this work.
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <span
+              className={`shrink-0 self-start justify-self-start rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.06em] sm:justify-self-end ${
+                clarification
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-blue-50 text-blue-700"
+              }`}
+            >
+              {clarification ? "Clarification pending" : "Needs owner decision"}
+            </span>
+          )}
         </div>
 
         {finding.mechanicalValidationNotes ? (
@@ -273,46 +375,6 @@ export function MechanicalOwnerFindingReview({
 
         {renderFacts(finding)}
         {renderParts(finding)}
-
-        {needsDifferentPartner ? (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0">
-                <div className="text-xs font-black text-amber-950">
-                  Assign alternate partner
-                </div>
-                <div className="mt-0.5 text-[11px] font-semibold text-amber-800">
-                  The inspector cannot perform this work. Your selection carries into the Work Plan and Active Work.
-                </div>
-              </div>
-
-              <select
-                value={alternatePartners[finding.id] || ""}
-                onChange={(event) =>
-                  setAlternatePartners((current) => ({
-                    ...current,
-                    [finding.id]: event.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 lg:w-[320px]"
-              >
-                <option value="">Choose alternate partner</option>
-                {availablePartners.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.displayName}
-                    {partner.secondaryLabel ? ` · ${partner.secondaryLabel}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {!availablePartners.length ? (
-              <div className="mt-2 text-xs font-bold text-red-700">
-                No other active partners are available. Add or enable a partner in Admin → Partners before routing this work.
-              </div>
-            ) : null}
-          </div>
-        ) : null}
 
         {clarification && finding.mechanicalOwnerReviewNotes ? (
           <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
@@ -360,7 +422,7 @@ export function MechanicalOwnerFindingReview({
             <button
               disabled={
                 workingId === finding.id ||
-                (needsDifferentPartner && !(alternatePartners[finding.id] || ""))
+                (needsDifferentPartner && !selectedAlternatePartner)
               }
               onClick={() => void review(finding, "accept")}
               className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
@@ -432,7 +494,11 @@ export function MechanicalOwnerFindingReview({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-start gap-2">
-              <span className={`mt-0.5 font-black ${accepted ? "text-emerald-600" : "text-slate-400"}`}>
+              <span
+                className={`mt-0.5 font-black ${
+                  accepted ? "text-emerald-600" : "text-slate-400"
+                }`}
+              >
                 {accepted ? "✓" : "—"}
               </span>
               <div className="min-w-0">
@@ -467,7 +533,9 @@ export function MechanicalOwnerFindingReview({
             {renderParts(finding)}
             {accepted && needsDifferentPartner && selectedPartner ? (
               <div className="mt-3 text-xs font-semibold text-slate-600">
-                <span className="font-black text-slate-800">Preferred partner:</span>{" "}
+                <span className="font-black text-slate-800">
+                  Preferred partner:
+                </span>{" "}
                 {selectedPartner.displayName}
                 {selectedPartner.secondaryLabel
                   ? ` · ${selectedPartner.secondaryLabel}`
@@ -492,7 +560,9 @@ export function MechanicalOwnerFindingReview({
         <div>
           <div className="text-sm font-black text-slate-900">
             {unresolvedFindings.length
-              ? `${unresolvedFindings.length} decision${unresolvedFindings.length === 1 ? "" : "s"} remaining`
+              ? `${unresolvedFindings.length} decision${
+                  unresolvedFindings.length === 1 ? "" : "s"
+                } remaining`
               : "Owner review complete"}
           </div>
           <div className="mt-1 text-xs font-semibold text-slate-500">
@@ -506,7 +576,9 @@ export function MechanicalOwnerFindingReview({
               : "bg-emerald-100 text-emerald-700"
           }`}
         >
-          {unresolvedFindings.length ? "Owner review required" : "Ready to continue"}
+          {unresolvedFindings.length
+            ? "Owner review required"
+            : "Ready to continue"}
         </span>
       </div>
 
@@ -536,7 +608,9 @@ export function MechanicalOwnerFindingReview({
               {resolvedFindings.length}
             </span>
           </div>
-          <div className="space-y-2">{resolvedFindings.map(renderResolvedFinding)}</div>
+          <div className="space-y-2">
+            {resolvedFindings.map(renderResolvedFinding)}
+          </div>
         </section>
       ) : null}
 
