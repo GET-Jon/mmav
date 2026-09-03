@@ -105,8 +105,8 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
         <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
           <Link href="/" className={navClass(active === "evaluator")}>Evaluator</Link>
           <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
-          <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link>
-          <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link>
+          {isAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
+          {isAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
           <Link href="/assumptions" className={navClass(active === "rules")}>Rules</Link>
         </nav>
 
