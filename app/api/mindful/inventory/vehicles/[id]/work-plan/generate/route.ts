@@ -127,6 +127,12 @@ export async function POST(
         })),
     });
 
+    const preferredPartnerByFindingId = new Map(
+      intakeInspection.findings
+        .filter((finding) => finding.ownerPreferredPartnerId)
+        .map((finding) => [finding.id, finding.ownerPreferredPartnerId as string]),
+    );
+
     let carPlanId = existingPlan.carPlanId;
     if (!carPlanId) {
       const { data: plan, error: planError } = await access.supabase
@@ -161,6 +167,10 @@ export async function POST(
       for (let index = 0; index < preliminary.items.length; index += 1) {
         const item = preliminary.items[index];
         const primaryFindingId = item.findingIds[0] || null;
+        const preferredPartnerIds = Array.from(new Set(
+          item.findingIds.map((findingId) => preferredPartnerByFindingId.get(findingId)).filter(Boolean) as string[],
+        ));
+        const suggestedPartnerId = preferredPartnerIds.length === 1 ? preferredPartnerIds[0] : null;
 
         const { data: insertedItem, error: itemError } = await access.supabase
           .from("mindful_inventory_plan_items")
@@ -181,6 +191,7 @@ export async function POST(
             estimated_duration_hours: item.estimatedElapsedHours,
             estimated_labor_hours: item.estimatedLaborHours,
             estimated_elapsed_hours: item.estimatedElapsedHours,
+            suggested_partner_id: suggestedPartnerId,
             sequence_order: (index + 1) * 10,
             confidence: item.confidence,
             assumptions: item.assumptions,
