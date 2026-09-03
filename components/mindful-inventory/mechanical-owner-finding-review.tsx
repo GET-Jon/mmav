@@ -5,20 +5,42 @@ import { useRouter } from "next/navigation";
 
 import type { InventoryFindingView } from "@/lib/mindful-inventory/intake-inspection";
 
+export type OwnerReviewPartnerOption = {
+  id: string;
+  displayName: string;
+  secondaryLabel: string | null;
+};
+
 function money(value: number | null) {
   if (value === null) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 }
 
-export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleId: string; findings: InventoryFindingView[] }) {
+export function MechanicalOwnerFindingReview({
+  vehicleId,
+  findings,
+  partnerOptions,
+  inspectorPartnerId,
+}: {
+  vehicleId: string;
+  findings: InventoryFindingView[];
+  partnerOptions: OwnerReviewPartnerOption[];
+  inspectorPartnerId: string | null;
+}) {
   const router = useRouter();
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>(() => Object.fromEntries(findings.map((finding) => [finding.id, finding.mechanicalOwnerReviewNotes || ""])));
+  const [alternatePartners, setAlternatePartners] = useState<Record<string, string>>(() => Object.fromEntries(findings.map((finding) => [finding.id, finding.ownerPreferredPartnerId || ""])));
   const [message, setMessage] = useState("");
 
   async function review(finding: InventoryFindingView, decision: "accept" | "clarification" | "dismiss") {
+    const needsDifferentPartner = finding.mechanicalCanPerform === false && finding.mechanicalValidationStatus !== "not_found";
     if (decision === "clarification" && !(notes[finding.id] || "").trim()) {
       setMessage("Add the question or clarification you want the inspector to answer.");
+      return;
+    }
+    if (decision === "accept" && needsDifferentPartner && !(alternatePartners[finding.id] || "").trim()) {
+      setMessage(`Choose who should handle ${finding.title} before accepting the finding.`);
       return;
     }
     setWorkingId(finding.id);
@@ -27,7 +49,12 @@ export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleI
       const response = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/inspection-finding-review`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ findingId: finding.id, decision, notes: notes[finding.id] || "" }),
+        body: JSON.stringify({
+          findingId: finding.id,
+          decision,
+          notes: notes[finding.id] || "",
+          alternatePartnerId: needsDifferentPartner ? alternatePartners[finding.id] || null : null,
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Finding review could not be saved.");
@@ -40,6 +67,7 @@ export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleI
     }
   }
 
+  const availablePartners = partnerOptions.filter((partner) => partner.id !== inspectorPartnerId);
   const pending = findings.filter((finding) => !finding.mechanicalOwnerReviewStatus || finding.mechanicalOwnerReviewStatus === "clarification_requested").length;
 
   return <div className="mt-4 space-y-3">
@@ -51,6 +79,7 @@ export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleI
       const dismissed = finding.mechanicalOwnerReviewStatus === "dismissed";
       const clarification = finding.mechanicalOwnerReviewStatus === "clarification_requested";
       const needsDifferentPartner = finding.mechanicalCanPerform === false && finding.mechanicalValidationStatus !== "not_found";
+      const selectedPartner = partnerOptions.find((partner) => partner.id === (finding.ownerPreferredPartnerId || alternatePartners[finding.id]));
       return <div key={finding.id} className={`rounded-xl border px-4 py-4 ${accepted ? "border-emerald-200 bg-emerald-50/40" : dismissed ? "border-slate-200 bg-slate-50" : clarification ? "border-amber-300 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -73,16 +102,26 @@ export function MechanicalOwnerFindingReview({ vehicleId, findings }: { vehicleI
             <div><div className="text-[10px] font-black uppercase text-slate-400">Recommended action</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalRecommendedAction || "—"}</div></div>
             <div><div className="text-[10px] font-black uppercase text-slate-400">Labor</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalLaborHours === null ? "—" : `${finding.mechanicalLaborHours} hr`}</div></div>
             <div><div className="text-[10px] font-black uppercase text-slate-400">Proposed labor price</div><div className="mt-1 font-semibold text-slate-800">{money(finding.mechanicalProposedLaborPrice)}</div></div>
-            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspector can perform</div><div className={`mt-1 font-black ${needsDifferentPartner ? "text-amber-800" : "text-slate-800"}`}>{finding.mechanicalCanPerform === null ? "—" : finding.mechanicalCanPerform ? "Yes" : "No — Owner assigns another partner in Work Plan"}</div></div>
+            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspector can perform</div><div className={`mt-1 font-black ${needsDifferentPartner ? "text-amber-800" : "text-slate-800"}`}>{finding.mechanicalCanPerform === null ? "—" : finding.mechanicalCanPerform ? "Yes" : "No"}</div></div>
           </div>
-          {needsDifferentPartner ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">If you accept this finding, it will continue into planning without assigning the repair to this inspector. The Owner will choose a qualified partner when the resulting work is set up.</div> : null}
+          {needsDifferentPartner ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-amber-700">Route accepted work</div>
+            {accepted && selectedPartner ? <div className="mt-1 text-sm font-black text-amber-950">Preferred partner: {selectedPartner.displayName}{selectedPartner.secondaryLabel ? ` · ${selectedPartner.secondaryLabel}` : ""}</div> : <>
+              <div className="mt-1 text-xs font-semibold text-amber-900">The inspector cannot perform this repair. Choose the partner who should receive it if you accept the finding. This choice carries into the Work Plan and Active Work.</div>
+              <select value={alternatePartners[finding.id] || ""} onChange={(event) => setAlternatePartners((current) => ({ ...current, [finding.id]: event.target.value }))} className="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-slate-800">
+                <option value="">Choose alternate partner</option>
+                {availablePartners.map((partner) => <option key={partner.id} value={partner.id}>{partner.displayName}{partner.secondaryLabel ? ` · ${partner.secondaryLabel}` : ""}</option>)}
+              </select>
+              {!availablePartners.length ? <div className="mt-2 text-xs font-bold text-red-700">No other active partners are available. Add or enable a partner in Admin → Partners before accepting this finding.</div> : null}
+            </>}
+          </div> : null}
           {finding.mechanicalSuggestedParts.length ? <div className="mt-3 border-t border-slate-200 pt-3"><div className="text-[10px] font-black uppercase text-slate-400">Suggested parts</div><div className="mt-2 space-y-1.5">{finding.mechanicalSuggestedParts.map((part, index) => <div key={`${part.description}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700"><span className="font-black">{part.quantity}× {part.description}</span>{part.partNumber ? ` · Part # ${part.partNumber}` : ""}{part.notes ? ` · ${part.notes}` : ""}</div>)}</div></div> : finding.mechanicalPartsRequired ? <div className="mt-3 border-t border-slate-200 pt-3"><div className="text-[10px] font-black uppercase text-slate-400">Parts needed</div><div className="mt-1 font-semibold text-slate-800">{finding.mechanicalPartsRequired}</div></div> : null}
         </div> : null}
 
         {!accepted && !dismissed ? <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="flex-1 text-[10px] font-black uppercase text-slate-400">Owner note / question<input value={notes[finding.id] || ""} onChange={(event) => setNotes((current) => ({ ...current, [finding.id]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-800" placeholder="Optional for accept/dismiss; required when requesting clarification" /></label>
           <div className="flex flex-wrap gap-2">
-            <button disabled={workingId === finding.id} onClick={() => void review(finding, "accept")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Accept Finding</button>
+            <button disabled={workingId === finding.id || (needsDifferentPartner && !(alternatePartners[finding.id] || ""))} onClick={() => void review(finding, "accept")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Accept Finding</button>
             <button disabled={workingId === finding.id || !(notes[finding.id] || "").trim()} onClick={() => void review(finding, "clarification")} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-900 disabled:opacity-40">Request Clarification</button>
             <button disabled={workingId === finding.id} onClick={() => void review(finding, "dismiss")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40">Dismiss</button>
           </div>
