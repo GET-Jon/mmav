@@ -1,0 +1,109 @@
+name: One-time expand search fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/one-time-expand-search-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Keep comp expansion available after successful pulls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('components/evaluation/evaluation-workspace.tsx')
+          text = path.read_text()
+
+          old = '''                  {marketCheckSearchMeta &&
+                  marketCheckSearchMeta.loadedCount === 0 &&
+                  marketCheckSearchMeta.searchStage !== "metro" &&
+                  !marketCheckLoading ? (
+                    marketCheckSearchMeta.searchStage === "expanded" ||
+                    !activeAssumptions.regionalMarkets
+                      .filter((market) => market.enabled)
+                      .some(
+                        (market) =>
+                          !marketCheckSearchMeta.searchedZips.includes(
+                            market.zip,
+                          ),
+                      ) ? (
+                      <button
+                        type="button"
+                        onClick={searchMajorMetropolitanAreas}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
+                      >
+                        Major Metropolitan Areas
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={expandMarketCheckSearch}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
+                      >
+                        Expand Search
+                      </button>
+                    )
+                  ) : null}
+'''
+
+          new = '''                  {marketCheckSearchMeta && !marketCheckLoading ? (
+                    activeAssumptions.regionalMarkets
+                      .filter((market) => market.enabled)
+                      .some(
+                        (market) =>
+                          !marketCheckSearchMeta.searchedZips.includes(
+                            market.zip,
+                          ),
+                      ) ? (
+                      <button
+                        type="button"
+                        onClick={expandMarketCheckSearch}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
+                      >
+                        Expand Search
+                      </button>
+                    ) : ["90012", "33130", "30303"].some(
+                        (zip) =>
+                          !marketCheckSearchMeta.searchedZips.includes(zip),
+                      ) ? (
+                      <button
+                        type="button"
+                        onClick={searchMajorMetropolitanAreas}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
+                      >
+                        Major Metropolitan Areas
+                      </button>
+                    ) : null
+                  ) : null}
+'''
+
+          if old not in text:
+              raise SystemExit('Expected comp expansion block was not found; refusing to patch.')
+
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Commit fix and remove one-time workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-time-expand-search-fix.yml
+          git add components/evaluation/evaluation-workspace.tsx
+          git commit -m "Keep Expand Search available for all comp pulls"
+          git push origin HEAD:main
+          git push origin HEAD:v15-inventory-workflow
