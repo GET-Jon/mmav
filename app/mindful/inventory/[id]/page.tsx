@@ -5,6 +5,7 @@ import { InventoryOverviewIntake } from "@/components/mindful-inventory/inventor
 import type { InventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
+import { getMechanicalInspectorOptions } from "@/lib/mindful-inventory/mechanical-assignment";
 import { getInventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview-intake";
 import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
 import type { InventoryVehicleView } from "@/lib/mindful-inventory/types";
@@ -98,9 +99,10 @@ export default async function MindfulInventoryVehiclePage({ params }: { params: 
   const vehicle = data.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
 
-  const [overview, rawIntakeData] = await Promise.all([
+  const [overview, rawIntakeData, inspectorOptions] = await Promise.all([
     getInventoryOverviewIntakeData(access.supabase, access.company.companyId, vehicle.id),
     getInventoryIntakeInspectionData(access.supabase, vehicle.id),
+    getMechanicalInspectorOptions(access.supabase, access.company.companyId),
   ]);
 
   const intakeData = withSuggestedKeys(rawIntakeData, vehicle);
@@ -111,6 +113,8 @@ export default async function MindfulInventoryVehiclePage({ params }: { params: 
       <InventoryIntakeGuideV3
         vehicleId={vehicle.id}
         initialConfirmations={rawIntakeData.intake?.fieldConfirmations || {}}
+        inspectorOptions={inspectorOptions}
+        inspection={rawIntakeData.mechanicalInspection}
       />
     </>
   );
