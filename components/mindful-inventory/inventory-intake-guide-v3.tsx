@@ -67,10 +67,11 @@ export function InventoryIntakeGuideV3({ vehicleId, initialConfirmations, inspec
       <InventoryIntakeGuideV2 vehicleId={vehicleId} initialConfirmations={initialConfirmations} />
     </div>
 
-    {pickerOpen ? <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 p-4 pt-[8vh] backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPickerOpen(false); }}>
-      <div className="w-full max-w-[1500px]">
-        <div className="mb-2 flex justify-end">
-          <button type="button" onClick={() => setPickerOpen(false)} className="rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm">Close</button>
+    {pickerOpen ? <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-[8vh] backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPickerOpen(false); }}>
+      <div className="w-full max-w-[980px] rounded-3xl border border-white/60 bg-slate-100 p-3 shadow-2xl sm:p-4">
+        <div className="mb-3 flex items-center justify-between px-1">
+          <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">Mechanical inspection</div>
+          <button type="button" onClick={() => setPickerOpen(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm">Close</button>
         </div>
         <MechanicalInspectorAssignment
           vehicleId={vehicleId}
@@ -78,7 +79,7 @@ export function InventoryIntakeGuideV3({ vehicleId, initialConfirmations, inspec
           inspection={inspection}
           afterAssignPath={`/mindful/inventory/${vehicleId}/intake`}
         />
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-black text-slate-950">Owner mechanical inspection</div>
             <div className="mt-0.5 text-xs font-semibold text-slate-500">Use only when the owner will personally perform and validate the inspection.</div>
