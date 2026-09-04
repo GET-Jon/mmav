@@ -155,3 +155,27 @@ if (changed) {
   writeFileSync(path, source, "utf8");
   console.log("Tightened parts association and disposition UX in partner inspections.");
 }
+
+const routePath = "app/api/partner/inspections/[inspectionId]/route.ts";
+let routeSource = readFileSync(routePath, "utf8");
+const oldRecommendation = `function recommendationPatch(body: Record<string, unknown>) {
+  const suggestions = partSuggestions(body.partSuggestions);
+  const legacyParts = optionalText(body.partsRequired);
+  const summary = suggestions.length
+    ? suggestions.map((part) => \`${'${part.quantity > 1 ? `${part.quantity}x ` : ""}'}${'${part.name}'}${'${part.partNumber ? ` (${part.partNumber})` : ""}'}\`).join(", ")
+    : legacyParts;`;
+const newRecommendation = `function recommendationPatch(body: Record<string, unknown>) {
+  const suggestions = partSuggestions(body.partSuggestions);
+  const requiredSuggestions = suggestions.filter((part) => !part.notes?.startsWith("NOT NEEDED ·"));
+  const legacyParts = optionalText(body.partsRequired);
+  const summary = requiredSuggestions.length
+    ? requiredSuggestions.map((part) => \`${'${part.quantity > 1 ? `${part.quantity}x ` : ""}'}${'${part.name}'}${'${part.partNumber ? ` (${part.partNumber})` : ""}'}\`).join(", ")
+    : suggestions.length ? null : legacyParts;`;
+if (!routeSource.includes("const requiredSuggestions = suggestions.filter")) {
+  if (!routeSource.includes(oldRecommendation)) {
+    throw new Error("Could not find inspection recommendation summary for not-needed parts cleanup.");
+  }
+  routeSource = routeSource.replace(oldRecommendation, newRecommendation);
+  writeFileSync(routePath, routeSource, "utf8");
+  console.log("Excluded not-needed inspection parts from required-parts summary.");
+}
