@@ -50,11 +50,13 @@ type Props = {
 
 export function MechanicalInspectorAssignment({ vehicleId, options, inspection, pendingFindingReviews = 0, pendingUpgradeReviews = 0 }: Props) {
   const router = useRouter();
-  const [requestedStartAt, setRequestedStartAt] = useState(inspection?.requestedStartAt?.slice(0, 16) || "");
+  const initialStart = inspection?.requestedStartAt?.slice(0, 16) || "";
+  const [requestedStartAt, setRequestedStartAt] = useState(initialStart);
   const recommended = useMemo(() => { const available = requestedStartAt ? options.filter((option) => availableAt(option, requestedStartAt)) : options; return available[0] || options[0] || null; }, [options, requestedStartAt]);
   const [partnerId, setPartnerId] = useState(inspection?.performedByPartnerId || recommended?.id || "");
   const selected = options.find((option) => option.id === partnerId) || null;
   const suggestedSlots = useMemo(() => selected ? nextAvailableSlots(selected) : [], [selected]);
+  const [customTimeOpen, setCustomTimeOpen] = useState(Boolean(initialStart));
   const [fee, setFee] = useState(inspection?.inspectionFee === null || inspection?.inspectionFee === undefined ? (selected?.defaultInspectionFee === null || selected?.defaultInspectionFee === undefined ? "" : String(selected.defaultInspectionFee)) : String(inspection.inspectionFee));
   const [revisionNotes, setRevisionNotes] = useState(""); const [working, setWorking] = useState(false); const [message, setMessage] = useState("");
   const reviewRemaining = pendingFindingReviews + pendingUpgradeReviews;
@@ -84,9 +86,31 @@ export function MechanicalInspectorAssignment({ vehicleId, options, inspection, 
   }
   if (inspection?.status === "complete") return null;
 
-  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Setup</div><h2 className="mt-1 text-xl font-black">Assign a mechanical inspector</h2><p className="mt-1 max-w-3xl text-sm text-slate-500">Lot Logic recommends among admin-approved inspectors using their working hours, scheduled inspections, scheduled Work Orders, and current inspection load. The Owner confirms the assignment.</p></div>{recommended ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">Recommended: {recommended.name}</span> : null}</div>
-    {options.length ? <><div className="mt-4 grid gap-3 lg:grid-cols-[1.4fr_1fr_0.7fr_auto]"><select value={partnerId} onChange={(e) => { const next = options.find((option) => option.id === e.target.value); setPartnerId(e.target.value); setRequestedStartAt(""); if (next?.defaultInspectionFee !== null && next?.defaultInspectionFee !== undefined) setFee(String(next.defaultInspectionFee)); }} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold"><option value="">Choose inspector</option>{options.map((option) => { const available = availableAt(option, requestedStartAt); return <option key={option.id} value={option.id}>{option.name}{recommended?.id === option.id ? " — recommended" : ""}{requestedStartAt ? (available ? " · available" : " · conflict") : ` · ${option.openInspectionCount} open`}</option>; })}</select><input type="datetime-local" step="900" value={requestedStartAt} onChange={(e) => setRequestedStartAt(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold" /><input inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="Fee" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold" /><button disabled={working || !partnerId || !requestedStartAt} onClick={() => void assign()} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Assign Inspection</button></div>
-      {selected ? <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Suggested available times</div><div className="mt-2 flex flex-wrap gap-2">{suggestedSlots.map((slot) => <button key={slot} type="button" onClick={() => setRequestedStartAt(slot)} className={`rounded-lg border px-3 py-2 text-xs font-black ${requestedStartAt === slot ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 bg-white text-blue-900"}`}>{slotLabel(slot)}</button>)}</div><div className="mt-2 text-xs font-semibold text-slate-500">Suggestions use {selected.name}&apos;s working hours, current inspection/work schedule, and typical {selected.typicalDurationHours ?? 1.5} hr inspection duration. Choose one above or enter another 15-minute time.</div></div> : null}</> : <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-semibold text-slate-500">No partners are currently marked eligible for mechanical inspections. Enable one in Admin → Partners.</div>}
-    {selected ? <div className="mt-3 text-xs font-semibold text-slate-500">{selected.companyName || "Independent partner"}{selected.locationText ? ` · ${selected.locationText}` : ""} · {selected.openInspectionCount} open inspection{selected.openInspectionCount === 1 ? "" : "s"} · typical {selected.typicalDurationHours ?? "—"} hr{requestedStartAt ? ` · ${availableAt(selected, requestedStartAt) ? "available at requested time" : "schedule conflict at requested time"}` : ""}</div> : null}{message ? <div className="mt-3 text-sm font-bold text-slate-700">{message}</div> : null}
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <h2 className="text-xl font-black">Assign a mechanical inspector</h2>
+      {recommended ? <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">Recommended: {recommended.name}</span> : null}
+    </div>
+
+    {options.length ? <>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <select value={partnerId} onChange={(e) => { const next = options.find((option) => option.id === e.target.value); setPartnerId(e.target.value); setRequestedStartAt(""); setCustomTimeOpen(false); if (next?.defaultInspectionFee !== null && next?.defaultInspectionFee !== undefined) setFee(String(next.defaultInspectionFee)); }} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold sm:w-[260px]"><option value="">Choose inspector</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}{recommended?.id === option.id ? " — recommended" : ""}</option>)}</select>
+
+        {selected ? suggestedSlots.map((slot) => <button key={slot} type="button" onClick={() => { setRequestedStartAt(slot); setCustomTimeOpen(false); }} className={`rounded-xl border px-3 py-2.5 text-xs font-black ${requestedStartAt === slot && !customTimeOpen ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 bg-white text-blue-900"}`}>{slotLabel(slot)}</button>) : null}
+
+        {selected ? <button type="button" onClick={() => { setCustomTimeOpen(true); if (suggestedSlots.includes(requestedStartAt)) setRequestedStartAt(""); }} className={`rounded-xl border px-3 py-2.5 text-xs font-black ${customTimeOpen ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>Other…</button> : null}
+
+        <input inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="Fee" aria-label="Inspection fee" className="w-24 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold" />
+        <button disabled={working || !partnerId || !requestedStartAt} onClick={() => void assign()} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Assign Inspection</button>
+      </div>
+
+      {customTimeOpen ? <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <span className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Custom time</span>
+        <input type="datetime-local" step="900" value={requestedStartAt} onChange={(e) => setRequestedStartAt(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold" />
+        {selected && requestedStartAt ? <span className={`text-xs font-bold ${availableAt(selected, requestedStartAt) ? "text-emerald-700" : "text-red-700"}`}>{availableAt(selected, requestedStartAt) ? "Available" : "Schedule conflict"}</span> : null}
+      </div> : null}
+    </> : <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-semibold text-slate-500">No partners are currently marked eligible for mechanical inspections. Enable one in Admin → Partners.</div>}
+
+    {message ? <div className="mt-3 text-sm font-bold text-slate-700">{message}</div> : null}
   </section>;
 }
