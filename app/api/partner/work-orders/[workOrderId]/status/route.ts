@@ -16,6 +16,7 @@ export async function POST(
     const { workOrderId } = await context.params;
     const body = await request.json().catch(() => ({}));
     const status = String(body.status || "").trim();
+    const completionNotes = String(body.completionNotes || "").trim() || null;
     if (status !== "in_progress" && status !== "complete") {
       return NextResponse.json({ error: "Partner status must be in_progress or complete." }, { status: 400 });
     }
@@ -83,6 +84,7 @@ export async function POST(
       patch.actual_end_at = now;
       patch.completed_by_partner_id = partner.id;
       patch.completed_by_user_id = null;
+      patch.partner_completion_notes = completionNotes;
     }
 
     const { data: updated, error: updateError } = await admin
@@ -90,7 +92,7 @@ export async function POST(
       .update(patch)
       .eq("id", workOrderId)
       .eq("assigned_partner_id", partner.id)
-      .select("id,status,actual_start_at,actual_end_at")
+      .select("id,status,actual_start_at,actual_end_at,partner_completion_notes")
       .single();
     if (updateError) throw new Error(updateError.message);
     return NextResponse.json(updated);
