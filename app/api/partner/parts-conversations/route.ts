@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { normalizePartSearchesWithAi } from "@/lib/ai/part-search";
+import { buildPartSearchSources } from "@/lib/mindful-inventory/part-suggestions";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
@@ -15,7 +17,11 @@ function optionalNumber(value: unknown) {
 }
 
 async function assignedWorkIds(admin: ReturnType<typeof createSupabaseAdminClient>, partnerId: string) {
-  const { data, error } = await admin.from("mindful_inventory_work_orders").select("id,title,vehicle_id").eq("assigned_partner_id", partnerId).not("status", "in", '("complete","cancelled")');
+  const { data, error } = await admin
+    .from("mindful_inventory_work_orders")
+    .select("id,title,description,category,vehicle_id")
+    .eq("assigned_partner_id", partnerId)
+    .not("status", "in", '("complete","cancelled")');
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -25,7 +31,7 @@ export async function GET() {
     const access = await requirePartnerPortalAccess();
     const admin = createSupabaseAdminClient();
     const works = await assignedWorkIds(admin, access.partner.id);
-    if (!works.length) return NextResponse.json({ items: [] });
+    if (!works.length) return NextResponse.json({ items: [], workOrders: [] });
     const workIds = works.map((work) => work.id);
     const vehicleIds = [...new Set(works.map((work) => work.vehicle_id))];
 
@@ -64,7 +70,19 @@ export async function GET() {
         messages: messagesByRequirement.get(row.id) || [],
       };
     });
-    return NextResponse.json({ items });
+
+    const workOrders = works.map((work) => {
+      const vehicle = vehicleById.get(work.vehicle_id);
+      return {
+        id: work.id,
+        title: work.title,
+        description: work.description,
+        category: work.category,
+        vehicleLabel: vehicle ? [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") : "Vehicle",
+      };
+    });
+
+    return NextResponse.json({ items, workOrders });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load parts conversations." }, { status: 500 });
   }
@@ -79,6 +97,37 @@ export async function POST(request: Request) {
     const works = await assignedWorkIds(admin, access.partner.id);
     const workIds = new Set(works.map((work) => work.id));
 
+    if (action === "ai_suggest") {
+      const workOrderId = String(body.workOrderId || "").trim();
+      const work = works.find((item) => item.id === workOrderId);
+      if (!work) return NextResponse.json({ error: "Choose an assigned Work Order." }, { status: 400 });
+      const { data: vehicle, error: vehicleError } = await admin
+        .from("mindful_inventory_vehicles")
+        .select("year,make,model,trim")
+        .eq("id", work.vehicle_id)
+        .single();
+      if (vehicleError) throw new Error(vehicleError.message);
+      const fitmentLabel = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
+      const sourceText = [work.title, work.description, work.category].filter(Boolean).join(" ");
+      const normalized = await normalizePartSearchesWithAi([{
+        workOrderId: work.id,
+        workOrderTitle: sourceText || work.title,
+        partName: work.title,
+        fitmentLabel,
+      }]);
+      const result = normalized[0];
+      if (!result) return NextResponse.json({ items: [] });
+      const candidates = (result.recommendedParts.length ? result.recommendedParts : [{ name: result.partName, need: "possible" as const, searchQuery: result.searchQuery }])
+        .slice(0, 5)
+        .map((part) => ({
+          name: part.name,
+          need: part.need,
+          searchQuery: part.searchQuery,
+          sources: buildPartSearchSources(part.searchQuery),
+        }));
+      return NextResponse.json({ items: candidates });
+    }
+
     if (action === "suggest") {
       const workOrderId = String(body.workOrderId || "").trim();
       const description = String(body.description || "").trim();
@@ -90,6 +139,7 @@ export async function POST(request: Request) {
       const quantity = Number(body.quantity || 1);
       const offer = optionalNumber(body.unitPrice);
       const note = optionalText(body.note);
+      const sourceUrl = optionalText(body.sourceUrl);
       const { data: requirement, error } = await admin.from("mindful_inventory_part_requirements").insert({
         company_id: vehicle.company_id,
         vehicle_id: vehicleId,
@@ -97,7 +147,8 @@ export async function POST(request: Request) {
         description,
         quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
         part_number: optionalText(body.partNumber),
-        origin: "mechanic",
+        fitment_query: optionalText(body.fitmentQuery),
+        origin: body.origin === "ai" ? "ai" : "mechanic",
         requirement_status: "suggested",
         suggested_by_partner_id: access.partner.id,
         partner_offer_unit_price: offer,
@@ -113,6 +164,7 @@ export async function POST(request: Request) {
         message_type: offer !== null ? "offer" : "note",
         body: note || `${access.partner.name} suggested ${description}.`,
         unit_price: offer,
+        source_url: sourceUrl,
       });
       return NextResponse.json({ id: requirement.id });
     }
