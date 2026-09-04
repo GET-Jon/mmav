@@ -59,14 +59,14 @@ function PartsEditor({ vehicleLabel, contextText, parts, onChange }: { vehicleLa
 
   function addCandidate(candidate: AiPartCandidate) {
     if (parts.some((part) => part.name.trim().toLowerCase() === candidate.name.toLowerCase())) {
-      setPartsMessage(`${candidate.name} is already in the proposed parts list.`);
+      setPartsMessage(candidate.name + " is already in the proposed parts list.");
       return;
     }
     onChange([...parts, {
       name: candidate.name,
       quantity: "1",
       partNumber: "",
-      notes: `Lot Logic search: ${candidate.searchQuery}`,
+      notes: "Lot Logic search: " + candidate.searchQuery,
     }]);
   }
 
