@@ -82,7 +82,11 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
         <InventoryMechanicalInspection vehicle={vehicle} data={inspectionData} overview={overview} />
       )}
 
-      <InventoryMechanicalNextStep vehicleId={vehicle.id} inspectionComplete={inspection?.status === "complete"} />
+      <InventoryMechanicalNextStep
+        vehicleId={vehicle.id}
+        inspectionComplete={inspection?.status === "complete"}
+        planningReady={inspectionData.planningReady}
+      />
     </div>
   );
 }
