@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PartnerDetailingList } from "@/components/partner/partner-detailing-list";
+import { PartnerPartsConversationBoard } from "@/components/partner/partner-parts-conversation-board";
 import { PartnerWorkGroupedV2 } from "@/components/partner/partner-work-grouped-v2";
 import { requirePartnerPortalAccess } from "@/lib/partner-portal/access";
 import { getPartnerDetailingAssignments } from "@/lib/partner-portal/detailing";
@@ -44,6 +45,7 @@ export default async function PartnerWorkPage() {
     (!work.latestEstimate || ["awaiting_estimate", "revision_requested"].includes(work.partnerEstimateStatus || "awaiting_estimate")),
   ).length;
   const inspectionAttention = inspectionItems.filter((item) => ["assigned", "confirmed", "in_progress", "revision_requested"].includes(item.status)).length;
+  const partConversationWorkIds = workItems.filter((work) => !["complete", "cancelled"].includes(work.status)).map((work) => work.id);
 
   return <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
     <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-4 sm:px-5 lg:px-7">
@@ -56,6 +58,7 @@ export default async function PartnerWorkPage() {
       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-[30px] font-black tracking-[-0.035em]">Assigned Work</h1><p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Work is grouped by vehicle. Open only the job you are working on, confirm setup, review parts, submit any required labor estimate, and begin once approved.</p></div><div className="flex gap-2"><div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm"><div className="text-xl font-black">{openCount}</div><div className="text-[10px] font-black uppercase text-slate-400">Open</div></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm"><div className="text-xl font-black">{estimateNeeded}</div><div className="text-[10px] font-black uppercase text-slate-400">Need Estimate</div></div></div></div>
       <PartnerDetailingList items={detailingItems} />
       <PartnerWorkGroupedV2 workItems={workItems} permissions={access.permissions} />
+      <PartnerPartsConversationBoard workOrderIds={partConversationWorkIds} />
     </div>
   </main>;
 }
