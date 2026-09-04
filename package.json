@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/ensure-expand-search-source.mjs && node scripts/ensure-partner-diagnosis-ux.mjs",
+    "predev": "node scripts/ensure-expand-search-source.mjs && node scripts/ensure-intake-title-cleanup.mjs && node scripts/ensure-partner-diagnosis-ux.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/ensure-expand-search-source.mjs && node scripts/ensure-partner-diagnosis-ux.mjs",
+    "prebuild": "node scripts/ensure-expand-search-source.mjs && node scripts/ensure-intake-title-cleanup.mjs && node scripts/ensure-partner-diagnosis-ux.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
