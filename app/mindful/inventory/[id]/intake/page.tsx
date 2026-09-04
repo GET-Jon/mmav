@@ -12,11 +12,18 @@ import { getInventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview
 import { getInventoryPerformerOptions } from "@/lib/mindful-inventory/performers";
 import { getInventoryDashboardData } from "@/lib/mindful-inventory/queries";
 
-export default async function InventoryMechanicalInspectionPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InventoryMechanicalInspectionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ mode?: string }>;
+}) {
   const access = await getMindfulInventoryAccess();
   if (!access) notFound();
 
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const ownerInspectionMode = query.mode === "owner";
   const dashboard = await getInventoryDashboardData(access.supabase, access.company.companyId);
   const vehicle = dashboard.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
@@ -52,7 +59,7 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
 
   return (
     <div className="space-y-5">
-      {!submittedForOwner ? inspectorAssignment : null}
+      {!ownerInspectionMode && !submittedForOwner && partnerFlowStatus ? inspectorAssignment : null}
 
       {submittedForOwner ? (
         <>
@@ -76,17 +83,23 @@ export default async function InventoryMechanicalInspectionPage({ params }: { pa
         !submittedForOwner ? <section className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-5 shadow-sm">
           <div className="text-xs font-black uppercase tracking-[0.1em] text-blue-600">Inspection with partner</div>
           <h2 className="mt-1 text-xl font-black text-slate-950">Waiting for the mechanic to submit</h2>
-          <p className="mt-1 text-sm font-medium text-slate-600">Lot Logic findings and requested upgrades are locked on the Owner side while the assigned mechanic performs the inspection. When submitted, both return here for final Owner review before Work Plan generation.</p>
+          <p className="mt-1 text-sm font-medium text-slate-600">The inspection scope is locked on the Owner side while the assigned mechanic performs the inspection. Their findings return here for final Owner review.</p>
         </section> : null
-      ) : (
+      ) : ownerInspectionMode ? (
         <InventoryMechanicalInspection vehicle={vehicle} data={inspectionData} overview={overview} />
+      ) : (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <h2 className="text-lg font-black text-slate-950">Mechanical inspector not selected</h2>
+          <p className="mt-1 text-sm font-medium text-slate-600">Return to Intake and select an inspector, or explicitly choose Owner mechanical inspection.</p>
+          <a href={`/mindful/inventory/${vehicle.id}`} className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white">Back to Intake</a>
+        </section>
       )}
 
-      <InventoryMechanicalNextStep
+      {(partnerFlowStatus || ownerInspectionMode || inspection?.status === "complete") ? <InventoryMechanicalNextStep
         vehicleId={vehicle.id}
         inspectionComplete={inspection?.status === "complete"}
         planningReady={inspectionData.planningReady}
-      />
+      /> : null}
     </div>
   );
 }
