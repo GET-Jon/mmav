@@ -63,9 +63,9 @@ const partnerChanged = update("components/partner/partner-inspection-list.tsx", 
   }
 
   const legacyAsk = '{finding.ownerReviewStatus === "clarification_requested" && finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}';
-  const thread = `{finding.conversation.length ? <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+  const thread = `{(finding.conversation ?? []).length ? <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Owner / inspector conversation</div>
-        <div className="space-y-2">{finding.conversation.map((entry) => <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}><div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>{entry.message}</div>)}</div>
+        <div className="space-y-2">{(finding.conversation ?? []).map((entry) => <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}><div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>{entry.message}</div>)}</div>
       </div> : finding.ownerReviewStatus === "clarification_requested" && finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}`;
   source = source.replace(legacyAsk, thread);
   return source;
@@ -75,58 +75,30 @@ const ownerChanged = update("components/mindful-inventory/mechanical-owner-findi
   let source = input;
   source = source.replace('        finding.mechanicalOwnerReviewNotes || "",', '        "",');
   source = source.replace(
+    `  const [openNotes, setOpenNotes] = useState<Record<string, boolean>>(() =>\n    Object.fromEntries(\n      findings.map((finding) => [\n        finding.id,\n        Boolean(\n          finding.mechanicalOwnerReviewStatus === "clarification_requested" ||\n            finding.mechanicalOwnerReviewNotes,\n        ),\n      ]),\n    ),\n  );`,
+    `  const [openNotes, setOpenNotes] = useState<Record<string, boolean>>(() =>\n    Object.fromEntries(findings.map((finding) => [finding.id, false])),\n  );`,
+  );
+  source = source.replace(
     '        {finding.mechanicalValidationNotes ? (',
-    '        {finding.mechanicalValidationNotes && !finding.mechanicalConversation.some((entry) => entry.role === "partner" && entry.message === finding.mechanicalValidationNotes) ? (',
+    '        {finding.mechanicalValidationNotes && !(finding.mechanicalConversation ?? []).some((entry) => entry.role === "partner" && entry.message === finding.mechanicalValidationNotes) ? (',
   );
 
-  const oldQuestion = `        {clarification && finding.mechanicalOwnerReviewNotes ? (
-          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-            <span className="font-black">Question sent:</span>{" "}
-            {finding.mechanicalOwnerReviewNotes}
-          </div>
-        ) : null}`;
-  const newThread = `        {finding.mechanicalConversation.length ? (
-          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Owner / inspector conversation</div>
-            <div className="space-y-2">
-              {finding.mechanicalConversation.map((entry) => (
-                <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}>
-                  <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>
-                  {entry.message}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : clarification && finding.mechanicalOwnerReviewNotes ? (
-          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"><span className="font-black">Question sent:</span>{" "}{finding.mechanicalOwnerReviewNotes}</div>
-        ) : null}`;
+  const oldQuestion = `        {clarification && finding.mechanicalOwnerReviewNotes ? (\n          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">\n            <span className="font-black">Question sent:</span>{" "}\n            {finding.mechanicalOwnerReviewNotes}\n          </div>\n        ) : null}`;
+  const newThread = `        {(finding.mechanicalConversation ?? []).length ? (\n          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">\n            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Owner / inspector conversation</div>\n            <div className="space-y-2">\n              {(finding.mechanicalConversation ?? []).map((entry) => (\n                <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}>\n                  <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>\n                  {entry.message}\n                </div>\n              ))}\n            </div>\n          </div>\n        ) : clarification && finding.mechanicalOwnerReviewNotes ? (\n          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"><span className="font-black">Question sent:</span>{" "}{finding.mechanicalOwnerReviewNotes}</div>\n        ) : null}`;
   source = source.replace(oldQuestion, newThread);
 
-  const oldResolvedNote = `            {finding.mechanicalOwnerReviewNotes ? (
-              <div className="mt-3 text-xs font-semibold text-slate-600">
-                <span className="font-black text-slate-800">Owner note:</span>{" "}
-                {finding.mechanicalOwnerReviewNotes}
-              </div>
-            ) : null}`;
-  const resolvedThread = `            {finding.mechanicalConversation.length ? (
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Owner / inspector conversation</div>
-                <div className="space-y-2">{finding.mechanicalConversation.map((entry) => (
-                  <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}><div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>{entry.message}</div>
-                ))}</div>
-              </div>
-            ) : finding.mechanicalOwnerReviewNotes ? (
-              <div className="mt-3 text-xs font-semibold text-slate-600"><span className="font-black text-slate-800">Owner note:</span>{" "}{finding.mechanicalOwnerReviewNotes}</div>
-            ) : null}`;
+  const oldResolvedNote = `            {finding.mechanicalOwnerReviewNotes ? (\n              <div className="mt-3 text-xs font-semibold text-slate-600">\n                <span className="font-black text-slate-800">Owner note:</span>{" "}\n                {finding.mechanicalOwnerReviewNotes}\n              </div>\n            ) : null}`;
+  const resolvedThread = `            {(finding.mechanicalConversation ?? []).length ? (\n              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">\n                <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Owner / inspector conversation</div>\n                <div className="space-y-2">{(finding.mechanicalConversation ?? []).map((entry) => (\n                  <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}><div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>{entry.message}</div>\n                ))}</div>\n              </div>\n            ) : finding.mechanicalOwnerReviewNotes ? (\n              <div className="mt-3 text-xs font-semibold text-slate-600"><span className="font-black text-slate-800">Owner note:</span>{" "}{finding.mechanicalOwnerReviewNotes}</div>\n            ) : null}`;
   source = source.replace(oldResolvedNote, resolvedThread);
+
+  source = source.replace(
+    `              >\n                + Add note or question\n              </button>`,
+    `              >\n                {clarification ? "+ Add another question" : "+ Add note or question"}\n              </button>`,
+  );
 
   const refreshMarker = `      router.refresh();`;
   if (!source.includes('setOpenNotes((current) => ({ ...current, [finding.id]: false }))')) {
-    source = source.replace(refreshMarker, `      if (decision === "clarification") {
-        setNotes((current) => ({ ...current, [finding.id]: "" }));
-        setOpenNotes((current) => ({ ...current, [finding.id]: false }));
-      }
-      router.refresh();`);
+    source = source.replace(refreshMarker, `      if (decision === "clarification") {\n        setNotes((current) => ({ ...current, [finding.id]: "" }));\n        setOpenNotes((current) => ({ ...current, [finding.id]: false }));\n      }\n      router.refresh();`);
   }
   return source;
 });
@@ -134,7 +106,7 @@ const ownerChanged = update("components/mindful-inventory/mechanical-owner-findi
 const planChanged = update("app/api/mindful/inventory/vehicles/[id]/work-plan/generate/route.ts", (source) =>
   source.replace(
     '          mechanicalSuggestedParts: finding.mechanicalSuggestedParts,',
-    '          mechanicalSuggestedParts: finding.mechanicalSuggestedParts,\n          mechanicalConversation: finding.mechanicalConversation.map(({ role, message, createdAt }) => ({ role, message, createdAt })),',
+    '          mechanicalSuggestedParts: finding.mechanicalSuggestedParts,\\n          mechanicalConversation: finding.mechanicalConversation.map(({ role, message, createdAt }) => ({ role, message, createdAt })),',
   ),
 );
 
@@ -142,7 +114,7 @@ const promptChanged = update("lib/ai/prompts/work-plan.ts", (source) => {
   if (source.includes("mechanicalConversation contains the owner/inspector clarification thread")) return source;
   return source.replace(
     '- mechanicalSuggestedParts are inspector-suggested dependencies, not proof that those parts have been sourced or purchased.',
-    '- mechanicalSuggestedParts are inspector-suggested dependencies, not proof that those parts have been sourced or purchased.\n- mechanicalConversation contains the owner/inspector clarification thread for a Finding. Treat it as first-party project evidence: preserve resolved answers, owner constraints, and corrections when planning, and do not contradict the latest clarified response without stronger evidence.',
+    '- mechanicalSuggestedParts are inspector-suggested dependencies, not proof that those parts have been sourced or purchased.\\n- mechanicalConversation contains the owner/inspector clarification thread for a Finding. Treat it as first-party project evidence: preserve resolved answers, owner constraints, and corrections when planning, and do not contradict the latest clarified response without stronger evidence.',
   );
 });
 
