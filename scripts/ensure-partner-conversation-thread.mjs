@@ -17,15 +17,29 @@ if (clarificationStart !== -1 && clarificationEnd !== -1) {
     'findingNotes[finding.id] ?? ""',
   );
 
-  const ownerAskTextSm = '{finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}';
-  const ownerAskTextXs = '{finding.ownerReviewStatus === "clarification_requested" && finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}';
   const thread = `{(finding.conversation ?? []).length ? <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Owner / inspector conversation</div>
         <div className="space-y-2">{(finding.conversation ?? []).map((entry) => <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}><div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>{entry.message}</div>)}</div>
       </div> : finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}`;
 
+  // Remove the legacy one-line Owner asks block by locating its stable label,
+  // then insert the shared conversation thread directly before the response
+  // composer. This avoids depending on exact Tailwind class strings.
   if (!block.includes('Owner / inspector conversation')) {
-    block = block.replace(ownerAskTextSm, thread).replace(ownerAskTextXs, thread);
+    const ownerLabel = 'Owner asks:</span>';
+    const ownerLabelIndex = block.indexOf(ownerLabel);
+    if (ownerLabelIndex !== -1) {
+      const ownerBlockStart = block.lastIndexOf('{finding.ownerReviewNotes ?', ownerLabelIndex);
+      const ownerBlockEnd = block.indexOf(' : null}', ownerLabelIndex);
+      if (ownerBlockStart !== -1 && ownerBlockEnd !== -1) {
+        block = block.slice(0, ownerBlockStart) + block.slice(ownerBlockEnd + ' : null}'.length);
+      }
+    }
+
+    const responseComposerIndex = block.indexOf('<textarea ');
+    if (responseComposerIndex !== -1) {
+      block = block.slice(0, responseComposerIndex) + thread + block.slice(responseComposerIndex);
+    }
   }
 
   // Give the finding-level clarification badge a deliberate two-line footprint
