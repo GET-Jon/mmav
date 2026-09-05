@@ -52,7 +52,7 @@ const partnerChanged = update("components/partner/partner-inspection-list.tsx", 
         const statusBlock = source.slice(statusStart, textareaStart);
         let textareaBlock = source.slice(textareaStart, proposalStart);
         const proposalBlock = source.slice(proposalStart, proposalEnd + ' /></div>'.length);
-        textareaBlock = textareaBlock.replace('placeholder={selected === "needs_diagnosis" ? "Required: explain what remains unknown and why further diagnosis is needed" : "Answer the Owner\\'s question / update your notes"}', 'placeholder={selected === "needs_diagnosis" ? "Required: explain what remains unknown and why further diagnosis is needed" : "Your response to the Owner"}');
+        textareaBlock = textareaBlock.replace("Answer the Owner's question / update your notes", "Your response to the Owner");
         const replacement = `${textareaBlock}<details className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60">
         <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-slate-700">Review details & resubmit <span className="ml-1 text-slate-400">▾</span></summary>
         <div className="border-t border-slate-200 p-3">${statusBlock}${proposalBlock}</div>
