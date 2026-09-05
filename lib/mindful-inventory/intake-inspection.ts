@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { loadFindingConversation, type FindingConversationMessage } from "@/lib/mindful-inventory/finding-conversation";
+
 export type InventoryIntakeStatus = "draft" | "complete";
 export type InventoryInspectionStatus = "draft" | "assigned" | "confirmed" | "in_progress" | "submitted" | "revision_requested" | "complete" | "cancelled";
 export type InventoryFindingSeverity = "green" | "yellow" | "red";
@@ -35,6 +37,7 @@ export type InventoryFindingView = {
   mechanicalCanPerform: boolean | null; mechanicalLaborHours: number | null; mechanicalProposedLaborPrice: number | null;
   mechanicalSuggestedParts: MechanicalSuggestedPart[];
   mechanicalOwnerReviewStatus: InventoryFindingOwnerReviewStatus | null; mechanicalOwnerReviewNotes: string | null;
+  mechanicalConversation: FindingConversationMessage[];
   ownerPreferredPartnerId: string | null;
   resolvedAt: string | null; createdAt: string; updatedAt: string;
 };
@@ -75,9 +78,20 @@ export async function getInventoryIntakeInspectionData(supabase: SupabaseClient,
   if (intakeResult.error) throw new Error(intakeResult.error.message);
   if (inspectionResult.error) throw new Error(inspectionResult.error.message);
   if (findingsResult.error) throw new Error(findingsResult.error.message);
+
+  const findingRows = findingsResult.data || [];
+  const conversationByFinding = await loadFindingConversation(supabase, findingRows.map((row) => row.id));
   const intakeRow = intakeResult.data; const inspectionRow = inspectionResult.data;
   const intake: InventoryIntakeView | null = intakeRow ? { id: intakeRow.id, status: intakeRow.status as InventoryIntakeStatus, mileage: intakeRow.mileage, keysCount: intakeRow.keys_count, visibleDamageSummary: intakeRow.visible_damage_summary, initialObservations: intakeRow.initial_observations, preliminaryGrade: intakeRow.preliminary_grade, fieldConfirmations: normalizeConfirmations(intakeRow.field_confirmations), startedAt: intakeRow.started_at, completedAt: intakeRow.completed_at } : null;
   const mechanicalInspection: InventoryInspectionView | null = inspectionRow ? { id: inspectionRow.id, inspectionType: inspectionRow.inspection_type, status: inspectionRow.status as InventoryInspectionStatus, summary: inspectionRow.summary, startedAt: inspectionRow.started_at, completedAt: inspectionRow.completed_at, performedByUserId: inspectionRow.performed_by_user_id, performedByPartnerId: inspectionRow.performed_by_partner_id, requestedStartAt: inspectionRow.requested_start_at, scheduledStartAt: inspectionRow.scheduled_start_at, scheduledEndAt: inspectionRow.scheduled_end_at, partnerConfirmationStatus: inspectionRow.partner_confirmation_status, inspectionFee: toNullableNumber(inspectionRow.inspection_fee), submittedAt: inspectionRow.submitted_at, ownerReviewStatus: inspectionRow.owner_review_status, revisionNotes: inspectionRow.revision_notes } : null;
-  const findings: InventoryFindingView[] = (findingsResult.data || []).map((row) => ({ id: row.id, intakeId: row.intake_id, inspectionId: row.inspection_id, source: row.source as InventoryFindingSource, title: row.title, description: row.description, category: row.category, subcategory: row.subcategory, severity: row.severity as InventoryFindingSeverity | null, confidence: row.confidence, certainty: row.certainty, estimatedCostLow: toNullableNumber(row.estimated_cost_low), estimatedCostHigh: toNullableNumber(row.estimated_cost_high), estimatedDurationHours: toNullableNumber(row.estimated_duration_hours), status: row.status as InventoryFindingStatus, mechanicalValidationStatus: (row.mechanical_validation_status || "pending") as InventoryFindingMechanicalValidationStatus, mechanicalValidationNotes: row.mechanical_validation_notes, mechanicalRecommendedAction: row.mechanical_recommended_action, mechanicalPartsRequired: row.mechanical_parts_required, mechanicalCanPerform: typeof row.mechanical_can_perform === "boolean" ? row.mechanical_can_perform : null, mechanicalLaborHours: toNullableNumber(row.mechanical_labor_hours), mechanicalProposedLaborPrice: toNullableNumber(row.mechanical_proposed_labor_price), mechanicalSuggestedParts: normalizeSuggestedParts(row.mechanical_part_suggestions), mechanicalOwnerReviewStatus: (["accepted", "dismissed", "clarification_requested"] as const).includes(row.mechanical_owner_review_status as InventoryFindingOwnerReviewStatus) ? row.mechanical_owner_review_status as InventoryFindingOwnerReviewStatus : null, mechanicalOwnerReviewNotes: row.mechanical_owner_review_notes, ownerPreferredPartnerId: row.owner_preferred_partner_id || null, resolvedAt: row.resolved_at, createdAt: row.created_at, updatedAt: row.updated_at }));
+  const findings: InventoryFindingView[] = findingRows.map((row) => {
+    const conversation = [...(conversationByFinding.get(row.id) || [])];
+    const last = conversation.at(-1);
+    const response = String(row.mechanical_validation_notes || "").trim();
+    if (last?.role === "owner" && row.mechanical_owner_review_status !== "clarification_requested" && response) {
+      conversation.push({ id: `legacy-response-${row.id}-${row.updated_at}`, role: "partner", message: response, createdAt: row.updated_at });
+    }
+    return { id: row.id, intakeId: row.intake_id, inspectionId: row.inspection_id, source: row.source as InventoryFindingSource, title: row.title, description: row.description, category: row.category, subcategory: row.subcategory, severity: row.severity as InventoryFindingSeverity | null, confidence: row.confidence, certainty: row.certainty, estimatedCostLow: toNullableNumber(row.estimated_cost_low), estimatedCostHigh: toNullableNumber(row.estimated_cost_high), estimatedDurationHours: toNullableNumber(row.estimated_duration_hours), status: row.status as InventoryFindingStatus, mechanicalValidationStatus: (row.mechanical_validation_status || "pending") as InventoryFindingMechanicalValidationStatus, mechanicalValidationNotes: row.mechanical_validation_notes, mechanicalRecommendedAction: row.mechanical_recommended_action, mechanicalPartsRequired: row.mechanical_parts_required, mechanicalCanPerform: typeof row.mechanical_can_perform === "boolean" ? row.mechanical_can_perform : null, mechanicalLaborHours: toNullableNumber(row.mechanical_labor_hours), mechanicalProposedLaborPrice: toNullableNumber(row.mechanical_proposed_labor_price), mechanicalSuggestedParts: normalizeSuggestedParts(row.mechanical_part_suggestions), mechanicalOwnerReviewStatus: (["accepted", "dismissed", "clarification_requested"] as const).includes(row.mechanical_owner_review_status as InventoryFindingOwnerReviewStatus) ? row.mechanical_owner_review_status as InventoryFindingOwnerReviewStatus : null, mechanicalOwnerReviewNotes: row.mechanical_owner_review_notes, mechanicalConversation: conversation, ownerPreferredPartnerId: row.owner_preferred_partner_id || null, resolvedAt: row.resolved_at, createdAt: row.created_at, updatedAt: row.updated_at };
+  });
   return { intake, mechanicalInspection, findings, planningReady: intake?.status === "complete" && mechanicalInspection?.status === "complete" };
 }
