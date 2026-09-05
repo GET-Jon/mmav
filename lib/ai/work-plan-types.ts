@@ -21,6 +21,7 @@ export type WorkPlanFindingInput = {
   mechanicalLaborHours: number | null;
   mechanicalProposedLaborPrice: number | null;
   mechanicalSuggestedParts: WorkPlanPartSuggestionInput[];
+  mechanicalConversation: Array<{ role: "owner" | "partner"; message: string; createdAt: string }>;
   estimatedCostLow: number | null;
   estimatedCostHigh: number | null;
   estimatedDurationHours: number | null;
