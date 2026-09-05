@@ -1,3 +1,4 @@
+import { loadFindingConversation, type FindingConversationMessage } from "@/lib/mindful-inventory/finding-conversation";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { PartnerPortalAccess } from "@/lib/partner-portal/access";
 
@@ -56,6 +57,7 @@ export type PartnerInspectionItem = {
     proposedLaborPrice: number | null;
     ownerReviewStatus: string | null;
     ownerReviewNotes: string | null;
+    conversation: FindingConversationMessage[];
   }>;
   upgrades: PartnerInspectionUpgrade[];
 };
@@ -99,13 +101,15 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
   const vehicleIds = [...new Set(inspections.map((row) => row.vehicle_id))];
   const [vehiclesResult, findingsResult, upgradesResult] = await Promise.all([
     admin.from("mindful_inventory_vehicles").select("id,year,make,model,trim,vin,mileage").in("id", vehicleIds),
-    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_owner_review_status,mechanical_owner_review_notes").in("vehicle_id", vehicleIds).eq("status", "open"),
+    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_owner_review_status,mechanical_owner_review_notes,updated_at").in("vehicle_id", vehicleIds).eq("status", "open"),
     admin.from("mindful_inventory_upgrades").select("id,vehicle_id,title,description,desired_outcome,manufacturer,part_number,quantity,preferred_vendor,status,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price").in("vehicle_id", vehicleIds).eq("status", "proposed"),
   ]);
   if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
   if (findingsResult.error) throw new Error(findingsResult.error.message);
   if (upgradesResult.error) throw new Error(upgradesResult.error.message);
 
+  const findingRows = findingsResult.data || [];
+  const conversationByFinding = await loadFindingConversation(admin, findingRows.map((finding) => finding.id));
   const vehicles = new Map((vehiclesResult.data || []).map((row) => [row.id, row]));
   return inspections.map((row) => {
     const vehicle = vehicles.get(row.vehicle_id);
@@ -124,22 +128,31 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
       summary: row.summary,
       revisionNotes: row.revision_notes,
       ownerReviewStatus: row.owner_review_status,
-      findings: (findingsResult.data || []).filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => ({
-        id: finding.id,
-        title: finding.title,
-        description: finding.description,
-        severity: finding.severity,
-        validationStatus: finding.mechanical_validation_status || "pending",
-        validationNotes: finding.mechanical_validation_notes,
-        recommendedAction: finding.mechanical_recommended_action,
-        partsRequired: finding.mechanical_parts_required,
-        partSuggestions: partsOrEmpty(finding.mechanical_part_suggestions),
-        canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
-        laborHours: numberOrNull(finding.mechanical_labor_hours),
-        proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
-        ownerReviewStatus: finding.mechanical_owner_review_status,
-        ownerReviewNotes: finding.mechanical_owner_review_notes,
-      })),
+      findings: findingRows.filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => {
+        const conversation = [...(conversationByFinding.get(finding.id) || [])];
+        const last = conversation.at(-1);
+        const response = String(finding.mechanical_validation_notes || "").trim();
+        if (last?.role === "owner" && finding.mechanical_owner_review_status !== "clarification_requested" && response) {
+          conversation.push({ id: `legacy-response-${finding.id}-${finding.updated_at}`, role: "partner", message: response, createdAt: finding.updated_at });
+        }
+        return {
+          id: finding.id,
+          title: finding.title,
+          description: finding.description,
+          severity: finding.severity,
+          validationStatus: finding.mechanical_validation_status || "pending",
+          validationNotes: finding.mechanical_validation_notes,
+          recommendedAction: finding.mechanical_recommended_action,
+          partsRequired: finding.mechanical_parts_required,
+          partSuggestions: partsOrEmpty(finding.mechanical_part_suggestions),
+          canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
+          laborHours: numberOrNull(finding.mechanical_labor_hours),
+          proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
+          ownerReviewStatus: finding.mechanical_owner_review_status,
+          ownerReviewNotes: finding.mechanical_owner_review_notes,
+          conversation,
+        };
+      }),
       upgrades: (upgradesResult.data || []).filter((upgrade) => upgrade.vehicle_id === row.vehicle_id).map((upgrade) => ({
         id: upgrade.id,
         title: upgrade.title,
