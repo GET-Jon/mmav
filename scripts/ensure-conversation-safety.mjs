@@ -24,6 +24,10 @@ const ownerChanged = guard("components/mindful-inventory/mechanical-owner-findin
   ["finding.mechanicalConversation.some", "(finding.mechanicalConversation || []).some"],
 ]);
 
-if (partnerChanged || ownerChanged) {
-  console.log("Guarded owner/inspector conversation rendering against missing thread data.");
+const workPlanChanged = guard("app/api/mindful/inventory/vehicles/[id]/work-plan/generate/route.ts", [
+  ["mechanicalSuggestedParts: finding.mechanicalSuggestedParts,\\n          mechanicalConversation", "mechanicalSuggestedParts: finding.mechanicalSuggestedParts,\n          mechanicalConversation"],
+]);
+
+if (partnerChanged || ownerChanged || workPlanChanged) {
+  console.log("Guarded owner/inspector conversation rendering and AI handoff output.");
 }
