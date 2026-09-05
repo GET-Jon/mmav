@@ -86,7 +86,6 @@ function partsOrEmpty(value: unknown): MechanicalPartSuggestion[] {
 
 function conversationMessageFromHistory(row: {
   id: string;
-  entity_id: string | null;
   event_type: string;
   metadata: unknown;
   created_at: string;
@@ -102,6 +101,40 @@ function conversationMessageFromHistory(row: {
     message,
     createdAt: row.created_at,
   };
+}
+
+async function loadPartnerFindingConversation(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  findingId: string,
+): Promise<FindingConversationMessage[]> {
+  try {
+    const { data, error } = await admin
+      .from("mindful_inventory_history")
+      .select("id,event_type,metadata,created_at")
+      .eq("entity_type", "finding")
+      .eq("entity_id", findingId)
+      .in("event_type", [
+        "mechanical_finding_clarification_requested",
+        "mechanical_finding_clarification_answered",
+      ])
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(`Could not load clarification history for finding ${findingId}:`, error.message);
+      return [];
+    }
+
+    return (data || []).flatMap((row) => {
+      const message = conversationMessageFromHistory(row);
+      return message ? [message] : [];
+    });
+  } catch (error) {
+    console.error(
+      `Could not load clarification history for finding ${findingId}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
 }
 
 export async function getPartnerInspectionAssignments(access: PartnerPortalAccess): Promise<PartnerInspectionItem[]> {
@@ -129,33 +162,12 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
   if (upgradesResult.error) throw new Error(upgradesResult.error.message);
 
   const findingRows = findingsResult.data || [];
-  const findingIds = findingRows.map((finding) => finding.id);
-  const conversationByFinding = new Map<string, FindingConversationMessage[]>();
-
-  if (findingIds.length) {
-    const { data: historyRows, error: historyError } = await admin
-      .from("mindful_inventory_history")
-      .select("id,entity_id,event_type,metadata,created_at")
-      .in("entity_id", findingIds)
-      .in("event_type", [
-        "mechanical_finding_clarification_requested",
-        "mechanical_finding_clarification_answered",
-      ])
-      .order("created_at", { ascending: true });
-
-    if (historyError) throw new Error(`Could not load clarification history: ${historyError.message}`);
-
-    for (const row of historyRows || []) {
-      if (!row.entity_id) continue;
-      const message = conversationMessageFromHistory(row);
-      if (!message) continue;
-      const current = conversationByFinding.get(row.entity_id) || [];
-      current.push(message);
-      conversationByFinding.set(row.entity_id, current);
-    }
-  }
-
+  const conversationPairs = await Promise.all(
+    findingRows.map(async (finding) => [finding.id, await loadPartnerFindingConversation(admin, finding.id)] as const),
+  );
+  const conversationByFinding = new Map<string, FindingConversationMessage[]>(conversationPairs);
   const vehicles = new Map((vehiclesResult.data || []).map((row) => [row.id, row]));
+
   return inspections.map((row) => {
     const vehicle = vehicles.get(row.vehicle_id);
     return {
@@ -173,26 +185,23 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
       summary: row.summary,
       revisionNotes: row.revision_notes,
       ownerReviewStatus: row.owner_review_status,
-      findings: findingRows.filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => {
-        const conversation = [...(conversationByFinding.get(finding.id) || [])];
-        return {
-          id: finding.id,
-          title: finding.title,
-          description: finding.description,
-          severity: finding.severity,
-          validationStatus: finding.mechanical_validation_status || "pending",
-          validationNotes: finding.mechanical_validation_notes,
-          recommendedAction: finding.mechanical_recommended_action,
-          partsRequired: finding.mechanical_parts_required,
-          partSuggestions: partsOrEmpty(finding.mechanical_part_suggestions),
-          canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
-          laborHours: numberOrNull(finding.mechanical_labor_hours),
-          proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
-          ownerReviewStatus: finding.mechanical_owner_review_status,
-          ownerReviewNotes: finding.mechanical_owner_review_notes,
-          conversation,
-        };
-      }),
+      findings: findingRows.filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => ({
+        id: finding.id,
+        title: finding.title,
+        description: finding.description,
+        severity: finding.severity,
+        validationStatus: finding.mechanical_validation_status || "pending",
+        validationNotes: finding.mechanical_validation_notes,
+        recommendedAction: finding.mechanical_recommended_action,
+        partsRequired: finding.mechanical_parts_required,
+        partSuggestions: partsOrEmpty(finding.mechanical_part_suggestions),
+        canPerform: typeof finding.mechanical_can_perform === "boolean" ? finding.mechanical_can_perform : null,
+        laborHours: numberOrNull(finding.mechanical_labor_hours),
+        proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
+        ownerReviewStatus: finding.mechanical_owner_review_status,
+        ownerReviewNotes: finding.mechanical_owner_review_notes,
+        conversation: conversationByFinding.get(finding.id) || [],
+      })),
       upgrades: (upgradesResult.data || []).filter((upgrade) => upgrade.vehicle_id === row.vehicle_id).map((upgrade) => ({
         id: upgrade.id,
         title: upgrade.title,
