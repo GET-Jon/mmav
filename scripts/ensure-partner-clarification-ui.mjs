@@ -102,8 +102,26 @@ const ownerChanged = update("components/mindful-inventory/mechanical-owner-findi
         ) : null}`;
   source = source.replace(oldQuestion, newThread);
 
+  const oldResolvedNote = `            {finding.mechanicalOwnerReviewNotes ? (
+              <div className="mt-3 text-xs font-semibold text-slate-600">
+                <span className="font-black text-slate-800">Owner note:</span>{" "}
+                {finding.mechanicalOwnerReviewNotes}
+              </div>
+            ) : null}`;
+  const resolvedThread = `            {finding.mechanicalConversation.length ? (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Owner / inspector conversation</div>
+                <div className="space-y-2">{finding.mechanicalConversation.map((entry) => (
+                  <div key={entry.id} className={\`rounded-lg px-3 py-2 text-xs leading-5 \${entry.role === "owner" ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}\`}><div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.08em] opacity-60">{entry.role === "owner" ? "Owner" : "Inspector"}</div>{entry.message}</div>
+                ))}</div>
+              </div>
+            ) : finding.mechanicalOwnerReviewNotes ? (
+              <div className="mt-3 text-xs font-semibold text-slate-600"><span className="font-black text-slate-800">Owner note:</span>{" "}{finding.mechanicalOwnerReviewNotes}</div>
+            ) : null}`;
+  source = source.replace(oldResolvedNote, resolvedThread);
+
   const refreshMarker = `      router.refresh();`;
-  if (!source.includes('decision === "clarification" && setNotes')) {
+  if (!source.includes('setOpenNotes((current) => ({ ...current, [finding.id]: false }))')) {
     source = source.replace(refreshMarker, `      if (decision === "clarification") {
         setNotes((current) => ({ ...current, [finding.id]: "" }));
         setOpenNotes((current) => ({ ...current, [finding.id]: false }));
