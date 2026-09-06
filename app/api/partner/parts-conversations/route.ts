@@ -37,7 +37,7 @@ export async function GET() {
 
     const [requirementsResult, vehiclesResult] = await Promise.all([
       admin.from("mindful_inventory_part_requirements")
-        .select("id,work_order_id,description,quantity,part_number,requirement_status,partner_offer_unit_price,partner_offer_note,fulfillment_method,sourcing_owner,owner_target_unit_price_low,owner_target_unit_price_high,owner_decision_note,linked_part_id,created_at")
+        .select("id,work_order_id,description,quantity,part_number,requirement_status,partner_offer_unit_price,partner_offer_note,ai_estimated_unit_price_low,ai_estimated_unit_price_high,ai_price_basis,fulfillment_method,sourcing_owner,owner_target_unit_price_low,owner_target_unit_price_high,owner_decision_note,linked_part_id,created_at")
         .in("work_order_id", workIds)
         .order("created_at", { ascending: true }),
       admin.from("mindful_inventory_vehicles").select("id,year,make,model,trim").in("id", vehicleIds),
@@ -117,12 +117,15 @@ export async function POST(request: Request) {
       }]);
       const result = normalized[0];
       if (!result) return NextResponse.json({ items: [] });
-      const candidates = (result.recommendedParts.length ? result.recommendedParts : [{ name: result.partName, need: "possible" as const, searchQuery: result.searchQuery }])
+      const candidates = (result.recommendedParts.length ? result.recommendedParts : [{ name: result.partName, need: "possible" as const, searchQuery: result.searchQuery, estimatedUnitPriceLow: null, estimatedUnitPriceHigh: null, priceBasis: null }])
         .slice(0, 5)
         .map((part) => ({
           name: part.name,
           need: part.need,
           searchQuery: part.searchQuery,
+          estimatedUnitPriceLow: part.estimatedUnitPriceLow,
+          estimatedUnitPriceHigh: part.estimatedUnitPriceHigh,
+          priceBasis: part.priceBasis,
           sources: buildPartSearchSources(part.searchQuery),
         }));
       return NextResponse.json({ items: candidates });
@@ -138,6 +141,9 @@ export async function POST(request: Request) {
       if (vehicleError) throw new Error(vehicleError.message);
       const quantity = Number(body.quantity || 1);
       const offer = optionalNumber(body.unitPrice);
+      let aiLow = optionalNumber(body.aiEstimatedUnitPriceLow);
+      let aiHigh = optionalNumber(body.aiEstimatedUnitPriceHigh);
+      if (aiLow !== null && aiHigh !== null && aiHigh < aiLow) [aiLow, aiHigh] = [aiHigh, aiLow];
       const note = optionalText(body.note);
       const sourceUrl = optionalText(body.sourceUrl);
       const { data: requirement, error } = await admin.from("mindful_inventory_part_requirements").insert({
@@ -153,6 +159,9 @@ export async function POST(request: Request) {
         suggested_by_partner_id: access.partner.id,
         partner_offer_unit_price: offer,
         partner_offer_note: note,
+        ai_estimated_unit_price_low: aiLow,
+        ai_estimated_unit_price_high: aiHigh,
+        ai_price_basis: optionalText(body.aiPriceBasis),
         blocking: true,
       }).select("id").single();
       if (error) throw new Error(error.message);
