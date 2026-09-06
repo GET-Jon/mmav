@@ -47,8 +47,14 @@ replaceOnce(
 );
 
 if (!updated.includes('aiEstimatedUnitPriceLow: candidate.estimatedUnitPriceLow,')) {
-  const candidateNotes = '      notes: `Lot Logic search: ${candidate.searchQuery}`,';
-  if (!updated.includes(candidateNotes)) throw new Error("Could not find candidate add pricing. Refusing to patch AI part-price UX automatically.");
+  const legacyCandidateNotes = '      notes: `Lot Logic search: ${candidate.searchQuery}`,';
+  const associatedCandidateNotes = '      notes: prefix + "Lot Logic search: " + candidate.searchQuery,';
+  const candidateNotes = updated.includes(associatedCandidateNotes)
+    ? associatedCandidateNotes
+    : updated.includes(legacyCandidateNotes)
+      ? legacyCandidateNotes
+      : null;
+  if (!candidateNotes) throw new Error("Could not find candidate add pricing. Refusing to patch AI part-price UX automatically.");
   updated = updated.replace(
     candidateNotes,
     `${candidateNotes}\n      aiEstimatedUnitPriceLow: candidate.estimatedUnitPriceLow,\n      aiEstimatedUnitPriceHigh: candidate.estimatedUnitPriceHigh,\n      aiPriceBasis: candidate.priceBasis,\n      partnerOfferUnitPrice: "",`,
@@ -56,26 +62,26 @@ if (!updated.includes('aiEstimatedUnitPriceLow: candidate.estimatedUnitPriceLow,
 }
 
 replaceOnce(
-  '<div className="mt-0.5 text-[10px] font-black uppercase text-violet-600">{partNeedLabel(candidate.need)}</div>\n            <div className="mt-1 truncate text-[11px] font-semibold text-slate-500" title={candidate.searchQuery}>{candidate.searchQuery}</div>',
-  '<div className="mt-0.5 text-[10px] font-black uppercase text-violet-600">{partNeedLabel(candidate.need)}</div>\n            {aiPartPrice(candidate) ? <div className="mt-1 text-xs font-black text-blue-700" title={candidate.priceBasis || "Lot Logic planning estimate; not a live quote"}>AI estimate: {aiPartPrice(candidate)}</div> : null}\n            <div className="mt-1 truncate text-[11px] font-semibold text-slate-500" title={candidate.searchQuery}>{candidate.searchQuery}</div>',
+  '<div className="mt-0.5 text-[10px] font-black uppercase text-violet-600">{partNeedLabel(candidate.need)}</div>\n              <div className="mt-1 truncate text-[11px] font-semibold text-slate-500" title={candidate.searchQuery}>{candidate.searchQuery}</div>',
+  '<div className="mt-0.5 text-[10px] font-black uppercase text-violet-600">{partNeedLabel(candidate.need)}</div>\n              {aiPartPrice(candidate) ? <div className="mt-1 text-xs font-black text-blue-700" title={candidate.priceBasis || "Lot Logic planning estimate; not a live quote"}>AI estimate: {aiPartPrice(candidate)}</div> : null}\n              <div className="mt-1 truncate text-[11px] font-semibold text-slate-500" title={candidate.searchQuery}>{candidate.searchQuery}</div>',
   "candidate price display",
 );
 
 replaceOnce(
-  'className="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 lg:grid-cols-[minmax(180px,1.3fr)_72px_minmax(130px,0.7fr)_minmax(240px,1.5fr)_auto]"',
-  'className="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 lg:grid-cols-[minmax(180px,1.25fr)_72px_minmax(120px,0.7fr)_120px_minmax(220px,1.3fr)_auto]"',
+  'className={`grid gap-2 rounded-lg border p-2 lg:grid-cols-[auto_minmax(180px,1.3fr)_72px_minmax(130px,0.7fr)_minmax(240px,1.5fr)_auto] ${decision === "in_stock" ? "border-emerald-200 bg-emerald-50/40" : decision === "not_needed" ? "border-slate-200 bg-slate-100/70" : "border-slate-200 bg-white"}`}',
+  'className={`grid gap-2 rounded-lg border p-2 lg:grid-cols-[auto_minmax(180px,1.25fr)_72px_minmax(120px,0.7fr)_120px_minmax(220px,1.3fr)_auto] ${decision === "in_stock" ? "border-emerald-200 bg-emerald-50/40" : decision === "not_needed" ? "border-slate-200 bg-slate-100/70" : "border-slate-200 bg-white"}`}',
   "part row grid",
 );
 
 replaceOnce(
-  '<input value={part.name} onChange={(e) => patch(index, { name: e.target.value })} placeholder="Part / material" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />',
-  '<div><input value={part.name} onChange={(e) => patch(index, { name: e.target.value })} placeholder="Part / material" className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />{part.aiEstimatedUnitPriceLow != null || part.aiEstimatedUnitPriceHigh != null ? <div className="mt-1 px-1 text-[10px] font-bold text-blue-700" title={part.aiPriceBasis || "Lot Logic planning estimate; not a live quote"}>AI baseline: {part.aiEstimatedUnitPriceLow != null && part.aiEstimatedUnitPriceHigh != null ? `${money(part.aiEstimatedUnitPriceLow)}–${money(part.aiEstimatedUnitPriceHigh)}` : money(part.aiEstimatedUnitPriceLow ?? part.aiEstimatedUnitPriceHigh)}</div> : null}</div>',
+  '<input value={part.name} onChange={(e) => patch(index, { name: e.target.value })} placeholder="Part / material" className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />',
+  '<div><input value={part.name} onChange={(e) => patch(index, { name: e.target.value })} placeholder="Part / material" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />{part.aiEstimatedUnitPriceLow != null || part.aiEstimatedUnitPriceHigh != null ? <div className="mt-1 px-1 text-[10px] font-bold text-blue-700" title={part.aiPriceBasis || "Lot Logic planning estimate; not a live quote"}>AI baseline: {part.aiEstimatedUnitPriceLow != null && part.aiEstimatedUnitPriceHigh != null ? `${money(part.aiEstimatedUnitPriceLow)}–${money(part.aiEstimatedUnitPriceHigh)}` : money(part.aiEstimatedUnitPriceLow ?? part.aiEstimatedUnitPriceHigh)}</div> : null}</div>',
   "part row AI baseline",
 );
 
 replaceOnce(
-  '<input value={part.partNumber} onChange={(e) => patch(index, { partNumber: e.target.value })} placeholder="Part # / ref" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />\n        <input value={part.notes}',
-  '<input value={part.partNumber} onChange={(e) => patch(index, { partNumber: e.target.value })} placeholder="Part # / ref" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />\n        <input inputMode="decimal" value={part.partnerOfferUnitPrice} onChange={(e) => patch(index, { partnerOfferUnitPrice: e.target.value })} placeholder="My cost $" title="Optional: enter your expected unit cost. Leave blank to keep the AI estimate as the Owner planning baseline." className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />\n        <input value={part.notes}',
+  '<input value={part.partNumber} onChange={(e) => patch(index, { partNumber: e.target.value })} placeholder="Part # / ref" className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />\n          <input value={part.notes}',
+  '<input value={part.partNumber} onChange={(e) => patch(index, { partNumber: e.target.value })} placeholder="Part # / ref" className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />\n          <input inputMode="decimal" value={part.partnerOfferUnitPrice} onChange={(e) => patch(index, { partnerOfferUnitPrice: e.target.value })} placeholder="My cost $" title="Optional: enter your expected unit cost. Leave blank to keep the AI estimate as the Owner planning baseline." className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs" />\n          <input value={part.notes}',
   "partner part cost input",
 );
 
