@@ -12,7 +12,6 @@ Rules:
 - A finding with mechanicalValidationStatus = changed must follow mechanicalValidationNotes and mechanicalRecommendedAction as the authoritative current description/disposition. Do not fall back to the older AI wording when they conflict.
 - A finding with mechanicalValidationStatus = needs_diagnosis or pending must become a diagnosis/quote-gathering work item, not authorization for the unknown downstream repair. Classify it as investigate, use decision investigate, set managerInvestigationRequired = true, and make the title/description explicitly state the diagnostic next step.
 - For needs_diagnosis items, use the mechanic's validation notes and recommended action to define what remains unknown and what the next partner must determine. Do not invent a repair scope the mechanic did not establish.
-- For needs_diagnosis items with no supplied diagnosis fee or defensible cost basis, use costSource = unknown, estimatedCostLow = null, estimatedCostHigh = null, and planningAmount = 0. Do not fabricate an AI repair range for an unresolved diagnosis.
 - Approval of a plan containing an investigate item means authorization to perform the diagnosis / gather the quote only. It does not authorize the later repair that the diagnosis may recommend.
 - A green-severity Finding is a minor/acceptable observation. Do not classify it as required solely because the issue category could theoretically affect safety or because of vehicle age/model; required needs supplied, validated evidence supporting that urgency.
 - Owner upgrades are intent, not authorization. Mechanical upgrade review is the controlling technical feasibility evidence for an Owner-requested upgrade.
@@ -30,6 +29,18 @@ Rules:
 - Cost source should be ai_estimate when you are estimating from the supplied evidence. Use unknown when a meaningful estimate cannot responsibly be made.
 - Never label an AI-created number as a known quote, historical actual, catalog cost, or comparable vehicle unless the input explicitly supplies that basis.
 - managerInvestigationRequired must be true for unknown cost basis, unresolved diagnosis, compatibility uncertainty, or other meaningful uncertainty.
+
+COST ESTIMATES — MAKE THEM DECISION-USEFUL:
+- Use the supplied year, make, model, trim, mileage, exact finding, mechanic scope, mechanic labor hours, mechanic labor price, and known parts information when estimating cost. Do not fall back to a generic all-vehicle range when the scope is defined.
+- For a defined diagnostic/inspection service, estimate the likely charge for THAT diagnostic step only. Do not include the unknown downstream repair in the diagnostic estimate.
+- A non-free external service must not use $0 as estimatedCostLow unless the supplied evidence explicitly says the service may be free or included.
+- Prefer a narrow, realistic planning range. For a well-defined diagnostic or service task, aim for a range whose high end is generally no more than about 1.5x the low end. Wider ranges require a specific uncertainty stated in costSourceDetail.
+- If the likely price is substantially driven by labor, infer a realistic amount from estimatedLaborHours and a reasonable retail service-rate assumption. State that assumption briefly in costSourceDetail. Do not pretend the assumed rate is a partner quote.
+- If a mechanic already supplied a labor price, preserve it as known labor evidence and estimate only the missing components needed to form a useful total range.
+- If parts are known but prices are not, estimate reasonable part-market ranges only when you can do so responsibly; otherwise say parts pricing is pending rather than inflating the total range.
+- planningAmount for an ai_estimate should normally be a sensible midpoint or expected value inside estimatedCostLow–estimatedCostHigh, not $0 and not automatically the worst-case high.
+- If you cannot produce a defensible narrow estimate, use costSource = unknown with null low/high rather than a vague $0-to-large-number range.
+- costSourceDetail must explain the practical basis in one short sentence, such as expected labor time, assumed retail rate, known mechanic labor, or the specific uncertainty preventing a tighter estimate.
 
 TIME ESTIMATES — THESE DEFINITIONS ARE IMPORTANT:
 - estimatedLaborHours = actual hands-on technician/body/detail/vendor labor time. Think realistic flat-rate/shop labor, not how many hours the car remains at the shop.
@@ -90,5 +101,5 @@ ${JSON.stringify(input.findings, null, 2)}
 OWNER-REQUESTED UPGRADES WITH MECHANICAL REVIEW
 ${JSON.stringify(input.upgrades, null, 2)}
 
-Mechanical validation is the controlling evidence for Findings and the technical feasibility evidence for requested Upgrades. Respect mechanic-proposed scope, labor, parts, and performability constraints. Return a useful, concise plan. Do not create duplicate items for the same scope. Include source IDs on every item where applicable. Keep labor time and elapsed turnaround separate using the definitions in the system instructions.`;
+Mechanical validation is the controlling evidence for Findings and the technical feasibility evidence for requested Upgrades. Respect mechanic-proposed scope, labor, parts, and performability constraints. Return a useful, concise plan. Do not create duplicate items for the same scope. Include source IDs on every item where applicable. Keep labor time and elapsed turnaround separate using the definitions in the system instructions. For each AI-estimated cost, use the specific vehicle and exact scope to produce the narrowest defensible planning range; avoid $0 lows for paid services and explain the basis briefly.`;
 }
