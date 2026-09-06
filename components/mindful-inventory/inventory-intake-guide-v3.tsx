@@ -42,6 +42,8 @@ function polishIntakeHandoff() {
 export function InventoryIntakeGuideV3({ vehicleId, initialConfirmations, inspectorOptions, inspection }: Props) {
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [handoffWorking, setHandoffWorking] = useState(false);
+  const [handoffError, setHandoffError] = useState("");
 
   useEffect(() => {
     polishIntakeHandoff();
@@ -54,6 +56,36 @@ export function InventoryIntakeGuideV3({ vehicleId, initialConfirmations, inspec
     };
   }, []);
 
+  async function completeIntakeForHandoff() {
+    setHandoffWorking(true);
+    setHandoffError("");
+    try {
+      const response = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/intake/complete`, {
+        method: "POST",
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Could not complete Intake.");
+      return true;
+    } catch (error) {
+      setHandoffError(error instanceof Error ? error.message : "Could not complete Intake.");
+      return false;
+    } finally {
+      setHandoffWorking(false);
+    }
+  }
+
+  async function openInspectorPicker() {
+    const completed = await completeIntakeForHandoff();
+    if (!completed) return;
+    setPickerOpen(true);
+  }
+
+  async function inspectOurselves() {
+    const completed = await completeIntakeForHandoff();
+    if (!completed) return;
+    router.push(`/mindful/inventory/${vehicleId}/intake?mode=owner`);
+  }
+
   return <>
     <div onClickCapture={(event) => {
       const target = event.target as HTMLElement;
@@ -61,11 +93,13 @@ export function InventoryIntakeGuideV3({ vehicleId, initialConfirmations, inspec
       if (button?.textContent?.includes("Select Mechanical Inspector")) {
         event.preventDefault();
         event.stopPropagation();
-        setPickerOpen(true);
+        if (!handoffWorking) void openInspectorPicker();
       }
     }}>
       <InventoryIntakeGuideV2 vehicleId={vehicleId} initialConfirmations={initialConfirmations} />
     </div>
+
+    {handoffError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{handoffError}</div> : null}
 
     {pickerOpen ? <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-[8vh] backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPickerOpen(false); }}>
       <div className="w-full max-w-[980px] rounded-3xl border border-white/60 bg-slate-100 p-3 shadow-2xl sm:p-4">
@@ -84,7 +118,7 @@ export function InventoryIntakeGuideV3({ vehicleId, initialConfirmations, inspec
             <div className="text-sm font-black text-slate-950">Owner mechanical inspection</div>
             <div className="mt-0.5 text-xs font-semibold text-slate-500">Use only when the owner will personally perform and validate the inspection.</div>
           </div>
-          <button type="button" onClick={() => router.push(`/mindful/inventory/${vehicleId}/intake?mode=owner`)} className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800">Inspect ourselves</button>
+          <button type="button" disabled={handoffWorking} onClick={() => void inspectOurselves()} className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800 disabled:opacity-50">{handoffWorking ? "Opening…" : "Inspect ourselves"}</button>
         </div>
       </div>
     </div> : null}
