@@ -11,6 +11,10 @@ type PartSuggestion = {
   quantity: number;
   partNumber: string | null;
   notes: string | null;
+  aiEstimatedUnitPriceLow: number | null;
+  aiEstimatedUnitPriceHigh: number | null;
+  aiPriceBasis: string | null;
+  partnerOfferUnitPrice: number | null;
 };
 
 function optionalText(value: unknown) {
@@ -34,11 +38,20 @@ function partSuggestions(value: unknown): PartSuggestion[] {
       const name = String(row.name ?? row.description ?? "").trim();
       if (!name) return null;
       const quantityValue = Number(row.quantity ?? 1);
+      let aiEstimatedUnitPriceLow = optionalNonNegativeNumber(row.aiEstimatedUnitPriceLow ?? row.estimatedUnitPriceLow, "AI estimated part price low");
+      let aiEstimatedUnitPriceHigh = optionalNonNegativeNumber(row.aiEstimatedUnitPriceHigh ?? row.estimatedUnitPriceHigh, "AI estimated part price high");
+      if (aiEstimatedUnitPriceLow !== null && aiEstimatedUnitPriceHigh !== null && aiEstimatedUnitPriceHigh < aiEstimatedUnitPriceLow) {
+        [aiEstimatedUnitPriceLow, aiEstimatedUnitPriceHigh] = [aiEstimatedUnitPriceHigh, aiEstimatedUnitPriceLow];
+      }
       return {
         name,
         quantity: Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1,
         partNumber: optionalText(row.partNumber ?? row.part_number),
         notes: optionalText(row.notes),
+        aiEstimatedUnitPriceLow,
+        aiEstimatedUnitPriceHigh,
+        aiPriceBasis: optionalText(row.aiPriceBasis ?? row.priceBasis),
+        partnerOfferUnitPrice: optionalNonNegativeNumber(row.partnerOfferUnitPrice, "Partner part price"),
       } satisfies PartSuggestion;
     })
     .filter((row): row is PartSuggestion => Boolean(row));
