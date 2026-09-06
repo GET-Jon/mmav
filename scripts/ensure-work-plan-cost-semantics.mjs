@@ -14,7 +14,32 @@ function replaceOnce(oldText, newText, label) {
 
 replaceOnce(
   '  const pricedTotal = activeItems.reduce((sum, item) => sum + ((item.costSource === "unknown" || item.planningAmount <= 0) ? 0 : item.planningAmount), 0);',
-  `  const pricedTotal = activeItems.reduce((sum, item) => sum + ((item.costSource === "unknown" || item.planningAmount <= 0) ? 0 : item.planningAmount), 0);\n\n  function getInspectionCostEvidence(item: InventoryPlanItemView) {\n    const linked = item.findingIds.map((id) => findingsById.get(id)).filter(Boolean) as InventoryFindingView[];\n    const laborPrices = linked\n      .map((finding) => finding.mechanicalProposedLaborPrice)\n      .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));\n    const estimateLows = linked\n      .map((finding) => finding.estimatedCostLow)\n      .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));\n    const estimateHighs = linked\n      .map((finding) => finding.estimatedCostHigh)\n      .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));\n\n    return {\n      labor: laborPrices.reduce((sum, value) => sum + value, 0),\n      laborContributors: laborPrices.length,\n      estimateLow: estimateLows.length ? estimateLows.reduce((sum, value) => sum + value, 0) : null,\n      estimateHigh: estimateHighs.length ? estimateHighs.reduce((sum, value) => sum + value, 0) : null,\n      sourceCount: linked.length,\n    };\n  }\n\n  const editingEvidence = editing ? getInspectionCostEvidence(editing) : null;`,
+  [
+    '  const pricedTotal = activeItems.reduce((sum, item) => sum + ((item.costSource === "unknown" || item.planningAmount <= 0) ? 0 : item.planningAmount), 0);',
+    '',
+    '  function getInspectionCostEvidence(item: InventoryPlanItemView) {',
+    '    const linked = item.findingIds.map((id) => findingsById.get(id)).filter(Boolean) as InventoryFindingView[];',
+    '    const laborPrices = linked',
+    '      .map((finding) => finding.mechanicalProposedLaborPrice)',
+    '      .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));',
+    '    const estimateLows = linked',
+    '      .map((finding) => finding.estimatedCostLow)',
+    '      .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));',
+    '    const estimateHighs = linked',
+    '      .map((finding) => finding.estimatedCostHigh)',
+    '      .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));',
+    '',
+    '    return {',
+    '      labor: laborPrices.reduce((sum, value) => sum + value, 0),',
+    '      laborContributors: laborPrices.length,',
+    '      estimateLow: estimateLows.length ? estimateLows.reduce((sum, value) => sum + value, 0) : null,',
+    '      estimateHigh: estimateHighs.length ? estimateHighs.reduce((sum, value) => sum + value, 0) : null,',
+    '      sourceCount: linked.length,',
+    '    };',
+    '  }',
+    '',
+    '  const editingEvidence = editing ? getInspectionCostEvidence(editing) : null;',
+  ].join('\n'),
   "Work Plan cost totals anchor",
 );
 
@@ -48,9 +73,23 @@ replaceOnce(
   "cost modal heading",
 );
 
+const evidencePanel = [
+  '        {editingEvidence ? <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">',
+  '          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Inspection cost evidence</div>',
+  '          <div className="mt-2 grid gap-3 sm:grid-cols-3">',
+  '            <div><div className="text-[10px] font-black uppercase text-slate-400">Known labor</div><div className="mt-1 text-lg font-black text-slate-950">{editingEvidence.labor > 0 ? money(editingEvidence.labor) : "Not provided"}</div></div>',
+  '            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspection estimate</div><div className="mt-1 text-sm font-black text-slate-800">{editingEvidence.estimateLow !== null || editingEvidence.estimateHigh !== null ? <>{money(editingEvidence.estimateLow)} – {money(editingEvidence.estimateHigh)}</> : "Not provided"}</div></div>',
+  '            <div><div className="text-[10px] font-black uppercase text-slate-400">Formal quote</div><div className="mt-1 text-sm font-black text-amber-800">{editing.costSource === "known_quote" && editing.planningAmount > 0 ? money(editing.planningAmount) : "Pending"}</div></div>',
+  '          </div>',
+  '          <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">Mechanical values are first-party cost evidence, not a formal downstream quote. A repair is only financially authorized once a sufficiently known total is entered below.</p>',
+  '          {editing.costSource === "unknown" && editing.costSourceDetail ? <div className="mt-3 rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-600"><span className="font-black">Work Plan synthesis:</span> {editing.costSourceDetail}</div> : null}',
+  '        </div> : null}',
+  '        <div className="mt-5 grid gap-4 sm:grid-cols-2">',
+].join('\n');
+
 replaceOnce(
   '        <div className="mt-5 grid gap-4 sm:grid-cols-2">',
-  `        {editingEvidence ? <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">\n          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Inspection cost evidence</div>\n          <div className="mt-2 grid gap-3 sm:grid-cols-3">\n            <div><div className="text-[10px] font-black uppercase text-slate-400">Known labor</div><div className="mt-1 text-lg font-black text-slate-950">{editingEvidence.labor > 0 ? money(editingEvidence.labor) : "Not provided"}</div></div>\n            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspection estimate</div><div className="mt-1 text-sm font-black text-slate-800">{editingEvidence.estimateLow !== null || editingEvidence.estimateHigh !== null ? \\`${money(editingEvidence.estimateLow)} – ${money(editingEvidence.estimateHigh)}\\` : "Not provided"}</div></div>\n            <div><div className="text-[10px] font-black uppercase text-slate-400">Formal quote</div><div className="mt-1 text-sm font-black text-amber-800">{editing.costSource === "known_quote" && editing.planningAmount > 0 ? money(editing.planningAmount) : "Pending"}</div></div>\n          </div>\n          <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">Mechanical values are first-party cost evidence, not a formal downstream quote. A repair is only financially authorized once a sufficiently known total is entered below.</p>\n          {editing.costSource === "unknown" && editing.costSourceDetail ? <div className="mt-3 rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-600"><span className="font-black">Work Plan synthesis:</span> {editing.costSourceDetail}</div> : null}\n        </div> : null}\n        <div className="mt-5 grid gap-4 sm:grid-cols-2">`,
+  evidencePanel,
   "inspection evidence panel",
 );
 
