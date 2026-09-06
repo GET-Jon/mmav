@@ -37,7 +37,7 @@ export default async function InventoryMechanicalInspectionPage({
 
   const inspection = inspectionData.mechanicalInspection;
   const partnerFlowStatus = Boolean(
-    inspection?.performedByPartnerId && ["assigned", "confirmed", "in_progress", "revision_requested", "submitted"].includes(inspection.status),
+    inspection?.performedByPartnerId && ["assigned", "confirmed", "in_progress", "revision_requested", "submitted", "complete"].includes(inspection.status),
   );
   const submittedForOwner = Boolean(inspection?.performedByPartnerId && inspection.status === "submitted");
   const submittedFindings = inspectionData.findings.filter((finding) => finding.status === "open" || finding.mechanicalOwnerReviewStatus === "dismissed");
@@ -59,7 +59,7 @@ export default async function InventoryMechanicalInspectionPage({
 
   return (
     <div className="space-y-5">
-      {!ownerInspectionMode && !submittedForOwner && partnerFlowStatus ? inspectorAssignment : null}
+      {!ownerInspectionMode && !submittedForOwner && partnerFlowStatus && inspection?.status !== "complete" ? inspectorAssignment : null}
 
       {submittedForOwner ? (
         <>
@@ -80,11 +80,19 @@ export default async function InventoryMechanicalInspectionPage({
       ) : null}
 
       {partnerFlowStatus ? (
-        !submittedForOwner ? <section className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-5 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.1em] text-blue-600">Inspection with partner</div>
-          <h2 className="mt-1 text-xl font-black text-slate-950">Waiting for the mechanic to submit</h2>
-          <p className="mt-1 text-sm font-medium text-slate-600">The inspection scope is locked on the Owner side while the assigned mechanic performs the inspection. Their findings return here for final Owner review.</p>
-        </section> : null
+        !submittedForOwner ? inspection?.status === "complete" ? (
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5 shadow-sm">
+            <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Mechanical complete</div>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Partner inspection accepted</h2>
+            <p className="mt-1 text-sm font-medium text-slate-600">The assigned mechanic completed the inspection and the Owner accepted it. The inspector assignment remains attached to the project history.</p>
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-5 shadow-sm">
+            <div className="text-xs font-black uppercase tracking-[0.1em] text-blue-600">Inspection with partner</div>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Waiting for the mechanic to submit</h2>
+            <p className="mt-1 text-sm font-medium text-slate-600">The inspection scope is locked on the Owner side while the assigned mechanic performs the inspection. Their findings return here for final Owner review.</p>
+          </section>
+        ) : null
       ) : ownerInspectionMode ? (
         <InventoryMechanicalInspection vehicle={vehicle} data={inspectionData} overview={overview} />
       ) : (
