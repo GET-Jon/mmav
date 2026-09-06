@@ -46,11 +46,14 @@ replaceOnce(
   "AI part price formatter",
 );
 
-replaceOnce(
-  '      notes: `Lot Logic search: ${candidate.searchQuery}`,\n    }]);',
-  '      notes: `Lot Logic search: ${candidate.searchQuery}`,\n      aiEstimatedUnitPriceLow: candidate.estimatedUnitPriceLow,\n      aiEstimatedUnitPriceHigh: candidate.estimatedUnitPriceHigh,\n      aiPriceBasis: candidate.priceBasis,\n      partnerOfferUnitPrice: "",\n    }]);',
-  "candidate add pricing",
-);
+if (!updated.includes('aiEstimatedUnitPriceLow: candidate.estimatedUnitPriceLow,')) {
+  const candidateNotes = '      notes: `Lot Logic search: ${candidate.searchQuery}`,';
+  if (!updated.includes(candidateNotes)) throw new Error("Could not find candidate add pricing. Refusing to patch AI part-price UX automatically.");
+  updated = updated.replace(
+    candidateNotes,
+    `${candidateNotes}\n      aiEstimatedUnitPriceLow: candidate.estimatedUnitPriceLow,\n      aiEstimatedUnitPriceHigh: candidate.estimatedUnitPriceHigh,\n      aiPriceBasis: candidate.priceBasis,\n      partnerOfferUnitPrice: "",`,
+  );
+}
 
 replaceOnce(
   '<div className="mt-0.5 text-[10px] font-black uppercase text-violet-600">{partNeedLabel(candidate.need)}</div>\n            <div className="mt-1 truncate text-[11px] font-semibold text-slate-500" title={candidate.searchQuery}>{candidate.searchQuery}</div>',
