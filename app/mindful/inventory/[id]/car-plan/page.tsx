@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 
-import { InventoryWorkPlan } from "@/components/mindful-inventory/inventory-work-plan";
+import { InventoryWorkPlanV2 } from "@/components/mindful-inventory/inventory-work-plan-v2";
 import { WorkPlanPartsReview } from "@/components/mindful-inventory/work-plan-parts-review";
-import { WorkPlanRoutingSummary } from "@/components/mindful-inventory/work-plan-routing-summary";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryCarPlanData } from "@/lib/mindful-inventory/car-plan";
 import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
@@ -29,17 +28,23 @@ export default async function InventoryCarPlanPage({ params }: { params: Promise
   ]);
   const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
 
+  const partsReview = (
+    <WorkPlanPartsReview
+      vehicleId={vehicle.id}
+      vehicleLabel={vehicleLabel}
+      requirements={partRequirements}
+    />
+  );
+
   return (
-    <div className="space-y-5">
-      <WorkPlanRoutingSummary plan={carPlan} performers={performers} />
-      <WorkPlanPartsReview vehicleId={vehicle.id} vehicleLabel={vehicleLabel} requirements={partRequirements} />
-      <InventoryWorkPlan
-        vehicleId={vehicle.id}
-        planningReady={intakeInspection.planningReady}
-        plan={carPlan}
-        findings={intakeInspection.findings}
-        upgrades={overview.upgrades}
-      />
-    </div>
+    <InventoryWorkPlanV2
+      vehicleId={vehicle.id}
+      planningReady={intakeInspection.planningReady}
+      plan={carPlan}
+      findings={intakeInspection.findings}
+      upgrades={overview.upgrades}
+      performers={performers}
+      partsReview={partsReview}
+    />
   );
 }
