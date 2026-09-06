@@ -20,3 +20,9 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   text-rendering: geometricPrecision;
 }
+
+button:not(:disabled),
+select:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
