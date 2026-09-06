@@ -16,6 +16,9 @@ export type AiRecommendedPart = {
   name: string;
   need: AiRecommendedPartNeed;
   searchQuery: string;
+  estimatedUnitPriceLow: number | null;
+  estimatedUnitPriceHigh: number | null;
+  priceBasis: string | null;
 };
 
 export type AiPartSearchResult = {
@@ -57,6 +60,12 @@ function recommendedNeed(value: unknown): AiRecommendedPartNeed {
   return "possible";
 }
 
+function nonNegativeNumberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 export async function normalizePartSearchesWithAi(
   items: AiPartSearchInput[],
 ): Promise<AiPartSearchResult[]> {
@@ -64,8 +73,8 @@ export async function normalizePartSearchesWithAi(
 
   const client = getClient();
   const result = await client.generateText({
-    system: `You create concise automotive parts-shopping search phrases and practical parts checklists for dealership staff.
-Turn database/work-order language into phrases a normal person would actually type into Amazon, eBay, or a distributor catalog, and identify the physical parts/materials that may be needed to complete the work.
+    system: `You create concise automotive parts-shopping search phrases, practical parts checklists, and cautious planning price ranges for dealership staff.
+Turn database/work-order language into phrases a normal person would actually type into Amazon, eBay, or a distributor catalog, identify the physical parts/materials that may be needed to complete the work, and provide a rough US-market unit-price range when a reasonable planning estimate is possible.
 
 Rules:
 - Keep year, make, model, and useful chassis/generation when known.
@@ -79,6 +88,9 @@ Rules:
 - Recommend 1-5 distinct physical parts/materials only when reasonably related to the work. Do not pad the list.
 - Classify each recommendation as likely_required, possible, or consumable.
 - Give every recommended item its own natural, vehicle-aware search phrase.
+- For each recommended item, provide estimatedUnitPriceLow and estimatedUnitPriceHigh in USD when a reasonable planning estimate is possible. Use a realistic range rather than false precision. These are planning estimates, NOT live quotes or verified catalog prices.
+- priceBasis should briefly explain the estimate basis, e.g. "typical aftermarket retail range" or "broad replacement-part market range". Do not imply that you checked a live listing unless the input explicitly contains one.
+- If pricing is too uncertain to be useful, return null for both price fields and explain why in priceBasis.
 - If a work order genuinely does not imply a purchasable part/material, recommendedParts may be empty.
 - Return JSON only.`,
     prompt: `Normalize these part-sourcing searches and recommend the likely parts/materials for each Work Order. Preserve each workOrderId exactly.
@@ -86,9 +98,9 @@ Rules:
 ${JSON.stringify(items, null, 2)}
 
 Return this exact shape:
-{"items":[{"workOrderId":"...","partName":"short likely part/material name","searchQuery":"natural primary search","alternateQueries":["optional alternate 1","optional alternate 2"],"recommendedParts":[{"name":"part/material","need":"likely_required|possible|consumable","searchQuery":"natural vehicle-aware shopping search"}]}]}`,
+{"items":[{"workOrderId":"...","partName":"short likely part/material name","searchQuery":"natural primary search","alternateQueries":["optional alternate 1","optional alternate 2"],"recommendedParts":[{"name":"part/material","need":"likely_required|possible|consumable","searchQuery":"natural vehicle-aware shopping search","estimatedUnitPriceLow":0,"estimatedUnitPriceHigh":0,"priceBasis":"brief non-live estimate basis"}]}]}`,
     temperature: 0.15,
-    maxOutputTokens: 2600,
+    maxOutputTokens: 3200,
     responseMimeType: "application/json",
   });
 
@@ -123,10 +135,18 @@ Return this exact shape:
           const key = name.toLowerCase();
           if (seenRecommendations.has(key)) return [];
           seenRecommendations.add(key);
+          let estimatedUnitPriceLow = nonNegativeNumberOrNull(part.estimatedUnitPriceLow);
+          let estimatedUnitPriceHigh = nonNegativeNumberOrNull(part.estimatedUnitPriceHigh);
+          if (estimatedUnitPriceLow !== null && estimatedUnitPriceHigh !== null && estimatedUnitPriceHigh < estimatedUnitPriceLow) {
+            [estimatedUnitPriceLow, estimatedUnitPriceHigh] = [estimatedUnitPriceHigh, estimatedUnitPriceLow];
+          }
           return [{
             name,
             need: recommendedNeed(part.need),
             searchQuery: partSearchQuery,
+            estimatedUnitPriceLow,
+            estimatedUnitPriceHigh,
+            priceBasis: String(part.priceBasis || "").trim().slice(0, 240) || null,
           }];
         }).slice(0, 5)
       : [];
