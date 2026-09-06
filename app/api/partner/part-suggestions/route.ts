@@ -32,12 +32,22 @@ export async function POST(request: Request) {
 
     const rawCandidates = result.recommendedParts.length
       ? result.recommendedParts
-      : [{ name: result.partName, need: "possible" as const, searchQuery: result.searchQuery }];
+      : [{
+          name: result.partName,
+          need: "possible" as const,
+          searchQuery: result.searchQuery,
+          estimatedUnitPriceLow: null,
+          estimatedUnitPriceHigh: null,
+          priceBasis: null,
+        }];
 
     const items = rawCandidates.slice(0, 5).map((part) => ({
       name: part.name,
       need: part.need,
       searchQuery: part.searchQuery,
+      estimatedUnitPriceLow: part.estimatedUnitPriceLow,
+      estimatedUnitPriceHigh: part.estimatedUnitPriceHigh,
+      priceBasis: part.priceBasis,
       sources: buildPartSearchSources(part.searchQuery),
     }));
 
