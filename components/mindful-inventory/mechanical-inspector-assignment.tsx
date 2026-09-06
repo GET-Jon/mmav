@@ -42,14 +42,24 @@ function availableAt(option: MechanicalInspectorOption, localStart: string) {
 }
 function nextAvailableSlots(option: MechanicalInspectorOption, count = 4) {
   const results: string[] = [];
+  const selectedByDay = new Map<string, Date[]>();
   const start = new Date();
   start.setSeconds(0, 0);
   const remainder = start.getMinutes() % 15;
   if (remainder) start.setMinutes(start.getMinutes() + (15 - remainder));
-  for (let offset = 0; offset < 10 * 24 * 4 && results.length < count; offset += 1) {
+
+  for (let offset = 0; offset < 14 * 24 * 4 && results.length < count; offset += 1) {
     const candidate = new Date(start.getTime() + offset * 15 * 60_000);
     const local = localInput(candidate);
-    if (availableAt(option, local)) results.push(local);
+    if (!availableAt(option, local)) continue;
+
+    const dayKey = `${candidate.getFullYear()}-${candidate.getMonth()}-${candidate.getDate()}`;
+    const daySelections = selectedByDay.get(dayKey) || [];
+    if (daySelections.length >= 2) continue;
+    if (daySelections.some((selected) => candidate.getTime() - selected.getTime() < 2 * 60 * 60_000)) continue;
+
+    results.push(local);
+    selectedByDay.set(dayKey, [...daySelections, candidate]);
   }
   return results;
 }
