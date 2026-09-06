@@ -55,6 +55,18 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], fall
   return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+function expectedPlanningAmount(
+  source: typeof costSources[number],
+  planningInput: number | null,
+  low: number | null,
+  high: number | null,
+) {
+  if (source !== "ai_estimate") return planningInput ?? high ?? low ?? 0;
+  if (planningInput !== null && planningInput > 0) return planningInput;
+  if (low !== null && high !== null && high >= low) return Math.round(((low + high) / 2) * 100) / 100;
+  return high ?? low ?? 0;
+}
+
 function normalizeItem(
   value: unknown,
   findingValidationById: Map<string, FindingValidationStatus>,
@@ -69,11 +81,11 @@ function normalizeItem(
   const highInput = nullableNumber(item.estimatedCostHigh);
   const high = highInput === null ? low : low === null ? highInput : Math.max(low, highInput);
   const planningInput = nullableNumber(item.planningAmount);
-  const planningAmount = planningInput ?? high ?? low ?? 0;
   const rawSource = enumValue(item.costSource, costSources, "unknown");
   const costSource = ["known_quote", "historical_actual", "catalog_parts_cost", "comparable_vehicle"].includes(rawSource)
     ? "unknown"
     : rawSource;
+  const planningAmount = expectedPlanningAmount(costSource, planningInput, low, high);
 
   let classification = enumValue(item.classification, classifications, "investigate");
   let decision = enumValue(item.decision, decisions, "investigate");
