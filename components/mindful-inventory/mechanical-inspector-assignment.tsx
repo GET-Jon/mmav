@@ -164,22 +164,32 @@ export function MechanicalInspectorAssignment({ vehicleId, options, inspection, 
     </div>
 
     {options.length ? <>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <select value={partnerId} onChange={(e) => { const next = options.find((option) => option.id === e.target.value); setPartnerId(e.target.value); setRequestedStartAt(""); setCustomTimeOpen(false); if (next?.defaultInspectionFee !== null && next?.defaultInspectionFee !== undefined) setFee(String(next.defaultInspectionFee)); }} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold sm:w-[260px]">
-          <option value="">Choose inspector</option>
-          {options.map((option) => <option key={option.id} value={option.id}>{option.name}{recommended?.id === option.id ? " — recommended" : ""}</option>)}
-        </select>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div>
+          <div className="mb-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Inspector</div>
+          <select value={partnerId} onChange={(e) => { const next = options.find((option) => option.id === e.target.value); setPartnerId(e.target.value); setRequestedStartAt(""); setCustomTimeOpen(false); if (next?.defaultInspectionFee !== null && next?.defaultInspectionFee !== undefined) setFee(String(next.defaultInspectionFee)); }} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold">
+            <option value="">Choose inspector</option>
+            {options.map((option) => <option key={option.id} value={option.id}>{option.name}{recommended?.id === option.id ? " — recommended" : ""}</option>)}
+          </select>
+        </div>
 
-        {selected ? suggestedSlots.map((slot) => <button key={slot} type="button" onClick={() => { setRequestedStartAt(slot); setCustomTimeOpen(false); }} className={`w-[172px] rounded-xl border px-3 py-2.5 text-xs font-black ${requestedStartAt === slot && !customTimeOpen ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 bg-white text-blue-900"}`}>{slotLabel(slot)}</button>) : null}
+        {selected ? <div>
+          <div className="mb-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Suggested times</div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {suggestedSlots.map((slot) => <button key={slot} type="button" onClick={() => { setRequestedStartAt(slot); setCustomTimeOpen(false); }} className={`min-w-0 rounded-xl border px-3 py-2.5 text-xs font-black ${requestedStartAt === slot && !customTimeOpen ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 bg-white text-blue-900"}`}>{slotLabel(slot)}</button>)}
+          </div>
+        </div> : null}
+      </div>
 
-        {selected ? <button type="button" onClick={() => { setCustomTimeOpen(true); if (suggestedSlots.includes(requestedStartAt)) setRequestedStartAt(""); }} className={`w-[172px] rounded-xl border px-3 py-2.5 text-xs font-black ${customTimeOpen ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>Other times</button> : null}
+      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-3">
+        {selected ? <button type="button" onClick={() => { setCustomTimeOpen(true); if (suggestedSlots.includes(requestedStartAt)) setRequestedStartAt(""); }} className={`h-[42px] rounded-xl border px-4 text-xs font-black ${customTimeOpen ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>Other times</button> : null}
 
         <label className="flex h-[42px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3">
           <span className="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Inspection fee</span>
           <span className="text-sm font-black text-slate-700">$</span>
           <input inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="0" aria-label="Inspection fee" className="w-16 bg-transparent text-sm font-semibold outline-none" />
         </label>
-        <button disabled={working || !partnerId || !requestedStartAt} onClick={() => void assign()} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Assign Inspection</button>
+        <button disabled={working || !partnerId || !requestedStartAt} onClick={() => void assign()} className="h-[42px] rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:bg-slate-300">Assign Inspection</button>
       </div>
 
       {customTimeOpen ? <div className="mt-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
