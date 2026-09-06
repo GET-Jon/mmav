@@ -13,9 +13,15 @@ function replaceOnce(oldText, newText, label) {
 }
 
 replaceOnce(
+  '  const quotePending = activeItems.filter((item) => item.costSource === "unknown" || item.planningAmount <= 0).length;',
+  '  const quotePending = activeItems.filter((item) => item.costSource === "unknown" || item.costSource === "ai_estimate" || item.planningAmount <= 0).length;',
+  "AI estimate pending-confirmation count",
+);
+
+replaceOnce(
   '  const pricedTotal = activeItems.reduce((sum, item) => sum + ((item.costSource === "unknown" || item.planningAmount <= 0) ? 0 : item.planningAmount), 0);',
   [
-    '  const pricedTotal = activeItems.reduce((sum, item) => sum + ((item.costSource === "unknown" || item.planningAmount <= 0) ? 0 : item.planningAmount), 0);',
+    '  const pricedTotal = activeItems.reduce((sum, item) => sum + ((item.costSource === "unknown" || item.costSource === "ai_estimate" || item.planningAmount <= 0) ? 0 : item.planningAmount), 0);',
     '',
     '  function getInspectionCostEvidence(item: InventoryPlanItemView) {',
     '    const linked = item.findingIds.map((id) => findingsById.get(id)).filter(Boolean) as InventoryFindingView[];',
@@ -56,6 +62,12 @@ replaceOnce(
 );
 
 replaceOnce(
+  '          const quoteRequired = item.costSource === "unknown" || item.planningAmount <= 0;',
+  '          const quoteRequired = item.costSource === "unknown" || item.costSource === "ai_estimate" || item.planningAmount <= 0;',
+  "AI estimate remains provisional",
+);
+
+replaceOnce(
   '          const investigation = item.classification === "investigate" || item.decision === "investigate" || item.managerInvestigationRequired;',
   '          const investigation = item.classification === "investigate" || item.decision === "investigate" || item.managerInvestigationRequired;\n          const inspectionEvidence = getInspectionCostEvidence(item);',
   "Approval Review evidence computation",
@@ -81,7 +93,7 @@ const evidencePanel = [
   '            <div><div className="text-[10px] font-black uppercase text-slate-400">Inspection estimate</div><div className="mt-1 text-sm font-black text-slate-800">{editingEvidence.estimateLow !== null || editingEvidence.estimateHigh !== null ? <>{money(editingEvidence.estimateLow)} – {money(editingEvidence.estimateHigh)}</> : "Not provided"}</div></div>',
   '            <div><div className="text-[10px] font-black uppercase text-slate-400">Formal quote</div><div className="mt-1 text-sm font-black text-amber-800">{editing.costSource === "known_quote" && editing.planningAmount > 0 ? money(editing.planningAmount) : "Pending"}</div></div>',
   '          </div>',
-  '          <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">Mechanical values are first-party cost evidence, not a formal downstream quote. A repair is only financially authorized once a sufficiently known total is entered below.</p>',
+  '          <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">Mechanical values and AI estimates are planning evidence, not a formal downstream quote. A repair is only financially authorized once a sufficiently known total is entered below.</p>',
   '          {editing.costSource === "unknown" && editing.costSourceDetail ? <div className="mt-3 rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-600"><span className="font-black">Work Plan synthesis:</span> {editing.costSourceDetail}</div> : null}',
   '        </div> : null}',
   '        <div className="mt-5 grid gap-4 sm:grid-cols-2">',
@@ -113,5 +125,5 @@ replaceOnce(
 
 if (updated !== source) {
   writeFileSync(path, updated, "utf8");
-  console.log("Separated Mechanical cost evidence from formal Work Plan quotes.");
+  console.log("Separated Mechanical/AI cost evidence from formal Work Plan authorization.");
 }
