@@ -181,7 +181,7 @@ export function MechanicalInspectorAssignment({ vehicleId, options, inspection, 
         </div> : null}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-3">
+      <div className="mt-3 flex flex-wrap items-end justify-end gap-2 border-t border-slate-100 pt-3">
         {selected ? <button type="button" onClick={() => { setCustomTimeOpen(true); if (suggestedSlots.includes(requestedStartAt)) setRequestedStartAt(""); }} className={`h-[42px] rounded-xl border px-4 text-xs font-black ${customTimeOpen ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>Other times</button> : null}
 
         <label className="flex h-[42px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3">
