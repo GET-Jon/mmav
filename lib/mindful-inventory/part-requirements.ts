@@ -35,6 +35,9 @@ export type PartRequirementView = {
   suggestedByPartnerName: string | null;
   partnerOfferUnitPrice: number | null;
   partnerOfferNote: string | null;
+  aiEstimatedUnitPriceLow: number | null;
+  aiEstimatedUnitPriceHigh: number | null;
+  aiPriceBasis: string | null;
   fitmentQuery: string | null;
   fulfillmentMethod: PartFulfillmentMethod | null;
   sourcingOwner: PartSourcingOwner | null;
@@ -67,7 +70,7 @@ export async function getInventoryPartRequirements(
 ): Promise<PartRequirementView[]> {
   const { data: rows, error } = await supabase
     .from("mindful_inventory_part_requirements")
-    .select("id,vehicle_id,plan_item_id,work_order_id,finding_id,upgrade_id,linked_part_id,description,quantity,part_number,origin,requirement_status,suggested_by_partner_id,partner_offer_unit_price,partner_offer_note,fitment_query,fulfillment_method,sourcing_owner,blocking,owner_target_unit_price_low,owner_target_unit_price_high,owner_decision_note,created_at")
+    .select("id,vehicle_id,plan_item_id,work_order_id,finding_id,upgrade_id,linked_part_id,description,quantity,part_number,origin,requirement_status,suggested_by_partner_id,partner_offer_unit_price,partner_offer_note,ai_estimated_unit_price_low,ai_estimated_unit_price_high,ai_price_basis,fitment_query,fulfillment_method,sourcing_owner,blocking,owner_target_unit_price_low,owner_target_unit_price_high,owner_decision_note,created_at")
     .eq("company_id", companyId)
     .eq("vehicle_id", vehicleId)
     .order("created_at", { ascending: true });
@@ -144,6 +147,9 @@ export async function getInventoryPartRequirements(
       suggestedByPartnerName: row.suggested_by_partner_id ? partnerById.get(row.suggested_by_partner_id) || null : null,
       partnerOfferUnitPrice: numberOrNull(row.partner_offer_unit_price),
       partnerOfferNote: row.partner_offer_note,
+      aiEstimatedUnitPriceLow: numberOrNull(row.ai_estimated_unit_price_low),
+      aiEstimatedUnitPriceHigh: numberOrNull(row.ai_estimated_unit_price_high),
+      aiPriceBasis: row.ai_price_basis,
       fitmentQuery: row.fitment_query,
       fulfillmentMethod: row.fulfillment_method as PartFulfillmentMethod | null,
       sourcingOwner: row.sourcing_owner as PartSourcingOwner | null,
