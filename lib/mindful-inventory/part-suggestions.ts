@@ -8,6 +8,9 @@ export type RecommendedPartSuggestion = {
   name: string;
   need: RecommendedPartNeed;
   searchQuery: string;
+  estimatedUnitPriceLow: number | null;
+  estimatedUnitPriceHigh: number | null;
+  priceBasis: string | null;
 };
 
 export type PartSearchSuggestion = {
