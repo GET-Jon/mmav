@@ -11,6 +11,12 @@ function money(value: number | null | undefined) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 }
 
+function priceRange(low: number | null, high: number | null) {
+  if (low == null && high == null) return null;
+  if (low != null && high != null) return low === high ? money(low) : `${money(low)}–${money(high)}`;
+  return money(low ?? high);
+}
+
 function decisionLabel(method: PartFulfillmentMethod | null) {
   if (method === "partner_supplied") return "Partner supplies";
   if (method === "mindful_purchase") return "I'll source";
@@ -64,7 +70,7 @@ export function WorkPlanPartsReview({ vehicleId, vehicleLabel, requirements }: {
       <div>
         <div className={`text-xs font-black uppercase tracking-[0.1em] ${unresolved ? "text-amber-700" : "text-emerald-700"}`}>Parts Confirmation</div>
         <h2 className="mt-1 text-xl font-black text-slate-950">Confirm how each required part will be handled</h2>
-        <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">Mechanical decisions carry forward automatically. Only unresolved sourcing choices need your attention here.</p>
+        <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">Mechanical decisions and partner pricing carry forward automatically. AI pricing is a planning baseline until a partner or actual purchase replaces it.</p>
       </div>
       <div className={`rounded-xl px-3 py-2 text-xs font-black ${unresolved ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>{unresolved ? `${unresolved} decision${unresolved === 1 ? "" : "s"} needed` : "Parts confirmed ✓"}</div>
     </div>
@@ -73,6 +79,7 @@ export function WorkPlanPartsReview({ vehicleId, vehicleLabel, requirements }: {
       const links = searchLinks(item);
       const resolved = item.requirementStatus === "not_required" || Boolean(item.fulfillmentMethod);
       const selected = decisionLabel(item.fulfillmentMethod);
+      const aiRange = priceRange(item.aiEstimatedUnitPriceLow, item.aiEstimatedUnitPriceHigh);
       const buttonBase = "cursor-pointer rounded-lg border px-3 py-2 text-xs font-black transition hover:-translate-y-px hover:shadow-sm disabled:cursor-wait disabled:opacity-50";
       return <div key={item.id} className={`rounded-xl border p-4 ${resolved ? "border-emerald-100 bg-white" : "border-amber-200 bg-amber-50/40"}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -82,6 +89,10 @@ export function WorkPlanPartsReview({ vehicleId, vehicleLabel, requirements }: {
               {selected ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-emerald-800">{selected} ✓</span> : <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-amber-900">Decision needed</span>}
             </div>
             <div className="mt-1 text-xs font-semibold text-slate-500">For: {item.workTitle}{item.partNumber ? ` · ${item.partNumber}` : ""}</div>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+              {aiRange ? <span className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-blue-800" title={item.aiPriceBasis || "Lot Logic planning estimate; not a live quote"}>AI baseline: {aiRange}</span> : null}
+              {item.partnerOfferUnitPrice != null ? <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-emerald-800">Partner price: {money(item.partnerOfferUnitPrice)}</span> : aiRange ? <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-800">Partner price pending</span> : null}
+            </div>
             {item.partnerOfferUnitPrice != null || item.partnerOfferNote ? <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"><span className="font-black">{item.suggestedByPartnerName || "Mechanic"}:</span>{item.partnerOfferUnitPrice != null ? ` I can get it for about ${money(item.partnerOfferUnitPrice)}.` : ""}{item.partnerOfferNote ? ` ${item.partnerOfferNote}` : ""}</div> : null}
           </div>
           <div className="flex flex-wrap gap-2 lg:max-w-[560px] lg:justify-end">
