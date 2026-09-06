@@ -7,6 +7,10 @@ export type MechanicalPartSuggestion = {
   quantity: number;
   partNumber: string | null;
   notes: string | null;
+  aiEstimatedUnitPriceLow: number | null;
+  aiEstimatedUnitPriceHigh: number | null;
+  aiPriceBasis: string | null;
+  partnerOfferUnitPrice: number | null;
 };
 
 export type PartnerInspectionUpgrade = {
@@ -80,6 +84,10 @@ function partsOrEmpty(value: unknown): MechanicalPartSuggestion[] {
       quantity: numberOrNull(row.quantity) || 1,
       partNumber: String(row.partNumber ?? row.part_number ?? "").trim() || null,
       notes: String(row.notes || "").trim() || null,
+      aiEstimatedUnitPriceLow: numberOrNull(row.aiEstimatedUnitPriceLow ?? row.estimatedUnitPriceLow),
+      aiEstimatedUnitPriceHigh: numberOrNull(row.aiEstimatedUnitPriceHigh ?? row.estimatedUnitPriceHigh),
+      aiPriceBasis: String(row.aiPriceBasis ?? row.priceBasis ?? "").trim() || null,
+      partnerOfferUnitPrice: numberOrNull(row.partnerOfferUnitPrice),
     }];
   });
 }
