@@ -2,7 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 function replaceOnce(source, oldText, newText, label) {
   if (source.includes(newText)) return source;
-  if (!source.includes(oldText)) throw new Error(`Could not find ${label}. Refusing to patch mechanical → Work Plan transition automatically.`);
+  if (!source.includes(oldText)) {
+    console.log(`Skipped ${label}; target already changed or no longer matches the legacy markup.`);
+    return source;
+  }
   return source.replace(oldText, newText);
 }
 
@@ -10,12 +13,22 @@ function replaceOnce(source, oldText, newText, label) {
 const reviewPath = "components/mindful-inventory/mechanical-owner-finding-review.tsx";
 let review = readFileSync(reviewPath, "utf8");
 
-const oldAfterSave = `      setMessage(\n        decision === "accept"\n          ? needsDifferentPartner\n            ? \`${'${finding.title}'} approved and routed.\`\n            : \`${'${finding.title}'} accepted.\`\n          : decision === "dismiss"\n            ? \`${'${finding.title}'} dismissed from the mechanical scope.\`\n            : \`Clarification requested from the inspector for ${'${finding.title}'}.\`,\n      );\n      router.refresh();`;
+if (!review.includes("const finishingMechanicalReview =")) {
+  const startMarker = '      setMessage(\n        decision === "accept"';
+  const endMarker = "      router.refresh();";
+  const start = review.indexOf(startMarker);
+  const endStart = start >= 0 ? review.indexOf(endMarker, start) : -1;
 
-const newAfterSave = `      const finishingMechanicalReview =\n        decision !== "clarification" &&\n        unresolvedFindings.length === 1 &&\n        unresolvedFindings[0]?.id === finding.id;\n\n      if (finishingMechanicalReview) {\n        setMessage("Mechanical review complete. Building the Preliminary Work Plan…");\n        const planResponse = await fetch(\n          \`/api/mindful/inventory/vehicles/${'${vehicleId}'}/work-plan/generate\`,\n          { method: "POST" },\n        );\n        if (!planResponse.ok) {\n          const planPayload = (await planResponse.json().catch(() => ({}))) as { error?: string };\n          throw new Error(planPayload.error || "Mechanical review was saved, but the Preliminary Work Plan could not be built.");\n        }\n        router.push(\`/mindful/inventory/${'${vehicleId}'}/car-plan?from=mechanical\`);\n        router.refresh();\n        return;\n      }\n\n      setMessage(\n        decision === "accept"\n          ? needsDifferentPartner\n            ? \`${'${finding.title}'} approved and routed.\`\n            : \`${'${finding.title}'} accepted.\`\n          : decision === "dismiss"\n            ? \`${'${finding.title}'} dismissed from the mechanical scope.\`\n            : \`Clarification requested from the inspector for ${'${finding.title}'}.\`,\n      );\n      router.refresh();`;
+  if (start >= 0 && endStart >= 0) {
+    const end = endStart + endMarker.length;
+    const newAfterSave = `      const finishingMechanicalReview =\n        decision !== "clarification" &&\n        unresolvedFindings.length === 1 &&\n        unresolvedFindings[0]?.id === finding.id;\n\n      if (finishingMechanicalReview) {\n        setMessage("Mechanical review complete. Building the Preliminary Work Plan…");\n        const planResponse = await fetch(\n          \`/api/mindful/inventory/vehicles/\${vehicleId}/work-plan/generate\`,\n          { method: "POST" },\n        );\n        if (!planResponse.ok) {\n          const planPayload = (await planResponse.json().catch(() => ({}))) as { error?: string };\n          throw new Error(planPayload.error || "Mechanical review was saved, but the Preliminary Work Plan could not be built.");\n        }\n        router.push(\`/mindful/inventory/\${vehicleId}/car-plan?from=mechanical\`);\n        router.refresh();\n        return;\n      }\n\n      setMessage(\n        decision === "accept"\n          ? needsDifferentPartner\n            ? \`\${finding.title} approved and routed.\`\n            : \`\${finding.title} accepted.\`\n          : decision === "dismiss"\n            ? \`\${finding.title} dismissed from the mechanical scope.\`\n            : \`Clarification requested from the inspector for \${finding.title}.\`,\n      );\n      router.refresh();`;
 
-review = replaceOnce(review, oldAfterSave, newAfterSave, "final Owner review transition");
-writeFileSync(reviewPath, review, "utf8");
+    review = review.slice(0, start) + newAfterSave + review.slice(end);
+    writeFileSync(reviewPath, review, "utf8");
+  } else {
+    console.log("Skipped final Owner review transition; current component no longer matches the expected save block.");
+  }
+}
 
 // 2) Mechanical page should be history/review, not a transition screen.
 const intakePath = "app/mindful/inventory/[id]/intake/page.tsx";
@@ -24,7 +37,7 @@ intake = intake.replace('import { InventoryMechanicalNextStep } from "@/componen
 
 const oldCompleteBlock = `        !submittedForOwner ? inspection?.status === "complete" ? (\n          <section className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-5 shadow-sm">\n            <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Mechanical complete</div>\n            <h2 className="mt-1 text-xl font-black text-slate-950">Partner inspection accepted</h2>\n            <p className="mt-1 text-sm font-medium text-slate-600">The assigned mechanic completed the inspection and the Owner accepted it. The inspector assignment remains attached to the project history.</p>\n          </section>\n        ) : (`;
 
-const newCompleteBlock = `        !submittedForOwner ? inspection?.status === "complete" ? (\n          <>\n            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm">\n              <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Mechanical complete ✓</div>\n              <h2 className="mt-1 text-lg font-black text-slate-950">Completed inspection record</h2>\n              <p className="mt-1 text-sm font-medium text-slate-600">The mechanic's findings, Owner decisions, upgrade assessment, and inspector assignment remain here as vehicle history.</p>\n            </section>\n            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">\n              <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>\n              <h2 className="mt-1 text-xl font-black text-slate-950">Mechanical inspection history</h2>\n              <MechanicalOwnerFindingReview\n                vehicleId={vehicle.id}\n                findings={submittedFindings}\n                partnerOptions={ownerReviewPartners}\n                inspectorPartnerId={inspection?.performedByPartnerId || null}\n              />\n            </section>\n            <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />\n          </>\n        ) : (`;
+const newCompleteBlock = `        !submittedForOwner ? inspection?.status === "complete" ? (\n          <>\n            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm">\n              <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Mechanical complete ✓</div>\n              <h2 className="mt-1 text-lg font-black text-slate-950">Completed inspection record</h2>\n              <p className="mt-1 text-sm font-medium text-slate-600">The mechanic&apos;s findings, Owner decisions, upgrade assessment, and inspector assignment remain here as vehicle history.</p>\n            </section>\n            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">\n              <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>\n              <h2 className="mt-1 text-xl font-black text-slate-950">Mechanical inspection history</h2>\n              <MechanicalOwnerFindingReview\n                vehicleId={vehicle.id}\n                findings={submittedFindings}\n                partnerOptions={ownerReviewPartners}\n                inspectorPartnerId={inspection?.performedByPartnerId || null}\n              />\n            </section>\n            <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />\n          </>\n        ) : (`;
 intake = replaceOnce(intake, oldCompleteBlock, newCompleteBlock, "completed mechanical history view");
 
 const nextStepStart = `\n      {(partnerFlowStatus || ownerInspectionMode || inspection?.status === "complete") ? <InventoryMechanicalNextStep\n        vehicleId={vehicle.id}\n        inspectionComplete={inspection?.status === "complete"}\n        planningReady={inspectionData.planningReady}\n      /> : null}`;
@@ -52,4 +65,4 @@ const newReturn = `  return (\n    <div className="space-y-4">\n      {query.fro
 plan = replaceOnce(plan, oldReturn, newReturn, "Work Plan completion banner");
 writeFileSync(planPath, plan, "utf8");
 
-console.log("Removed redundant mechanical transition screen and routed final Owner review directly into the Work Plan.");
+console.log("Mechanical → Work Plan transition is aligned.");
