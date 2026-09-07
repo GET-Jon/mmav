@@ -18,7 +18,7 @@ const helpers = `  function ownerReviewPartStatus(part: InventoryFindingView["me
     const notes = part.notes || "";
     if (notes.startsWith("IN STOCK ·")) return { label: "In stock ✓", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
     if (notes.startsWith("NOT NEEDED ·")) return { label: "Not needed", tone: "border-slate-200 bg-slate-100 text-slate-600" };
-    return { label: "Needs sourcing", tone: "border-amber-200 bg-amber-50 text-amber-800" };
+    return { label: "Purchase required", tone: "border-amber-200 bg-amber-50 text-amber-800" };
   }
 
   function ownerReviewPartUrl(part: InventoryFindingView["mechanicalSuggestedParts"][number]) {
@@ -78,7 +78,7 @@ const helpers = `  function ownerReviewPartStatus(part: InventoryFindingView["me
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <span className={\`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] ${'${status.tone}'}\`}>{status.label}</span>
-                    {sourceUrl && !notNeeded ? <a href={sourceUrl} target="_blank" rel="noreferrer" className="text-[11px] font-black text-blue-700 hover:text-blue-900">View source ↗</a> : null}
+                    {sourceUrl && !notNeeded ? <a href={sourceUrl} target="_blank" rel="noreferrer" className="text-[11px] font-black text-blue-700 hover:text-blue-900">Source reference ↗</a> : null}
                   </div>
                   {note ? <div className="mt-2 text-[11px] font-semibold leading-4 text-slate-500">{note}</div> : null}
                 </div>
