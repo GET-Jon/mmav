@@ -46,12 +46,12 @@ source = source.replace(
   `            const editing = editingSetupId === work.id;\n            const editingStep = editing ? (editingSetupStep[work.id] ?? null) : null;\n            const openStep = (step: number) => { setEditingSetupId(work.id); setEditingSetupStep((current) => ({ ...current, [work.id]: step })); };`,
 );
 
-const oldSteps = `<Step n={1} label="Parts" done={work.partsReviewComplete} active={partsActive} detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : \`${work.pendingPartCount} pending\`) : "Review"} />
+const oldSteps = `<Step n={1} label="Parts" done={work.partsReviewComplete} active={partsActive} detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : \`\${work.pendingPartCount} pending\`) : "Review"} />
                         <Step n={2} label="Partner" done={Boolean(work.performerName)} active={partnerActive} detail={work.performerName || undefined} />
                         <Step n={3} label="Quote" done={quoteComplete} active={quoteActive} detail={quoteDetail(work)} />
                         <Step n={4} label="Location" done={Boolean(work.locationId)} active={locationActive} detail={work.locationName || undefined} />
                         <Step n={5} label="Schedule" done={Boolean(work.scheduledStartAt)} active={scheduleActive} detail={work.scheduledStartAt ? dateTimeLabel(work.scheduledStartAt) : undefined} />`;
-const newSteps = `<Step n={1} label="Parts" done={work.partsReviewComplete} active={partsActive} selected={editingStep === 1} onClick={!done ? () => openStep(1) : undefined} detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : \`${work.pendingPartCount} pending\`) : "Review"} />
+const newSteps = `<Step n={1} label="Parts" done={work.partsReviewComplete} active={partsActive} selected={editingStep === 1} onClick={!done ? () => openStep(1) : undefined} detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : \`\${work.pendingPartCount} pending\`) : "Review"} />
                         <Step n={2} label="Partner" done={Boolean(work.performerName)} active={partnerActive} selected={editingStep === 2} onClick={!done ? () => openStep(2) : undefined} detail={work.performerName || "Unassigned"} />
                         <Step n={3} label="Quote" done={quoteComplete} active={quoteActive} selected={editingStep === 3} onClick={!done ? () => openStep(3) : undefined} detail={quoteDetail(work)} />
                         <Step n={4} label="Location" done={Boolean(work.locationId)} active={locationActive} selected={editingStep === 4} onClick={!done ? () => openStep(4) : undefined} detail={work.locationName || "Not selected"} />
