@@ -88,9 +88,16 @@ function scheduleRoutePatch(source) {
   // but never block a proposed time because parts / quote / location are unfinished.
   source = source.replace(`import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";\n`, ``);
 
+  // The two-sided scheduling patch runs earlier and may already have expanded this
+  // select. Ensure the audit-history fields are present regardless of which shape
+  // reaches this script.
   source = source.replace(
     `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status")`,
-    `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status")`,
+    `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source")`,
+  );
+  source = source.replace(
+    `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source")`,
+    `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source")`,
   );
 
   source = source.replace(
