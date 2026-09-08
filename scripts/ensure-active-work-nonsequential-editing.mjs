@@ -31,6 +31,10 @@ function ownerUiPatch(source) {
     `(scheduleActive || editingStep === 5) && work.partsReviewComplete && work.performerName && quoteComplete && work.locationId`,
     `(scheduleActive || editingStep === 5)`,
   );
+  source = source.replaceAll(
+    `(scheduleActive || editingStep === 5) && work.partsReviewComplete && work.performerName && work.locationId`,
+    `(scheduleActive || editingStep === 5)`,
+  );
 
   // Quote can be inspected before a Partner is assigned; make that state explicit
   // rather than incorrectly calling it internal work.
@@ -39,17 +43,17 @@ function ownerUiPatch(source) {
     `{!work.performerName ? <div className="text-xs font-bold text-slate-600">No Partner assigned yet. Assign one when you are ready to request or review a labor quote.</div> : !work.assignedPartnerId ? <div className="text-xs font-bold text-emerald-700">✓ Internal Mindful work · quote not required.</div> : work.partnerEstimateStatus === "awaiting_review" ?`,
   );
 
-  // Location is a planning decision and may be set before performer/quote work is complete.
-  source = source.replace(
-    `<select disabled={workingId === work.id || !work.locationId} value={work.resourceId || ""}`,
-    `<select disabled={workingId === work.id || !work.locationId} value={work.resourceId || ""}`,
-  );
+  // Scheduling is a planning decision and is NEVER locked. Parts / quote readiness
+  // become guidance only; execution readiness is still enforced when work starts.
+  const unlockedSchedule = `<div>{!work.partsReadyForExecution ? <div className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Scheduling guidance: required parts are not ready yet. {partsPendingLabel(work)} You can still change the work time.</div> : null}{estimate ? <div className="mb-2 rounded-lg bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800">Scheduling guidance: {estimate}. You can still propose or change the work time.</div> : null}<div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue} onChange={(event) => setScheduleDrafts((current) => ({ ...current, [work.id]: event.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold" /><button disabled={workingId === work.id || !draftValue} onClick={() => void scheduleWork(work, draftValue)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{work.scheduledStartAt || work.proposedStartAt ? "Propose New Time" : "Propose Time"}</button></div></div>`;
 
-  // Scheduling is also a planning decision. Keep the parts warning, but do not lock
-  // the date/time control while parts are still pending.
   source = source.replace(
     `{!work.partsReadyForExecution ? <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Locked until all required parts are received. {partsPendingLabel(work)}</div> : <div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue} onChange={(event) => setScheduleDrafts((current) => ({ ...current, [work.id]: event.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold" /><button disabled={workingId === work.id || !draftValue} onClick={() => void scheduleWork(work, draftValue)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{work.scheduledStartAt ? "Save New Time" : "Save Schedule"}</button></div>}`,
-    `<div>{!work.partsReadyForExecution ? <div className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Planning is allowed now; execution will still wait for required parts. {partsPendingLabel(work)}</div> : null}<div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue} onChange={(event) => setScheduleDrafts((current) => ({ ...current, [work.id]: event.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold" /><button disabled={workingId === work.id || !draftValue} onClick={() => void scheduleWork(work, draftValue)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{work.scheduledStartAt ? "Save New Time" : "Save Schedule"}</button></div></div>`,
+    unlockedSchedule,
+  );
+  source = source.replace(
+    `{!work.partsReadyForExecution ? <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Locked until all required parts are received. {partsPendingLabel(work)}</div> : estimate ? <div className="rounded-lg bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800">Locked: {estimate}.</div> : <div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue} onChange={(event) => setScheduleDrafts((current) => ({ ...current, [work.id]: event.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold" /><button disabled={workingId === work.id || !draftValue} onClick={() => void scheduleWork(work, draftValue)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{work.scheduledStartAt ? "Save New Time" : "Save Schedule"}</button></div>}`,
+    unlockedSchedule,
   );
 
   source = source.replace(
@@ -80,13 +84,25 @@ function workOrderRoutePatch(source) {
 }
 
 function scheduleRoutePatch(source) {
+  // Scheduling is planning, not execution authorization. Preserve collision checks,
+  // but never block a proposed time because parts / quote / location are unfinished.
   source = source.replace(`import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";\n`, ``);
 
-  // Scheduling is a planning action, not an execution authorization. Remove the
-  // old sequential readiness gates while preserving collision checks below.
+  source = source.replace(
+    `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status")`,
+    `.select("id,vehicle_id,status,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status")`,
+  );
+
   source = source.replace(
     /\n    if \(existing\.parts_review_status !== "resolved"\) \{[\s\S]*?\n    const duration = Number\(existing\.estimated_elapsed_minutes \?\? existing\.estimated_duration_minutes \?\? 60\);/,
     `\n    const duration = Number(existing.estimated_elapsed_minutes ?? existing.estimated_duration_minutes ?? 60);`,
+  );
+
+  // Keep an explicit audit trail of every time/date change so missed, superseded,
+  // proposed, countered, and confirmed times remain reconstructable in History.
+  source = source.replace(
+    `      metadata: { proposedStartAt: isPartnerWork ? start.toISOString() : null, scheduledStartAt: isPartnerWork ? null : start.toISOString(), endAt: end.toISOString(), elapsedMinutes: safeDuration },`,
+    `      metadata: {\n        previousScheduledStartAt: existing.scheduled_start_at || null,\n        previousScheduledEndAt: existing.scheduled_end_at || null,\n        previousProposedStartAt: existing.proposed_start_at || null,\n        previousProposedEndAt: existing.proposed_end_at || null,\n        previousPartnerConfirmationStatus: existing.partner_confirmation_status || null,\n        proposedStartAt: isPartnerWork ? start.toISOString() : null,\n        scheduledStartAt: isPartnerWork ? null : start.toISOString(),\n        endAt: end.toISOString(),\n        elapsedMinutes: safeDuration,\n        changedAt: now,\n      },`,
   );
 
   source = source.replace(
