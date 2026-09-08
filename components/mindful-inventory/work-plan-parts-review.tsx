@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { PartRequirementView, PartFulfillmentMethod } from "@/lib/mindful-inventory/part-requirements";
@@ -25,6 +25,21 @@ function decisionLabel(method: PartFulfillmentMethod | null) {
   return null;
 }
 
+function cleanPartnerNote(note: string | null) {
+  if (!note) return null;
+  const cleaned = note
+    .replace(/\s*Lot Logic search:\s*.*$/i, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || null;
+}
+
+function displayPartNumber(value: string | null) {
+  if (!value || /^https?:\/\//i.test(value)) return null;
+  return value;
+}
+
 export function WorkPlanPartsReview({ vehicleId, vehicleLabel, requirements }: {
   vehicleId: string;
   vehicleLabel: string;
@@ -34,12 +49,22 @@ export function WorkPlanPartsReview({ vehicleId, vehicleLabel, requirements }: {
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [localDecisions, setLocalDecisions] = useState<Record<string, PartFulfillmentMethod | null>>(() =>
+    Object.fromEntries(requirements.map((item) => [item.id, item.fulfillmentMethod])),
+  );
+  const [openSourcing, setOpenSourcing] = useState<Record<string, boolean>>({});
 
+  const visibleRequirements = useMemo(() => requirements, [requirements]);
   if (!requirements.length) return null;
-  const unresolved = requirements.filter((item) => item.requirementStatus !== "not_required" && !item.fulfillmentMethod).length;
+
+  const methodFor = (item: PartRequirementView) => localDecisions[item.id] ?? item.fulfillmentMethod;
+  const unresolved = visibleRequirements.filter((item) => item.requirementStatus !== "not_required" && !methodFor(item)).length;
 
   async function decide(item: PartRequirementView, fulfillmentMethod: PartFulfillmentMethod) {
-    setWorking(item.id); setMessage("");
+    const previous = methodFor(item);
+    setLocalDecisions((current) => ({ ...current, [item.id]: fulfillmentMethod }));
+    setWorking(item.id);
+    setMessage("");
     try {
       const response = await fetch(`/api/mindful/inventory/vehicles/${vehicleId}/part-requirements`, {
         method: "POST",
@@ -57,56 +82,96 @@ export function WorkPlanPartsReview({ vehicleId, vehicleLabel, requirements }: {
       if (!response.ok) throw new Error(data.error || "Could not save the parts decision.");
       router.refresh();
     } catch (error) {
+      setLocalDecisions((current) => ({ ...current, [item.id]: previous }));
       setMessage(error instanceof Error ? error.message : "Could not save the parts decision.");
-    } finally { setWorking(null); }
+    } finally {
+      setWorking(null);
+    }
   }
 
   function searchLinks(item: PartRequirementView) {
     return buildPartSearchSources(`${vehicleLabel} ${item.description}`.replace(/\s+/g, " ").trim());
   }
 
-  return <section className={`rounded-2xl border p-5 shadow-sm ${unresolved ? "border-amber-200 bg-amber-50/30" : "border-emerald-200 bg-white"}`}>
+  return <section className={`rounded-2xl border p-5 shadow-sm ${unresolved ? "border-amber-200 bg-amber-50/20" : "border-emerald-200 bg-white"}`}>
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div>
-        <div className={`text-xs font-black uppercase tracking-[0.1em] ${unresolved ? "text-amber-700" : "text-emerald-700"}`}>Parts Confirmation</div>
-        <h2 className="mt-1 text-xl font-black text-slate-950">Confirm how each required part will be handled</h2>
-        <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">Mechanical decisions and partner pricing carry forward automatically. AI pricing is a planning baseline until a partner or actual purchase replaces it.</p>
+        <div className={`text-xs font-black uppercase tracking-[0.1em] ${unresolved ? "text-amber-700" : "text-emerald-700"}`}>Parts confirmation</div>
+        <h2 className="mt-1 text-xl font-black text-slate-950">Decide how each part will be handled</h2>
+        <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">Choose one disposition for each part. Pricing is supporting context; sourcing and ordering continue in Active Work.</p>
       </div>
-      <div className={`rounded-xl px-3 py-2 text-xs font-black ${unresolved ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>{unresolved ? `${unresolved} decision${unresolved === 1 ? "" : "s"} needed` : "Parts confirmed ✓"}</div>
+      <div className={`rounded-xl px-3 py-2 text-xs font-black ${unresolved ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>{unresolved ? `${unresolved} decision${unresolved === 1 ? "" : "s"} remaining` : "All parts addressed ✓"}</div>
     </div>
+
     {message ? <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{message}</div> : null}
-    <div className="mt-4 space-y-2">{requirements.map((item) => {
+
+    <div className="mt-4 space-y-3">{visibleRequirements.map((item) => {
       const links = searchLinks(item);
-      const resolved = item.requirementStatus === "not_required" || Boolean(item.fulfillmentMethod);
-      const selected = decisionLabel(item.fulfillmentMethod);
+      const method = methodFor(item);
+      const resolved = item.requirementStatus === "not_required" || Boolean(method);
+      const selected = decisionLabel(method);
       const aiRange = priceRange(item.aiEstimatedUnitPriceLow, item.aiEstimatedUnitPriceHigh);
-      const buttonBase = "cursor-pointer rounded-lg border px-3 py-2 text-xs font-black transition hover:-translate-y-px hover:shadow-sm disabled:cursor-wait disabled:opacity-50";
-      return <div key={item.id} className={`rounded-xl border p-4 ${resolved ? "border-emerald-100 bg-white" : "border-amber-200 bg-amber-50/40"}`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      const partnerNote = cleanPartnerNote(item.partnerOfferNote);
+      const partNumber = displayPartNumber(item.partNumber);
+      const primaryPrice = item.partnerOfferUnitPrice != null ? money(item.partnerOfferUnitPrice) : aiRange;
+      const primaryPriceLabel = item.partnerOfferUnitPrice != null ? "Inspector / partner price" : aiRange ? "AI estimate" : "Price not provided";
+      const sourcingOpen = Boolean(openSourcing[item.id]);
+      const buttonBase = "cursor-pointer rounded-lg border px-3 py-2 text-xs font-black transition disabled:cursor-wait disabled:opacity-50";
+
+      return <article key={item.id} className={`rounded-2xl border p-4 transition-colors ${resolved ? "border-emerald-200 bg-emerald-50/20" : "border-amber-200 bg-white"}`}>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_190px] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="font-black text-slate-950">{item.description} <span className="text-xs font-bold text-slate-400">×{item.quantity}</span></div>
-              {selected ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-emerald-800">{selected} ✓</span> : <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-amber-900">Decision needed</span>}
+              <h3 className="text-base font-black leading-6 text-slate-950">{item.description}</h3>
+              <span className="text-xs font-bold text-slate-400">×{item.quantity}</span>
+              {resolved ? (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-emerald-800">✓ {selected || "Addressed"}</span>
+              ) : (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-amber-900">Decision needed</span>
+              )}
             </div>
-            <div className="mt-1 text-xs font-semibold text-slate-500">For: {item.workTitle}{item.partNumber ? ` · ${item.partNumber}` : ""}</div>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-              {aiRange ? <span className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-blue-800" title={item.aiPriceBasis || "Lot Logic planning estimate; not a live quote"}>AI baseline: {aiRange}</span> : null}
-              {item.partnerOfferUnitPrice != null ? <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-emerald-800">Partner price: {money(item.partnerOfferUnitPrice)}</span> : aiRange ? <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-800">Partner price pending</span> : null}
-            </div>
-            {item.partnerOfferUnitPrice != null || item.partnerOfferNote ? <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"><span className="font-black">{item.suggestedByPartnerName || "Mechanic"}:</span>{item.partnerOfferUnitPrice != null ? ` I can get it for about ${money(item.partnerOfferUnitPrice)}.` : ""}{item.partnerOfferNote ? ` ${item.partnerOfferNote}` : ""}</div> : null}
+            <div className="mt-1 text-xs font-semibold text-slate-500">For {item.workTitle}{partNumber ? ` · Part # ${partNumber}` : ""}</div>
+
+            {partnerNote ? <div className="mt-3 text-xs font-semibold leading-5 text-slate-600"><span className="font-black text-slate-700">Inspector note:</span> {partnerNote}</div> : null}
           </div>
-          <div className="flex flex-wrap gap-2 lg:max-w-[560px] lg:justify-end">
-            {(item.suggestedByPartnerId || item.partnerOfferUnitPrice != null) ? <button title="Have the partner provide this part" disabled={working === item.id} onClick={() => void decide(item, "partner_supplied")} className={`${buttonBase} ${item.fulfillmentMethod === "partner_supplied" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}>{item.fulfillmentMethod === "partner_supplied" ? "✓ Partner supplies" : item.partnerOfferUnitPrice != null ? `Partner supplies · ${money(item.partnerOfferUnitPrice)}` : "Partner supplies"}</button> : null}
-            <button title="Mindful will source this part" disabled={working === item.id} onClick={() => void decide(item, "mindful_purchase")} className={`${buttonBase} ${item.fulfillmentMethod === "mindful_purchase" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}>{item.fulfillmentMethod === "mindful_purchase" ? "✓ I'll source" : "I'll source"}</button>
-            <button title="This part is already in stock" disabled={working === item.id} onClick={() => void decide(item, "in_stock")} className={`${buttonBase} ${item.fulfillmentMethod === "in_stock" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}>{item.fulfillmentMethod === "in_stock" ? "✓ In stock" : "In stock"}</button>
-            <button title="This part is not needed for the approved work" disabled={working === item.id} onClick={() => void decide(item, "not_required")} className={`${buttonBase} ${item.fulfillmentMethod === "not_required" || item.requirementStatus === "not_required" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>{item.fulfillmentMethod === "not_required" || item.requirementStatus === "not_required" ? "✓ Not required" : "Not required"}</button>
+
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 lg:text-right">
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Expected part cost</div>
+            <div className={`mt-0.5 text-lg font-black ${item.partnerOfferUnitPrice != null ? "text-emerald-700" : "text-slate-900"}`}>{primaryPrice || "—"}</div>
+            <div className="mt-0.5 text-[10px] font-bold text-slate-400">{primaryPriceLabel}</div>
+            {item.partnerOfferUnitPrice != null && aiRange ? <div className="mt-1 text-[10px] font-semibold text-blue-700">AI baseline {aiRange}</div> : null}
           </div>
         </div>
-        {item.fulfillmentMethod === "mindful_purchase" || !item.fulfillmentMethod ? <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center">
-          <div className="flex flex-wrap gap-1.5">{links.map((source) => <a key={source.key} href={source.url} target="_blank" rel="noreferrer" className="cursor-pointer rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-black transition hover:bg-slate-200">{source.key === "turn14" ? "Turn 14" : source.label} ↗</a>)}</div>
-          <input value={notes[item.id] || ""} onChange={(e) => setNotes((current) => ({ ...current, [item.id]: e.target.value }))} placeholder="Optional sourcing note" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs" />
-        </div> : null}
-      </div>;
+
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">How will this part be handled?</div>
+              <div className="mt-1 text-xs font-semibold text-slate-500">Choose one. You can change the decision later.</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(item.suggestedByPartnerId || item.partnerOfferUnitPrice != null) ? <button title="Have the partner provide this part" disabled={working === item.id} onClick={() => void decide(item, "partner_supplied")} className={`${buttonBase} ${method === "partner_supplied" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>Partner supplies</button> : null}
+              <button title="Mindful will source this part" disabled={working === item.id} onClick={() => void decide(item, "mindful_purchase")} className={`${buttonBase} ${method === "mindful_purchase" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>I'll source</button>
+              <button title="This part is already in stock" disabled={working === item.id} onClick={() => void decide(item, "in_stock")} className={`${buttonBase} ${method === "in_stock" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>In stock</button>
+              <button title="This part is not needed for the approved work" disabled={working === item.id} onClick={() => void decide(item, "not_required")} className={`${buttonBase} ${method === "not_required" || item.requirementStatus === "not_required" ? "border-slate-600 bg-slate-700 text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"}`}>Not required</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 min-h-[40px] border-t border-slate-100 pt-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-semibold text-slate-500">
+              {method === "mindful_purchase" ? "You’ll source this in Active Work." : method === "partner_supplied" ? "Partner will supply this part." : method === "in_stock" ? "Marked as already available." : method === "not_required" || item.requirementStatus === "not_required" ? "Excluded from the approved parts requirement." : "Sourcing details are optional until you choose a disposition."}
+            </div>
+            <button type="button" onClick={() => setOpenSourcing((current) => ({ ...current, [item.id]: !current[item.id] }))} className="shrink-0 cursor-pointer text-xs font-black text-slate-500 hover:text-slate-900">{sourcingOpen ? "Hide sourcing references" : "Sourcing references"}</button>
+          </div>
+
+          {sourcingOpen ? <div className="mt-3 flex flex-col gap-2 rounded-xl bg-slate-50 p-3 sm:flex-row sm:items-center">
+            <div className="flex flex-wrap gap-1.5">{links.map((source) => <a key={source.key} href={source.url} target="_blank" rel="noreferrer" className="cursor-pointer rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-black shadow-sm transition hover:bg-slate-100">{source.key === "turn14" ? "Turn 14" : source.label} ↗</a>)}</div>
+            <input value={notes[item.id] || ""} onChange={(e) => setNotes((current) => ({ ...current, [item.id]: e.target.value }))} placeholder="Optional sourcing note" className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs" />
+          </div> : null}
+        </div>
+      </article>;
     })}</div>
   </section>;
 }
