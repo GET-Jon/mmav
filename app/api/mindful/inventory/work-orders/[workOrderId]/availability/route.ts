@@ -14,8 +14,6 @@ function localParts(date: Date, offsetMinutes: number) {
     month: shifted.getUTCMonth(),
     day: shifted.getUTCDate(),
     weekday: shifted.getUTCDay(),
-    hour: shifted.getUTCHours(),
-    minute: shifted.getUTCMinutes(),
   };
 }
 
@@ -35,25 +33,18 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
 
     const { data: work, error: workError } = await access.supabase
       .from("mindful_inventory_work_orders")
-      .select("id,vehicle_id,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,location_id,resource_id,parts_review_status,partner_estimate_status")
+      .select("id,vehicle_id,estimated_elapsed_minutes,estimated_duration_minutes,assigned_partner_id,assigned_user_id,resource_id,parts_review_status,partner_estimate_status")
       .eq("id", workOrderId)
       .single();
     if (workError || !work) return NextResponse.json({ error: "Work Order not found." }, { status: 404 });
 
-    const { data: vehicle } = await access.supabase
+    const { data: companyVehicles, error: vehicleError } = await access.supabase
       .from("mindful_inventory_vehicles")
       .select("id")
-      .eq("id", work.vehicle_id)
-      .eq("company_id", access.company.companyId)
-      .maybeSingle();
-    if (!vehicle) return NextResponse.json({ error: "Work Order is outside the current company." }, { status: 403 });
-
-    if (work.parts_review_status !== "resolved") return NextResponse.json({ error: "Complete Parts Review before scheduling." }, { status: 409 });
-    if (!work.assigned_partner_id && !work.assigned_user_id) return NextResponse.json({ error: "Choose a Partner before scheduling." }, { status: 409 });
-    if (!work.location_id) return NextResponse.json({ error: "Choose the work location before scheduling." }, { status: 409 });
-    if (work.assigned_partner_id && !["approved", "not_required"].includes(work.partner_estimate_status || "")) {
-      return NextResponse.json({ error: "Approve the partner labor estimate before scheduling." }, { status: 409 });
-    }
+      .eq("company_id", access.company.companyId);
+    if (vehicleError) throw new Error(vehicleError.message);
+    const vehicleIds = (companyVehicles || []).map((row) => row.id);
+    if (!vehicleIds.includes(work.vehicle_id)) return NextResponse.json({ error: "Work Order is outside the current company." }, { status: 403 });
 
     const { data: partRows, error: partsError } = await access.supabase
       .from("mindful_inventory_work_order_parts")
@@ -61,47 +52,51 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
       .eq("work_order_id", workOrderId);
     if (partsError) throw new Error(partsError.message);
     const parts = summarizePartsReadiness(partRows || []);
-    if (!parts.readyForExecution) {
-      return NextResponse.json({ error: "All required parts must be received before scheduling.", latestEtaAt: parts.latestEtaAt }, { status: 409 });
-    }
 
     const durationRaw = Number(work.estimated_elapsed_minutes ?? work.estimated_duration_minutes ?? 60);
     const durationMinutes = Number.isFinite(durationRaw) && durationRaw > 0 ? durationRaw : 60;
-    const horizonStart = new Date();
-    const horizonEnd = new Date(horizonStart.getTime() + 8 * 24 * 60 * 60_000);
+    const now = Date.now();
+    const horizonStart = new Date(now);
+    const horizonEnd = new Date(now + 14 * 24 * 60 * 60_000);
 
-    let query = access.supabase
-      .from("mindful_inventory_work_orders")
-      .select("id,assigned_partner_id,assigned_user_id,resource_id,scheduled_start_at,scheduled_end_at,status")
-      .neq("id", workOrderId)
-      .not("status", "in", '("complete","cancelled")')
-      .not("scheduled_start_at", "is", null)
-      .lt("scheduled_start_at", horizonEnd.toISOString())
-      .gt("scheduled_end_at", horizonStart.toISOString());
-
-    if (work.assigned_partner_id) query = query.eq("assigned_partner_id", work.assigned_partner_id);
-    else if (work.assigned_user_id) query = query.eq("assigned_user_id", work.assigned_user_id);
-
-    const { data: busyRows, error: busyError } = await query;
+    const { data: busyRows, error: busyError } = vehicleIds.length
+      ? await access.supabase
+          .from("mindful_inventory_work_orders")
+          .select("id,vehicle_id,assigned_partner_id,assigned_user_id,resource_id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,status")
+          .in("vehicle_id", vehicleIds)
+          .neq("id", workOrderId)
+          .not("status", "in", '("complete","cancelled")')
+      : { data: [], error: null };
     if (busyError) throw new Error(busyError.message);
 
-    const busy = (busyRows || [])
-      .map((row) => ({
-        start: row.scheduled_start_at ? new Date(row.scheduled_start_at).getTime() : NaN,
-        end: row.scheduled_end_at ? new Date(row.scheduled_end_at).getTime() : NaN,
+    const busy = (busyRows || []).flatMap((row) => {
+      const startValue = row.scheduled_start_at || row.proposed_start_at;
+      const endValue = row.scheduled_end_at || row.proposed_end_at;
+      if (!startValue || !endValue) return [];
+      const start = new Date(startValue).getTime();
+      const end = new Date(endValue).getTime();
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < horizonStart.getTime() || start > horizonEnd.getTime()) return [];
+      return [{
+        start,
+        end,
+        vehicleId: row.vehicle_id as string,
+        partnerId: row.assigned_partner_id as string | null,
+        userId: row.assigned_user_id as string | null,
         resourceId: row.resource_id as string | null,
-      }))
-      .filter((row) => Number.isFinite(row.start) && Number.isFinite(row.end));
+      }];
+    });
 
-    const now = Date.now();
     const firstCandidate = new Date(Math.ceil((now + 30 * 60_000) / (30 * 60_000)) * 30 * 60_000);
     const firstLocal = localParts(firstCandidate, offsetMinutes);
+    const etaFloor = parts.latestEtaAt ? new Date(parts.latestEtaAt).getTime() : null;
     const suggestions: Array<{ startAt: string; endAt: string }> = [];
+    const selectedByDay = new Map<string, number[]>();
 
-    for (let dayOffset = 0; dayOffset < 8 && suggestions.length < 6; dayOffset += 1) {
+    for (let dayOffset = 0; dayOffset < 14 && suggestions.length < 6; dayOffset += 1) {
       const baseNoon = fromLocal(firstLocal.year, firstLocal.month, firstLocal.day + dayOffset, 12, 0, offsetMinutes);
       const p = localParts(baseNoon, offsetMinutes);
       if (p.weekday === 0 || p.weekday === 6) continue;
+      const dayKey = `${p.year}-${p.month}-${p.day}`;
 
       for (let minuteOfDay = 8 * 60; minuteOfDay + durationMinutes <= 17 * 60 && suggestions.length < 6; minuteOfDay += 30) {
         const hour = Math.floor(minuteOfDay / 60);
@@ -109,16 +104,35 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
         const start = fromLocal(p.year, p.month, p.day, hour, minute, offsetMinutes);
         const end = new Date(start.getTime() + durationMinutes * 60_000);
         if (start.getTime() < firstCandidate.getTime()) continue;
+        // Known parts ETA improves the recommendation, but never locks manual scheduling.
+        if (etaFloor && !parts.readyForExecution && start.getTime() < etaFloor) continue;
+
+        const daySelections = selectedByDay.get(dayKey) || [];
+        if (daySelections.length >= 2) continue;
+        if (daySelections.some((selected) => Math.abs(start.getTime() - selected) < 2 * 60 * 60_000)) continue;
 
         const conflict = busy.some((item) => {
-          if (overlaps(start.getTime(), end.getTime(), item.start, item.end)) return true;
-          return Boolean(work.resource_id && item.resourceId === work.resource_id && overlaps(start.getTime(), end.getTime(), item.start, item.end));
+          if (!overlaps(start.getTime(), end.getTime(), item.start, item.end)) return false;
+          if (item.vehicleId === work.vehicle_id) return true;
+          if (work.assigned_partner_id && item.partnerId === work.assigned_partner_id) return true;
+          if (work.assigned_user_id && item.userId === work.assigned_user_id) return true;
+          if (work.resource_id && item.resourceId === work.resource_id) return true;
+          return false;
         });
-        if (!conflict) suggestions.push({ startAt: start.toISOString(), endAt: end.toISOString() });
+        if (conflict) continue;
+
+        suggestions.push({ startAt: start.toISOString(), endAt: end.toISOString() });
+        selectedByDay.set(dayKey, [...daySelections, start.getTime()]);
       }
     }
 
-    return NextResponse.json({ durationMinutes, suggestions });
+    const guidance: string[] = [];
+    if (!work.assigned_partner_id && !work.assigned_user_id) guidance.push("Assignee not selected yet");
+    if (work.parts_review_status !== "resolved") guidance.push("parts review pending");
+    else if (!parts.readyForExecution) guidance.push(parts.latestEtaAt ? "suggestions begin after the latest known parts ETA" : "parts readiness unknown");
+    if (work.assigned_partner_id && !["approved", "not_required"].includes(work.partner_estimate_status || "")) guidance.push("partner quote still pending");
+
+    return NextResponse.json({ durationMinutes, suggestions, guidance: guidance.join(" · ") || null });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not calculate schedule availability." }, { status: 500 });
   }
