@@ -43,11 +43,13 @@ changed = patch("components/mindful-inventory/inventory-active-work-v6.tsx", (so
   );
 
   // Always put conflict-aware suggestions directly above the manual Work Order time control.
+  // Pass the current value through without render-time toISOString() conversion; malformed
+  // legacy values must never be able to crash server rendering.
   const manualAnchor = '<div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue}';
   if (updated.includes(manualAnchor) && !updated.includes('endpoint={`/api/mindful/inventory/work-orders/${work.id}/availability`}')) {
     updated = updated.replace(
       manualAnchor,
-      '<SuggestedTimePicker endpoint={`/api/mindful/inventory/work-orders/${work.id}/availability`} selectedStartAt={draftValue ? new Date(draftValue).toISOString() : (work.proposedStartAt || work.scheduledStartAt)} onSelect={(startAt) => setScheduleDrafts((current) => ({ ...current, [work.id]: localInput(startAt) }))} />\n                        <div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue}',
+      '<SuggestedTimePicker endpoint={`/api/mindful/inventory/work-orders/${work.id}/availability`} selectedStartAt={draftValue || work.proposedStartAt || work.scheduledStartAt} onSelect={(startAt) => setScheduleDrafts((current) => ({ ...current, [work.id]: localInput(startAt) }))} />\n                        <div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue}',
     );
   }
   return updated;
@@ -59,7 +61,7 @@ changed = patch("components/mindful-inventory/inventory-schedule-board.tsx", (so
   if (updated.includes(editorAnchor) && !updated.includes('endpoint={`/api/mindful/inventory/work-orders/${selectedItem.id}/availability`}')) {
     updated = updated.replace(
       editorAnchor,
-      '<div className="rounded-xl border border-slate-200 p-4"><SuggestedTimePicker endpoint={`/api/mindful/inventory/work-orders/${selectedItem.id}/availability`} selectedStartAt={starts[selectedItem.id] ? new Date(starts[selectedItem.id]).toISOString() : selectedItem.scheduledStartAt} onSelect={(startAt) => setStarts((current) => ({ ...current, [selectedItem.id]: localInput(startAt) }))} /><label className="block"><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Other time</div><input type="datetime-local" value={starts[selectedItem.id] || localInput(selectedItem.scheduledStartAt)}',
+      '<div className="rounded-xl border border-slate-200 p-4"><SuggestedTimePicker endpoint={`/api/mindful/inventory/work-orders/${selectedItem.id}/availability`} selectedStartAt={starts[selectedItem.id] || selectedItem.scheduledStartAt} onSelect={(startAt) => setStarts((current) => ({ ...current, [selectedItem.id]: localInput(startAt) }))} /><label className="block"><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Other time</div><input type="datetime-local" value={starts[selectedItem.id] || localInput(selectedItem.scheduledStartAt)}',
     );
   }
   return updated;
@@ -71,7 +73,7 @@ changed = patch("components/mindful-inventory/inventory-detailing.tsx", (source)
   if (updated.includes(gridAnchor) && !updated.includes('vehicles/${detailing.vehicleId}/detailing/availability')) {
     updated = updated.replace(
       gridAnchor,
-      '<div className="mt-6 border-t border-slate-200 pt-5"><SuggestedTimePicker endpoint={`/api/mindful/inventory/vehicles/${detailing.vehicleId}/detailing/availability?partnerId=${encodeURIComponent(partnerId)}&durationMinutes=${turnaroundHours ? Math.round(Number(turnaroundHours) * 60) : 120}`} selectedStartAt={scheduledStart ? new Date(scheduledStart).toISOString() : null} onSelect={(startAt) => setScheduledStart(localInput(startAt))} /></div>\n      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">',
+      '<div className="mt-6 border-t border-slate-200 pt-5"><SuggestedTimePicker endpoint={`/api/mindful/inventory/vehicles/${detailing.vehicleId}/detailing/availability?partnerId=${encodeURIComponent(partnerId)}&durationMinutes=${turnaroundHours ? Math.round(Number(turnaroundHours) * 60) : 120}`} selectedStartAt={scheduledStart || null} onSelect={(startAt) => setScheduledStart(localInput(startAt))} /></div>\n      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">',
     );
   }
   updated = updated.replace('Scheduled start<input type="datetime-local"', 'Other time<input type="datetime-local"');
@@ -84,7 +86,7 @@ changed = patch("components/partner/partner-detailing-list.tsx", (source) => {
   if (updated.includes(gridAnchor) && !updated.includes('partner/detailing/${item.id}/availability')) {
     updated = updated.replace(
       gridAnchor,
-      '<div className="mt-4"><SuggestedTimePicker compact endpoint={`/api/partner/detailing/${item.id}/availability?durationMinutes=${draft.turnaround ? Math.round(Number(draft.turnaround) * 60) : 120}`} selectedStartAt={draft.time ? new Date(draft.time).toISOString() : item.scheduledStartAt} onSelect={(startAt) => setDraft(item, { time: localInput(startAt) })} /></div>\n          <div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-[10px] font-black text-slate-500">Other time<input type="datetime-local"',
+      '<div className="mt-4"><SuggestedTimePicker compact endpoint={`/api/partner/detailing/${item.id}/availability?durationMinutes=${draft.turnaround ? Math.round(Number(draft.turnaround) * 60) : 120}`} selectedStartAt={draft.time || item.scheduledStartAt} onSelect={(startAt) => setDraft(item, { time: localInput(startAt) })} /></div>\n          <div className="mt-3 grid gap-2 sm:grid-cols-3"><label className="text-[10px] font-black text-slate-500">Other time<input type="datetime-local"',
     );
   }
   return updated;
