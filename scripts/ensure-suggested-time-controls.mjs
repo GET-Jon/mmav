@@ -21,7 +21,18 @@ let changed = false;
 changed = patch("components/mindful-inventory/inventory-active-work-v6.tsx", (source) => {
   let updated = addImport(source, 'import { WorkOrderPartsModal } from "@/components/mindful-inventory/work-order-parts-modal";');
 
-  // The command-center tiles already explain themselves; remove the redundant helper line.
+  // The command-center tiles already explain themselves. Remove the whole conditional
+  // helper expression, not just its child div, so prebuild can never leave invalid
+  // JSX such as {!done && !editing ? : null} behind.
+  updated = updated.replaceAll(
+    '{!done && !editing ? <div className="mt-2 text-[10px] font-semibold text-slate-400">Every setup tile is independent. Select Parts, Partner, Quote, Location, or Schedule at any time to review or change it.</div> : null}',
+    '',
+  );
+  updated = updated.replaceAll(
+    '{!done && !editing ? <div className="mt-2 text-[10px] font-semibold text-slate-400">Select Parts, Partner, Quote, Location, or Schedule above to review or change it.</div> : null}',
+    '',
+  );
+  // Tolerate a standalone helper from older source shapes too.
   updated = updated.replaceAll(
     '<div className="mt-2 text-[10px] font-semibold text-slate-400">Every setup tile is independent. Select Parts, Partner, Quote, Location, or Schedule at any time to review or change it.</div>',
     '',
