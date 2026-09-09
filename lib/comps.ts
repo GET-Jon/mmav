@@ -54,6 +54,57 @@ export type MileageAdjustmentResult = {
   reliability: "normal" | "caution" | "low";
 };
 
+function calculateDiminishingMileageValue({
+  mileageDelta,
+  targetMileage,
+  compMileage,
+  dollarsPerThousand,
+}: {
+  mileageDelta: number;
+  targetMileage: number;
+  compMileage: number;
+  dollarsPerThousand: number;
+}) {
+  const sign = mileageDelta >= 0 ? 1 : -1;
+  let remainingMiles = Math.abs(mileageDelta);
+
+  // The first miles of difference matter more than very large gaps. This avoids
+  // treating the 150,000th-mile difference as economically identical to the
+  // first 10,000 miles of difference.
+  const bands = [
+    { miles: 25000, factor: 1 },
+    { miles: 25000, factor: 0.7 },
+    { miles: 50000, factor: 0.4 },
+    { miles: Number.POSITIVE_INFINITY, factor: 0.2 },
+  ];
+
+  let adjustment = 0;
+  for (const band of bands) {
+    if (remainingMiles <= 0) break;
+    const milesInBand = Math.min(remainingMiles, band.miles);
+    adjustment +=
+      (milesInBand / 1000) * dollarsPerThousand * band.factor;
+    remainingMiles -= milesInBand;
+  }
+
+  // Mileage premiums also flatten as the vehicles themselves age into higher
+  // odometer ranges. A 10k-mile gap around 25k miles generally matters more than
+  // a 10k-mile gap around 175k miles.
+  const averageOdometer = Math.max(0, (targetMileage + compMileage) / 2);
+  const odometerFactor =
+    averageOdometer <= 40000
+      ? 1.15
+      : averageOdometer <= 80000
+        ? 1
+        : averageOdometer <= 120000
+          ? 0.85
+          : averageOdometer <= 160000
+            ? 0.65
+            : 0.5;
+
+  return sign * adjustment * odometerFactor;
+}
+
 export function calculateMileageAdjustment({
   comp,
   targetMileage,
@@ -64,9 +115,13 @@ export function calculateMileageAdjustment({
   assumptions: Assumptions;
 }): MileageAdjustmentResult {
   const mileageDelta = comp.mileage - targetMileage;
-  const rawAdjustment =
-    (mileageDelta / 1000) *
-    assumptions.compSettings.mileageAdjustmentPerThousand;
+  const rawAdjustment = calculateDiminishingMileageValue({
+    mileageDelta,
+    targetMileage,
+    compMileage: comp.mileage,
+    dollarsPerThousand:
+      assumptions.compSettings.mileageAdjustmentPerThousand,
+  });
 
   const configuredDollarCap = Number(
     assumptions.compSettings.maxMileageAdjustmentDollars,
@@ -166,8 +221,6 @@ function removeRobustPriceOutliers(entries: ValuationComp[]) {
     }
   }
 
-  // Never let outlier logic erase most of a thin market. If fewer than three
-  // observations survive, keep the original set and let confidence stay Low.
   if (kept.length < 3) {
     return { kept: entries, excluded: [] as ValuationComp[] };
   }
@@ -191,9 +244,6 @@ export function calculateCompSummary({
 }): CompSummary {
   const rawIncludedComps = comps.filter((comp) => comp.included === true);
 
-  // No fallback to unchecked/weak comps. If nothing passes both the explicit
-  // inclusion state and the quality/equivalence gates, Lot Logic returns no
-  // automatic valuation rather than manufacturing one from weak evidence.
   const qualityPassingComps = rawIncludedComps.filter(
     (comp) =>
       isPrimaryEquivalent(comp) &&
