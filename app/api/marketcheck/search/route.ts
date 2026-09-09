@@ -43,6 +43,7 @@ type RankedComp = {
   autoIncludeEligible?: boolean;
   targetClassification?: string | null;
   candidateClassification?: string | null;
+  needsClassificationReview?: boolean;
   marketCheckDetails?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -58,6 +59,8 @@ type TargetIdentity = {
   bodyType?: string;
   engine?: string;
   transmission?: string;
+  doors?: number | null;
+  cylinders?: number | null;
 };
 
 function hasValue(value: unknown) {
@@ -122,6 +125,8 @@ function buildTargetVehicle(target: TargetIdentity): VehicleIdentity {
     bodyType: target.bodyType,
     engine: target.engine,
     transmission: target.transmission,
+    doors: target.doors,
+    cylinders: target.cylinders,
   };
 }
 
@@ -178,6 +183,7 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
   const original = payload.comps as RankedComp[];
   const originalIncludedCount = original.filter((comp) => comp.included === true).length;
   const targetVehicle = buildTargetVehicle(target);
+  const minimumQualityScore = Number(payload.minimumQualityScore || 55);
 
   const ranked = original.map((comp) => {
     const compYear = Number(comp.year || 0);
@@ -212,6 +218,7 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
       autoIncludeEligible: equivalence.autoIncludeEligible,
       targetClassification: equivalence.targetClassification || null,
       candidateClassification: equivalence.candidateClassification || null,
+      needsClassificationReview: equivalence.needsClassificationReview === true,
       marketCheckDetails: {
         ...details,
         targetYear: target.year,
@@ -238,6 +245,8 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
           originalScore: currentScore,
           equivalenceTier: equivalence.tier,
           equivalenceReasons: equivalence.reasons,
+          autoIncludeEligible: equivalence.autoIncludeEligible,
+          needsClassificationReview: equivalence.needsClassificationReview === true,
         },
       },
     };
@@ -263,11 +272,16 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
   });
 
   let included = 0;
-  const withInclusions = ranked.map((comp) => {
-    const eligible = comp.autoIncludeEligible === true && comp.equivalenceTier !== "reject";
-    const shouldInclude =
-      eligible && included < originalIncludedCount;
+  const desiredIncludedCount = Math.min(6, Math.max(0, originalIncludedCount));
 
+  const withInclusions = ranked.map((comp) => {
+    const scorePasses = Number(comp.qualityScore || 0) >= minimumQualityScore;
+    const eligible =
+      comp.autoIncludeEligible === true &&
+      (comp.equivalenceTier === "direct" || comp.equivalenceTier === "near") &&
+      scorePasses;
+
+    const shouldInclude = eligible && included < desiredIncludedCount;
     if (shouldInclude) included += 1;
 
     return {
@@ -288,18 +302,30 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
   const rejectedCount = withInclusions.filter(
     (comp) => comp.equivalenceTier === "reject",
   ).length;
+  const aiReviewCandidateCount = withInclusions.filter(
+    (comp) => comp.needsClassificationReview === true,
+  ).length;
+  const qualityPassingEquivalentCount = withInclusions.filter(
+    (comp) =>
+      (comp.equivalenceTier === "direct" || comp.equivalenceTier === "near") &&
+      Number(comp.qualityScore || 0) >= minimumQualityScore,
+  ).length;
 
   return {
     ...payload,
+    lowConfidenceFallback: false,
     comps: withInclusions,
     equivalenceSummary: {
       directCount,
       nearCount,
       supportingCount,
       rejectedCount,
+      aiReviewCandidateCount,
+      qualityPassingEquivalentCount,
       autoIncludedCount: included,
+      valuationReady: included > 0,
       methodology:
-        "Vehicle equivalence is evaluated before mileage normalization. Supporting and rejected variants are not auto-included in valuation.",
+        "Vehicle equivalence and quality thresholds are evaluated before mileage normalization. Only Direct/Near comps that pass the quality floor are auto-included; weak fallback rows never create an automatic valuation.",
     },
   };
 }
@@ -333,6 +359,8 @@ export async function POST(request: Request) {
     bodyType: String(normalizedBody.bodyType || "").trim(),
     engine: String(normalizedBody.engine || "").trim(),
     transmission: String(normalizedBody.transmission || "").trim(),
+    doors: Number(normalizedBody.doors || 0) || null,
+    cylinders: Number(normalizedBody.cylinders || 0) || null,
   });
 
   return Response.json(rankedPayload, { status: response.status });
