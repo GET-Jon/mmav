@@ -12,8 +12,16 @@ type Props = {
   compact?: boolean;
 };
 
+function timeMs(value: string | null | undefined) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
 function label(value: string) {
-  return new Date(value).toLocaleString("en-US", {
+  const ms = timeMs(value);
+  if (ms === null) return "Available time";
+  return new Date(ms).toLocaleString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -49,6 +57,8 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
 
   useEffect(() => { void load(); }, [load, refreshKey]);
 
+  const selectedMs = timeMs(selectedStartAt);
+
   return <div className={compact ? "mb-2" : "mb-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3"}>
     <div className="flex items-center justify-between gap-2">
       <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Suggested times</div>
@@ -58,7 +68,8 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
     {error ? <div className="mt-2 text-[11px] font-semibold text-red-700">{error}</div> : null}
     {!error && !loading && !suggestions.length ? <div className="mt-2 text-[11px] font-semibold text-slate-500">No conflict-free suggestions found in the next two weeks. You can still choose another time manually.</div> : null}
     {suggestions.length ? <div className="mt-2 flex flex-wrap gap-2">{suggestions.map((slot) => {
-      const selected = Boolean(selectedStartAt && new Date(selectedStartAt).getTime() === new Date(slot.startAt).getTime());
+      const slotMs = timeMs(slot.startAt);
+      const selected = selectedMs !== null && slotMs !== null && selectedMs === slotMs;
       return <button key={slot.startAt} type="button" onClick={() => onSelect(slot.startAt, slot.endAt)} className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-black transition ${selected ? "border-blue-600 bg-blue-700 text-white" : "border-blue-200 bg-white text-blue-900 hover:border-blue-500 hover:bg-blue-50"}`}>
         {label(slot.startAt)}
       </button>;
