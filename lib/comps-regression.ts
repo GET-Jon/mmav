@@ -32,6 +32,7 @@ function assert(condition: boolean, message: string) {
 }
 
 export function assertCompValuationRegressionCases() {
+  regressionId = 0;
   const targetMileage = 70000;
 
   const wranglerHighMile = makeComp({
