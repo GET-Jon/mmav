@@ -14,6 +14,12 @@ export type MarketComp = {
   imageUrl?: string | null;
   dealerDays?: number | null;
   marketDays?: number | null;
+  equivalenceTier?: "direct" | "near" | "supporting" | "reject";
+  equivalenceReasons?: string[];
+  autoIncludeEligible?: boolean;
+  targetClassification?: string | null;
+  candidateClassification?: string | null;
+  needsClassificationReview?: boolean;
 
   marketCheckDetails?: {
     vin?: string | null;
@@ -52,6 +58,10 @@ export type MarketComp = {
       distanceMiles?: number | null;
       trimAvailable?: boolean;
       originalScore?: number | null;
+      equivalenceTier?: "direct" | "near" | "supporting" | "reject";
+      equivalenceReasons?: string[];
+      autoIncludeEligible?: boolean;
+      needsClassificationReview?: boolean;
     };
     raw?: Record<string, unknown>;
   };
@@ -70,4 +80,13 @@ export type CompSummary = {
   averageDealerDays: number;
   averageMarketDays: number;
   marketSpeedSignal: "Unknown" | "Fast" | "Normal" | "Slow" | "Very Slow";
+  valuationAvailable?: boolean;
+  rawIncludedCount?: number;
+  excludedOutlierCount?: number;
+  directCount?: number;
+  nearCount?: number;
+  supportingCount?: number;
+  cappedAdjustmentCount?: number;
+  lowReliabilityAdjustmentCount?: number;
+  confidenceReasons?: string[];
 };
