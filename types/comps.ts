@@ -85,6 +85,7 @@ export type CompSummary = {
   excludedOutlierCount?: number;
   directCount?: number;
   nearCount?: number;
+  supportingCount?: number;
   cappedAdjustmentCount?: number;
   lowReliabilityAdjustmentCount?: number;
   confidenceReasons?: string[];
