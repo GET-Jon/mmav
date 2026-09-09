@@ -12,6 +12,7 @@ export async function GET() {
       equivalence,
       valuation,
       totalPassed: equivalence.passed + valuation.passed,
+      note: "Internal regression suite for Lot Logic comp equivalence and valuation guardrails.",
     });
   } catch (error) {
     return NextResponse.json(
