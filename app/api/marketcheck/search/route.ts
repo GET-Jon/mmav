@@ -12,6 +12,26 @@ function normalizeIdentity(value: unknown) {
     .trim();
 }
 
+function canonicalFuelIdentity(value: unknown) {
+  const normalized = normalizeIdentity(value);
+  if (!normalized) return "";
+  if (normalized.includes("plug in hybrid") || normalized.includes("phev")) return "plug-in hybrid";
+  if (normalized.includes("electric") || normalized === "ev" || normalized.includes("battery")) return "electric";
+  if (normalized.includes("hybrid") || normalized.includes("hev")) return "hybrid";
+  if (normalized.includes("diesel") || normalized.includes("tdi")) return "diesel";
+  if (
+    normalized.includes("gasoline") ||
+    normalized === "gas" ||
+    normalized.includes("petrol") ||
+    normalized.includes("unleaded") ||
+    normalized.includes("regular fuel") ||
+    normalized.includes("premium fuel") ||
+    normalized === "regular" ||
+    normalized === "premium"
+  ) return "gasoline";
+  return normalized;
+}
+
 function canonicalizeMercedesSearch(body: Record<string, unknown>) {
   const normalizedMake = normalizeIdentity(body.make);
 
@@ -120,7 +140,7 @@ function buildTargetVehicle(target: TargetIdentity): VehicleIdentity {
     make: target.make,
     model: target.model,
     trim: target.trim,
-    fuelType: target.fuelType,
+    fuelType: canonicalFuelIdentity(target.fuelType),
     drivetrain: target.drivetrain,
     bodyType: target.bodyType,
     engine: target.engine,
@@ -156,9 +176,9 @@ function buildCandidateVehicle(
     drivetrain: String(
       details.drivetrain || build.drivetrain || build.drive_type || "",
     ).trim(),
-    fuelType: String(
+    fuelType: canonicalFuelIdentity(
       details.fuelType || build.fuel_type || build.fuel || "",
-    ).trim(),
+    ),
     engine: String(
       details.engine || build.engine || build.engine_description || "",
     ).trim(),
@@ -333,6 +353,8 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
 export async function POST(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
   const normalizedBody = canonicalizeMercedesSearch(body);
+  const decodedVehicle = asRecord(normalizedBody.decodedVehicle);
+  const nestedVehicle = asRecord(normalizedBody.vehicle);
 
   const forwardedRequest = new Request(request.url, {
     method: "POST",
@@ -345,22 +367,56 @@ export async function POST(request: Request) {
 
   const payload = (await response.json()) as Record<string, unknown>;
   const rankedPayload = rerankByCompFit(payload, {
-    year: Number(normalizedBody.year || 0),
-    make: String(normalizedBody.make || "").trim(),
-    model: String(normalizedBody.model || "").trim(),
-    trim: String(normalizedBody.trim || "").trim(),
-    fuelType: String(
+    year: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0),
+    make: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim(),
+    model: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim(),
+    trim: String(normalizedBody.trim || decodedVehicle.trim || nestedVehicle.trim || "").trim(),
+    fuelType: canonicalFuelIdentity(
       normalizedBody.fuelType ||
         normalizedBody.targetFuelType ||
+        decodedVehicle.fuelType ||
+        nestedVehicle.fuelType ||
+        "",
+    ),
+    mileage: Number(
+      normalizedBody.targetMileage ||
+        normalizedBody.mileage ||
+        decodedVehicle.mileage ||
+        nestedVehicle.mileage ||
+        0,
+    ),
+    drivetrain: String(
+      normalizedBody.drivetrain ||
+        decodedVehicle.drivetrain ||
+        nestedVehicle.drivetrain ||
         "",
     ).trim(),
-    mileage: Number(normalizedBody.targetMileage || normalizedBody.mileage || 0),
-    drivetrain: String(normalizedBody.drivetrain || "").trim(),
-    bodyType: String(normalizedBody.bodyType || "").trim(),
-    engine: String(normalizedBody.engine || "").trim(),
-    transmission: String(normalizedBody.transmission || "").trim(),
-    doors: Number(normalizedBody.doors || 0) || null,
-    cylinders: Number(normalizedBody.cylinders || 0) || null,
+    bodyType: String(
+      normalizedBody.bodyType ||
+        decodedVehicle.bodyType ||
+        decodedVehicle.bodyStyle ||
+        nestedVehicle.bodyType ||
+        nestedVehicle.bodyStyle ||
+        "",
+    ).trim(),
+    engine: String(
+      normalizedBody.engine || decodedVehicle.engine || nestedVehicle.engine || "",
+    ).trim(),
+    transmission: String(
+      normalizedBody.transmission ||
+        decodedVehicle.transmission ||
+        nestedVehicle.transmission ||
+        "",
+    ).trim(),
+    doors: Number(
+      normalizedBody.doors || decodedVehicle.doors || nestedVehicle.doors || 0,
+    ) || null,
+    cylinders: Number(
+      normalizedBody.cylinders ||
+        decodedVehicle.cylinders ||
+        nestedVehicle.cylinders ||
+        0,
+    ) || null,
   });
 
   return Response.json(rankedPayload, { status: response.status });
