@@ -15,6 +15,28 @@ source = source.replace(
   `(scheduleActive || editingStep === 5) ? <div`,
 );
 
+// Once the Owner explicitly selects a tile, that tile becomes the one and only
+// editor shown below the status row. When nothing is selected, Lot Logic may still
+// surface the current recommended setup item as a default suggestion.
+for (const [step, active] of [
+  [1, "partsActive"],
+  [2, "partnerActive"],
+  [3, "quoteActive"],
+  [4, "locationActive"],
+  [5, "scheduleActive"],
+]) {
+  source = source.replaceAll(
+    `(${active} || editingStep === ${step})`,
+    `(editing ? editingStep === ${step} : ${active})`,
+  );
+}
+
+// Make the editor heading identify what the Owner intentionally opened.
+source = source.replace(
+  `{editing ? "Edit setup" : "Next setup step"}`,
+  `{editing ? editingStep === 1 ? "Edit parts" : editingStep === 2 ? "Change partner" : editingStep === 3 ? "Edit quote" : editingStep === 4 ? "Edit location" : editingStep === 5 ? "Edit schedule" : "Edit setup" : "Next setup step"}`,
+);
+
 // Two-sided scheduling used to leave a hard parts gate in the rendered editor.
 // Convert that gate to guidance while preserving the existing proposal / accept UI.
 const lockedSchedulePrefix = `{!work.partsReadyForExecution ? <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Locked until all required parts are received. {partsPendingLabel(work)}</div> : <>`;
@@ -29,7 +51,7 @@ source = source.replaceAll(lockedPartsAndQuotePrefix, unlockedPartsAndQuotePrefi
 
 if (source !== original) {
   writeFileSync(path, source, "utf8");
-  console.log("Finalized Owner command-center tile independence and unlocked scheduling.");
+  console.log("Finalized Owner command-center tile independence, exclusive editing, and unlocked scheduling.");
 } else {
   console.log("Owner command-center final state already aligned.");
 }
