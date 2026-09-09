@@ -64,6 +64,8 @@ export type VehicleClassificationRule = {
 
 export type CompSettings = {
   mileageAdjustmentPerThousand: number;
+  maxMileageAdjustmentDollars: number;
+  maxMileageAdjustmentPercentOfAsk: number;
   fastSaleDiscount: number;
   minimumQualityScore: number;
   minimumCompsForMediumConfidence: number;
