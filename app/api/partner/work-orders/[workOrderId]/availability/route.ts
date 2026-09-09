@@ -8,18 +8,25 @@ function overlaps(startA: number, endA: number, startB: number, endB: number) {
   return startA < endB && endA > startB;
 }
 
-function roundUp(date: Date, minutes = 30) {
-  const step = minutes * 60_000;
-  return new Date(Math.ceil(date.getTime() / step) * step);
+function localParts(date: Date, offsetMinutes: number) {
+  const shifted = new Date(date.getTime() - offsetMinutes * 60_000);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth(), day: shifted.getUTCDate(), weekday: shifted.getUTCDay() };
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ workOrderId: string }> }) {
+function fromLocal(year: number, month: number, day: number, hour: number, minute: number, offsetMinutes: number) {
+  return new Date(Date.UTC(year, month, day, hour, minute) + offsetMinutes * 60_000);
+}
+
+export async function GET(request: Request, context: { params: Promise<{ workOrderId: string }> }) {
   try {
     const authClient = await createSupabaseServerAuthClient();
     const { data: { user } } = await authClient.auth.getUser();
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
     const { workOrderId } = await context.params;
+    const url = new URL(request.url);
+    const offsetRaw = Number(url.searchParams.get("tzOffset") || "0");
+    const offsetMinutes = Number.isFinite(offsetRaw) ? Math.max(-840, Math.min(840, offsetRaw)) : 0;
     const admin = createSupabaseAdminClient();
 
     const { data: work, error: workError } = await admin
@@ -66,8 +73,8 @@ export async function GET(_request: Request, context: { params: Promise<{ workOr
     if (vehicleError) throw new Error(vehicleError.message);
     const vehicleIds = (companyVehicles || []).map((row) => row.id);
 
-    const now = new Date();
-    const horizonEnd = new Date(now.getTime() + 14 * 24 * 60 * 60_000);
+    const now = Date.now();
+    const horizonEnd = new Date(now + 14 * 24 * 60 * 60_000);
     const { data: busyRows, error: busyError } = vehicleIds.length
       ? await admin
           .from("mindful_inventory_work_orders")
@@ -85,38 +92,27 @@ export async function GET(_request: Request, context: { params: Promise<{ workOr
       const start = new Date(startValue).getTime();
       const end = new Date(endValue).getTime();
       if (!Number.isFinite(start) || !Number.isFinite(end) || start > horizonEnd.getTime()) return [];
-      return [{
-        start,
-        end,
-        vehicleId: row.vehicle_id as string,
-        partnerId: row.assigned_partner_id as string | null,
-        resourceId: row.resource_id as string | null,
-      }];
+      return [{ start, end, vehicleId: row.vehicle_id as string, partnerId: row.assigned_partner_id as string | null, resourceId: row.resource_id as string | null }];
     });
 
+    const firstCandidate = new Date(Math.ceil((now + 30 * 60_000) / (30 * 60_000)) * 30 * 60_000);
+    const firstLocal = localParts(firstCandidate, offsetMinutes);
+    const etaFloor = parts.latestEtaAt ? new Date(parts.latestEtaAt).getTime() : null;
     const suggestions: Array<{ startAt: string; endAt: string }> = [];
     const selectedByDay = new Map<string, number[]>();
-    const cursor = roundUp(new Date(now.getTime() + 30 * 60_000));
-    cursor.setMinutes(cursor.getMinutes() >= 30 ? 30 : 0, 0, 0);
-    const etaFloor = parts.latestEtaAt ? new Date(parts.latestEtaAt).getTime() : null;
 
-    for (let day = 0; day < 14 && suggestions.length < 6; day += 1) {
-      const date = new Date(cursor);
-      date.setDate(cursor.getDate() + day);
-      const weekday = date.getDay();
-      if (weekday === 0 || weekday === 6) continue;
-      const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    for (let dayOffset = 0; dayOffset < 14 && suggestions.length < 6; dayOffset += 1) {
+      const baseNoon = fromLocal(firstLocal.year, firstLocal.month, firstLocal.day + dayOffset, 12, 0, offsetMinutes);
+      const p = localParts(baseNoon, offsetMinutes);
+      if (p.weekday === 0 || p.weekday === 6) continue;
+      const dayKey = `${p.year}-${p.month}-${p.day}`;
 
-      for (let minute = 8 * 60; minute + durationMinutes <= 17 * 60 && suggestions.length < 6; minute += 30) {
-        const start = new Date(date);
-        start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-        if (start.getTime() < now.getTime() + 30 * 60_000) continue;
+      for (let minuteOfDay = 8 * 60; minuteOfDay + durationMinutes <= 17 * 60 && suggestions.length < 6; minuteOfDay += 30) {
+        const start = fromLocal(p.year, p.month, p.day, Math.floor(minuteOfDay / 60), minuteOfDay % 60, offsetMinutes);
+        if (start.getTime() < firstCandidate.getTime()) continue;
         if (etaFloor && !parts.readyForExecution && start.getTime() < etaFloor) continue;
-
         const daySelections = selectedByDay.get(dayKey) || [];
-        if (daySelections.length >= 2) continue;
-        if (daySelections.some((selected) => Math.abs(start.getTime() - selected) < 2 * 60 * 60_000)) continue;
-
+        if (daySelections.length >= 2 || daySelections.some((selected) => Math.abs(start.getTime() - selected) < 2 * 60 * 60_000)) continue;
         const end = new Date(start.getTime() + durationMinutes * 60_000);
         const conflict = busy.some((item) => {
           if (!overlaps(start.getTime(), end.getTime(), item.start, item.end)) return false;
@@ -126,7 +122,6 @@ export async function GET(_request: Request, context: { params: Promise<{ workOr
           return false;
         });
         if (conflict) continue;
-
         suggestions.push({ startAt: start.toISOString(), endAt: end.toISOString() });
         selectedByDay.set(dayKey, [...daySelections, start.getTime()]);
       }
