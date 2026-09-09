@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type ScheduleSuggestion = { startAt: string; endAt: string };
+type ScheduleSegment = { startAt: string; endAt: string };
+type ScheduleSuggestion = { startAt: string; endAt: string; segments?: ScheduleSegment[] };
 
 type Props = {
   endpoint: string;
@@ -28,6 +29,15 @@ function label(value: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function segmentLabel(segment: ScheduleSegment) {
+  const startMs = timeMs(segment.startAt);
+  const endMs = timeMs(segment.endAt);
+  if (startMs === null || endMs === null) return null;
+  const start = new Date(startMs);
+  const end = new Date(endMs);
+  return `${start.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}–${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
 export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refreshKey, compact = false }: Props) {
@@ -66,14 +76,16 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
     </div>
     {guidance ? <div className="mt-1 text-[10px] font-semibold text-amber-700">{guidance}</div> : null}
     {error ? <div className="mt-2 text-[11px] font-semibold text-red-700">{error}</div> : null}
-    {!error && !loading && !suggestions.length ? <div className="mt-2 text-[11px] font-semibold text-slate-500">No conflict-free suggestions found in the next two weeks. You can still choose another time manually.</div> : null}
+    {!error && !loading && !suggestions.length ? <div className="mt-2 text-[11px] font-semibold text-slate-500">No conflict-free labor slots found in the next two weeks. You can still choose another time manually.</div> : null}
     {suggestions.length ? <div className="mt-2 flex flex-wrap gap-2">{suggestions.map((slot) => {
       const slotMs = timeMs(slot.startAt);
       const selected = selectedMs !== null && slotMs !== null && selectedMs === slotMs;
+      const segments = (slot.segments || []).map(segmentLabel).filter(Boolean) as string[];
       return <button key={slot.startAt} type="button" onClick={() => onSelect(slot.startAt, slot.endAt)} className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-black transition ${selected ? "border-blue-600 bg-blue-700 text-white" : "border-blue-200 bg-white text-blue-900 hover:border-blue-500 hover:bg-blue-50"}`}>
-        {label(slot.startAt)}
+        <div>{label(slot.startAt)}</div>
+        {segments.length > 1 ? <div className={`mt-1 text-[9px] font-semibold ${selected ? "text-blue-100" : "text-slate-500"}`}>{segments.join(" · ")}</div> : null}
       </button>;
     })}</div> : null}
-    {!compact ? <div className="mt-2 text-[10px] font-semibold text-slate-400">Suggestions account for the known vehicle, assignee, resource, duration, and current schedule. Manual selection remains available.</div> : null}
+    {!compact ? <div className="mt-2 text-[10px] font-semibold text-slate-400">Suggestions use hands-on labor capacity. Elapsed turnaround is tracked separately; long labor jobs are split across workdays.</div> : null}
   </div>;
 }
