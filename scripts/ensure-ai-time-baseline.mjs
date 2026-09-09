@@ -26,6 +26,7 @@ changed = patch("lib/mindful-inventory/car-plan.ts", (source) => {
       "  estimatedElapsedHours: number | null;\n  aiEstimatedLaborHours: number | null;\n  aiEstimatedElapsedHours: number | null;",
     );
   }
+
   source = source.replace(
     "estimated_duration_hours,estimated_labor_hours,estimated_elapsed_hours,labor_estimate_rationale,elapsed_estimate_rationale,suggested_partner_id",
     "estimated_duration_hours,estimated_labor_hours,estimated_elapsed_hours,ai_estimated_labor_hours,ai_estimated_elapsed_hours,labor_estimate_rationale,elapsed_estimate_rationale,suggested_partner_id",
@@ -34,12 +35,19 @@ changed = patch("lib/mindful-inventory/car-plan.ts", (source) => {
     "estimated_duration_hours,estimated_labor_hours,estimated_elapsed_hours,suggested_partner_id",
     "estimated_duration_hours,estimated_labor_hours,estimated_elapsed_hours,ai_estimated_labor_hours,ai_estimated_elapsed_hours,suggested_partner_id",
   );
+
   if (!source.includes("aiEstimatedLaborHours: nullableNumber(row.ai_estimated_labor_hours")) {
-    source = source.replace(
-      "      estimatedElapsedHours: nullableNumber(row.estimated_elapsed_hours as number | string | null),",
-      "      estimatedElapsedHours: nullableNumber(row.estimated_elapsed_hours as number | string | null),\n      aiEstimatedLaborHours: nullableNumber(row.ai_estimated_labor_hours as number | string | null),\n      aiEstimatedElapsedHours: nullableNumber(row.ai_estimated_elapsed_hours as number | string | null),",
-    );
+    const plain = "    estimatedElapsedHours: nullableNumber(row.estimated_elapsed_hours),";
+    const casted = "    estimatedElapsedHours: nullableNumber(row.estimated_elapsed_hours as number | string | null),";
+    const anchor = source.includes(plain) ? plain : source.includes(casted) ? casted : null;
+    if (anchor) {
+      source = source.replace(
+        anchor,
+        `${anchor}\n    aiEstimatedLaborHours: nullableNumber(row.ai_estimated_labor_hours),\n    aiEstimatedElapsedHours: nullableNumber(row.ai_estimated_elapsed_hours),`,
+      );
+    }
   }
+
   return source;
 }) || changed;
 
