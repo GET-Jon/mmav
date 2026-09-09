@@ -4,10 +4,9 @@ alter table public.mindful_inventory_plan_items
   add column if not exists ai_estimated_elapsed_hours numeric(8,2)
     check (ai_estimated_elapsed_hours is null or ai_estimated_elapsed_hours >= 0);
 
-update public.mindful_inventory_plan_items
-set ai_estimated_labor_hours = coalesce(ai_estimated_labor_hours, estimated_labor_hours),
-    ai_estimated_elapsed_hours = coalesce(ai_estimated_elapsed_hours, estimated_elapsed_hours, estimated_duration_hours)
-where ai_estimated_labor_hours is null or ai_estimated_elapsed_hours is null;
+-- Approved Work Plan items are intentionally immutable, so legacy approved rows
+-- are left untouched. New AI-generated draft items persist their original AI
+-- timing baselines at creation time.
 
 create or replace function public.populate_inventory_work_order_time_baseline()
 returns trigger
