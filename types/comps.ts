@@ -1,3 +1,9 @@
+export type VehicleEquivalenceTier =
+  | "direct"
+  | "near"
+  | "supporting"
+  | "reject";
+
 export type MarketComp = {
   id: string;
   included: boolean;
@@ -11,6 +17,11 @@ export type MarketComp = {
   mileage: number;
   askingPrice: number;
   qualityScore: number;
+  equivalenceTier?: VehicleEquivalenceTier;
+  equivalenceReasons?: string[];
+  autoIncludeEligible?: boolean;
+  targetClassification?: string | null;
+  candidateClassification?: string | null;
   imageUrl?: string | null;
   dealerDays?: number | null;
   marketDays?: number | null;
@@ -52,6 +63,8 @@ export type MarketComp = {
       distanceMiles?: number | null;
       trimAvailable?: boolean;
       originalScore?: number | null;
+      equivalenceTier?: VehicleEquivalenceTier;
+      equivalenceReasons?: string[];
     };
     raw?: Record<string, unknown>;
   };
