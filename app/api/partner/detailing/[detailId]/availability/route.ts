@@ -7,9 +7,13 @@ function overlaps(startA: number, endA: number, startB: number, endB: number) {
   return startA < endB && endA > startB;
 }
 
-function roundUp(date: Date, minutes = 30) {
-  const step = minutes * 60_000;
-  return new Date(Math.ceil(date.getTime() / step) * step);
+function localParts(date: Date, offsetMinutes: number) {
+  const shifted = new Date(date.getTime() - offsetMinutes * 60_000);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth(), day: shifted.getUTCDate(), weekday: shifted.getUTCDay() };
+}
+
+function fromLocal(year: number, month: number, day: number, hour: number, minute: number, offsetMinutes: number) {
+  return new Date(Date.UTC(year, month, day, hour, minute) + offsetMinutes * 60_000);
 }
 
 export async function GET(request: Request, context: { params: Promise<{ detailId: string }> }) {
@@ -20,6 +24,8 @@ export async function GET(request: Request, context: { params: Promise<{ detailI
     const { detailId } = await context.params;
     const url = new URL(request.url);
     const requestedDuration = Number(url.searchParams.get("durationMinutes") || "0");
+    const offsetRaw = Number(url.searchParams.get("tzOffset") || "0");
+    const offsetMinutes = Number.isFinite(offsetRaw) ? Math.max(-840, Math.min(840, offsetRaw)) : 0;
     const admin = createSupabaseAdminClient();
 
     const { data: detail, error: detailError } = await admin
@@ -56,14 +62,14 @@ export async function GET(request: Request, context: { params: Promise<{ detailI
     if (workResult.error) throw new Error(workResult.error.message);
     if (detailingResult.error) throw new Error(detailingResult.error.message);
 
-    const busy: Array<{ start: number; end: number; vehicleId: string }> = [];
+    const busy: Array<{ start: number; end: number }> = [];
     for (const row of workResult.data || []) {
       if (row.assigned_partner_id !== partner.id && row.vehicle_id !== detail.vehicle_id) continue;
       const startValue = row.scheduled_start_at || row.proposed_start_at;
       const endValue = row.scheduled_end_at || row.proposed_end_at;
       if (!startValue || !endValue) continue;
       const start = new Date(startValue).getTime(); const end = new Date(endValue).getTime();
-      if (Number.isFinite(start) && Number.isFinite(end)) busy.push({ start, end, vehicleId: row.vehicle_id });
+      if (Number.isFinite(start) && Number.isFinite(end)) busy.push({ start, end });
     }
     for (const row of detailingResult.data || []) {
       const startValue = row.scheduled_start_at || row.proposed_start_at;
@@ -71,20 +77,23 @@ export async function GET(request: Request, context: { params: Promise<{ detailI
       const start = new Date(startValue).getTime();
       const otherDuration = Number(row.expected_turnaround_minutes || 120);
       const end = start + (Number.isFinite(otherDuration) && otherDuration > 0 ? otherDuration : 120) * 60_000;
-      if (Number.isFinite(start)) busy.push({ start, end, vehicleId: row.vehicle_id });
+      if (Number.isFinite(start)) busy.push({ start, end });
     }
 
-    const now = new Date();
-    const cursor = roundUp(new Date(now.getTime() + 30 * 60_000));
+    const now = Date.now();
+    const firstCandidate = new Date(Math.ceil((now + 30 * 60_000) / (30 * 60_000)) * 30 * 60_000);
+    const firstLocal = localParts(firstCandidate, offsetMinutes);
     const suggestions: Array<{ startAt: string; endAt: string }> = [];
     const selectedByDay = new Map<string, number[]>();
-    for (let day = 0; day < 14 && suggestions.length < 6; day += 1) {
-      const date = new Date(cursor); date.setDate(cursor.getDate() + day);
-      if (date.getDay() === 0 || date.getDay() === 6) continue;
-      const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-      for (let minute = 8 * 60; minute + durationMinutes <= 17 * 60 && suggestions.length < 6; minute += 30) {
-        const start = new Date(date); start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-        if (start.getTime() < now.getTime() + 30 * 60_000) continue;
+
+    for (let dayOffset = 0; dayOffset < 14 && suggestions.length < 6; dayOffset += 1) {
+      const baseNoon = fromLocal(firstLocal.year, firstLocal.month, firstLocal.day + dayOffset, 12, 0, offsetMinutes);
+      const p = localParts(baseNoon, offsetMinutes);
+      if (p.weekday === 0 || p.weekday === 6) continue;
+      const dayKey = `${p.year}-${p.month}-${p.day}`;
+      for (let minuteOfDay = 8 * 60; minuteOfDay + durationMinutes <= 17 * 60 && suggestions.length < 6; minuteOfDay += 30) {
+        const start = fromLocal(p.year, p.month, p.day, Math.floor(minuteOfDay / 60), minuteOfDay % 60, offsetMinutes);
+        if (start.getTime() < firstCandidate.getTime()) continue;
         const daySelections = selectedByDay.get(dayKey) || [];
         if (daySelections.length >= 2 || daySelections.some((value) => Math.abs(start.getTime() - value) < 2 * 60 * 60_000)) continue;
         const end = new Date(start.getTime() + durationMinutes * 60_000);
