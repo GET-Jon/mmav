@@ -6,9 +6,12 @@ import {
 } from "@/lib/comps";
 import type { MarketComp } from "@/types/comps";
 
+let regressionId = 0;
+
 function makeComp(overrides: Partial<MarketComp>): MarketComp {
+  regressionId += 1;
   return {
-    id: overrides.id || crypto.randomUUID(),
+    id: overrides.id || `regression-${regressionId}`,
     included: overrides.included ?? true,
     source: overrides.source || "Regression",
     region: overrides.region || "Test",
