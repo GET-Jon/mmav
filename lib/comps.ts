@@ -68,9 +68,6 @@ function calculateDiminishingMileageValue({
   const sign = mileageDelta >= 0 ? 1 : -1;
   let remainingMiles = Math.abs(mileageDelta);
 
-  // The first miles of difference matter more than very large gaps. This avoids
-  // treating the 150,000th-mile difference as economically identical to the
-  // first 10,000 miles of difference.
   const bands = [
     { miles: 25000, factor: 1 },
     { miles: 25000, factor: 0.7 },
@@ -87,9 +84,6 @@ function calculateDiminishingMileageValue({
     remainingMiles -= milesInBand;
   }
 
-  // Mileage premiums also flatten as the vehicles themselves age into higher
-  // odometer ranges. A 10k-mile gap around 25k miles generally matters more than
-  // a 10k-mile gap around 175k miles.
   const averageOdometer = Math.max(0, (targetMileage + compMileage) / 2);
   const odometerFactor =
     averageOdometer <= 40000
@@ -228,9 +222,8 @@ function removeRobustPriceOutliers(entries: ValuationComp[]) {
   return { kept, excluded };
 }
 
-function isPrimaryEquivalent(comp: MarketComp) {
-  if (!comp.equivalenceTier) return true;
-  return comp.equivalenceTier === "direct" || comp.equivalenceTier === "near";
+function isHardRejected(comp: MarketComp) {
+  return comp.equivalenceTier === "reject";
 }
 
 export function calculateCompSummary({
@@ -244,9 +237,12 @@ export function calculateCompSummary({
 }): CompSummary {
   const rawIncludedComps = comps.filter((comp) => comp.included === true);
 
+  // Supporting comps are never auto-included by the search pipeline, but a
+  // manager can still deliberately check one. Reject-tier vehicles remain hard
+  // exclusions because they are a different vehicle/fuel/model family.
   const qualityPassingComps = rawIncludedComps.filter(
     (comp) =>
-      isPrimaryEquivalent(comp) &&
+      !isHardRejected(comp) &&
       (typeof comp.qualityScore !== "number" ||
         comp.qualityScore >= assumptions.compSettings.minimumQualityScore),
   );
@@ -298,7 +294,11 @@ export function calculateCompSummary({
   const nearCount = validComps.filter(
     (comp) => comp.equivalenceTier === "near",
   ).length;
+  const supportingCount = validComps.filter(
+    (comp) => comp.equivalenceTier === "supporting",
+  ).length;
   const directRatio = includedCount > 0 ? directCount / includedCount : 0;
+  const supportingRatio = includedCount > 0 ? supportingCount / includedCount : 0;
   const averageQuality = includedCount
     ? average(validComps.map((comp) => Number(comp.qualityScore || 0)))
     : 0;
@@ -315,7 +315,10 @@ export function calculateCompSummary({
     confidenceReasons.push("too few reliable comps");
   }
   if (directRatio < 0.5 && includedCount > 0) {
-    confidenceReasons.push("most included comps are Near rather than Direct");
+    confidenceReasons.push("most included comps are not Direct equivalents");
+  }
+  if (supportingCount > 0) {
+    confidenceReasons.push(`${supportingCount} Supporting comp${supportingCount === 1 ? " is" : "s are"} manually included`);
   }
   if (spread > assumptions.compSettings.maxSpreadForHighConfidence) {
     confidenceReasons.push("adjusted prices have a wide spread");
@@ -336,6 +339,7 @@ export function calculateCompSummary({
   const highConfidence =
     includedCount >= assumptions.compSettings.minimumCompsForHighConfidence &&
     directRatio >= 0.5 &&
+    supportingCount === 0 &&
     averageQuality >= 75 &&
     spread <= assumptions.compSettings.maxSpreadForHighConfidence &&
     cappedRatio <= 0.25 &&
@@ -345,7 +349,8 @@ export function calculateCompSummary({
     includedCount >= assumptions.compSettings.minimumCompsForMediumConfidence &&
     averageQuality >= 60 &&
     spread <= 0.35 &&
-    cappedRatio <= 0.5;
+    cappedRatio <= 0.5 &&
+    supportingRatio <= 0.5;
 
   const confidence = highConfidence
     ? "High"
@@ -369,6 +374,7 @@ export function calculateCompSummary({
     excludedOutlierCount: excluded.length,
     directCount,
     nearCount,
+    supportingCount,
     cappedAdjustmentCount,
     lowReliabilityAdjustmentCount,
     confidenceReasons,
