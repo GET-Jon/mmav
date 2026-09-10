@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
+import { LotLogicEvidenceCard } from "@/components/settings/lot-logic-evidence-card";
 import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
 import { listIntelligenceSettingsData } from "@/lib/lot-logic-intelligence/service";
@@ -135,12 +136,15 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         ) : null}
 
         {activeTab === "intelligence" && companyContext ? (
-          <LotLogicIntelligenceCard
-            canReview={companyContext.company.role === "company_admin"}
-            initialKnowledgeSources={companyContext.intelligence.knowledgeSources}
-            initialInsights={companyContext.intelligence.insights}
-            initialAssertions={companyContext.intelligence.assertions}
-          />
+          <>
+            <LotLogicIntelligenceCard
+              canReview={companyContext.company.role === "company_admin"}
+              initialKnowledgeSources={companyContext.intelligence.knowledgeSources}
+              initialInsights={companyContext.intelligence.insights}
+              initialAssertions={companyContext.intelligence.assertions}
+            />
+            <LotLogicEvidenceCard />
+          </>
         ) : null}
       </div>
     </main>
