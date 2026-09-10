@@ -44,6 +44,15 @@ patch("components/mindful-inventory/inventory-active-work-v6.tsx", (source) => {
     '{work.partsReviewComplete ? (work.partsReadyForExecution ? "Parts resolved and ready." : partsPendingLabel(work)) : "Determine what is needed and resolve the source for every dependency."}',
     '{work.partnerPartsConfirmationStatus === "issue_reported" ? "Partner reported a parts issue. Open Manage Parts to review the conversation and resolve it." : work.partnerPartsConfirmationStatus === "reconfirmation_requested" ? "Parts were updated. Waiting for Partner reconfirmation." : work.partsReviewComplete ? (work.partsReadyForExecution ? "Parts resolved and ready." : partsPendingLabel(work)) : "Determine what is needed and resolve the source for every dependency."}',
   );
+
+  // If a replacement ETA pushes beyond the scheduled work time, the Parts modal can jump
+  // straight into this Work Order's Schedule editor rather than forcing the Owner to navigate back manually.
+  if (!source.includes('onReviewSchedule={() => { setPartsWorkOrderId(null); setEditingSetupId(modalWork.id);')) {
+    source = source.replace(
+      'open onClose={() => setPartsWorkOrderId(null)} />',
+      'open onClose={() => setPartsWorkOrderId(null)} onReviewSchedule={() => { setPartsWorkOrderId(null); setEditingSetupId(modalWork.id); setEditingSetupStep((current) => ({ ...current, [modalWork.id]: 5 })); }} />',
+    );
+  }
   return source;
 }, "Owner Parts exception tile and editor state");
 
@@ -64,8 +73,22 @@ patch("components/mindful-inventory/work-order-parts-modal.tsx", (source) => {
     }
     return true;
   }).join("\n");
+
+  // Give schedule-risk feedback a direct command-center action.
+  source = source.replace(
+    'export function WorkOrderPartsModal({ vehicleId, workOrderId, workOrderTitle: _workOrderTitle, suggestion, parts, partnerName, partnerPartsConfirmationStatus, partnerPartsNote, open, onClose }: {',
+    'export function WorkOrderPartsModal({ vehicleId, workOrderId, workOrderTitle: _workOrderTitle, suggestion, parts, partnerName, partnerPartsConfirmationStatus, partnerPartsNote, open, onClose, onReviewSchedule }: {',
+  );
+  source = source.replace(
+    '  onClose: () => void;\n}) {',
+    '  onClose: () => void;\n  onReviewSchedule?: () => void;\n}) {',
+  );
+  source = source.replace(
+    '{message ? <div className="mt-2 text-xs font-bold text-emerald-700">{message}</div> : null}',
+    '{message ? <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-emerald-700"><span>{message}</span>{message.includes("schedule may need attention") && onReviewSchedule ? <button type="button" onClick={onReviewSchedule} className="cursor-pointer font-black text-blue-700 hover:text-blue-900">Review schedule →</button> : null}</div> : null}',
+  );
   return source;
-}, "managed Parts issue modal imports");
+}, "managed Parts issue modal imports and schedule-risk action");
 
 patch("components/partner/partner-work-list-v4.tsx", (source) => {
   if (!source.includes('PartsIssueThread')) {
