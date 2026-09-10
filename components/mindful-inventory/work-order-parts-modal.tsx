@@ -8,7 +8,7 @@ import { PartsIssueThread } from "@/components/shared/parts-issue-thread";
 import type { InventoryPartView } from "@/lib/mindful-inventory/parts-transport";
 import type { PartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
 
-export function WorkOrderPartsModal({ vehicleId, workOrderId, workOrderTitle: _workOrderTitle, suggestion, parts, partnerName, partnerPartsConfirmationStatus, partnerPartsNote: _partnerPartsNote, open, onClose }: {
+export function WorkOrderPartsModal({ vehicleId, workOrderId, workOrderTitle: _workOrderTitle, suggestion, parts, partnerName, partnerPartsConfirmationStatus, partnerPartsNote, open, onClose }: {
   vehicleId: string;
   workOrderId: string;
   workOrderTitle: string;
@@ -32,6 +32,7 @@ export function WorkOrderPartsModal({ vehicleId, workOrderId, workOrderTitle: _w
 
   const issueReported = partnerPartsConfirmationStatus === "issue_reported";
   const awaitingReconfirmation = partnerPartsConfirmationStatus === "reconfirmation_requested";
+  const hasIssueHistory = Boolean(partnerPartsNote);
 
   async function issueAction(action: "reorder" | "not_required" | "resolve") {
     setWorking(true);
@@ -72,11 +73,11 @@ export function WorkOrderPartsModal({ vehicleId, workOrderId, workOrderTitle: _w
         </div>
 
         <div className="p-4 sm:p-5">
-          {issueReported || awaitingReconfirmation ? <div className={`mb-4 rounded-xl border p-4 ${issueReported ? "border-amber-300 bg-amber-50" : "border-blue-200 bg-blue-50/60"}`}>
-            <div className={`text-[10px] font-black uppercase tracking-[0.1em] ${issueReported ? "text-amber-800" : "text-blue-800"}`}>{issueReported ? "Partner parts issue" : "Awaiting Partner reconfirmation"}</div>
-            <div className="mt-1 text-sm font-black text-slate-950">{issueReported ? `${partnerName || "The assigned Partner"} reported a problem with the parts plan.` : `Mindful updated the parts plan. ${partnerName || "The assigned Partner"} must review and reconfirm it.`}</div>
+          {issueReported || awaitingReconfirmation || hasIssueHistory ? <div className={`mb-4 rounded-xl border p-4 ${issueReported ? "border-amber-300 bg-amber-50" : awaitingReconfirmation ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-slate-50"}`}>
+            <div className={`text-[10px] font-black uppercase tracking-[0.1em] ${issueReported ? "text-amber-800" : awaitingReconfirmation ? "text-blue-800" : "text-slate-500"}`}>{issueReported ? "Partner parts issue" : awaitingReconfirmation ? "Awaiting Partner reconfirmation" : "Previous parts issue"}</div>
+            <div className="mt-1 text-sm font-black text-slate-950">{issueReported ? `${partnerName || "The assigned Partner"} reported a problem with the parts plan.` : awaitingReconfirmation ? `Mindful updated the parts plan. ${partnerName || "The assigned Partner"} must review and reconfirm it.` : "The issue is resolved. The conversation remains available for the Work Order record."}</div>
 
-            <PartsIssueThread endpoint={`/api/mindful/inventory/work-orders/${workOrderId}/parts-issue`} />
+            <PartsIssueThread endpoint={`/api/mindful/inventory/work-orders/${workOrderId}/parts-issue`} canReply={issueReported || awaitingReconfirmation} />
 
             {issueReported ? <div className="mt-4 border-t border-amber-200 pt-4">
               <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-800">Resolve the affected part</div>
