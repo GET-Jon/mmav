@@ -55,8 +55,14 @@ const newSteps = `<Step n={1} label="Parts" done={work.partsReviewComplete} acti
                         <Step n={2} label="Partner" done={Boolean(work.performerName)} active={partnerActive} selected={editingStep === 2} onClick={!done ? () => openStep(2) : undefined} detail={work.performerName || "Unassigned"} />
                         <Step n={3} label="Quote" done={quoteComplete} active={quoteActive} selected={editingStep === 3} onClick={!done ? () => openStep(3) : undefined} detail={quoteDetail(work)} />
                         <Step n={4} label="Location" done={Boolean(work.locationId)} active={locationActive} selected={editingStep === 4} onClick={!done ? () => openStep(4) : undefined} detail={work.locationName || "Not selected"} />
-                        <Step n={5} label="Schedule" done={Boolean(work.scheduledStartAt)} active={scheduleActive} selected={editingStep === 5} onClick={!done ? () => openStep(5) : undefined} detail={work.scheduledStartAt ? dateTimeLabel(work.scheduledStartAt) : "Unscheduled"} />`;
+                        <Step n={5} label="Schedule" done={Boolean(work.scheduledStartAt)} active={Boolean(work.proposedStartAt) || scheduleActive} selected={editingStep === 5} onClick={!done ? () => openStep(5) : undefined} detail={work.scheduledStartAt ? "Scheduled" : work.proposedStartAt ? "Proposed" : "Unscheduled"} />`;
 if (source.includes(oldSteps)) source = source.replace(oldSteps, newSteps);
+
+// Keep already-clickable schedule tiles aligned if this script runs against a previously patched source.
+source = source.replace(
+  `<Step n={5} label="Schedule" done={Boolean(work.scheduledStartAt)} active={scheduleActive} selected={editingStep === 5} onClick={!done ? () => openStep(5) : undefined} detail={work.scheduledStartAt ? dateTimeLabel(work.scheduledStartAt) : "Unscheduled"} />`,
+  `<Step n={5} label="Schedule" done={Boolean(work.scheduledStartAt)} active={Boolean(work.proposedStartAt) || scheduleActive} selected={editingStep === 5} onClick={!done ? () => openStep(5) : undefined} detail={work.scheduledStartAt ? "Scheduled" : work.proposedStartAt ? "Proposed" : "Unscheduled"} />`,
+);
 
 source = source.replaceAll(`(partsActive || editing)`, `(partsActive || editingStep === 1)`);
 source = source.replaceAll(`(partnerActive || editing)`, `(partnerActive || editingStep === 2)`);
