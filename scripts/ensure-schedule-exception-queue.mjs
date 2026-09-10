@@ -66,8 +66,10 @@ updated = updated.replaceAll(
 );
 
 const oldJump = '<button type="button" onClick={scrollToUnscheduled} className={`rounded-full px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500"}`}>Unscheduled ({unscheduled.length})</button>';
-const newJump = '<span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true" />\n        <button type="button" onClick={scrollToUnscheduled} className={`rounded-lg border px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "border-blue-300 bg-white text-blue-700 shadow-sm hover:bg-blue-50" : "border-slate-200 bg-white text-slate-400"}`}>↓ Needs scheduling ({unscheduled.length})</button>';
+const interimJump = '<span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true" />\n        <button type="button" onClick={scrollToUnscheduled} className={`rounded-lg border px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "border-blue-300 bg-white text-blue-700 shadow-sm hover:bg-blue-50" : "border-slate-200 bg-white text-slate-400"}`}>↓ Needs scheduling ({unscheduled.length})</button>';
+const newJump = '<span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true" />\n        <button type="button" onClick={scrollToUnscheduled} className={`rounded-lg border px-3 py-1.5 text-xs font-black ${unscheduled.length > 0 ? "border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-100" : "border-slate-200 bg-white text-slate-400"}`}>↓ Needs attention ({unscheduled.length})</button>';
 replaceOnce(oldJump, newJump);
+replaceOnce(interimJump, newJump);
 
 replaceOnce(
   '<div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Unscheduled Queue</div><h2 className="mt-1 text-xl font-black text-slate-950">Work waiting for a calendar slot</h2><p className="mt-1 text-xs font-semibold text-slate-500">Highest-urgency vehicles appear first. Suggested scheduling should normally keep this queue small; outside-partner coordination may leave work here temporarily.</p></div><div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{unscheduled.length} waiting</div>',
