@@ -49,12 +49,13 @@ patch("components/mindful-inventory/inventory-active-work-v6.tsx", (source) => {
 
 patch("components/mindful-inventory/work-order-parts-modal.tsx", (source) => {
   // Older lifecycle patchers may attempt to add their legacy imports to the newer managed-exception modal.
+  const combinedUseStateImport = source.includes('import { useMemo, useState } from "react";');
   const lines = source.split("\n");
   let seenUseState = false;
   let seenRouter = false;
   source = lines.filter((line) => {
     if (line === 'import { useState } from "react";') {
-      if (seenUseState || source.includes('import { useMemo, useState } from "react";')) return false;
+      if (combinedUseStateImport || seenUseState) return false;
       seenUseState = true;
     }
     if (line === 'import { useRouter } from "next/navigation";') {
@@ -75,9 +76,10 @@ patch("components/partner/partner-work-list-v4.tsx", (source) => {
   }
 
   const locationAnchor = '\n\n          <div className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">3 · Location</div>';
-  if (!source.includes('/parts-issue`} compact />') && source.includes(locationAnchor)) {
+  const boundary = '</div>' + locationAnchor;
+  if (!source.includes('/parts-issue`} compact />') && source.includes(boundary)) {
     source = source.replace(
-      locationAnchor,
+      boundary,
       '{(partsIssueReported || partsReconfirmationRequested) ? <PartsIssueThread endpoint={`/api/partner/work-orders/${work.id}/parts-issue`} compact /> : null}</div>' + locationAnchor,
     );
   }
