@@ -4,6 +4,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { createSupabaseServerAuthClient } from "@/lib/supabase/server-auth";
 import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";
 
+const PARTS_ETA_BUFFER_MINUTES = 120;
+
 function overlaps(startA: number, endA: number, startB: number, endB: number) {
   return startA < endB && endA > startB;
 }
@@ -124,7 +126,8 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
 
     const firstCandidate = new Date(Math.ceil((now + 30 * 60_000) / (30 * 60_000)) * 30 * 60_000);
     const firstLocal = localParts(firstCandidate, offsetMinutes);
-    const etaFloor = parts.latestEtaAt ? new Date(parts.latestEtaAt).getTime() : null;
+    const etaRaw = parts.latestEtaAt ? new Date(parts.latestEtaAt).getTime() : null;
+    const etaFloor = etaRaw !== null && Number.isFinite(etaRaw) ? etaRaw + PARTS_ETA_BUFFER_MINUTES * 60_000 : null;
     const suggestions: Array<{ startAt: string; endAt: string; segments: Segment[] }> = [];
     const selectedByDay = new Map<string, number[]>();
 
@@ -157,12 +160,12 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
 
     const guidance: string[] = [];
     if (work.parts_review_status !== "resolved") guidance.push("parts review pending");
-    else if (!parts.readyForExecution) guidance.push(parts.latestEtaAt ? "suggestions begin after the latest known parts ETA" : "parts readiness unknown");
+    else if (!parts.readyForExecution) guidance.push(parts.latestEtaAt ? "suggestions begin after the latest known parts ETA + 2 hr receiving buffer" : "parts ETA unknown · suggestions use known availability constraints only");
     if (!["approved", "not_required"].includes(work.partner_estimate_status || "")) guidance.push("labor quote still pending");
     if (laborMinutes > 9 * 60) guidance.push(`${Math.round((laborMinutes / 60) * 10) / 10} labor hr allocated across workdays`);
     if (elapsedMinutes > laborMinutes) guidance.push(`${Math.round((elapsedMinutes / 60) * 10) / 10} hr elapsed turnaround tracked separately`);
 
-    return NextResponse.json({ laborMinutes, elapsedMinutes, suggestions, guidance: guidance.join(" · ") || null });
+    return NextResponse.json({ laborMinutes, elapsedMinutes, suggestions, guidance: guidance.join(" · ") || null, partsLatestEtaAt: parts.latestEtaAt, partsEtaBufferMinutes: PARTS_ETA_BUFFER_MINUTES });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not calculate schedule availability." }, { status: 500 });
   }
