@@ -108,7 +108,7 @@ function partsNeedsAttention(state: PartsScheduleState) {
       let result = await send();
       if (!result.response.ok && result.payload.requiresOverride) {
         const warning = result.payload.warning || result.payload.error || "This time has a scheduling risk.";
-        if (!window.confirm(warning + "\n\nSchedule it anyway?")) {
+        if (!window.confirm(warning + "\\n\\nSchedule it anyway?")) {
           setMessage("Schedule change cancelled.");
           return;
         }
