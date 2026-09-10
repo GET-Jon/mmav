@@ -11,6 +11,9 @@ type Props = {
   onSelect: (startAt: string, endAt: string) => void;
   refreshKey?: string | number | null;
   compact?: boolean;
+  calendarHref?: string | null;
+  onManualRequest?: (() => void) | null;
+  manualExpanded?: boolean;
 };
 
 function timeMs(value: string | null | undefined) {
@@ -57,13 +60,14 @@ function hoursLabel(minutes: number | null) {
   return `${hours} hr`;
 }
 
-export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refreshKey, compact = false }: Props) {
+export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refreshKey, compact = false, calendarHref = null, onManualRequest = null, manualExpanded = false }: Props) {
   const [suggestions, setSuggestions] = useState<ScheduleSuggestion[]>([]);
   const [guidance, setGuidance] = useState<string | null>(null);
   const [laborMinutes, setLaborMinutes] = useState<number | null>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +101,7 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
   useEffect(() => { void load(); }, [load, refreshKey]);
 
   const selectedMs = timeMs(selectedStartAt);
+  const visibleSuggestions = suggestions.slice(0, 2);
   const selectedSuggestion = useMemo(() => suggestions.find((slot) => {
     const slotMs = timeMs(slot.startAt);
     return selectedMs !== null && slotMs !== null && selectedMs === slotMs;
@@ -105,45 +110,63 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
   const laborText = hoursLabel(laborMinutes);
   const elapsedText = hoursLabel(elapsedMinutes);
 
-  return <div className={compact ? "mb-2" : "mb-3"}>
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Suggested times</div>
-        {!compact && elapsedText && laborText && elapsedMinutes !== null && laborMinutes !== null && elapsedMinutes > laborMinutes
-          ? <div className="mt-0.5 text-[10px] font-semibold text-slate-500">{laborText} hands-on labor · {elapsedText} turnaround</div>
-          : null}
+  return <>
+    <div className={compact ? "mb-2" : "mb-3"}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Suggested times</div>
+          {!compact && elapsedText && laborText && elapsedMinutes !== null && laborMinutes !== null && elapsedMinutes > laborMinutes
+            ? <div className="mt-0.5 text-[10px] font-semibold text-slate-500">{laborText} hands-on labor · {elapsedText} turnaround</div>
+            : null}
+        </div>
+        <div className="flex items-center gap-3">
+          {calendarHref ? <button type="button" onClick={() => setCalendarOpen(true)} className="cursor-pointer text-[10px] font-black text-blue-700 hover:text-blue-900">View calendar</button> : null}
+          <button type="button" disabled={loading} onClick={() => void load()} className="cursor-pointer text-[10px] font-black text-blue-700 hover:text-blue-900 disabled:cursor-default disabled:opacity-50">{loading ? "Checking…" : "Refresh"}</button>
+        </div>
       </div>
-      <button type="button" disabled={loading} onClick={() => void load()} className="cursor-pointer text-[10px] font-black text-blue-700 hover:text-blue-900 disabled:cursor-default disabled:opacity-50">{loading ? "Checking…" : "Refresh"}</button>
+
+      {error ? <div className="mt-2 text-[11px] font-semibold text-red-700">{error}</div> : null}
+      {!error && !loading && !suggestions.length ? <div className="mt-2 text-[11px] font-semibold text-slate-500">No conflict-free labor slots found in the next two weeks. You can still choose another time manually.</div> : null}
+
+      {visibleSuggestions.length ? <div className="mt-2 grid gap-2 sm:grid-cols-2">{visibleSuggestions.map((slot) => {
+        const slotMs = timeMs(slot.startAt);
+        const selected = selectedMs !== null && slotMs !== null && selectedMs === slotMs;
+        return <button
+          key={slot.startAt}
+          type="button"
+          onClick={() => onSelect(slot.startAt, slot.endAt)}
+          className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left text-[11px] font-black transition ${selected ? "border-blue-600 bg-blue-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-900 hover:border-blue-400 hover:bg-blue-50"}`}
+        >
+          {label(slot.startAt)}
+        </button>;
+      })}</div> : null}
+
+      {selectedSuggestion && !compact ? <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-[10px] text-slate-600">
+        <div className="font-black text-slate-800">Selected: {label(selectedSuggestion.startAt)}</div>
+        {selectedSegments.length ? <div className="mt-1"><span className="font-black">Labor:</span> {selectedSegments.join(" · ")}</div> : laborText ? <div className="mt-1"><span className="font-black">Labor:</span> {laborText}</div> : null}
+        {elapsedText && elapsedMinutes !== null && laborMinutes !== null && elapsedMinutes > laborMinutes ? <div className="mt-1"><span className="font-black">Turnaround:</span> {elapsedText}</div> : null}
+      </div> : null}
+
+      {guidance ? <div className="mt-2 text-[10px] font-semibold text-slate-500">{guidance}</div> : null}
+
+      {!compact && onManualRequest ? <div className="mt-3">
+        <button type="button" onClick={onManualRequest} className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-[10px] font-black text-slate-700 hover:border-blue-400 hover:text-blue-800">
+          {manualExpanded ? "Hide manual time" : "Propose time"}
+        </button>
+      </div> : null}
     </div>
 
-    {error ? <div className="mt-2 text-[11px] font-semibold text-red-700">{error}</div> : null}
-    {!error && !loading && !suggestions.length ? <div className="mt-2 text-[11px] font-semibold text-slate-500">No conflict-free labor slots found in the next two weeks. You can still choose another time manually.</div> : null}
-
-    {suggestions.length ? <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">{suggestions.map((slot) => {
-      const slotMs = timeMs(slot.startAt);
-      const selected = selectedMs !== null && slotMs !== null && selectedMs === slotMs;
-      return <button
-        key={slot.startAt}
-        type="button"
-        onClick={() => onSelect(slot.startAt, slot.endAt)}
-        className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left text-[11px] font-black transition ${selected ? "border-blue-600 bg-blue-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-900 hover:border-blue-400 hover:bg-blue-50"}`}
-      >
-        {label(slot.startAt)}
-      </button>;
-    })}</div> : null}
-
-    {selectedSuggestion && !compact ? <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-[10px] text-slate-600">
-      <div className="font-black text-slate-800">Selected: {label(selectedSuggestion.startAt)}</div>
-      {selectedSegments.length ? <div className="mt-1"><span className="font-black">Labor:</span> {selectedSegments.join(" · ")}</div> : laborText ? <div className="mt-1"><span className="font-black">Labor:</span> {laborText}</div> : null}
-      {elapsedText && elapsedMinutes !== null && laborMinutes !== null && elapsedMinutes > laborMinutes ? <div className="mt-1"><span className="font-black">Turnaround:</span> {elapsedText}</div> : null}
+    {calendarOpen && calendarHref ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-label="Schedule calendar">
+      <div className="flex h-[86vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Schedule</div>
+            <div className="text-sm font-black text-slate-950">Calendar availability</div>
+          </div>
+          <button type="button" onClick={() => setCalendarOpen(false)} className="cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-600 hover:bg-slate-50">Close</button>
+        </div>
+        <iframe title="Lot Logic schedule calendar" src={calendarHref} className="min-h-0 flex-1 w-full border-0" />
+      </div>
     </div> : null}
-
-    {guidance ? <div className="mt-2 text-[10px] font-semibold text-slate-500">{guidance}</div> : null}
-
-    {!compact ? <div className="my-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-      <span className="h-px flex-1 bg-slate-200" />
-      <span>or choose another time</span>
-      <span className="h-px flex-1 bg-slate-200" />
-    </div> : null}
-  </div>;
+  </>;
 }
