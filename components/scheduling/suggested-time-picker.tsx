@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type ScheduleSegment = { startAt: string; endAt: string };
 type ScheduleSuggestion = { startAt: string; endAt: string; segments?: ScheduleSegment[] };
@@ -22,23 +22,22 @@ function timeMs(value: string | null | undefined) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function label(value: string) {
-  const ms = timeMs(value);
-  if (ms === null) return "Available time";
-  return new Date(ms).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+function suggestionLabel(startValue: string, endValue: string) {
+  const startMs = timeMs(startValue);
+  const endMs = timeMs(endValue);
+  if (startMs === null) return "Available time";
 
-function segmentLabel(segment: ScheduleSegment) {
-  const startMs = timeMs(segment.startAt);
-  const endMs = timeMs(segment.endAt);
-  if (startMs === null || endMs === null) return null;
   const start = new Date(startMs);
+  if (endMs === null) {
+    return start.toLocaleString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
   const end = new Date(endMs);
   const sameDay = start.toDateString() === end.toDateString();
   const startLabel = start.toLocaleString("en-US", {
@@ -51,6 +50,7 @@ function segmentLabel(segment: ScheduleSegment) {
   const endLabel = end.toLocaleString("en-US", sameDay
     ? { hour: "numeric", minute: "2-digit" }
     : { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
   return `${startLabel}–${endLabel}`;
 }
 
@@ -102,11 +102,6 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
 
   const selectedMs = timeMs(selectedStartAt);
   const visibleSuggestions = suggestions.slice(0, 2);
-  const selectedSuggestion = useMemo(() => suggestions.find((slot) => {
-    const slotMs = timeMs(slot.startAt);
-    return selectedMs !== null && slotMs !== null && selectedMs === slotMs;
-  }) || null, [selectedMs, suggestions]);
-  const selectedSegments = useMemo(() => (selectedSuggestion?.segments || []).map(segmentLabel).filter(Boolean) as string[], [selectedSuggestion]);
   const laborText = hoursLabel(laborMinutes);
   const elapsedText = hoursLabel(elapsedMinutes);
 
@@ -121,11 +116,14 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
         </div>
         <div className="flex items-center gap-3">
           {calendarHref ? <button type="button" onClick={() => setCalendarOpen(true)} className="cursor-pointer text-[10px] font-black text-blue-700 hover:text-blue-900">View calendar</button> : null}
-          <button type="button" disabled={loading} onClick={() => void load()} className="cursor-pointer text-[10px] font-black text-blue-700 hover:text-blue-900 disabled:cursor-default disabled:opacity-50">{loading ? "Checking…" : "Refresh"}</button>
+          {!compact && onManualRequest ? <button type="button" onClick={onManualRequest} className="cursor-pointer text-[10px] font-black text-blue-700 hover:text-blue-900">
+            {manualExpanded ? "Hide time" : "Propose time"}
+          </button> : null}
         </div>
       </div>
 
       {error ? <div className="mt-2 text-[11px] font-semibold text-red-700">{error}</div> : null}
+      {!error && loading ? <div className="mt-2 text-[11px] font-semibold text-slate-500">Checking availability…</div> : null}
       {!error && !loading && !suggestions.length ? <div className="mt-2 text-[11px] font-semibold text-slate-500">No conflict-free labor slots found in the next two weeks. You can still choose another time manually.</div> : null}
 
       {visibleSuggestions.length ? <div className="mt-2 grid gap-2 sm:grid-cols-2">{visibleSuggestions.map((slot) => {
@@ -137,23 +135,11 @@ export function SuggestedTimePicker({ endpoint, selectedStartAt, onSelect, refre
           onClick={() => onSelect(slot.startAt, slot.endAt)}
           className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left text-[11px] font-black transition ${selected ? "border-blue-600 bg-blue-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-900 hover:border-blue-400 hover:bg-blue-50"}`}
         >
-          {label(slot.startAt)}
+          {suggestionLabel(slot.startAt, slot.endAt)}
         </button>;
       })}</div> : null}
 
-      {selectedSuggestion && !compact ? <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-[10px] text-slate-600">
-        <div className="font-black text-slate-800">Selected: {label(selectedSuggestion.startAt)}</div>
-        {selectedSegments.length ? <div className="mt-1"><span className="font-black">Labor:</span> {selectedSegments.join(" · ")}</div> : laborText ? <div className="mt-1"><span className="font-black">Labor:</span> {laborText}</div> : null}
-        {elapsedText && elapsedMinutes !== null && laborMinutes !== null && elapsedMinutes > laborMinutes ? <div className="mt-1"><span className="font-black">Turnaround:</span> {elapsedText}</div> : null}
-      </div> : null}
-
       {guidance ? <div className="mt-2 text-[10px] font-semibold text-slate-500">{guidance}</div> : null}
-
-      {!compact && onManualRequest ? <div className="mt-3">
-        <button type="button" onClick={onManualRequest} className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-[10px] font-black text-slate-700 hover:border-blue-400 hover:text-blue-800">
-          {manualExpanded ? "Hide manual time" : "Propose time"}
-        </button>
-      </div> : null}
     </div>
 
     {calendarOpen && calendarHref ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-label="Schedule calendar">
