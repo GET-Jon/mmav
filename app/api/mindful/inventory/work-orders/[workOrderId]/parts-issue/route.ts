@@ -140,7 +140,7 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
         const etaAt = etaValue ? new Date(`${etaValue}T17:00:00`).toISOString() : null;
         const { error: updateError } = await ctx.admin.from("mindful_inventory_work_order_parts").update({
           status: "ordered",
-          dependency_resolution: "mindful_sourced",
+          dependency_resolution: "purchased",
           dependency_resolved_at: now,
           dependency_resolved_by: ctx.access.userId,
           ordered_at: now,
