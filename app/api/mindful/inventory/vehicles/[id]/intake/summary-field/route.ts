@@ -10,7 +10,7 @@ const numericFields = {
   other_acquisition: "other_acquisition_cost",
 } as const;
 
-type SummaryField = keyof typeof numericFields;
+type SummaryField = keyof typeof numericFields | "title_status";
 
 function parseNonNegativeNumber(value: unknown, field: string) {
   const cleaned = String(value ?? "").replace(/[^0-9.-]/g, "").trim();
@@ -34,10 +34,15 @@ export async function PATCH(
 
     const body = await request.json();
     const field = String(body.field || "").trim() as SummaryField;
-    const column = numericFields[field];
+    const column = field === "title_status" ? "title_status" : numericFields[field];
     if (!column) return NextResponse.json({ error: "Unsupported Intake summary field." }, { status: 400 });
 
-    const value = parseNonNegativeNumber(body.value, field);
+    const value = column === "title_status"
+      ? String(body.value || "").trim()
+      : parseNonNegativeNumber(body.value, field);
+    if (column === "title_status" && !["unknown", "awaiting", "received", "issue", "not_applicable"].includes(String(value))) {
+      return NextResponse.json({ error: "Invalid title status." }, { status: 400 });
+    }
 
     const { data: vehicle, error: vehicleError } = await access.supabase
       .from("mindful_inventory_vehicles")
