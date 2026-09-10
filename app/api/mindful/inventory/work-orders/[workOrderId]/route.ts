@@ -50,6 +50,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ workO
     }
 
     if (requestedStatus === "in_progress") {
+      if (existing.assigned_partner_id) {
+        return NextResponse.json({ error: "External Partner work must be started by the assigned Partner." }, { status: 403 });
+      }
       if (existing.parts_review_status !== "resolved") {
         return NextResponse.json({ error: "Parts Review must be resolved before work can start." }, { status: 409 });
       }
