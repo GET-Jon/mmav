@@ -38,11 +38,18 @@ changed = patch("components/mindful-inventory/inventory-active-work-v6.tsx", (so
     '',
   );
 
+  if (!updated.includes("manualScheduleId, setManualScheduleId")) {
+    updated = updated.replace(
+      '  const [editingSetupId, setEditingSetupId] = useState<string | null>(null);',
+      '  const [editingSetupId, setEditingSetupId] = useState<string | null>(null);\n  const [manualScheduleId, setManualScheduleId] = useState<string | null>(null);',
+    );
+  }
+
   const manualAnchor = '<div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue}';
   if (updated.includes(manualAnchor) && !updated.includes('endpoint={`/api/mindful/inventory/work-orders/${work.id}/availability`}')) {
     updated = updated.replace(
       manualAnchor,
-      '<SuggestedTimePicker endpoint={`/api/mindful/inventory/work-orders/${work.id}/availability`} selectedStartAt={draftValue || work.proposedStartAt || work.scheduledStartAt} onSelect={(startAt) => setScheduleDrafts((current) => ({ ...current, [work.id]: localInput(startAt) }))} />\n                        <div className="flex flex-col gap-2 sm:flex-row"><input disabled={workingId === work.id} type="datetime-local" value={draftValue}',
+      '<SuggestedTimePicker endpoint={`/api/mindful/inventory/work-orders/${work.id}/availability`} calendarHref="/mindful/inventory/schedule?embed=1" selectedStartAt={draftValue || work.proposedStartAt || work.scheduledStartAt} onSelect={(startAt) => setScheduleDrafts((current) => ({ ...current, [work.id]: localInput(startAt) }))} onManualRequest={() => setManualScheduleId((current) => current === work.id ? null : work.id)} manualExpanded={manualScheduleId === work.id} />\n                        <div className={`${manualScheduleId === work.id ? "flex" : "hidden"} flex-col gap-2 sm:flex-row`}><input disabled={workingId === work.id} type="datetime-local" value={draftValue}',
     );
   }
   updated = updated.replace(
