@@ -110,9 +110,10 @@ export function InventoryDetailing({ detailing, performers }: { detailing: Inven
     setScopeItems((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item]);
   }
 
-  async function save(status?: string) {
+  async function save() {
     setWorking(true); setMessage("");
     try {
+      const preserveOperationalStatus = ["in_progress", "completed", "accepted"].includes(detailing.status) ? detailing.status : undefined;
       const response = await fetch(`/api/mindful/inventory/vehicles/${detailing.vehicleId}/detailing`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -126,13 +127,13 @@ export function InventoryDetailing({ detailing, performers }: { detailing: Inven
           quotedCost: quotedCost || null,
           actualCost: actualCost || null,
           notes: notes || null,
-          ...(status ? { status } : {}),
+          ...(preserveOperationalStatus ? { status: preserveOperationalStatus } : {}),
         }),
       });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Failed to update detailing.");
-      setMessage(status === "accepted" ? "Detailing accepted. Vehicle moved to Final QC." : status === "completed" ? "Detailing marked complete." : "Detailing setup saved.");
-      if (!status) setEditing(null);
+      setMessage("Detailing submitted.");
+      setEditing(null);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to update detailing.");
@@ -140,9 +141,6 @@ export function InventoryDetailing({ detailing, performers }: { detailing: Inven
   }
 
   const statusLabel = detailing.status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const canStart = Boolean(partnerId && scheduledStart) && !["in_progress", "completed", "accepted"].includes(detailing.status);
-  const canComplete = detailing.status === "in_progress";
-  const canAccept = detailing.status === "completed";
   const quoteDone = Boolean(quotedCost);
 
   return <div className="space-y-4">
@@ -215,19 +213,9 @@ export function InventoryDetailing({ detailing, performers }: { detailing: Inven
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Detail-specific instructions or notes" className="min-h-20 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm" />
       </div>
 
-      {canComplete || canAccept ? <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-        <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Completion / reconciliation</div>
-        <label className="mt-2 block max-w-sm text-xs font-black text-slate-600">Actual cost<input type="number" min="0" step="0.01" value={actualCost} onChange={(e) => setActualCost(e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" /></label>
-      </div> : null}
-
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
         <div className="text-xs font-semibold text-slate-500">Quote {quotedCost ? money(Number(quotedCost)) : "—"}{detailing.actualCost != null ? ` · Actual ${money(detailing.actualCost)}` : ""}</div>
-        <div className="flex flex-wrap gap-2">
-          <button disabled={working} onClick={() => void save()} className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black disabled:opacity-50">Save setup</button>
-          {canStart ? <button disabled={working} onClick={() => void save("in_progress")} className="cursor-pointer rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">Start Detailing</button> : null}
-          {canComplete ? <button disabled={working} onClick={() => void save("completed")} className="cursor-pointer rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">Mark Completed</button> : null}
-          {canAccept ? <button disabled={working} onClick={() => void save("accepted")} className="cursor-pointer rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">Accept & Move to QC →</button> : null}
-        </div>
+        <button disabled={working} onClick={() => void save()} className="cursor-pointer rounded-xl bg-slate-950 px-5 py-2.5 text-xs font-black text-white disabled:opacity-50">{working ? "Submitting…" : "Submit"}</button>
       </div>
     </section>
   </div>;
