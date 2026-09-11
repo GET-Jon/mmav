@@ -51,5 +51,56 @@ const assignmentChanged = updateFile(assignmentPath, (source) => {
   return updated;
 });
 
+const ownerReviewPath = "components/mindful-inventory/mechanical-owner-finding-review-v2.tsx";
+const ownerReviewChanged = updateFile(ownerReviewPath, (source) => {
+  let updated = source;
+
+  const summaryStrip = `      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <div className="text-sm font-black text-slate-900">
+            {unresolvedFindings.length
+              ? \`${'${unresolvedFindings.length}'} decision${'${'}
+                  unresolvedFindings.length === 1 ? "" : "s"
+                } remaining\`
+              : "Owner review complete"}
+          </div>
+          <div className="mt-0.5 text-xs font-semibold text-slate-500">
+            Approve required work or confirm the mechanic&apos;s no-work result.
+          </div>
+        </div>
+        <span
+          className={\`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${'${'}
+            unresolvedFindings.length
+              ? "bg-amber-100 text-amber-800"
+              : "bg-emerald-100 text-emerald-700"
+          }\`}
+        >
+          {unresolvedFindings.length ? "Owner review required" : "Ready to continue"}
+        </span>
+      </div>
+
+`;
+  if (updated.includes(summaryStrip)) updated = updated.replace(summaryStrip, "");
+
+  const unresolvedHeader = `        <section>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">
+              Needs your decision
+            </h3>
+            <span className="text-xs font-bold text-slate-400">
+              {unresolvedFindings.length}
+            </span>
+          </div>
+          <div className="space-y-2.5">`;
+  const unresolvedCompact = `        <section>
+          <div className="space-y-2.5">`;
+  if (updated.includes(unresolvedHeader)) updated = updated.replace(unresolvedHeader, unresolvedCompact);
+
+  updated = updated.replace('    <div className="mt-3 space-y-5">', '    <div className="mt-3 space-y-4">');
+
+  return updated;
+});
+
 if (inspectionChanged) console.log("Simplified Mechanical Inspection scope hierarchy.");
 if (assignmentChanged) console.log("Refined Mechanical inspector custom scheduling UX.");
+if (ownerReviewChanged) console.log("Simplified Owner mechanical review hierarchy.");
