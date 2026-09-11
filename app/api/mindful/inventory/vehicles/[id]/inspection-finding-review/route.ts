@@ -87,6 +87,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!finding) return NextResponse.json({ error: "Mechanical finding not found." }, { status: 404 });
 
     const isNotFound = finding.mechanical_validation_status === "not_found";
+    const isDiagnosis = finding.mechanical_validation_status === "needs_diagnosis";
     const suggestedParts = normalizeSuggestedParts(finding.mechanical_part_suggestions);
     const hasLegacyUnpricedParts = Boolean(
       optionalText(finding.mechanical_parts_required) && suggestedParts.length === 0,
@@ -98,24 +99,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     let preferredPartnerId: string | null = null;
     if (decision === "accept" && !isNotFound) {
-      if (hasLegacyUnpricedParts || !approvalCost.pricingComplete || approvalCost.totalHigh === null) {
+      if (!isDiagnosis && (hasLegacyUnpricedParts || !approvalCost.pricingComplete || approvalCost.totalHigh === null)) {
         return NextResponse.json({ error: "Complete labor and required part pricing before approving this repair and its spend." }, { status: 400 });
       }
       if (finding.mechanical_can_perform === null) {
-        return NextResponse.json({ error: "The mechanic must confirm whether they can perform this work before the Owner approves it." }, { status: 400 });
+        return NextResponse.json({ error: isDiagnosis ? "Confirm who should perform the diagnostic work before routing it." : "The mechanic must confirm whether they can perform this work before the Owner approves it." }, { status: 400 });
       }
 
       if (finding.mechanical_can_perform === true) {
         if (!inspection.performed_by_partner_id) {
-          return NextResponse.json({ error: "The mechanic who offered to perform this repair could not be identified." }, { status: 409 });
+          return NextResponse.json({ error: isDiagnosis ? "The mechanic who offered to perform this diagnosis could not be identified." : "The mechanic who offered to perform this repair could not be identified." }, { status: 409 });
         }
         preferredPartnerId = inspection.performed_by_partner_id;
       } else {
         if (!alternatePartnerId) {
-          return NextResponse.json({ error: "Choose the alternate partner who should handle this accepted repair." }, { status: 400 });
+          return NextResponse.json({ error: isDiagnosis ? "Choose the partner who should perform the next diagnostic step." : "Choose the alternate partner who should handle this accepted repair." }, { status: 400 });
         }
         if (inspection.performed_by_partner_id && alternatePartnerId === inspection.performed_by_partner_id) {
-          return NextResponse.json({ error: "The inspector said they cannot perform this work. Choose a different partner." }, { status: 400 });
+          return NextResponse.json({ error: isDiagnosis ? "The inspector said another specialist is needed. Choose a different partner." : "The inspector said they cannot perform this work. Choose a different partner." }, { status: 400 });
         }
         const { data: partner, error: partnerError } = await access.supabase
           .from("mindful_inventory_partners")
@@ -125,7 +126,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           .eq("active", true)
           .maybeSingle();
         if (partnerError) throw new Error(partnerError.message);
-        if (!partner) return NextResponse.json({ error: "Selected alternate partner is not available." }, { status: 400 });
+        if (!partner) return NextResponse.json({ error: "Selected partner is not available." }, { status: 400 });
         preferredPartnerId = partner.id;
       }
     }
@@ -150,14 +151,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const eventType = decision === "accept"
       ? isNotFound
         ? "mechanical_finding_not_found_confirmed"
-        : "mechanical_finding_owner_accepted"
+        : isDiagnosis
+          ? "mechanical_finding_diagnosis_routed"
+          : "mechanical_finding_owner_accepted"
       : decision === "dismiss"
         ? "mechanical_finding_owner_dismissed"
         : "mechanical_finding_clarification_requested";
     const summary = decision === "accept"
       ? isNotFound
         ? `Owner accepted mechanic result: ${finding.title} was not found; no repair required.`
-        : `Owner approved mechanical repair: ${finding.title} for up to $${approvalCost.totalHigh?.toFixed(2)}.`
+        : isDiagnosis
+          ? `Owner routed diagnostic work for ${finding.title} to the selected partner.`
+          : `Owner approved mechanical repair: ${finding.title} for up to $${approvalCost.totalHigh?.toFixed(2)}.`
       : decision === "dismiss"
         ? `Owner dismissed mechanical finding: ${finding.title}.`
         : `Owner requested clarification on mechanical finding: ${finding.title}.`;
@@ -175,7 +180,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         mechanicResult: finding.mechanical_validation_status,
         notes,
         assignedPartnerId: isNotFound ? null : preferredPartnerId,
-        authorization: decision === "accept" && !isNotFound ? {
+        diagnosticRouting: decision === "accept" && isDiagnosis ? {
+          partnerId: preferredPartnerId,
+          scope: "diagnosis_only",
+          spendAuthorized: false,
+        } : null,
+        authorization: decision === "accept" && !isNotFound && !isDiagnosis ? {
           laborHours: optionalNumber(finding.mechanical_labor_hours),
           laborPrice: approvalCost.laborPrice,
           partsCostLow: approvalCost.partsLow,
@@ -193,7 +203,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       reviewStatus,
       mechanicResult: finding.mechanical_validation_status,
       assignedPartnerId: isNotFound ? null : preferredPartnerId,
-      authorization: decision === "accept" && !isNotFound ? {
+      diagnosticRouting: decision === "accept" && isDiagnosis ? {
+        partnerId: preferredPartnerId,
+        spendAuthorized: false,
+      } : null,
+      authorization: decision === "accept" && !isNotFound && !isDiagnosis ? {
         totalLow: approvalCost.totalLow,
         totalHigh: approvalCost.totalHigh,
       } : null,
