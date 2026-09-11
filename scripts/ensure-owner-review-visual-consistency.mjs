@@ -4,6 +4,11 @@ const path = "components/mindful-inventory/mechanical-owner-upgrade-review.tsx";
 let source = readFileSync(path, "utf8");
 let changed = false;
 
+if (source.includes('data-owner-upgrade-review="resolved-row-v1"')) {
+  console.log("Owner upgrade review already uses the compact resolved-row presentation.");
+  process.exit(0);
+}
+
 function replaceOnce(oldText, newText, label) {
   if (source.includes(newText)) return;
   if (!source.includes(oldText)) throw new Error(`Could not find ${label}. Refusing to patch Owner Review visual consistency automatically.`);
