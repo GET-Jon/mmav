@@ -53,6 +53,13 @@ function partDispositionLabel(part: MechanicalSuggestedPart) {
   return "Purchase required";
 }
 
+function hasLegacyUnpricedParts(finding: InventoryFindingView) {
+  return Boolean(
+    finding.mechanicalPartsRequired?.trim() &&
+      finding.mechanicalSuggestedParts.length === 0,
+  );
+}
+
 export function MechanicalOwnerFindingReview({
   vehicleId,
   findings,
@@ -146,7 +153,10 @@ export function MechanicalOwnerFindingReview({
       return;
     }
 
-    if (decision === "accept" && !approvalCost.pricingComplete) {
+    if (
+      decision === "accept" &&
+      (hasLegacyUnpricedParts(finding) || !approvalCost.pricingComplete)
+    ) {
       setMessage(
         "Complete the labor and required part pricing before approving this repair and its spend.",
       );
@@ -332,9 +342,9 @@ export function MechanicalOwnerFindingReview({
 
     if (finding.mechanicalPartsRequired) {
       return (
-        <div className="mt-4 text-sm font-semibold text-slate-600">
-          <span className="font-black text-slate-800">Parts needed:</span>{" "}
-          {finding.mechanicalPartsRequired}
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+          <span className="font-black">Parts needed:</span>{" "}
+          {finding.mechanicalPartsRequired}. Add structured part pricing before approval.
         </div>
       );
     }
@@ -347,13 +357,15 @@ export function MechanicalOwnerFindingReview({
       finding.mechanicalProposedLaborPrice,
       finding.mechanicalSuggestedParts,
     );
+    const legacyPartsMissing = hasLegacyUnpricedParts(finding);
+    const pricingReady = cost.pricingComplete && !legacyPartsMissing;
 
     const qualifierBits = [
       cost.purchaseRequiredCount
         ? `${cost.purchaseRequiredCount} purchase part${
             cost.purchaseRequiredCount === 1 ? "" : "s"
           } included`
-        : "No new parts spend",
+        : "No new structured parts spend",
       cost.inStockCount
         ? `${cost.inStockCount} in-stock part${cost.inStockCount === 1 ? "" : "s"} excluded from new cash spend`
         : null,
@@ -364,10 +376,19 @@ export function MechanicalOwnerFindingReview({
       cost.usesPartnerPartPrice ? "Includes Partner part pricing" : null,
     ].filter(Boolean);
 
+    let pricingStatus = "Ready to approve";
+    if (legacyPartsMissing) pricingStatus = "Required part pricing missing";
+    else if (cost.laborPrice === null) pricingStatus = "Labor price missing";
+    else if (cost.unknownPartCount) {
+      pricingStatus = `${cost.unknownPartCount} part price${
+        cost.unknownPartCount === 1 ? "" : "s"
+      } missing`;
+    }
+
     return (
       <div
         className={`mt-4 rounded-2xl border-2 p-4 ${
-          cost.pricingComplete
+          pricingReady
             ? "border-emerald-200 bg-emerald-50/60"
             : "border-amber-300 bg-amber-50/70"
         }`}
@@ -376,7 +397,7 @@ export function MechanicalOwnerFindingReview({
           <div>
             <div
               className={`text-[10px] font-black uppercase tracking-[0.09em] ${
-                cost.pricingComplete ? "text-emerald-700" : "text-amber-800"
+                pricingReady ? "text-emerald-700" : "text-amber-800"
               }`}
             >
               Repair authorization
@@ -392,10 +413,10 @@ export function MechanicalOwnerFindingReview({
             </div>
             <div
               className={`mt-0.5 text-2xl font-black ${
-                cost.pricingComplete ? "text-emerald-800" : "text-amber-900"
+                pricingReady ? "text-emerald-800" : "text-amber-900"
               }`}
             >
-              {approvalAuthorizationLabel(cost)}
+              {pricingReady ? approvalAuthorizationLabel(cost) : "Pricing incomplete"}
             </div>
           </div>
         </div>
@@ -412,7 +433,7 @@ export function MechanicalOwnerFindingReview({
               New parts spend
             </div>
             <div className="font-black text-slate-900">
-              {cost.unknownPartCount
+              {legacyPartsMissing || cost.unknownPartCount
                 ? "Incomplete"
                 : cost.hasRange
                   ? `${money(cost.partsLow)}–${money(cost.partsHigh)}`
@@ -425,14 +446,10 @@ export function MechanicalOwnerFindingReview({
             </div>
             <div
               className={`font-black ${
-                cost.pricingComplete ? "text-emerald-800" : "text-amber-900"
+                pricingReady ? "text-emerald-800" : "text-amber-900"
               }`}
             >
-              {cost.pricingComplete
-                ? "Ready to approve"
-                : `${cost.unknownPartCount} part price${
-                    cost.unknownPartCount === 1 ? "" : "s"
-                  } missing`}
+              {pricingStatus}
             </div>
           </div>
         </div>
@@ -461,7 +478,10 @@ export function MechanicalOwnerFindingReview({
     const performerResolved =
       finding.mechanicalCanPerform === true ||
       (finding.mechanicalCanPerform === false && Boolean(selectedAlternatePartner));
-    const approvalReady = approvalCost.pricingComplete && performerResolved;
+    const approvalReady =
+      approvalCost.pricingComplete &&
+      !hasLegacyUnpricedParts(finding) &&
+      performerResolved;
 
     return (
       <article
