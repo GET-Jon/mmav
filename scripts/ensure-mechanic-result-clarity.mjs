@@ -52,7 +52,16 @@ updateFile(
       throw new Error("Could not install compact reviewed Inspector Result treatment.");
     }
 
+    // Once a finding is reviewed, the Inspector Result + Open control is enough.
+    // Keep the four outcome buttons only on pending findings or while a reviewed card is reopened.
+    const outcomeButtons = '<div className="mt-3 flex flex-wrap gap-2">{findingChoices.map((choice) => <button key={choice.value} type="button" disabled={working === item.id} onClick={() => { setSelectedStatuses((current) => ({ ...current, [finding.id]: choice.value })); setExpandedFindings((current) => ({ ...current, [item.id]: finding.id })); }} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{choice.label}</button>)}</div>';
+    const reviewedAwareOutcomeButtons = '{!reviewed || expanded ? <div className="mt-3 flex flex-wrap gap-2">{findingChoices.map((choice) => <button key={choice.value} type="button" disabled={working === item.id} onClick={() => { setSelectedStatuses((current) => ({ ...current, [finding.id]: choice.value })); setExpandedFindings((current) => ({ ...current, [item.id]: finding.id })); }} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{choice.label}</button>)}</div> : null}';
+    if (source.includes(outcomeButtons)) source = source.replace(outcomeButtons, reviewedAwareOutcomeButtons);
+    else if (!source.includes('{!reviewed || expanded ? <div className="mt-3 flex flex-wrap gap-2">')) {
+      throw new Error("Could not hide reviewed finding outcome buttons.");
+    }
+
     return source;
   },
-  "Standardized compact Inspector Result treatment for all reviewed findings.",
+  "Standardized reviewed Inspector Result treatment and hid redundant outcome buttons.",
 );
