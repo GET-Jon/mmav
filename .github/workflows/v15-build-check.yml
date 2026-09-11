@@ -21,3 +21,4 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+        # Temporary branch-only verification of the full prebuild + Next.js production build.
