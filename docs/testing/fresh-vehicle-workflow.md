@@ -40,7 +40,6 @@ Implemented correction:
 - The Overview save currently writes Intake, then vehicle details, then refreshes the server page. The page loads the Inventory dashboard to locate one vehicle. Investigate these paths when measuring broader latency; do not assume they explain every slow action.
 - Verify these changes in the deployed Owner session before recording the fresh-vehicle stage as passed.
 
-
 ## Upgrade capture — September 11, 2026
 
 User-approved simplification implemented for the current test:
@@ -55,7 +54,6 @@ Rebuild follow-up: suggest category, progressively add sourcing/assessment detai
 
 Verification: production build passed with the existing prebuild chain. A field-binding comparison confirmed that every prior form value is retained. Deployed visual review remains pending.
 
-
 ### Upgrade estimates refinement — September 11, 2026
 
 - Description renamed Details (optional), with a concrete example distinguishing the work title from preferences and constraints.
@@ -65,20 +63,17 @@ Verification: production build passed with the existing prebuild chain. A field-
 
 Verification: production build passed. Calculation checks passed for blank, partial and complete estimates, manual-total preservation, recalculation, clearing both components and explicit zero.
 
-
 ### Finding review action grouping — September 11, 2026
 
 Request Clarification now sits alongside the owner note/question field. Accept Finding (or Approve & Route) and Dismiss form a separate decision group, visually divided on desktop and stacked on smaller screens. Existing handlers, validation and permissions are unchanged. Rebuild principle: group message submission with its input, separately from operational decisions.
 
 Verification: full production build passed with the prebuild chain. Deployed visual review remains pending.
 
-
 ### Clarification draft lifecycle
 
 Successful clarification submission clears the submitted draft. Failed submissions retain it; text changed while the request is pending is preserved. Saved review notes are no longer copied into the composer on page load, preventing already-sent questions from reappearing as drafts. Conversation/history persistence is unchanged.
 
 Verification: production build passed; checked that the draft-clearing logic survives the source-mutating prebuild chain.
-
 
 ## Mechanical repair authorization — September 11, 2026
 
@@ -109,7 +104,7 @@ Implemented behavior:
 - Preliminary Work Plan generation now receives only Owner-accepted open mechanical findings. Dismissed, unreviewed, and clarification-pending findings cannot silently enter the plan.
 - Every accepted finding must appear exactly once in the generated Work Plan and cannot be merged into an upgrade item.
 - For an accepted finding represented in a generated Plan Item, the Owner-authorized repair range overrides a fresh AI cost guess. The Plan Item planning amount uses the approved maximum, and the preferred Partner carries into routing.
-- The final Owner finding decision continues to build/open the Preliminary Work Plan automatically; the prebuild transition script now targets the V2 review component.
+- Final finding approval no longer tries to generate the Work Plan immediately. The correct sequence is: resolve findings → Owner accepts the submitted inspection → Work Plan can be assembled.
 
 Rebuild requirement:
 
@@ -119,26 +114,61 @@ Rebuild requirement:
 Verification:
 
 - Full production `npm run build` passed on Node 22 after the complete source-mutating prebuild chain, Next.js production compilation, and TypeScript validation for the initial authorization implementation.
-- The prebuild verification caught and corrected two legacy-patcher incompatibilities rather than allowing them to reach deployment: exact-match part-type detection and the old Owner-review component reference.
-- Deployed visual review with the fresh GLS finding is still required.
-- Fresh-vehicle runtime verification still needs to confirm that an accepted repair appears once in the generated Work Plan with the displayed authorization maximum and intended Partner.
+- Later authorization-card refinements exposed stale exact-match prebuild patchers; those were hardened rather than rolling the new UI backward.
+- Deployed visual testing confirmed approved repairs and accepted no-work findings move into a compact Resolved section and retain detail/provenance.
+- The final-finding transition defect was traced to premature Work Plan generation after repair approval and corrected so inspection acceptance remains the explicit boundary.
 
 ### Authorization-card refinement after initial build
 
-- The visible Owner card was subsequently reorganized again around the actual decision: Finding identity → Mechanic assessment → Parts detail → Repair authorization → Clarification → Approve/Dismiss.
-- The assigned mechanic/Partner name is now shown directly. If the inspector offered to perform the repair, the card identifies them as the proposed performer; otherwise it requires an alternate Partner.
+- The visible Owner card was reorganized around the actual decision: Finding identity → authorization amount/performer → mechanic evidence/conversation → collapsed parts detail → clarification → Approve/Dismiss.
+- The assigned mechanic/Partner name is shown directly. If the inspector offered to perform the repair, the card identifies them as the performer; otherwise it requires an alternate Partner.
 - `Estimate` was replaced by the unambiguous `Labor price` label.
-- The Repair authorization box shows labor price, new-parts spend, pricing status, and the exact/range total being authorized.
-- Approval copy now explicitly states that approving authorizes the repair, its spend, its performer, and inclusion in the Work Plan.
-- The primary action now reads `Approve Repair` or `Approve Repair & Route`, rather than the weaker `Accept Finding` wording.
-- A legacy safety case was added: if a finding says parts are required but has no structured part records/pricing, both the UI and review endpoint block approval rather than silently treating the repair as labor-only.
-- Missing labor price, missing purchase-required part price, and unresolved performer status are surfaced separately instead of displaying a misleading total.
+- The full Owner ↔ mechanic clarification conversation is visible in the active finding card without expanding a separate history view.
+- `not_found` is a distinct no-work state. Owner acceptance resolves it with no spend, no performer assignment, and no Work Plan item; it remains visible under Resolved for transparency.
+- Reviewed Owner-requested upgrades are presented in the same compact resolved visual language while remaining upgrades in the domain model.
 
-Verification status for this refinement:
+## Work Plan setup — September 11, 2026
 
-- Netlify build on September 11 failed during `prebuild`, before Next.js compilation. `scripts/ensure-owner-review-part-pricing.mjs` still expected the legacy suggested-part JSX and threw `Could not find Owner review suggested-part rendering.`
-- The failure was caused by stale exact-match patcher logic, not by the new authorization card itself.
-- `ensure-owner-review-part-pricing.mjs` now detects the decision-focused authorization card and becomes a no-op for that component while preserving its data-normalization responsibility.
-- `ensure-owner-review-part-cards.mjs`, which runs later in the same chain, was proactively hardened the same way so it cannot overwrite or reject the new authorization card on the next build.
-- A fresh production build is still required after these patcher fixes. Do not treat the earlier successful build as verification of these later UI/backend refinements.
-- Next deployed test: open the fresh GLS mechanical review card, confirm the mechanic name and `$710–$880`-style authorization math where applicable, approve one repair, and verify the generated Work Plan carries the same ceiling and intended Partner exactly once.
+Product decision:
+
+> A decision should happen once. Later screens inherit it; they do not ask for it again.
+
+The Work Plan page is an assembly/setup stage, not a second approval stage. Its purpose is to turn already-authorized scope into an executable plan and surface only true exceptions or missing execution details.
+
+Implemented behavior:
+
+- `Final manager approval` / blanket `Approval Review` semantics were removed from the V2 Work Plan UI.
+- Repairs already approved in Mechanical Review arrive under **Approved Scope / Already authorized**. The Owner is not required to click Include again.
+- Owner-requested upgrades that are already represented as approved Plan Items also carry forward automatically and are labeled as upgrades rather than treated as a second approval request.
+- A prior decision can still be changed deliberately through **Change decision → Defer this work**. This is an exception action, not the normal path.
+- Only Plan Items still in the real `investigate` decision state appear under **Needs your decision**. Resolving one to Include also clears `managerInvestigationRequired`.
+- Preferred Partner remains editable as optional execution setup; it is not a gating re-approval step.
+- Pricing details remain available, but unknown/final quotes do not block finalizing the plan. Quote collection can continue in Active Work.
+- The final action is **Create Active Work**, which converts authorized Plan Items into Work Orders. It is blocked only by genuine unresolved scope decisions, not by optional quotes, sourcing, location, or scheduling refinements.
+
+Parts carry-forward:
+
+- The Parts section was reframed as **Parts Setup**, not another blanket confirmation checklist.
+- Existing structured `fulfillment_method` decisions remain authoritative.
+- Mechanical inspection facts encoded by the current v15 model are carried forward automatically: `IN STOCK` → `in_stock`; `NOT NEEDED` → `not_required`.
+- Those inferred structured decisions are persisted through the existing part-requirement decision endpoint and recorded as carried forward from Mechanical Inspection.
+- `Purchase required` alone does not determine who sources the part, so those items correctly remain as genuine sourcing choices.
+- Only required parts with no sourcing method are shown prominently under **Resolve remaining sourcing choices**. Already-determined parts move into a compact **Already determined** list with a Change escape hatch.
+- Unresolved sourcing is intentionally allowed to continue into Active Work; Work Plan assembly remains permissive while Start Work enforces execution prerequisites.
+
+Prebuild compatibility:
+
+- `ensure-work-plan-approval-clarity.mjs` was retired as a source mutator for V2 so it cannot reintroduce the old Include/Defer checklist.
+- `ensure-work-plan-cost-semantics.mjs` was likewise retired for V2; current cost semantics live in the component instead of being patched during build.
+- `ensure-unified-part-decision-flow.mjs` only creates the PartsReview component when missing, so the current component remains authoritative.
+
+Rebuild requirement:
+
+- Preserve the one-decision rule as a domain invariant: Intake intent → mechanic assessment → Owner authorization → Work Plan assembly → Work Orders/execution. A downstream screen may expose an explicit revision action, but it must not silently turn a prior authorization back into a pending decision.
+- Store part disposition (`in_stock`, `not_required`, purchase required, etc.) structurally at inspection time so no later screen needs to infer it from note prefixes.
+
+Verification status:
+
+- API contracts were checked for Plan Item decisions, Partner routing, and part-requirement fulfillment methods after the rewrite.
+- The stale `suggested` Plan Item state reference was removed; the actual V15 decision domain is `approved | declined | investigate | monitor`.
+- A fresh Netlify production build and deployed visual pass are still required for this Work Plan rewrite.
