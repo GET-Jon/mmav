@@ -88,30 +88,37 @@ Product decision:
 - If the inspecting Partner says they can perform the repair, that Partner becomes the preferred performer automatically.
 - If the inspecting Partner says they cannot perform it, the Owner must choose an alternate Partner before approval.
 - The mechanic who authored the assessment remains visible as provenance even when a different Partner will perform the work.
+- The approval total represents new cash spend for the work. In-stock parts remain visible but contribute $0 to new spend. Parts marked Not Needed are excluded. Purchase-required parts plus labor determine the authorization range/ceiling.
 
 Implementation corrections discovered during this change:
 
 - The old review endpoint recorded `accepted` but did not save the inspector as preferred performer when `mechanical_can_perform = true`.
 - Preliminary Work Plan generation previously consumed every open mechanical finding, even if the Owner had not accepted it. That violated the intended Finding → Owner decision → Work Plan boundary.
 - Mechanical part quote/AI-price fields existed in the stored suggestion JSON but the Owner finding view normalized them away, preventing a trustworthy total from being calculated in the approval card.
+- A legacy prebuild patch could overwrite the Mechanical page with the older Owner-review component. The patch chain was aligned so the V2 review component remains authoritative through production build.
 
 Implemented behavior:
 
 - Owner review now uses a decision-focused card that shows the mechanic, recommendation, can-perform status, labor hours, mechanic note, Partner routing, labor price, part pricing, and a prominent Total Authorization.
 - Partner-offered part prices are treated as exact quoted unit prices. AI part estimates remain ranges and are labeled as AI estimates. Quantity is included in totals.
-- The approval amount is exact when all inputs are exact and a range when any included part is a range. The maximum displayed amount is the spend authorization ceiling.
-- Approval is blocked when labor price or a required suggested part price is genuinely missing. The Owner is directed to Request Clarification rather than approving an undefined budget.
-- Accepting writes the authorization snapshot to immutable Inventory History, including labor, parts low/high, total low/high, price-source flags, and assigned Partner.
+- Purchase-required part prices count toward new spend. In-stock parts are clearly labeled and excluded from new spend. Not-needed parts are excluded from the authorization.
+- The approval amount is exact when all included inputs are exact and a range when any purchase-required part is a range. The maximum displayed amount is the spend authorization ceiling.
+- Approval is blocked when the labor price, a purchase-required part price, or performer decision is missing. The Owner is directed to Request Clarification rather than approving undefined scope/budget/ownership.
+- Accepting writes the authorization snapshot to immutable Inventory History, including labor, new-parts low/high, total low/high, price-source flags, and assigned Partner.
 - When the inspector can perform the repair, `owner_preferred_partner_id` now receives the inspection Partner. When they cannot, the selected alternate Partner is stored instead.
 - Preliminary Work Plan generation now receives only Owner-accepted open mechanical findings. Dismissed, unreviewed, and clarification-pending findings cannot silently enter the plan.
+- Every accepted finding must appear exactly once in the generated Work Plan and cannot be merged into an upgrade item.
 - For an accepted finding represented in a generated Plan Item, the Owner-authorized repair range overrides a fresh AI cost guess. The Plan Item planning amount uses the approved maximum, and the preferred Partner carries into routing.
+- The final Owner finding decision continues to build/open the Preliminary Work Plan automatically; the prebuild transition script now targets the V2 review component.
 
 Rebuild requirement:
 
 - Formalize repair authorization as a first-class immutable domain object or versioned approval snapshot rather than deriving it from mutable Finding fields plus History metadata. The current v15 correction is behaviorally correct for the fresh-vehicle test, but the clean rebuild should make authorization boundaries explicit in the schema.
+- Model part disposition as structured data rather than encoding `IN STOCK` / `NOT NEEDED` prefixes into notes.
 
-Verification still required:
+Verification:
 
-- Run the production build through the current prebuild chain.
-- Review the deployed card visually with the fresh GLS finding.
-- Confirm the accepted repair appears once in the generated Work Plan with the approved maximum and intended Partner.
+- Full production `npm run build` passed on Node 22 after the complete source-mutating prebuild chain, Next.js production compilation, and TypeScript validation.
+- The prebuild verification caught and corrected two legacy-patcher incompatibilities rather than allowing them to reach deployment: exact-match part-type detection and the old Owner-review component reference.
+- Deployed visual review with the fresh GLS finding is still required.
+- Fresh-vehicle runtime verification still needs to confirm that an accepted repair appears once in the generated Work Plan with the displayed authorization maximum and intended Partner.
