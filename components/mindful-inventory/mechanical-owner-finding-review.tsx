@@ -384,51 +384,40 @@ export function MechanicalOwnerFindingReview({
         ) : null}
 
         <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0 flex-1">
-            {noteOpen ? (
-              <label className="block">
-                <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
-                  Owner note / question
-                </span>
-                <input
-                  value={notes[finding.id] || ""}
-                  onChange={(event) =>
-                    setNotes((current) => ({
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              {noteOpen ? (
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+                    Owner note / question
+                  </span>
+                  <input
+                    value={notes[finding.id] || ""}
+                    onChange={(event) =>
+                      setNotes((current) => ({
+                        ...current,
+                        [finding.id]: event.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+                    placeholder="Add context, or type the question for the inspector"
+                  />
+                </label>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenNotes((current) => ({
                       ...current,
-                      [finding.id]: event.target.value,
+                      [finding.id]: true,
                     }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
-                  placeholder="Add context, or type the question for the inspector"
-                />
-              </label>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  setOpenNotes((current) => ({
-                    ...current,
-                    [finding.id]: true,
-                  }))
-                }
-                className="text-xs font-black text-slate-500 hover:text-blue-700"
-              >
-                + Add note or question
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              disabled={
-                workingId === finding.id ||
-                (needsDifferentPartner && !selectedAlternatePartner)
-              }
-              onClick={() => void review(finding, "accept")}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {needsDifferentPartner ? "Approve & Route" : "Accept Finding"}
-            </button>
+                  className="text-xs font-black text-slate-500 hover:text-blue-700"
+                >
+                  + Add note or question
+                </button>
+              )}
+            </div>
             <button
               disabled={workingId === finding.id}
               onClick={() => {
@@ -442,10 +431,24 @@ export function MechanicalOwnerFindingReview({
                 }
                 void review(finding, "clarification");
               }}
-              className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-xs font-black text-amber-800 hover:bg-amber-50 disabled:opacity-40"
+              className="shrink-0 rounded-lg border border-amber-300 bg-white px-4 py-2 text-xs font-black text-amber-800 hover:bg-amber-50 disabled:opacity-40"
             >
               Request Clarification
             </button>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-100 pt-3 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+            <button
+              disabled={
+                workingId === finding.id ||
+                (needsDifferentPartner && !selectedAlternatePartner)
+              }
+              onClick={() => void review(finding, "accept")}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {needsDifferentPartner ? "Approve & Route" : "Accept Finding"}
+            </button>
+
             <button
               disabled={workingId === finding.id}
               onClick={() => void review(finding, "dismiss")}

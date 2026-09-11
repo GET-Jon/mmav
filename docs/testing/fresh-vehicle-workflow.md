@@ -64,3 +64,10 @@ Verification: production build passed with the existing prebuild chain. A field-
 - Both components blank leaves the total blank, including on reopening saved upgrades. Explicit zero remains distinct from unknown. Partial breakdowns sum only known entries, and the UI explains this. The existing API already preserves null component estimates.
 
 Verification: production build passed. Calculation checks passed for blank, partial and complete estimates, manual-total preservation, recalculation, clearing both components and explicit zero.
+
+
+### Finding review action grouping — September 11, 2026
+
+Request Clarification now sits alongside the owner note/question field. Accept Finding (or Approve & Route) and Dismiss form a separate decision group, visually divided on desktop and stacked on smaller screens. Existing handlers, validation and permissions are unchanged. Rebuild principle: group message submission with its input, separately from operational decisions.
+
+Verification: full production build passed with the prebuild chain. Deployed visual review remains pending.
