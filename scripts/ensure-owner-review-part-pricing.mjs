@@ -6,7 +6,13 @@ let dataUpdated = dataSource;
 
 const oldType = 'export type MechanicalSuggestedPart = { description: string; quantity: number; partNumber: string | null; notes: string | null };';
 const newType = 'export type MechanicalSuggestedPart = { description: string; quantity: number; partNumber: string | null; notes: string | null; aiEstimatedUnitPriceLow: number | null; aiEstimatedUnitPriceHigh: number | null; aiPriceBasis: string | null; partnerOfferUnitPrice: number | null };';
-if (!dataUpdated.includes(newType)) {
+const hasEnrichedSuggestedPartType =
+  dataUpdated.includes("export type MechanicalSuggestedPart") &&
+  dataUpdated.includes("aiEstimatedUnitPriceLow: number | null") &&
+  dataUpdated.includes("aiEstimatedUnitPriceHigh: number | null") &&
+  dataUpdated.includes("aiPriceBasis: string | null") &&
+  dataUpdated.includes("partnerOfferUnitPrice: number | null");
+if (!hasEnrichedSuggestedPartType) {
   if (!dataUpdated.includes(oldType)) throw new Error("Could not find MechanicalSuggestedPart type.");
   dataUpdated = dataUpdated.replace(oldType, newType);
 }
