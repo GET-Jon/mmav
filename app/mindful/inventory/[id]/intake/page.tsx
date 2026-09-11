@@ -69,9 +69,17 @@ export default async function InventoryMechanicalInspectionPage({
       {submittedForOwner ? (
         <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>
-            <h2 className="mt-1 text-xl font-black text-slate-950">Review the mechanic&apos;s findings</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-500">Approve each repair with its Partner and authorized spend, request clarification when something is incomplete, or dismiss it from the mechanical scope.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Mechanical Review</div>
+                <h2 className="mt-1 text-xl font-black text-slate-950">Review inspection results</h2>
+              </div>
+              {pendingFindingReviews ? (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-amber-800">
+                  {pendingFindingReviews} remaining
+                </span>
+              ) : null}
+            </div>
             <MechanicalOwnerFindingReviewV2
               vehicleId={vehicle.id}
               findings={submittedFindings}
