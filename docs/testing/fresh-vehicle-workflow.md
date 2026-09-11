@@ -39,3 +39,18 @@ Implemented correction:
 - Measure live request latency separately from perceived responsiveness. The user reports broader site slowness; its overall cause remains unverified.
 - The Overview save currently writes Intake, then vehicle details, then refreshes the server page. The page loads the Inventory dashboard to locate one vehicle. Investigate these paths when measuring broader latency; do not assume they explain every slow action.
 - Verify these changes in the deployed Owner session before recording the fresh-vehicle stage as passed.
+
+
+## Upgrade capture — September 11, 2026
+
+User-approved simplification implemented for the current test:
+
+- Default fields: Upgrade, Description, optional Product link, optional Budget preference.
+- Native More details disclosure retains category, quantity, desired outcome, manufacturer, part number, preferred vendor, parts/labor estimates, substitutes and notes. Collapsing it does not clear values.
+- Budget remains the existing estimate field, explicitly described as a planning preference. Adding an upgrade records intent and does not authorize work or spending.
+- New upgrades default to Other rather than silently assuming Performance when category is collapsed. Existing upgrade categories are preserved on edit.
+- Existing create/edit payloads and cost calculations are unchanged.
+
+Rebuild follow-up: suggest category, progressively add sourcing/assessment detail, distinguish budget preference from formal authorization in the domain model, and preserve structured information through assessment, Work Plan and execution without re-entry.
+
+Verification: production build passed with the existing prebuild chain. A field-binding comparison confirmed that every prior form value is retained. Deployed visual review remains pending.

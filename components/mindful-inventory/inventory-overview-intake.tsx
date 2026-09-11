@@ -111,7 +111,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   const [upgradeSaving, setUpgradeSaving] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const [upgradeTitle, setUpgradeTitle] = useState("");
-  const [upgradeCategory, setUpgradeCategory] = useState("performance");
+  const [upgradeCategory, setUpgradeCategory] = useState("other");
   const [upgradeDescription, setUpgradeDescription] = useState("");
   const [upgradeOutcome, setUpgradeOutcome] = useState("");
   const [upgradeManufacturer, setUpgradeManufacturer] = useState("");
@@ -287,7 +287,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   function resetUpgradeForm() {
     setEditingUpgradeId(null);
     setUpgradeTitle("");
-    setUpgradeCategory("performance");
+    setUpgradeCategory("other");
     setUpgradeDescription("");
     setUpgradeOutcome("");
     setUpgradeManufacturer("");
@@ -587,37 +587,43 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
 
       {showUpgradeForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label={editingUpgradeId ? "Edit upgrade" : "Add upgrade"} onMouseDown={(event) => { if (event.target === event.currentTarget) closeUpgradeModal(); }}>
-          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
             <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
               <div>
                 <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Upgrade</div>
                 <h3 className="mt-1 text-xl font-black text-slate-950">{editingUpgradeId ? "Edit Upgrade" : "Add Upgrade"}</h3>
-                <p className="mt-1 text-sm text-slate-500">Capture the intended improvement and budget. Mechanical will validate the final scope.</p>
+                <p className="mt-1 text-sm text-slate-500">Describe the improvement you have in mind. Adding an upgrade records intent; it does not authorize work or spending.</p>
               </div>
               <button type="button" onClick={closeUpgradeModal} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600">Close</button>
             </div>
 
-            <form onSubmit={saveUpgrade} className="grid gap-4 p-5 md:grid-cols-2 lg:grid-cols-4 sm:p-6">
+            <form onSubmit={saveUpgrade} className="grid gap-4 p-5 md:grid-cols-2 sm:p-6">
               <label className="md:col-span-2"><FieldLabel>Upgrade</FieldLabel><input required className={inputClass} value={upgradeTitle} onChange={(e) => setUpgradeTitle(e.target.value)} placeholder="e.g. Stage 1 engine tune" /></label>
-              <label><FieldLabel>Category</FieldLabel><select className={inputClass} value={upgradeCategory} onChange={(e) => setUpgradeCategory(e.target.value)}><option value="performance">Performance</option><option value="exhaust">Exhaust</option><option value="lighting">Lighting</option><option value="wheels_tires">Wheels / Tires</option><option value="audio">Audio</option><option value="suspension">Suspension</option><option value="cosmetic">Cosmetic</option><option value="protection">Protection</option><option value="other">Other</option></select></label>
-              <label><FieldLabel>Quantity</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeQuantity} onChange={(e) => setUpgradeQuantity(e.target.value)} /></label>
-              <label className="md:col-span-2"><FieldLabel>Description / Desired Part</FieldLabel><input className={inputClass} value={upgradeDescription} onChange={(e) => setUpgradeDescription(e.target.value)} /></label>
-              <label className="md:col-span-2"><FieldLabel>Desired Outcome</FieldLabel><input className={inputClass} value={upgradeOutcome} onChange={(e) => setUpgradeOutcome(e.target.value)} placeholder="What should this change accomplish?" /></label>
-              <label><FieldLabel>Manufacturer</FieldLabel><input className={inputClass} value={upgradeManufacturer} onChange={(e) => setUpgradeManufacturer(e.target.value)} /></label>
-              <label><FieldLabel>Part Number</FieldLabel><input className={inputClass} value={upgradePartNumber} onChange={(e) => setUpgradePartNumber(e.target.value)} /></label>
-              <label><FieldLabel>Preferred Vendor</FieldLabel><input className={inputClass} value={upgradeVendor} onChange={(e) => setUpgradeVendor(e.target.value)} /></label>
-              <label><FieldLabel>Product URL</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
-              <label><FieldLabel>Parts Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="$0" /></label>
-              <label><FieldLabel>Labor Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="$0" /></label>
-              <label className="lg:col-span-2">
-                <div className="flex items-center justify-between gap-3"><FieldLabel>Total Budget</FieldLabel>{totalBudgetOverridden ? <button type="button" onClick={useCalculatedBudget} className="mb-1.5 text-[11px] font-black text-slate-500 underline">Use parts + labor</button> : null}</div>
+              <label className="md:col-span-2"><FieldLabel>Description</FieldLabel><input className={inputClass} placeholder="What would you like to change or add?" value={upgradeDescription} onChange={(e) => setUpgradeDescription(e.target.value)} /></label>
+              <label><FieldLabel>Product link (optional)</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
+              <label className="block">
+                <div className="flex items-center justify-between gap-3"><FieldLabel>Budget preference (optional)</FieldLabel>{totalBudgetOverridden ? <button type="button" onClick={useCalculatedBudget} className="mb-1.5 text-[11px] font-black text-slate-500 underline">Use parts + labor</button> : null}</div>
                 <input className={inputClass} inputMode="decimal" value={upgradeTotalCost} onChange={(e) => { setTotalBudgetOverridden(true); setUpgradeTotalCost(formatCurrencyText(e.target.value)); }} placeholder="$0" />
-                <div className="mt-1 text-xs font-semibold text-slate-400">Auto-calculated from Parts + Labor until manually changed.</div>
+                <div className="mt-1 text-xs font-semibold text-slate-400">A planning preference, not an approved spending limit.</div>
               </label>
-              <label className="flex items-end pb-3 text-sm font-black text-slate-700"><input type="checkbox" className="mr-2 h-4 w-4" checked={substitutesAllowed} onChange={(e) => setSubstitutesAllowed(e.target.checked)} />Substitutes allowed</label>
-              <label className="md:col-span-2 lg:col-span-4"><FieldLabel>Notes</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={upgradeNotes} onChange={(e) => setUpgradeNotes(e.target.value)} /></label>
-              {upgradeMessage ? <div className="md:col-span-2 lg:col-span-4 text-sm font-semibold text-red-600">{upgradeMessage}</div> : null}
-              <div className="md:col-span-2 lg:col-span-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <details className="rounded-xl border border-slate-200 md:col-span-2">
+                <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-black text-slate-700 focus-visible:outline-2 focus-visible:outline-slate-500">More details</summary>
+                <div className="grid gap-4 border-t border-slate-100 p-4 md:grid-cols-2 lg:grid-cols-4">
+                  <label><FieldLabel>Category</FieldLabel><select className={inputClass} value={upgradeCategory} onChange={(e) => setUpgradeCategory(e.target.value)}><option value="performance">Performance</option><option value="exhaust">Exhaust</option><option value="lighting">Lighting</option><option value="wheels_tires">Wheels / Tires</option><option value="audio">Audio</option><option value="suspension">Suspension</option><option value="cosmetic">Cosmetic</option><option value="protection">Protection</option><option value="other">Other</option></select></label>
+                  <label><FieldLabel>Quantity</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeQuantity} onChange={(e) => setUpgradeQuantity(e.target.value)} /></label>
+                  <label className="md:col-span-2"><FieldLabel>Desired Outcome</FieldLabel><input className={inputClass} value={upgradeOutcome} onChange={(e) => setUpgradeOutcome(e.target.value)} placeholder="What should this change accomplish?" /></label>
+                  <label><FieldLabel>Manufacturer</FieldLabel><input className={inputClass} value={upgradeManufacturer} onChange={(e) => setUpgradeManufacturer(e.target.value)} /></label>
+                  <label><FieldLabel>Part Number</FieldLabel><input className={inputClass} value={upgradePartNumber} onChange={(e) => setUpgradePartNumber(e.target.value)} /></label>
+                  <label><FieldLabel>Preferred Vendor</FieldLabel><input className={inputClass} value={upgradeVendor} onChange={(e) => setUpgradeVendor(e.target.value)} /></label>
+                  <label><FieldLabel>Parts Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="$0" /></label>
+                  <label><FieldLabel>Labor Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="$0" /></label>
+                  <label className="flex items-end pb-3 text-sm font-black text-slate-700"><input type="checkbox" className="mr-2 h-4 w-4" checked={substitutesAllowed} onChange={(e) => setSubstitutesAllowed(e.target.checked)} />Substitutes allowed</label>
+                  <label className="md:col-span-2 lg:col-span-4"><FieldLabel>Notes</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={upgradeNotes} onChange={(e) => setUpgradeNotes(e.target.value)} /></label>
+                  <p className="text-xs font-medium text-slate-500 md:col-span-2 lg:col-span-4">Parts and labor estimates calculate the budget preference unless you enter it directly. All details remain available when this upgrade is assessed.</p>
+                </div>
+              </details>
+              {upgradeMessage ? <div className="md:col-span-2 text-sm font-semibold text-red-600">{upgradeMessage}</div> : null}
+              <div className="md:col-span-2 flex justify-end gap-2 border-t border-slate-100 pt-4">
                 <button type="button" onClick={closeUpgradeModal} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-black text-slate-700">Cancel</button>
                 <button disabled={upgradeSaving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white disabled:bg-slate-300">{upgradeSaving ? "Saving..." : editingUpgradeId ? "Save Changes" : "Add Upgrade"}</button>
               </div>
