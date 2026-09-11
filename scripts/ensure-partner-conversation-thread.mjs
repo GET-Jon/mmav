@@ -60,9 +60,66 @@ if (!block.includes('<PartnerFindingConversation findingId={finding.id} />')) {
 
 next = next.slice(0, clarificationStart) + block + next.slice(clarificationEnd);
 
-if (next === source) {
-  throw new Error("Partner clarification conversation patch made no source change.");
+if (next !== source) {
+  writeFileSync(path, next, "utf8");
+  console.log("Connected partner clarification UI to dedicated live conversation endpoint.");
+} else {
+  console.log("Partner clarification conversation is already connected.");
 }
 
-writeFileSync(path, next, "utf8");
-console.log("Connected partner clarification UI to dedicated live conversation endpoint.");
+// Keep the complete Owner ↔ mechanic exchange visible in the compact Owner review
+// card. V15 still uses build-time source alignment, so this intentionally patches
+// the V2 review component without changing any authorization semantics.
+const ownerPath = "components/mindful-inventory/mechanical-owner-finding-review-v2.tsx";
+const ownerSource = readFileSync(ownerPath, "utf8");
+let ownerNext = ownerSource;
+
+if (!ownerNext.includes("function renderConversation(finding: InventoryFindingView)")) {
+  const marker = "  function renderPartnerChoice(finding: InventoryFindingView) {";
+  if (!ownerNext.includes(marker)) {
+    throw new Error("Could not find Owner review Partner-choice boundary for conversation insertion.");
+  }
+
+  const helper = `  function renderConversation(finding: InventoryFindingView) {\n    if (!finding.mechanicalConversation.length) return null;\n\n    return (\n      <div className=\"mt-2.5 border-t border-slate-100 pt-2.5\">\n        <div className=\"text-[10px] font-black uppercase tracking-[0.08em] text-slate-400\">Conversation</div>\n        <div className=\"mt-1.5 space-y-1.5\">\n          {finding.mechanicalConversation.map((entry) => (\n            <div key={entry.id} className=\"flex gap-2 text-xs leading-5\">\n              <span className={\`w-16 shrink-0 font-black ${entry.role === \"owner\" ? \"text-blue-700\" : \"text-slate-700\"}\`}>\n                {entry.role === \"owner\" ? \"Owner\" : inspector?.displayName || \"Mechanic\"}\n              </span>\n              <span className=\"font-semibold text-slate-600\">{entry.message}</span>\n            </div>\n          ))}\n        </div>\n      </div>\n    );\n  }\n\n`;
+
+  ownerNext = ownerNext.replace(marker, helper + marker);
+}
+
+const normalConversationTarget = `        {renderDecisionSummary(finding)}\n        {renderMechanicEvidence(finding)}\n        {renderPartnerChoice(finding)}`;
+const normalConversationReplacement = `        {renderDecisionSummary(finding)}\n        {renderMechanicEvidence(finding)}\n        {renderConversation(finding)}\n        {renderPartnerChoice(finding)}`;
+if (!ownerNext.includes(normalConversationReplacement)) {
+  if (!ownerNext.includes(normalConversationTarget)) {
+    throw new Error("Could not find normal Owner review evidence stack for conversation insertion.");
+  }
+  ownerNext = ownerNext.replace(normalConversationTarget, normalConversationReplacement);
+}
+
+const notFoundConversationTarget = `        </div>\n\n        {clarification && finding.mechanicalOwnerReviewNotes ? (`;
+const notFoundConversationReplacement = `        </div>\n\n        {renderConversation(finding)}\n\n        {clarification && finding.mechanicalOwnerReviewNotes && !finding.mechanicalConversation.length ? (`;
+if (!ownerNext.includes(notFoundConversationReplacement)) {
+  if (!ownerNext.includes(notFoundConversationTarget)) {
+    throw new Error("Could not find no-work Owner review conversation boundary.");
+  }
+  ownerNext = ownerNext.replace(notFoundConversationTarget, notFoundConversationReplacement);
+}
+
+ownerNext = ownerNext.replaceAll(
+  "{clarification && finding.mechanicalOwnerReviewNotes ? (",
+  "{clarification && finding.mechanicalOwnerReviewNotes && !finding.mechanicalConversation.length ? (",
+);
+
+const resolvedConversationTarget = `            )}\n            {finding.mechanicalOwnerReviewNotes ? (`;
+const resolvedConversationReplacement = `            )}\n            {renderConversation(finding)}\n            {finding.mechanicalOwnerReviewNotes ? (`;
+if (!ownerNext.includes(resolvedConversationReplacement)) {
+  if (!ownerNext.includes(resolvedConversationTarget)) {
+    throw new Error("Could not find resolved finding detail boundary for conversation insertion.");
+  }
+  ownerNext = ownerNext.replace(resolvedConversationTarget, resolvedConversationReplacement);
+}
+
+if (ownerNext !== ownerSource) {
+  writeFileSync(ownerPath, ownerNext, "utf8");
+  console.log("Displayed the full Owner/mechanic conversation in compact finding review cards.");
+} else {
+  console.log("Owner finding review already shows the full conversation thread.");
+}
