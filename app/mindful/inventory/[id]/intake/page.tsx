@@ -78,8 +78,8 @@ export default async function InventoryMechanicalInspectionPage({
               partnerOptions={ownerReviewPartners}
               inspectorPartnerId={inspection?.performedByPartnerId || null}
             />
+            <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />
           </section>
-          <MechanicalOwnerUpgradeReview upgrades={overview.upgrades} />
           {inspectorAssignment}
         </>
       ) : null}
