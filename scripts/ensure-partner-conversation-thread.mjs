@@ -80,7 +80,28 @@ if (!ownerNext.includes("function renderConversation(finding: InventoryFindingVi
     throw new Error("Could not find Owner review Partner-choice boundary for conversation insertion.");
   }
 
-  const helper = `  function renderConversation(finding: InventoryFindingView) {\n    if (!finding.mechanicalConversation.length) return null;\n\n    return (\n      <div className=\"mt-2.5 border-t border-slate-100 pt-2.5\">\n        <div className=\"text-[10px] font-black uppercase tracking-[0.08em] text-slate-400\">Conversation</div>\n        <div className=\"mt-1.5 space-y-1.5\">\n          {finding.mechanicalConversation.map((entry) => (\n            <div key={entry.id} className=\"flex gap-2 text-xs leading-5\">\n              <span className={\`w-16 shrink-0 font-black ${entry.role === \"owner\" ? \"text-blue-700\" : \"text-slate-700\"}\`}>\n                {entry.role === \"owner\" ? \"Owner\" : inspector?.displayName || \"Mechanic\"}\n              </span>\n              <span className=\"font-semibold text-slate-600\">{entry.message}</span>\n            </div>\n          ))}\n        </div>\n      </div>\n    );\n  }\n\n`;
+  const helper = [
+    '  function renderConversation(finding: InventoryFindingView) {',
+    '    if (!finding.mechanicalConversation.length) return null;',
+    '',
+    '    return (',
+    '      <div className="mt-2.5 border-t border-slate-100 pt-2.5">',
+    '        <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Conversation</div>',
+    '        <div className="mt-1.5 space-y-1.5">',
+    '          {finding.mechanicalConversation.map((entry) => (',
+    '            <div key={entry.id} className="flex gap-2 text-xs leading-5">',
+    '              <span className={"w-16 shrink-0 font-black " + (entry.role === "owner" ? "text-blue-700" : "text-slate-700")}>',
+    '                {entry.role === "owner" ? "Owner" : inspector?.displayName || "Mechanic"}',
+    '              </span>',
+    '              <span className="font-semibold text-slate-600">{entry.message}</span>',
+    '            </div>',
+    '          ))}',
+    '        </div>',
+    '      </div>',
+    '    );',
+    '  }',
+    '',
+  ].join("\n");
 
   ownerNext = ownerNext.replace(marker, helper + marker);
 }
