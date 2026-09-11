@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { InventoryMechanicalInspection } from "@/components/mindful-inventory/inventory-mechanical-inspection";
 import { InventoryMechanicalNextStep } from "@/components/mindful-inventory/inventory-mechanical-next-step";
 import { MechanicalInspectorAssignment } from "@/components/mindful-inventory/mechanical-inspector-assignment";
-import { MechanicalOwnerFindingReview } from "@/components/mindful-inventory/mechanical-owner-finding-review";
+import { MechanicalOwnerFindingReviewV2 } from "@/components/mindful-inventory/mechanical-owner-finding-review-v2";
 import { MechanicalOwnerUpgradeReview } from "@/components/mindful-inventory/mechanical-owner-upgrade-review";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
@@ -66,8 +66,8 @@ export default async function InventoryMechanicalInspectionPage({
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection Findings</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">Review the mechanic&apos;s findings</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-500">Resolve the open findings below. If the inspector cannot perform the work, choose who should handle it before moving on.</p>
-            <MechanicalOwnerFindingReview
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">Approve each repair with its Partner and authorized spend, request clarification when something is incomplete, or dismiss it from the mechanical scope.</p>
+            <MechanicalOwnerFindingReviewV2
               vehicleId={vehicle.id}
               findings={submittedFindings}
               partnerOptions={ownerReviewPartners}
