@@ -75,15 +75,15 @@ const ownerReviewChanged = updateFile(ownerReviewPath, (source) => {
   );
   updated = updated.replace(
     '      !isNotFound &&\n      (hasLegacyUnpricedParts(finding) || !cost.pricingComplete)',
-    '      !isNotFound &&\n      !isDiagnosis &&\n      (hasLegacyUnpricedParts(finding) || !cost.pricingComplete)',
+    '      !isNotFound &&\n      !isDiagnosis &&\n      !needsDifferentPartner &&\n      (hasLegacyUnpricedParts(finding) || !cost.pricingComplete)',
   );
   updated = updated.replace(
     '          ? isNotFound\n            ? `${finding.title}: mechanic result accepted. No repair will enter the Work Plan.`\n            : `${finding.title} approved for ${approvalAuthorizationLabel(cost)} and added to the Work Plan scope.`',
-    '          ? isNotFound\n            ? `${finding.title}: mechanic result accepted. No repair will enter the Work Plan.`\n            : isDiagnosis\n              ? `${finding.title}: diagnostic work routed to the selected Partner.`\n              : `${finding.title} approved for ${approvalAuthorizationLabel(cost)} and added to the Work Plan scope.`',
+    '          ? isNotFound\n            ? `${finding.title}: mechanic result accepted. No repair will enter the Work Plan.`\n            : isDiagnosis\n              ? `${finding.title}: diagnostic work routed to the selected Partner.`\n              : needsDifferentPartner\n                ? `${finding.title}: work scope approved and routed to the selected Partner; final quote is pending.`\n                : `${finding.title} approved for ${approvalAuthorizationLabel(cost)} and added to the Work Plan scope.`',
   );
 
   const decisionSummaryNeedle = '  function renderDecisionSummary(finding: InventoryFindingView) {\n    const cost = summarizeFindingApprovalCost(';
-  const decisionSummaryReplacement = '  function renderDecisionSummary(finding: InventoryFindingView) {\n    if (finding.mechanicalValidationStatus === "needs_diagnosis") {\n      const selectedPartner = finding.mechanicalCanPerform === true\n        ? inspector\n        : partnerOptions.find((partner) => partner.id === alternatePartners[finding.id]) || null;\n      return (\n        <section className="mt-3 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">\n          <div className="flex flex-wrap items-start justify-between gap-3">\n            <div>\n              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Next step</div>\n              <div className="mt-0.5 text-lg font-black text-slate-950">Specialist diagnosis</div>\n              <div className="mt-1 text-sm font-semibold text-slate-600">{finding.mechanicalRecommendedAction || "Complete the next diagnostic step before deciding on a repair."}</div>\n            </div>\n            <div className="text-right text-sm">\n              <div className="font-black text-slate-900">{selectedPartner ? selectedPartner.displayName : "Choose a Partner"}</div>\n              <div className="mt-0.5 text-xs font-semibold text-slate-500">Repair scope and pricing come after diagnosis</div>\n            </div>\n          </div>\n        </section>\n      );\n    }\n\n    const cost = summarizeFindingApprovalCost(';
+  const decisionSummaryReplacement = '  function renderDecisionSummary(finding: InventoryFindingView) {\n    if (finding.mechanicalValidationStatus === "needs_diagnosis") {\n      const selectedPartner = finding.mechanicalCanPerform === true\n        ? inspector\n        : partnerOptions.find((partner) => partner.id === alternatePartners[finding.id]) || null;\n      return (\n        <section className="mt-3 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">\n          <div className="flex flex-wrap items-start justify-between gap-3">\n            <div>\n              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Next step</div>\n              <div className="mt-0.5 text-lg font-black text-slate-950">Specialist diagnosis</div>\n              <div className="mt-1 text-sm font-semibold text-slate-600">{finding.mechanicalRecommendedAction || "Complete the next diagnostic step before deciding on a repair."}</div>\n            </div>\n            <div className="text-right text-sm">\n              <div className="font-black text-slate-900">{selectedPartner ? selectedPartner.displayName : "Choose a Partner"}</div>\n              <div className="mt-0.5 text-xs font-semibold text-slate-500">Repair scope and pricing come after diagnosis</div>\n            </div>\n          </div>\n        </section>\n      );\n    }\n\n    if (finding.mechanicalCanPerform === false) {\n      const selectedPartner = partnerOptions.find((partner) => partner.id === alternatePartners[finding.id]) || null;\n      return (\n        <section className="mt-3 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">\n          <div className="flex flex-wrap items-start justify-between gap-3">\n            <div>\n              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">Next step</div>\n              <div className="mt-0.5 text-lg font-black text-slate-950">Route confirmed work</div>\n              <div className="mt-1 text-sm font-semibold text-slate-600">The mechanic confirmed this scope but cannot perform it. Route it to the Partner who will quote and handle the work.</div>\n            </div>\n            <div className="text-right text-sm">\n              <div className="font-black text-slate-900">{selectedPartner ? selectedPartner.displayName : "Choose a Partner"}</div>\n              <div className="mt-0.5 text-xs font-semibold text-slate-500">Final quote and spend approval pending</div>\n            </div>\n          </div>\n        </section>\n      );\n    }\n\n    const cost = summarizeFindingApprovalCost(';
   if (updated.includes(decisionSummaryNeedle)) updated = updated.replace(decisionSummaryNeedle, decisionSummaryReplacement);
 
   updated = updated.replace(
@@ -92,19 +92,19 @@ const ownerReviewChanged = updateFile(ownerReviewPath, (source) => {
   );
   updated = updated.replace(
     '    const canApprove =\n      cost.pricingComplete && !hasLegacyUnpricedParts(finding) && performerReady;',
-    '    const canApprove = isDiagnosis\n      ? performerReady\n      : cost.pricingComplete && !hasLegacyUnpricedParts(finding) && performerReady;',
+    '    const canApprove = isDiagnosis || needsDifferentPartner\n      ? performerReady\n      : cost.pricingComplete && !hasLegacyUnpricedParts(finding) && performerReady;',
   );
   updated = updated.replace(
     '        {renderPartsDisclosure(finding)}',
-    '        {isDiagnosis ? null : renderPartsDisclosure(finding)}',
+    '        {isDiagnosis || needsDifferentPartner ? null : renderPartsDisclosure(finding)}',
   );
   updated = updated.replace(
     '                finding.mechanicalCanPerform === null\n                  ? "Mechanic must confirm whether they can perform this work"\n                  : !cost.pricingComplete || hasLegacyUnpricedParts(finding)',
-    '                finding.mechanicalCanPerform === null\n                  ? "Mechanic must confirm whether they can perform this work"\n                  : isDiagnosis\n                    ? undefined\n                    : !cost.pricingComplete || hasLegacyUnpricedParts(finding)',
+    '                finding.mechanicalCanPerform === null\n                  ? "Mechanic must confirm whether they can perform this work"\n                  : isDiagnosis || needsDifferentPartner\n                    ? undefined\n                    : !cost.pricingComplete || hasLegacyUnpricedParts(finding)',
   );
   updated = updated.replace(
     '              {needsDifferentPartner\n                ? `Approve & Route · up to ${money(cost.totalHigh)}`\n                : cost.hasRange',
-    '              {isDiagnosis\n                ? selectedAlternatePartner\n                  ? `Send to ${partnerOptions.find((partner) => partner.id === selectedAlternatePartner)?.displayName || "Partner"} for Diagnosis`\n                  : "Choose Partner to Continue"\n                : needsDifferentPartner\n                  ? `Approve & Route · up to ${money(cost.totalHigh)}`\n                  : cost.hasRange',
+    '              {isDiagnosis\n                ? selectedAlternatePartner\n                  ? `Send to ${partnerOptions.find((partner) => partner.id === selectedAlternatePartner)?.displayName || "Partner"} for Diagnosis`\n                  : "Choose Partner to Continue"\n                : needsDifferentPartner\n                  ? selectedAlternatePartner\n                    ? `Approve Scope & Route to ${partnerOptions.find((partner) => partner.id === selectedAlternatePartner)?.displayName || "Partner"}`\n                    : "Choose Partner to Continue"\n                  : cost.hasRange',
   );
 
   return updated;
@@ -114,16 +114,16 @@ const workPlanPath = "app/api/mindful/inventory/vehicles/[id]/work-plan/generate
 const workPlanChanged = updateFile(workPlanPath, (source) => {
   let updated = source;
   const authScope = '        const hasOwnerAuthorizedFindingScope =\n          !item.upgradeId &&\n          item.findingIds.length > 0 &&\n          linkedApprovedFindings.length === item.findingIds.length &&\n          authorizationCosts.length === item.findingIds.length &&\n          authorizationCosts.every((cost) => cost?.pricingComplete && cost.totalLow !== null && cost.totalHigh !== null);';
-  const diagnosisScope = authScope + '\n        const hasOwnerApprovedDiagnosticScope =\n          !item.upgradeId &&\n          item.findingIds.length > 0 &&\n          linkedApprovedFindings.length === item.findingIds.length &&\n          linkedApprovedFindings.every((finding) => finding?.mechanicalValidationStatus === "needs_diagnosis");';
-  if (updated.includes(authScope) && !updated.includes('hasOwnerApprovedDiagnosticScope')) updated = updated.replace(authScope, diagnosisScope);
+  const routedScopes = authScope + '\n        const hasOwnerApprovedDiagnosticScope =\n          !item.upgradeId &&\n          item.findingIds.length > 0 &&\n          linkedApprovedFindings.length === item.findingIds.length &&\n          linkedApprovedFindings.every((finding) => finding?.mechanicalValidationStatus === "needs_diagnosis");\n        const hasOwnerApprovedRoutedScope =\n          !item.upgradeId &&\n          item.findingIds.length > 0 &&\n          linkedApprovedFindings.length === item.findingIds.length &&\n          linkedApprovedFindings.every((finding) => finding?.mechanicalCanPerform === false && Boolean(finding?.ownerPreferredPartnerId));';
+  if (updated.includes(authScope) && !updated.includes('hasOwnerApprovedDiagnosticScope')) updated = updated.replace(authScope, routedScopes);
   updated = updated.replace(
     '        const decision = hasOwnerAuthorizedFindingScope ? "approved" : item.decision;\n        const managerInvestigationRequired = hasOwnerAuthorizedFindingScope ? false : item.managerInvestigationRequired;',
-    '        const ownerApprovedScope = hasOwnerAuthorizedFindingScope || hasOwnerApprovedDiagnosticScope;\n        const decision = ownerApprovedScope ? "approved" : item.decision;\n        const managerInvestigationRequired = ownerApprovedScope ? false : item.managerInvestigationRequired;',
+    '        const ownerApprovedScope = hasOwnerAuthorizedFindingScope || hasOwnerApprovedDiagnosticScope || hasOwnerApprovedRoutedScope;\n        const decision = ownerApprovedScope ? "approved" : item.decision;\n        const managerInvestigationRequired = ownerApprovedScope ? false : item.managerInvestigationRequired;',
   );
   return updated;
 });
 
 if (inspectionChanged) console.log("Simplified Mechanical Inspection scope hierarchy.");
 if (assignmentChanged) console.log("Refined Mechanical inspector custom scheduling UX.");
-if (ownerReviewChanged) console.log("Simplified Owner mechanical review hierarchy and made diagnosis routing actionable.");
-if (workPlanChanged) console.log("Preserved Owner-approved diagnostic routing in Work Plan generation.");
+if (ownerReviewChanged) console.log("Simplified Owner mechanical review hierarchy and made routed scope actionable.");
+if (workPlanChanged) console.log("Preserved Owner-approved diagnostic and quote-pending routing in Work Plan generation.");
