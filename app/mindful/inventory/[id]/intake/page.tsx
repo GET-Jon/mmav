@@ -40,7 +40,12 @@ export default async function InventoryMechanicalInspectionPage({
     inspection?.performedByPartnerId && ["assigned", "confirmed", "in_progress", "revision_requested", "submitted", "complete"].includes(inspection.status),
   );
   const submittedForOwner = Boolean(inspection?.performedByPartnerId && inspection.status === "submitted");
-  const submittedFindings = inspectionData.findings.filter((finding) => finding.status === "open" || finding.mechanicalOwnerReviewStatus === "dismissed");
+  const submittedFindings = inspectionData.findings.filter(
+    (finding) =>
+      finding.status === "open" ||
+      finding.mechanicalOwnerReviewStatus === "accepted" ||
+      finding.mechanicalOwnerReviewStatus === "dismissed",
+  );
   const pendingFindingReviews = submittedFindings.filter((finding) => finding.status === "open" && (!finding.mechanicalOwnerReviewStatus || finding.mechanicalOwnerReviewStatus === "clarification_requested")).length;
   const pendingUpgradeReviews = overview.upgrades.filter((upgrade) => upgrade.status === "proposed" && upgrade.mechanicalValidationStatus === "pending").length;
   const ownerReviewPartners = performerOptions
