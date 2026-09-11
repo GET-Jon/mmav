@@ -155,8 +155,8 @@ function PartsEditor({ vehicleLabel, jobLabel, contextText, parts, onChange, onR
   const ready = unresolvedCandidates.length === 0 && !invalidManual;
   const addressed = candidates.length - unresolvedCandidates.length;
   const readinessMessage = candidates.length
-    ? ready ? "All " + candidates.length + " suggested parts addressed ✓" : addressed + " of " + candidates.length + " suggested parts addressed"
-    : pendingManualIndexes.length ? "Finish the manually added part before submitting." : "Parts are ready.";
+    ? ready ? "" : addressed + " of " + candidates.length + " suggested parts addressed"
+    : pendingManualIndexes.length ? "Finish the manually added part before submitting." : "";
 
   useEffect(() => {
     onReadinessChange(ready, readinessMessage);
@@ -192,7 +192,7 @@ function PartsEditor({ vehicleLabel, jobLabel, contextText, parts, onChange, onR
     {partsMessage ? <div className="mt-2 text-xs font-semibold text-slate-600">{partsMessage}</div> : null}
 
     {candidates.length ? <div className="mt-3">
-      <div className="mb-2 flex items-center justify-between gap-3"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-600">Lot Logic suggestions</div><div className={\`text-xs font-black \${ready ? "text-emerald-700" : "text-slate-500"}\`}>{readinessMessage}</div></div>
+      <div className="mb-2 flex items-center justify-between gap-3"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-600">Lot Logic suggestions</div>{readinessMessage ? <div className="text-xs font-black text-slate-500">{readinessMessage}</div> : null}</div>
       <div className="grid gap-3 lg:grid-cols-2">
         {candidates.map((candidate) => {
           const index = partIndexFor(candidate);
@@ -227,7 +227,7 @@ if (proposalStart === -1 || proposalEnd === -1) throw new Error("Could not find 
 let proposal = source.slice(proposalStart, proposalEnd);
 proposal = proposal.replace(
   '  const diagnosisReady = !requiresDiagnosisHandoff || (diagnosisNotesReady && diagnosisActionReady);',
-  '  const diagnosisReady = !requiresDiagnosisHandoff || (diagnosisNotesReady && diagnosisActionReady);\n  const [partsReady, setPartsReady] = useState(true);\n  const [partsReadyMessage, setPartsReadyMessage] = useState("Parts are ready.");\n  const handlePartsReadiness = (ready: boolean, message: string) => { setPartsReady(ready); setPartsReadyMessage(message); };',
+  '  const diagnosisReady = !requiresDiagnosisHandoff || (diagnosisNotesReady && diagnosisActionReady);\n  const [partsReady, setPartsReady] = useState(true);\n  const [partsReadyMessage, setPartsReadyMessage] = useState("");\n  const handlePartsReadiness = (ready: boolean, message: string) => { setPartsReady(ready); setPartsReadyMessage(message); };',
 );
 proposal = proposal.replace(
   '<PartsEditor vehicleLabel={vehicleLabel} jobLabel={jobLabel} contextText={partsContext} parts={draft.parts} onChange={(parts) => onChange({ ...draft, parts })} />',
@@ -239,9 +239,37 @@ proposal = proposal.replace(
 );
 proposal = proposal.replace(
   '<div>\n      <button type="button"',
-  '<div>\n      <div className={`mb-2 text-xs font-black ${partsReady ? "text-emerald-700" : "text-amber-700"}`}>{partsReadyMessage}</div>\n      <button type="button"',
+  '<div>\n      {!partsReady && partsReadyMessage ? <div className="mb-2 text-xs font-black text-amber-700">{partsReadyMessage}</div> : null}\n      <button type="button"',
 );
 source = source.slice(0, proposalStart) + proposal + source.slice(proposalEnd);
 
+const submitFindingOld = '    if (saved) setExpandedFindings((current) => ({ ...current, [item.id]: null }));';
+const submitFindingNew = `    if (saved) {
+      const nextFinding = item.findings.find((candidate) => candidate.id !== finding.id && candidate.validationStatus === "pending");
+      if (nextFinding) {
+        setExpandedFindings((current) => ({ ...current, [item.id]: nextFinding.id }));
+        window.setTimeout(() => document.getElementById("inspection-finding-" + nextFinding.id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+        return;
+      }
+      setExpandedFindings((current) => ({ ...current, [item.id]: null }));
+      const nextUpgrade = item.upgrades.find((upgrade) => upgrade.validationStatus === "pending");
+      if (nextUpgrade) {
+        setExpandedUpgrades((current) => ({ ...current, [item.id]: nextUpgrade.id }));
+        window.setTimeout(() => document.getElementById("inspection-upgrade-" + nextUpgrade.id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+      }
+    }`;
+if (source.includes(submitFindingOld)) source = source.replace(submitFindingOld, submitFindingNew);
+else if (!source.includes('document.getElementById("inspection-finding-" + nextFinding.id)')) throw new Error("Could not install inspection queue auto-advance.");
+
+const findingCardOld = 'return <div key={finding.id} className={`rounded-xl border ${reviewed ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200"}`}>';
+const findingCardNew = 'return <div key={finding.id} id={"inspection-finding-" + finding.id} className={`rounded-xl border ${reviewed ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200"}`}>';
+if (source.includes(findingCardOld)) source = source.replace(findingCardOld, findingCardNew);
+else if (!source.includes('id={"inspection-finding-" + finding.id}')) throw new Error("Could not add inspection finding focus anchor.");
+
+const upgradeCardOld = 'return <div key={upgrade.id} className={`rounded-xl border ${reviewed ? "border-violet-200 bg-violet-50/20" : "border-slate-200 bg-white"}`}>';
+const upgradeCardNew = 'return <div key={upgrade.id} id={"inspection-upgrade-" + upgrade.id} className={`rounded-xl border ${reviewed ? "border-violet-200 bg-violet-50/20" : "border-slate-200 bg-white"}`}>';
+if (source.includes(upgradeCardOld)) source = source.replace(upgradeCardOld, upgradeCardNew);
+else if (!source.includes('id={"inspection-upgrade-" + upgrade.id}')) throw new Error("Could not add inspection upgrade focus anchor.");
+
 writeFileSync(path, source, "utf8");
-console.log("Unified mechanical part suggestions, decisions, editing, and completion gating.");
+console.log("Unified mechanical part decisions, removed premature parts-ready status, and enabled inspection queue auto-advance.");
