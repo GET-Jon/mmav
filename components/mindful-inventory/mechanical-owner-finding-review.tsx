@@ -39,14 +39,8 @@ export function MechanicalOwnerFindingReview({
 }) {
   const router = useRouter();
   const [workingId, setWorkingId] = useState<string | null>(null);
-  const [notes, setNotes] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      findings.map((finding) => [
-        finding.id,
-        finding.mechanicalOwnerReviewNotes || "",
-      ]),
-    ),
-  );
+  // Saved review notes belong to the conversation, not the next message draft.
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [alternatePartners, setAlternatePartners] = useState<
     Record<string, string>
   >(() =>
@@ -98,6 +92,7 @@ export function MechanicalOwnerFindingReview({
       return;
     }
 
+    const submittedNote = notes[finding.id] || "";
     setWorkingId(finding.id);
     setMessage("");
 
@@ -110,7 +105,7 @@ export function MechanicalOwnerFindingReview({
           body: JSON.stringify({
             findingId: finding.id,
             decision,
-            notes: notes[finding.id] || "",
+            notes: submittedNote,
             alternatePartnerId: needsDifferentPartner
               ? alternatePartners[finding.id] || null
               : null,
@@ -121,6 +116,14 @@ export function MechanicalOwnerFindingReview({
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || "Finding review could not be saved.");
+      }
+
+      if (decision === "clarification") {
+        setNotes((current) =>
+          (current[finding.id] || "") === submittedNote
+            ? { ...current, [finding.id]: "" }
+            : current,
+        );
       }
 
       setMessage(

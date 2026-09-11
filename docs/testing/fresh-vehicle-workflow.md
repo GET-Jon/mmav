@@ -71,3 +71,10 @@ Verification: production build passed. Calculation checks passed for blank, part
 Request Clarification now sits alongside the owner note/question field. Accept Finding (or Approve & Route) and Dismiss form a separate decision group, visually divided on desktop and stacked on smaller screens. Existing handlers, validation and permissions are unchanged. Rebuild principle: group message submission with its input, separately from operational decisions.
 
 Verification: full production build passed with the prebuild chain. Deployed visual review remains pending.
+
+
+### Clarification draft lifecycle
+
+Successful clarification submission clears the submitted draft. Failed submissions retain it; text changed while the request is pending is preserved. Saved review notes are no longer copied into the composer on page load, preventing already-sent questions from reappearing as drafts. Conversation/history persistence is unchanged.
+
+Verification: production build passed; checked that the draft-clearing logic survives the source-mutating prebuild chain.
