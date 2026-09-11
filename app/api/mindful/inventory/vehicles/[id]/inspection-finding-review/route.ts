@@ -97,13 +97,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if (!approvalCost.pricingComplete || approvalCost.totalHigh === null) {
         return NextResponse.json({ error: "Complete labor and required part pricing before approving this repair and its spend." }, { status: 400 });
       }
+      if (finding.mechanical_can_perform === null) {
+        return NextResponse.json({ error: "The mechanic must confirm whether they can perform this work before the Owner approves it." }, { status: 400 });
+      }
 
       if (finding.mechanical_can_perform === true) {
         if (!inspection.performed_by_partner_id) {
           return NextResponse.json({ error: "The mechanic who offered to perform this repair could not be identified." }, { status: 409 });
         }
         preferredPartnerId = inspection.performed_by_partner_id;
-      } else if (finding.mechanical_can_perform === false) {
+      } else {
         if (!alternatePartnerId) {
           return NextResponse.json({ error: "Choose the alternate partner who should handle this accepted repair." }, { status: 400 });
         }
