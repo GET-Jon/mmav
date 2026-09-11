@@ -310,9 +310,9 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   }
 
   function openEditUpgrade(upgrade: InventoryUpgradeView) {
-    const parts = upgrade.estimatedPartsCost ?? 0;
-    const labor = upgrade.estimatedLaborCost ?? 0;
-    const calculated = parts + labor;
+    const parts = upgrade.estimatedPartsCost;
+    const labor = upgrade.estimatedLaborCost;
+    const calculated = parts === null && labor === null ? null : (parts ?? 0) + (labor ?? 0);
     const savedTotal = upgrade.estimatedTotalCost;
 
     setEditingUpgradeId(upgrade.id);
@@ -328,7 +328,7 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
     setUpgradePartsCost(upgrade.estimatedPartsCost === null ? "" : currencyInput(upgrade.estimatedPartsCost));
     setUpgradeLaborCost(upgrade.estimatedLaborCost === null ? "" : currencyInput(upgrade.estimatedLaborCost));
     setUpgradeTotalCost(savedTotal === null ? currencyInput(calculated) : currencyInput(savedTotal));
-    setTotalBudgetOverridden(savedTotal !== null && Math.abs(savedTotal - calculated) > 0.005);
+    setTotalBudgetOverridden(savedTotal !== null && (calculated === null || Math.abs(savedTotal - calculated) > 0.005));
     setUpgradeNotes(upgrade.notes || "");
     setSubstitutesAllowed(upgrade.substitutesAllowed);
     setUpgradeMessage("");
@@ -342,9 +342,9 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
 
   function syncCalculatedTotal(partsText: string, laborText: string) {
     if (totalBudgetOverridden) return;
-    const parts = parseCurrency(partsText) || 0;
-    const labor = parseCurrency(laborText) || 0;
-    setUpgradeTotalCost(currencyInput(parts + labor));
+    const parts = parseCurrency(partsText);
+    const labor = parseCurrency(laborText);
+    setUpgradeTotalCost(currencyInput(parts === null && labor === null ? null : (parts ?? 0) + (labor ?? 0)));
   }
 
   function changePartsCost(value: string) {
@@ -360,10 +360,10 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
   }
 
   function useCalculatedBudget() {
-    const parts = parseCurrency(upgradePartsCost) || 0;
-    const labor = parseCurrency(upgradeLaborCost) || 0;
+    const parts = parseCurrency(upgradePartsCost);
+    const labor = parseCurrency(upgradeLaborCost);
     setTotalBudgetOverridden(false);
-    setUpgradeTotalCost(currencyInput(parts + labor));
+    setUpgradeTotalCost(currencyInput(parts === null && labor === null ? null : (parts ?? 0) + (labor ?? 0)));
   }
 
   async function saveUpgrade(event: FormEvent<HTMLFormElement>) {
@@ -599,13 +599,25 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
 
             <form onSubmit={saveUpgrade} className="grid gap-4 p-5 md:grid-cols-2 sm:p-6">
               <label className="md:col-span-2"><FieldLabel>Upgrade</FieldLabel><input required className={inputClass} value={upgradeTitle} onChange={(e) => setUpgradeTitle(e.target.value)} placeholder="e.g. Stage 1 engine tune" /></label>
-              <label className="md:col-span-2"><FieldLabel>Description</FieldLabel><input className={inputClass} placeholder="What would you like to change or add?" value={upgradeDescription} onChange={(e) => setUpgradeDescription(e.target.value)} /></label>
-              <label><FieldLabel>Product link (optional)</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
-              <label className="block">
-                <div className="flex items-center justify-between gap-3"><FieldLabel>Budget preference (optional)</FieldLabel>{totalBudgetOverridden ? <button type="button" onClick={useCalculatedBudget} className="mb-1.5 text-[11px] font-black text-slate-500 underline">Use parts + labor</button> : null}</div>
-                <input className={inputClass} inputMode="decimal" value={upgradeTotalCost} onChange={(e) => { setTotalBudgetOverridden(true); setUpgradeTotalCost(formatCurrencyText(e.target.value)); }} placeholder="$0" />
-                <div className="mt-1 text-xs font-semibold text-slate-400">A planning preference, not an approved spending limit.</div>
-              </label>
+              <label className="md:col-span-2"><FieldLabel>Details (optional)</FieldLabel><input className={inputClass} placeholder="e.g. Gloss black, factory-style finish; retain existing exhaust tips" value={upgradeDescription} onChange={(e) => setUpgradeDescription(e.target.value)} /></label>
+              <label className="md:col-span-2"><FieldLabel>Product link (optional)</FieldLabel><input className={inputClass} value={upgradeUrl} onChange={(e) => setUpgradeUrl(e.target.value)} /></label>
+              <div className="grid gap-4 md:col-span-2 sm:grid-cols-3">
+                <label><FieldLabel>Parts estimate (optional)</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="Unknown" /></label>
+                <label><FieldLabel>Labor estimate (optional)</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="Unknown" /></label>
+                <label><FieldLabel>Total estimate (optional)</FieldLabel>
+                  <input className={inputClass} inputMode="decimal" value={upgradeTotalCost} onChange={(e) => {
+                    const formatted = formatCurrencyText(e.target.value);
+                    if (!formatted) { useCalculatedBudget(); return; }
+                    setTotalBudgetOverridden(true);
+                    setUpgradeTotalCost(formatted);
+                  }} placeholder="Unknown" />
+                </label>
+                <div className="text-xs font-medium text-slate-500 sm:col-span-3">
+                  {totalBudgetOverridden ? "Using your entered total. Parts and labor remain separate estimates." : "Total adds the estimates entered above. Blank amounts remain unknown."}
+                  {totalBudgetOverridden && (parseCurrency(upgradePartsCost) !== null || parseCurrency(upgradeLaborCost) !== null) ? <button type="button" onClick={useCalculatedBudget} className="ml-2 font-black text-slate-700 underline">Recalculate total</button> : null}
+                  <div className="mt-1">You can enter just a total if you do not know the breakdown. Estimates do not authorize spending.</div>
+                </div>
+              </div>
               <details className="rounded-xl border border-slate-200 md:col-span-2">
                 <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-black text-slate-700 focus-visible:outline-2 focus-visible:outline-slate-500">More details</summary>
                 <div className="grid gap-4 border-t border-slate-100 p-4 md:grid-cols-2 lg:grid-cols-4">
@@ -615,11 +627,9 @@ export function InventoryOverviewIntake({ vehicle, overview, intakeData }: Props
                   <label><FieldLabel>Manufacturer</FieldLabel><input className={inputClass} value={upgradeManufacturer} onChange={(e) => setUpgradeManufacturer(e.target.value)} /></label>
                   <label><FieldLabel>Part Number</FieldLabel><input className={inputClass} value={upgradePartNumber} onChange={(e) => setUpgradePartNumber(e.target.value)} /></label>
                   <label><FieldLabel>Preferred Vendor</FieldLabel><input className={inputClass} value={upgradeVendor} onChange={(e) => setUpgradeVendor(e.target.value)} /></label>
-                  <label><FieldLabel>Parts Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradePartsCost} onChange={(e) => changePartsCost(e.target.value)} placeholder="$0" /></label>
-                  <label><FieldLabel>Labor Estimate</FieldLabel><input className={inputClass} inputMode="decimal" value={upgradeLaborCost} onChange={(e) => changeLaborCost(e.target.value)} placeholder="$0" /></label>
                   <label className="flex items-end pb-3 text-sm font-black text-slate-700"><input type="checkbox" className="mr-2 h-4 w-4" checked={substitutesAllowed} onChange={(e) => setSubstitutesAllowed(e.target.checked)} />Substitutes allowed</label>
                   <label className="md:col-span-2 lg:col-span-4"><FieldLabel>Notes</FieldLabel><textarea className={`${inputClass} min-h-20 resize-y`} value={upgradeNotes} onChange={(e) => setUpgradeNotes(e.target.value)} /></label>
-                  <p className="text-xs font-medium text-slate-500 md:col-span-2 lg:col-span-4">Parts and labor estimates calculate the budget preference unless you enter it directly. All details remain available when this upgrade is assessed.</p>
+                  <p className="text-xs font-medium text-slate-500 md:col-span-2 lg:col-span-4">All details remain available when this upgrade is assessed.</p>
                 </div>
               </details>
               {upgradeMessage ? <div className="md:col-span-2 text-sm font-semibold text-red-600">{upgradeMessage}</div> : null}

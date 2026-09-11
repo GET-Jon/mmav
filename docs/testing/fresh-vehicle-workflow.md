@@ -54,3 +54,13 @@ User-approved simplification implemented for the current test:
 Rebuild follow-up: suggest category, progressively add sourcing/assessment detail, distinguish budget preference from formal authorization in the domain model, and preserve structured information through assessment, Work Plan and execution without re-entry.
 
 Verification: production build passed with the existing prebuild chain. A field-binding comparison confirmed that every prior form value is retained. Deployed visual review remains pending.
+
+
+### Upgrade estimates refinement — September 11, 2026
+
+- Description renamed Details (optional), with a concrete example distinguishing the work title from preferences and constraints.
+- Optional Parts, Labor and Total estimates are visible together. Entered parts/labor calculate the total unless the owner supplies a manual total. A total alone is supported without inventing a breakdown.
+- Manual totals are explicitly identified; Recalculate total restores the sum when a breakdown exists. Clearing a manual total returns to calculation (or blank when both components are unknown).
+- Both components blank leaves the total blank, including on reopening saved upgrades. Explicit zero remains distinct from unknown. Partial breakdowns sum only known entries, and the UI explains this. The existing API already preserves null component estimates.
+
+Verification: production build passed. Calculation checks passed for blank, partial and complete estimates, manual-total preservation, recalculation, clearing both components and explicit zero.
