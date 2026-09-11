@@ -88,6 +88,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const isNotFound = finding.mechanical_validation_status === "not_found";
     const isDiagnosis = finding.mechanical_validation_status === "needs_diagnosis";
+    const isExternalRoute = finding.mechanical_can_perform === false && !isNotFound;
     const suggestedParts = normalizeSuggestedParts(finding.mechanical_part_suggestions);
     const hasLegacyUnpricedParts = Boolean(
       optionalText(finding.mechanical_parts_required) && suggestedParts.length === 0,
@@ -99,7 +100,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     let preferredPartnerId: string | null = null;
     if (decision === "accept" && !isNotFound) {
-      if (!isDiagnosis && (hasLegacyUnpricedParts || !approvalCost.pricingComplete || approvalCost.totalHigh === null)) {
+      if (!isDiagnosis && !isExternalRoute && (hasLegacyUnpricedParts || !approvalCost.pricingComplete || approvalCost.totalHigh === null)) {
         return NextResponse.json({ error: "Complete labor and required part pricing before approving this repair and its spend." }, { status: 400 });
       }
       if (finding.mechanical_can_perform === null) {
@@ -113,7 +114,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         preferredPartnerId = inspection.performed_by_partner_id;
       } else {
         if (!alternatePartnerId) {
-          return NextResponse.json({ error: isDiagnosis ? "Choose the partner who should perform the next diagnostic step." : "Choose the alternate partner who should handle this accepted repair." }, { status: 400 });
+          return NextResponse.json({ error: isDiagnosis ? "Choose the partner who should perform the next diagnostic step." : "Choose the partner who should receive this approved work scope." }, { status: 400 });
         }
         if (inspection.performed_by_partner_id && alternatePartnerId === inspection.performed_by_partner_id) {
           return NextResponse.json({ error: isDiagnosis ? "The inspector said another specialist is needed. Choose a different partner." : "The inspector said they cannot perform this work. Choose a different partner." }, { status: 400 });
@@ -153,7 +154,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ? "mechanical_finding_not_found_confirmed"
         : isDiagnosis
           ? "mechanical_finding_diagnosis_routed"
-          : "mechanical_finding_owner_accepted"
+          : isExternalRoute
+            ? "mechanical_finding_scope_routed"
+            : "mechanical_finding_owner_accepted"
       : decision === "dismiss"
         ? "mechanical_finding_owner_dismissed"
         : "mechanical_finding_clarification_requested";
@@ -162,7 +165,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ? `Owner accepted mechanic result: ${finding.title} was not found; no repair required.`
         : isDiagnosis
           ? `Owner routed diagnostic work for ${finding.title} to the selected partner.`
-          : `Owner approved mechanical repair: ${finding.title} for up to $${approvalCost.totalHigh?.toFixed(2)}.`
+          : isExternalRoute
+            ? `Owner approved the work scope for ${finding.title} and routed it to the selected partner; final quote and spend approval are pending.`
+            : `Owner approved mechanical repair: ${finding.title} for up to $${approvalCost.totalHigh?.toFixed(2)}.`
       : decision === "dismiss"
         ? `Owner dismissed mechanical finding: ${finding.title}.`
         : `Owner requested clarification on mechanical finding: ${finding.title}.`;
@@ -185,7 +190,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           scope: "diagnosis_only",
           spendAuthorized: false,
         } : null,
-        authorization: decision === "accept" && !isNotFound && !isDiagnosis ? {
+        scopeRouting: decision === "accept" && isExternalRoute && !isDiagnosis ? {
+          partnerId: preferredPartnerId,
+          scope: "approved_work_scope",
+          quotePending: true,
+          spendAuthorized: false,
+        } : null,
+        authorization: decision === "accept" && !isNotFound && !isDiagnosis && !isExternalRoute ? {
           laborHours: optionalNumber(finding.mechanical_labor_hours),
           laborPrice: approvalCost.laborPrice,
           partsCostLow: approvalCost.partsLow,
@@ -207,7 +218,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         partnerId: preferredPartnerId,
         spendAuthorized: false,
       } : null,
-      authorization: decision === "accept" && !isNotFound && !isDiagnosis ? {
+      scopeRouting: decision === "accept" && isExternalRoute && !isDiagnosis ? {
+        partnerId: preferredPartnerId,
+        quotePending: true,
+        spendAuthorized: false,
+      } : null,
+      authorization: decision === "accept" && !isNotFound && !isDiagnosis && !isExternalRoute ? {
         totalLow: approvalCost.totalLow,
         totalHigh: approvalCost.totalHigh,
       } : null,
