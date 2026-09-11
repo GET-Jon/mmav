@@ -9,15 +9,27 @@ export type FindingApprovalPart = {
   partnerOfferUnitPrice: number | null;
 };
 
+export type FindingApprovalPartDisposition =
+  | "purchase_required"
+  | "in_stock"
+  | "not_needed";
+
 export type FindingApprovalCost = {
   laborPrice: number | null;
+  /** New cash spend for parts that still need to be sourced. */
   partsLow: number;
   partsHigh: number;
+  /** Informational value of parts already on hand; excluded from authorization. */
+  inStockValueLow: number;
+  inStockValueHigh: number;
   totalLow: number | null;
   totalHigh: number | null;
   hasRange: boolean;
   pricingComplete: boolean;
   unknownPartCount: number;
+  purchaseRequiredCount: number;
+  inStockCount: number;
+  notNeededCount: number;
   usesAiPartEstimate: boolean;
   usesPartnerPartPrice: boolean;
 };
@@ -28,6 +40,39 @@ function finiteNonNegative(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+export function findingApprovalPartDisposition(
+  part: Pick<FindingApprovalPart, "notes">,
+): FindingApprovalPartDisposition {
+  const notes = String(part.notes || "").trim().toUpperCase();
+  if (notes.startsWith("IN STOCK ·") || notes === "IN STOCK") return "in_stock";
+  if (notes.startsWith("NOT NEEDED ·") || notes === "NOT NEEDED") return "not_needed";
+  return "purchase_required";
+}
+
+function partPriceRange(part: FindingApprovalPart) {
+  const partnerPrice = finiteNonNegative(part.partnerOfferUnitPrice);
+  if (partnerPrice !== null) {
+    return {
+      low: partnerPrice,
+      high: partnerPrice,
+      source: "partner" as const,
+    };
+  }
+
+  let low = finiteNonNegative(part.aiEstimatedUnitPriceLow);
+  let high = finiteNonNegative(part.aiEstimatedUnitPriceHigh);
+  if (low !== null && high !== null && high < low) [low, high] = [high, low];
+  if (low !== null || high !== null) {
+    return {
+      low: low ?? high ?? 0,
+      high: high ?? low ?? 0,
+      source: "ai" as const,
+    };
+  }
+
+  return null;
+}
+
 export function summarizeFindingApprovalCost(
   laborPriceInput: number | null,
   parts: FindingApprovalPart[],
@@ -35,39 +80,47 @@ export function summarizeFindingApprovalCost(
   const laborPrice = finiteNonNegative(laborPriceInput);
   let partsLow = 0;
   let partsHigh = 0;
+  let inStockValueLow = 0;
+  let inStockValueHigh = 0;
   let unknownPartCount = 0;
+  let purchaseRequiredCount = 0;
+  let inStockCount = 0;
+  let notNeededCount = 0;
   let usesAiPartEstimate = false;
   let usesPartnerPartPrice = false;
 
   for (const part of parts) {
-    const quantity = Number.isFinite(Number(part.quantity)) && Number(part.quantity) > 0
-      ? Number(part.quantity)
-      : 1;
-    const partnerPrice = finiteNonNegative(part.partnerOfferUnitPrice);
-    let aiLow = finiteNonNegative(part.aiEstimatedUnitPriceLow);
-    let aiHigh = finiteNonNegative(part.aiEstimatedUnitPriceHigh);
-
-    if (aiLow !== null && aiHigh !== null && aiHigh < aiLow) {
-      [aiLow, aiHigh] = [aiHigh, aiLow];
-    }
-
-    if (partnerPrice !== null) {
-      partsLow += partnerPrice * quantity;
-      partsHigh += partnerPrice * quantity;
-      usesPartnerPartPrice = true;
+    const disposition = findingApprovalPartDisposition(part);
+    if (disposition === "not_needed") {
+      notNeededCount += 1;
       continue;
     }
 
-    if (aiLow !== null || aiHigh !== null) {
-      const low = aiLow ?? aiHigh ?? 0;
-      const high = aiHigh ?? aiLow ?? 0;
-      partsLow += low * quantity;
-      partsHigh += high * quantity;
-      usesAiPartEstimate = true;
+    const quantity =
+      Number.isFinite(Number(part.quantity)) && Number(part.quantity) > 0
+        ? Number(part.quantity)
+        : 1;
+    const price = partPriceRange(part);
+
+    if (disposition === "in_stock") {
+      inStockCount += 1;
+      if (price) {
+        inStockValueLow += price.low * quantity;
+        inStockValueHigh += price.high * quantity;
+      }
       continue;
     }
 
-    unknownPartCount += 1;
+    purchaseRequiredCount += 1;
+    if (!price) {
+      unknownPartCount += 1;
+      continue;
+    }
+
+    partsLow += price.low * quantity;
+    partsHigh += price.high * quantity;
+    if (price.source === "partner") usesPartnerPartPrice = true;
+    if (price.source === "ai") usesAiPartEstimate = true;
   }
 
   const pricingComplete = laborPrice !== null && unknownPartCount === 0;
@@ -78,6 +131,8 @@ export function summarizeFindingApprovalCost(
     laborPrice,
     partsLow,
     partsHigh,
+    inStockValueLow,
+    inStockValueHigh,
     totalLow,
     totalHigh,
     hasRange:
@@ -86,6 +141,9 @@ export function summarizeFindingApprovalCost(
         : Math.abs(partsHigh - partsLow) > 0.009,
     pricingComplete,
     unknownPartCount,
+    purchaseRequiredCount,
+    inStockCount,
+    notNeededCount,
     usesAiPartEstimate,
     usesPartnerPartPrice,
   };
