@@ -3,6 +3,10 @@ export type WorkPlanPartSuggestionInput = {
   quantity: number;
   partNumber: string | null;
   notes: string | null;
+  aiEstimatedUnitPriceLow?: number | null;
+  aiEstimatedUnitPriceHigh?: number | null;
+  aiPriceBasis?: string | null;
+  partnerOfferUnitPrice?: number | null;
 };
 
 export type WorkPlanFindingInput = {
