@@ -136,7 +136,9 @@ Verification:
 
 Verification status for this refinement:
 
-- Source review confirms compatibility with the existing `ensure-expand-search-source.mjs` Owner-review transformation markers; the new component preserves the exact marker sequence expected by that patcher.
-- Server validation mirrors the client approval gates for performer and pricing completeness, including legacy unstructured required-parts data.
-- A fresh production build has **not yet been observed for the final card-refinement commits**. Do not treat the earlier successful build as verification of these later UI/backend refinements.
+- Netlify build on September 11 failed during `prebuild`, before Next.js compilation. `scripts/ensure-owner-review-part-pricing.mjs` still expected the legacy suggested-part JSX and threw `Could not find Owner review suggested-part rendering.`
+- The failure was caused by stale exact-match patcher logic, not by the new authorization card itself.
+- `ensure-owner-review-part-pricing.mjs` now detects the decision-focused authorization card and becomes a no-op for that component while preserving its data-normalization responsibility.
+- `ensure-owner-review-part-cards.mjs`, which runs later in the same chain, was proactively hardened the same way so it cannot overwrite or reject the new authorization card on the next build.
+- A fresh production build is still required after these patcher fixes. Do not treat the earlier successful build as verification of these later UI/backend refinements.
 - Next deployed test: open the fresh GLS mechanical review card, confirm the mechanic name and `$710–$880`-style authorization math where applicable, approve one repair, and verify the generated Work Plan carries the same ceiling and intended Partner exactly once.
