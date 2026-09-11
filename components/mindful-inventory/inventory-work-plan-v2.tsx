@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
@@ -29,10 +29,6 @@ function hours(value: number | null | undefined) {
   return `${Math.round(value * 10) / 10} hr`;
 }
 
-function labelize(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 function numberOrNull(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
@@ -57,7 +53,7 @@ export function InventoryWorkPlanV2({
   findings: InventoryFindingView[];
   upgrades: InventoryUpgradeView[];
   performers: InventoryPerformerOption[];
-  partsReview?: React.ReactNode;
+  partsReview?: ReactNode;
 }) {
   const router = useRouter();
   const [working, setWorking] = useState(false);
@@ -86,9 +82,7 @@ export function InventoryWorkPlanV2({
   const partnerOptions = performers.filter((performer) => performer.type === "partner");
 
   const includedItems = plan.draftItems.filter((item) => item.decision === "approved");
-  const unresolvedItems = plan.draftItems.filter(
-    (item) => item.decision === "suggested" || item.decision === "investigate",
-  );
+  const unresolvedItems = plan.draftItems.filter((item) => item.decision === "investigate");
   const deferredItems = plan.draftItems.filter(
     (item) => item.decision === "declined" || item.decision === "monitor",
   );
@@ -173,8 +167,7 @@ export function InventoryWorkPlanV2({
             rationale: item.rationale || "",
             costSource: item.costSource,
             costSourceDetail: item.costSourceDetail || "",
-            managerInvestigationRequired:
-              nextDecision === "investigate" ? true : item.managerInvestigationRequired,
+            managerInvestigationRequired: nextDecision === "investigate",
             declineReason:
               nextDecision === "declined"
                 ? item.declineReason || "Deferred after prior authorization"
@@ -193,10 +186,7 @@ export function InventoryWorkPlanV2({
     }
   }
 
-  async function updatePartner(
-    item: InventoryPlanItemView,
-    suggestedPartnerId: string | null,
-  ) {
+  async function updatePartner(item: InventoryPlanItemView, suggestedPartnerId: string | null) {
     setPartnerSaving(item.id);
     setMessage("");
     try {
@@ -275,9 +265,7 @@ export function InventoryWorkPlanV2({
   if (plan.currentApprovedVersion) {
     return (
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">
-          Active Work Plan
-        </div>
+        <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Active Work Plan</div>
         <h2 className="mt-1 text-2xl font-black text-slate-950">
           Work Plan v{plan.currentApprovedVersion.versionNumber} is active
         </h2>
@@ -298,9 +286,7 @@ export function InventoryWorkPlanV2({
   if (!plan.currentDraftVersion) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
-          Work Plan Setup
-        </div>
+        <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Work Plan Setup</div>
         <h2 className="mt-1 text-2xl font-black text-slate-950">Assemble Work Plan</h2>
         {!planningReady ? (
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
@@ -325,9 +311,7 @@ export function InventoryWorkPlanV2({
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
-              Work Plan Setup
-            </div>
+            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Work Plan Setup</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">Finalize the executable plan</h2>
             <p className="mt-1.5 max-w-4xl text-sm font-semibold text-slate-600">
               Approved repairs and upgrades carry forward automatically. Resolve only the execution details Lot Logic still needs.
@@ -349,9 +333,7 @@ export function InventoryWorkPlanV2({
                 {quotePending} final quote{quotePending === 1 ? "" : "s"} later
               </span>
             ) : (
-              <span className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
-                Scope ready ✓
-              </span>
+              <span className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">Scope ready ✓</span>
             )}
           </div>
         </div>
@@ -362,9 +344,7 @@ export function InventoryWorkPlanV2({
         <section className="rounded-2xl border border-amber-200 bg-amber-50/20 p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.1em] text-amber-700">
-                Needs your decision
-              </div>
+              <div className="text-xs font-black uppercase tracking-[0.1em] text-amber-700">Needs your decision</div>
               <h3 className="mt-1 font-black text-slate-950">Resolve new or changed scope</h3>
               <p className="mt-1 text-sm text-slate-600">
                 These items were not already authorized upstream, so Lot Logic needs an explicit Include or Defer decision.
@@ -384,14 +364,10 @@ export function InventoryWorkPlanV2({
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="font-black text-slate-950">{item.title}</h4>
                         {sourceUpgrade ? (
-                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase text-blue-700">
-                            Upgrade
-                          </span>
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase text-blue-700">Upgrade</span>
                         ) : null}
                       </div>
-                      {item.description ? (
-                        <p className="mt-1 text-sm text-slate-600">{item.description}</p>
-                      ) : null}
+                      {item.description ? <p className="mt-1 text-sm text-slate-600">{item.description}</p> : null}
                       <div className="mt-1 text-xs font-semibold text-slate-500">
                         {hours(item.estimatedLaborHours)} labor · {money(item.planningAmount)} planning amount
                       </div>
@@ -425,9 +401,7 @@ export function InventoryWorkPlanV2({
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">
-              Approved Scope
-            </div>
+            <div className="text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Approved Scope</div>
             <h3 className="mt-1 font-black text-slate-950">Already authorized</h3>
             <p className="mt-1 text-sm text-slate-500">
               These decisions came from Intake and Mechanical Review. You do not need to approve them again.
@@ -444,13 +418,9 @@ export function InventoryWorkPlanV2({
               .map((id) => findingsById.get(id))
               .filter(Boolean);
             const sourceUpgrade = item.upgradeId ? upgradesById.get(item.upgradeId) : null;
-            const partner = item.suggestedPartnerId
-              ? performerById.get(item.suggestedPartnerId)
-              : null;
+            const partner = item.suggestedPartnerId ? performerById.get(item.suggestedPartnerId) : null;
             const quoteRequired =
-              item.costSource === "unknown" ||
-              item.costSource === "ai_estimate" ||
-              item.planningAmount <= 0;
+              item.costSource === "unknown" || item.costSource === "ai_estimate" || item.planningAmount <= 0;
             const changing = Boolean(changingDecision[item.id]);
 
             return (
@@ -461,13 +431,9 @@ export function InventoryWorkPlanV2({
                       <span className="text-emerald-600">✓</span>
                       <h4 className="font-black text-slate-950">{item.title}</h4>
                       {sourceUpgrade ? (
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">
-                          Upgrade
-                        </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">Upgrade</span>
                       ) : (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">
-                          Authorized
-                        </span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">Authorized</span>
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs font-semibold text-slate-500">
@@ -481,9 +447,7 @@ export function InventoryWorkPlanV2({
                   </div>
 
                   <div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
-                      Performer
-                    </div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Performer</div>
                     <select
                       disabled={partnerSaving === item.id}
                       value={item.suggestedPartnerId || ""}
@@ -495,9 +459,7 @@ export function InventoryWorkPlanV2({
                         <option key={option.id} value={option.id}>{option.displayName}</option>
                       ))}
                     </select>
-                    {partner ? null : (
-                      <div className="mt-1 text-[10px] font-semibold text-slate-400">Optional at this stage</div>
-                    )}
+                    {partner ? null : <div className="mt-1 text-[10px] font-semibold text-slate-400">Optional at this stage</div>}
                   </div>
 
                   <div className="flex items-center justify-between gap-3 lg:justify-end">
@@ -510,9 +472,7 @@ export function InventoryWorkPlanV2({
                     </button>
                     <button
                       type="button"
-                      onClick={() =>
-                        setChangingDecision((current) => ({ ...current, [item.id]: !changing }))
-                      }
+                      onClick={() => setChangingDecision((current) => ({ ...current, [item.id]: !changing }))}
                       className="text-xs font-black text-slate-500 hover:text-slate-900"
                     >
                       {changing ? "Cancel" : "Change decision"}
@@ -549,10 +509,7 @@ export function InventoryWorkPlanV2({
           </summary>
           <div className="mt-4 space-y-2">
             {deferredItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3"
-              >
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
                 <span className="font-black text-slate-700">{item.title}</span>
                 <button
                   type="button"
@@ -570,9 +527,7 @@ export function InventoryWorkPlanV2({
       <section className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
-              Finalize Work Plan
-            </div>
+            <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Finalize Work Plan</div>
             <h3 className="mt-1 text-lg font-black text-slate-950">
               {includedItems.length} approved item{includedItems.length === 1 ? "" : "s"}
               {unresolvedItems.length
@@ -608,9 +563,7 @@ export function InventoryWorkPlanV2({
           <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
-                  Pricing details
-                </div>
+                <div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Pricing details</div>
                 <h3 className="mt-1 text-xl font-black text-slate-950">{editing.title}</h3>
               </div>
               <button
