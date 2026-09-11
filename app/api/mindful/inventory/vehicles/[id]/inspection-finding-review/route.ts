@@ -78,7 +78,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const { data: finding, error: findingError } = await access.supabase
       .from("mindful_inventory_findings")
-      .select("id,title,status,source,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_parts_required,mechanical_part_suggestions")
+      .select("id,title,status,source,mechanical_validation_status,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_parts_required,mechanical_part_suggestions")
       .eq("id", findingId)
       .eq("vehicle_id", vehicleId)
       .in("source", ["ai", "partner"])
@@ -86,6 +86,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (findingError) throw new Error(findingError.message);
     if (!finding) return NextResponse.json({ error: "Mechanical finding not found." }, { status: 404 });
 
+    const isNotFound = finding.mechanical_validation_status === "not_found";
     const suggestedParts = normalizeSuggestedParts(finding.mechanical_part_suggestions);
     const hasLegacyUnpricedParts = Boolean(
       optionalText(finding.mechanical_parts_required) && suggestedParts.length === 0,
@@ -96,7 +97,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     );
 
     let preferredPartnerId: string | null = null;
-    if (decision === "accept") {
+    if (decision === "accept" && !isNotFound) {
       if (hasLegacyUnpricedParts || !approvalCost.pricingComplete || approvalCost.totalHigh === null) {
         return NextResponse.json({ error: "Complete labor and required part pricing before approving this repair and its spend." }, { status: 400 });
       }
@@ -131,23 +132,32 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const now = new Date().toISOString();
     const reviewStatus = decision === "accept" ? "accepted" : decision === "dismiss" ? "dismissed" : "clarification_requested";
+    const closesFinding = decision === "dismiss" || (decision === "accept" && isNotFound);
     const updateRow = {
       mechanical_owner_review_status: reviewStatus,
       mechanical_owner_review_notes: notes,
       mechanical_owner_reviewed_at: now,
       mechanical_owner_reviewed_by_user_id: access.userId,
-      owner_preferred_partner_id: decision === "accept" ? preferredPartnerId : null,
-      status: decision === "dismiss" ? "dismissed" : "open",
-      resolved_at: decision === "dismiss" ? now : null,
+      owner_preferred_partner_id: decision === "accept" && !isNotFound ? preferredPartnerId : null,
+      status: decision === "dismiss" ? "dismissed" : closesFinding ? "resolved" : "open",
+      resolved_at: closesFinding ? now : null,
       updated_at: now,
     };
 
     const { error: updateError } = await access.supabase.from("mindful_inventory_findings").update(updateRow).eq("id", finding.id);
     if (updateError) throw new Error(updateError.message);
 
-    const eventType = decision === "accept" ? "mechanical_finding_owner_accepted" : decision === "dismiss" ? "mechanical_finding_owner_dismissed" : "mechanical_finding_clarification_requested";
+    const eventType = decision === "accept"
+      ? isNotFound
+        ? "mechanical_finding_not_found_confirmed"
+        : "mechanical_finding_owner_accepted"
+      : decision === "dismiss"
+        ? "mechanical_finding_owner_dismissed"
+        : "mechanical_finding_clarification_requested";
     const summary = decision === "accept"
-      ? `Owner approved mechanical repair: ${finding.title} for up to $${approvalCost.totalHigh?.toFixed(2)}.`
+      ? isNotFound
+        ? `Owner accepted mechanic result: ${finding.title} was not found; no repair required.`
+        : `Owner approved mechanical repair: ${finding.title} for up to $${approvalCost.totalHigh?.toFixed(2)}.`
       : decision === "dismiss"
         ? `Owner dismissed mechanical finding: ${finding.title}.`
         : `Owner requested clarification on mechanical finding: ${finding.title}.`;
@@ -162,9 +172,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       metadata: {
         findingId: finding.id,
         decision,
+        mechanicResult: finding.mechanical_validation_status,
         notes,
-        assignedPartnerId: preferredPartnerId,
-        authorization: decision === "accept" ? {
+        assignedPartnerId: isNotFound ? null : preferredPartnerId,
+        authorization: decision === "accept" && !isNotFound ? {
           laborHours: optionalNumber(finding.mechanical_labor_hours),
           laborPrice: approvalCost.laborPrice,
           partsCostLow: approvalCost.partsLow,
@@ -180,8 +191,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({
       findingId: finding.id,
       reviewStatus,
-      assignedPartnerId: preferredPartnerId,
-      authorization: decision === "accept" ? {
+      mechanicResult: finding.mechanical_validation_status,
+      assignedPartnerId: isNotFound ? null : preferredPartnerId,
+      authorization: decision === "accept" && !isNotFound ? {
         totalLow: approvalCost.totalLow,
         totalHigh: approvalCost.totalHigh,
       } : null,
