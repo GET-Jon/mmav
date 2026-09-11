@@ -78,7 +78,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const { data: finding, error: findingError } = await access.supabase
       .from("mindful_inventory_findings")
-      .select("id,title,status,source,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_part_suggestions")
+      .select("id,title,status,source,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_parts_required,mechanical_part_suggestions")
       .eq("id", findingId)
       .eq("vehicle_id", vehicleId)
       .in("source", ["ai", "partner"])
@@ -87,6 +87,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!finding) return NextResponse.json({ error: "Mechanical finding not found." }, { status: 404 });
 
     const suggestedParts = normalizeSuggestedParts(finding.mechanical_part_suggestions);
+    const hasLegacyUnpricedParts = Boolean(
+      optionalText(finding.mechanical_parts_required) && suggestedParts.length === 0,
+    );
     const approvalCost = summarizeFindingApprovalCost(
       optionalNumber(finding.mechanical_proposed_labor_price),
       suggestedParts,
@@ -94,7 +97,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     let preferredPartnerId: string | null = null;
     if (decision === "accept") {
-      if (!approvalCost.pricingComplete || approvalCost.totalHigh === null) {
+      if (hasLegacyUnpricedParts || !approvalCost.pricingComplete || approvalCost.totalHigh === null) {
         return NextResponse.json({ error: "Complete labor and required part pricing before approving this repair and its spend." }, { status: 400 });
       }
       if (finding.mechanical_can_perform === null) {
