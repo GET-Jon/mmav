@@ -18,7 +18,7 @@ export type WorkPlanFindingInput = {
   severity: string | null;
   confidence: string | null;
   certainty: string | null;
-  mechanicalValidationStatus: "pending" | "confirmed" | "changed" | "needs_diagnosis";
+  mechanicalValidationStatus: "pending" | "confirmed" | "changed" | "needs_diagnosis" | "not_found";
   mechanicalValidationNotes: string | null;
   mechanicalRecommendedAction: string | null;
   mechanicalCanPerform: boolean | null;
