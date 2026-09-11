@@ -15,7 +15,7 @@ import type { InventoryFindingView } from "@/lib/mindful-inventory/intake-inspec
 function sourceLabel(source: string) {
   return source.toLowerCase() === "ai"
     ? "Originally flagged by AI"
-    : source.replaceAll("_", " ");
+    : `Originally flagged by ${source.replaceAll("_", " ")}`;
 }
 
 function validationLabel(status: string) {
@@ -28,7 +28,7 @@ function validationLabel(status: string) {
 
 function partPriceLabel(part: InventoryFindingView["mechanicalSuggestedParts"][number]) {
   if (part.partnerOfferUnitPrice !== null) {
-    return { value: money(part.partnerOfferUnitPrice), source: "Inspector price" };
+    return { value: money(part.partnerOfferUnitPrice), source: "Partner price" };
   }
   const low = part.aiEstimatedUnitPriceLow;
   const high = part.aiEstimatedUnitPriceHigh;
@@ -50,25 +50,9 @@ function partPriceLabel(part: InventoryFindingView["mechanicalSuggestedParts"][n
 
 function partStatusLabel(part: InventoryFindingView["mechanicalSuggestedParts"][number]) {
   const disposition = findingApprovalPartDisposition(part);
-  if (disposition === "in_stock") {
-    return {
-      label: "In stock",
-      detail: "No new cash spend",
-      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    };
-  }
-  if (disposition === "not_needed") {
-    return {
-      label: "Not needed",
-      detail: "Excluded",
-      tone: "border-slate-200 bg-slate-100 text-slate-600",
-    };
-  }
-  return {
-    label: "Purchase required",
-    detail: "Included in authorization",
-    tone: "border-amber-200 bg-amber-50 text-amber-800",
-  };
+  if (disposition === "in_stock") return "In stock";
+  if (disposition === "not_needed") return "Not needed";
+  return "Purchase required";
 }
 
 function partSourceUrl(part: InventoryFindingView["mechanicalSuggestedParts"][number]) {
@@ -83,6 +67,13 @@ function partDisplayNote(part: InventoryFindingView["mechanicalSuggestedParts"][
   note = note.replace(/https?:\/\/[^\s]+/gi, "").trim();
   if (/^Lot Logic search:/i.test(note)) return null;
   return note || null;
+}
+
+function hasLegacyUnpricedParts(finding: InventoryFindingView) {
+  return Boolean(
+    finding.mechanicalPartsRequired?.trim() &&
+      finding.mechanicalSuggestedParts.length === 0,
+  );
 }
 
 function scopeNoun(finding: InventoryFindingView) {
@@ -121,6 +112,7 @@ export function MechanicalOwnerFindingReviewV2({
       ]),
     ),
   );
+  const [openParts, setOpenParts] = useState<Record<string, boolean>>({});
   const [openResolved, setOpenResolved] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState("");
 
@@ -167,7 +159,10 @@ export function MechanicalOwnerFindingReviewV2({
       return;
     }
 
-    if (decision === "accept" && !cost.pricingComplete) {
+    if (
+      decision === "accept" &&
+      (hasLegacyUnpricedParts(finding) || !cost.pricingComplete)
+    ) {
       setOpenNotes((current) => ({ ...current, [finding.id]: true }));
       setMessage(
         "Complete the labor and purchase-required part pricing before approving this work and its spend.",
@@ -220,6 +215,31 @@ export function MechanicalOwnerFindingReviewV2({
         );
       }
 
+      const finishingMechanicalReview =
+        decision !== "clarification" &&
+        unresolvedFindings.length === 1 &&
+        unresolvedFindings[0]?.id === finding.id;
+
+      if (finishingMechanicalReview) {
+        setMessage("Mechanical review complete. Building the Preliminary Work Plan…");
+        const planResponse = await fetch(
+          `/api/mindful/inventory/vehicles/${vehicleId}/work-plan/generate`,
+          { method: "POST" },
+        );
+        if (!planResponse.ok) {
+          const planPayload = (await planResponse.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(
+            planPayload.error ||
+              "Mechanical review was saved, but the Preliminary Work Plan could not be built.",
+          );
+        }
+        router.push(`/mindful/inventory/${vehicleId}/car-plan?from=mechanical`);
+        router.refresh();
+        return;
+      }
+
       setMessage(
         decision === "accept"
           ? `${finding.title} approved for ${approvalAuthorizationLabel(cost)} and added to the Work Plan scope.`
@@ -239,324 +259,272 @@ export function MechanicalOwnerFindingReviewV2({
     }
   }
 
-  function renderAssessment(finding: InventoryFindingView) {
-    const performerIncomplete = finding.mechanicalCanPerform === null;
-    const needsDifferentPartner = finding.mechanicalCanPerform === false;
-    const mechanicName = inspector?.displayName || "Assigned mechanic";
-
-    return (
-      <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-        <div className="text-[10px] font-black uppercase tracking-[0.09em] text-slate-400">
-          Mechanic assessment
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400">
-              Mechanic
-            </div>
-            <div className="mt-1 text-sm font-black text-slate-900">{mechanicName}</div>
-            {inspector?.secondaryLabel ? (
-              <div className="text-xs font-semibold text-slate-500">
-                {inspector.secondaryLabel}
-              </div>
-            ) : null}
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400">
-              Recommended action
-            </div>
-            <div className="mt-1 text-sm font-black text-slate-900">
-              {finding.mechanicalRecommendedAction || "No recommendation entered"}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400">
-              Can perform
-            </div>
-            <div
-              className={`mt-1 text-sm font-black ${
-                performerIncomplete || needsDifferentPartner
-                  ? "text-amber-800"
-                  : "text-slate-900"
-              }`}
-            >
-              {performerIncomplete ? "Not answered" : needsDifferentPartner ? "No" : "Yes"}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400">
-              Labor
-            </div>
-            <div className="mt-1 text-sm font-black text-slate-900">
-              {finding.mechanicalLaborHours === null
-                ? "TBD"
-                : `${finding.mechanicalLaborHours} hr`}
-            </div>
-          </div>
-        </div>
-        {finding.mechanicalValidationNotes ? (
-          <div className="mt-3 border-t border-slate-200 pt-3 text-sm font-semibold leading-5 text-slate-600">
-            <span className="font-black text-slate-800">Mechanic note:</span>{" "}
-            {finding.mechanicalValidationNotes}
-          </div>
-        ) : null}
-      </section>
-    );
+  function performerSummary(finding: InventoryFindingView) {
+    if (finding.mechanicalCanPerform === true) {
+      return `${inspector?.displayName || "The mechanic"} will perform`;
+    }
+    if (finding.mechanicalCanPerform === false) {
+      const selected = partnerOptions.find(
+        (partner) => partner.id === alternatePartners[finding.id],
+      );
+      return selected ? `${selected.displayName} will perform` : "Partner needed";
+    }
+    return "Performer not confirmed";
   }
 
-  function renderApprovalSummary(finding: InventoryFindingView) {
+  function partsSpendLabel(finding: InventoryFindingView) {
     const cost = summarizeFindingApprovalCost(
       finding.mechanicalProposedLaborPrice,
       finding.mechanicalSuggestedParts,
     );
+    if (hasLegacyUnpricedParts(finding) || cost.unknownPartCount) return "Parts pricing incomplete";
+    return Math.abs(cost.partsHigh - cost.partsLow) > 0.009
+      ? `${money(cost.partsLow)}–${money(cost.partsHigh)} parts`
+      : `${money(cost.partsHigh)} parts`;
+  }
+
+  function renderDecisionSummary(finding: InventoryFindingView) {
+    const cost = summarizeFindingApprovalCost(
+      finding.mechanicalProposedLaborPrice,
+      finding.mechanicalSuggestedParts,
+    );
+    const legacyPartsMissing = hasLegacyUnpricedParts(finding);
+    const pricingReady = cost.pricingComplete && !legacyPartsMissing;
+    const needsDifferentPartner = finding.mechanicalCanPerform === false;
+    const selectedAlternatePartner = alternatePartners[finding.id] || "";
+    const performerReady =
+      finding.mechanicalCanPerform !== null &&
+      (!needsDifferentPartner || Boolean(selectedAlternatePartner));
+    const ready = pricingReady && performerReady;
 
     return (
-      <section
-        className={`rounded-xl border-2 p-4 ${
-          cost.pricingComplete
-            ? "border-emerald-200 bg-emerald-50/50"
-            : "border-amber-300 bg-amber-50/60"
-        }`}
-      >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+      <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-xs font-black text-slate-500">
+              {ready ? `Approve ${scopeNoun(finding)}` : "Approval not ready"}
+            </div>
             <div
-              className={`text-[10px] font-black uppercase tracking-[0.09em] ${
-                cost.pricingComplete ? "text-emerald-700" : "text-amber-800"
+              className={`mt-1 text-3xl font-black tracking-tight ${
+                ready ? "text-slate-950" : "text-amber-900"
               }`}
             >
-              Approval summary
+              {pricingReady ? approvalAuthorizationLabel(cost) : "Pricing incomplete"}
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-              <span>
-                <span className="font-semibold text-slate-500">Labor price </span>
-                <span className="font-black text-slate-900">{money(cost.laborPrice)}</span>
-              </span>
-              <span>
-                <span className="font-semibold text-slate-500">New parts spend </span>
-                <span className="font-black text-slate-900">
-                  {cost.unknownPartCount
-                    ? "Incomplete"
-                    : Math.abs(cost.partsHigh - cost.partsLow) > 0.009
-                      ? `${money(cost.partsLow)}–${money(cost.partsHigh)}`
-                      : money(cost.partsHigh)}
-                </span>
-              </span>
-              {cost.inStockCount ? (
-                <span>
-                  <span className="font-semibold text-slate-500">In stock </span>
-                  <span className="font-black text-emerald-800">
-                    {cost.inStockCount} part{cost.inStockCount === 1 ? "" : "s"} · $0 new spend
-                  </span>
-                </span>
+            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-sm font-semibold text-slate-600">
+              <span>{performerSummary(finding)}</span>
+              {finding.mechanicalLaborHours !== null ? (
+                <><span className="text-slate-300">·</span><span>{finding.mechanicalLaborHours} hr</span></>
               ) : null}
+              <><span className="text-slate-300">·</span><span>{money(cost.laborPrice)} labor</span></>
+              <><span className="text-slate-300">·</span><span>{partsSpendLabel(finding)}</span></>
             </div>
           </div>
-          <div className="sm:text-right">
-            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
-              Total authorization
+          {ready ? (
+            <div className="max-w-sm text-xs font-semibold leading-5 text-slate-500 sm:text-right">
+              Approval authorizes the work, new spend up to {money(cost.totalHigh)}, the performer,
+              and inclusion in the Work Plan.
             </div>
-            <div
-              className={`mt-1 text-2xl font-black ${
-                cost.pricingComplete ? "text-slate-950" : "text-amber-900"
-              }`}
-            >
-              {approvalAuthorizationLabel(cost)}
-            </div>
-          </div>
-        </div>
-        <div
-          className={`mt-3 text-xs font-semibold leading-5 ${
-            cost.pricingComplete ? "text-emerald-900" : "text-amber-900"
-          }`}
-        >
-          {cost.pricingComplete ? (
-            <>
-              Approving authorizes this {scopeNoun(finding)}, authorizes new spend up to{" "}
-              {money(cost.totalHigh)}, and includes it in the Work Plan.
-              {cost.inStockCount
-                ? " In-stock parts are available for the job but are excluded from this new-spend authorization."
-                : ""}
-              {cost.notNeededCount
-                ? " Parts marked not needed are excluded."
-                : ""}
-              {cost.usesAiPartEstimate
-                ? " One or more purchase-required part prices are AI estimates; spending above this authorization requires additional approval."
-                : ""}
-            </>
           ) : (
-            <>
-              Pricing is incomplete. Request clarification so labor and every purchase-required part have a usable price before this work can be approved.
-            </>
+            <div className="max-w-sm text-xs font-bold leading-5 text-amber-800 sm:text-right">
+              {finding.mechanicalCanPerform === null
+                ? "Ask the mechanic who will perform the work."
+                : needsDifferentPartner && !selectedAlternatePartner
+                  ? "Choose a Partner before approval."
+                  : legacyPartsMissing || cost.unknownPartCount
+                    ? "Complete required part pricing before approval."
+                    : cost.laborPrice === null
+                      ? "Complete labor pricing before approval."
+                      : "Complete the missing approval details."}
+            </div>
           )}
         </div>
       </section>
     );
   }
 
-  function renderParts(finding: InventoryFindingView) {
-    if (!finding.mechanicalSuggestedParts.length) {
-      return finding.mechanicalPartsRequired ? (
-        <div className="text-sm font-semibold text-slate-600">
-          <span className="font-black text-slate-800">Parts needed:</span>{" "}
-          {finding.mechanicalPartsRequired}
-        </div>
-      ) : null;
-    }
+  function renderMechanicEvidence(finding: InventoryFindingView) {
+    const mechanicName = inspector?.displayName || "Assigned mechanic";
+    const recommendation = finding.mechanicalRecommendedAction?.trim() || null;
 
     return (
-      <section>
-        <div className="text-[10px] font-black uppercase tracking-[0.09em] text-slate-400">
-          Parts supporting this approval
+      <div className="mt-4 border-t border-slate-100 pt-4">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="font-black text-slate-900">{mechanicName}</span>
+          {inspector?.secondaryLabel ? (
+            <><span className="text-slate-300">·</span><span className="font-semibold text-slate-500">{inspector.secondaryLabel}</span></>
+          ) : null}
+          <span className="text-slate-300">·</span>
+          <span className="font-semibold text-slate-600">{validationLabel(finding.mechanicalValidationStatus)}</span>
+          {finding.mechanicalLaborHours !== null ? (
+            <><span className="text-slate-300">·</span><span className="font-semibold text-slate-600">{finding.mechanicalLaborHours} hr labor</span></>
+          ) : null}
         </div>
-        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {finding.mechanicalSuggestedParts.map((part, index) => {
-            const price = partPriceLabel(part);
-            const status = partStatusLabel(part);
-            const disposition = findingApprovalPartDisposition(part);
-            const sourceUrl = partSourceUrl(part);
-            const note = partDisplayNote(part);
-            const partNumber =
-              part.partNumber && !/^https?:\/\//i.test(part.partNumber)
-                ? part.partNumber
-                : null;
-            return (
-              <div
-                key={`${part.description}-${index}`}
-                className={`rounded-xl border p-3 ${
-                  disposition === "not_needed"
-                    ? "border-slate-200 bg-slate-50/70 opacity-80"
-                    : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-black leading-5 text-slate-950">
-                      {part.description}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
-                      <span>Qty {part.quantity}</span>
-                      {partNumber ? <span>· #{partNumber}</span> : null}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-sm font-black text-slate-900">{price.value}</div>
-                    <div
-                      className={`mt-0.5 text-[9px] font-black uppercase tracking-[0.06em] ${
-                        price.source === "Price needed" ? "text-amber-700" : "text-slate-400"
-                      }`}
-                    >
-                      {price.source}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] ${status.tone}`}
-                    >
-                      {status.label}
-                    </span>
-                    <div className="mt-1.5 text-[10px] font-semibold text-slate-500">
-                      {status.detail}
-                    </div>
-                  </div>
-                  {sourceUrl && disposition !== "not_needed" ? (
-                    <a
-                      href={sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[11px] font-black text-blue-700 hover:text-blue-900"
-                    >
-                      Source reference ↗
-                    </a>
-                  ) : null}
-                </div>
-                {note ? (
-                  <div className="mt-2 text-[11px] font-semibold leading-4 text-slate-500">
-                    {note}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+        {recommendation ? (
+          <div className="mt-2 text-sm font-semibold text-slate-700">
+            <span className="text-slate-500">Recommended:</span> {recommendation}
+          </div>
+        ) : null}
+        {finding.mechanicalValidationNotes ? (
+          <div className="mt-2 text-sm leading-6 text-slate-700">
+            <span className="font-black">Mechanic note:</span>{" "}
+            {finding.mechanicalValidationNotes}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
-  function renderPartnerRouting(finding: InventoryFindingView) {
+  function renderPartnerChoice(finding: InventoryFindingView) {
+    if (finding.mechanicalCanPerform === true) return null;
+
     if (finding.mechanicalCanPerform === null) {
       return (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/70 px-4 py-3 text-sm font-semibold text-amber-900">
-          <span className="font-black">Performer confirmation required.</span>{" "}
-          Ask {inspector?.displayName || "the mechanic"} whether they can perform this work before approving it.
-        </div>
-      );
-    }
-
-    const needsDifferentPartner = finding.mechanicalCanPerform === false;
-    if (!needsDifferentPartner) {
-      return (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm font-semibold text-blue-900">
-          <span className="font-black">Partner:</span>{" "}
-          {inspector?.displayName || "Assigned mechanic"}
-          {inspector?.secondaryLabel ? ` · ${inspector.secondaryLabel}` : ""}
-          <span className="text-blue-700"> · Will carry into the Work Plan when approved.</span>
+        <div className="mt-3 text-xs font-bold text-amber-800">
+          Performer confirmation required before approval.
         </div>
       );
     }
 
     const selectedAlternatePartner = alternatePartners[finding.id] || "";
     return (
-      <div
-        className={`rounded-xl border p-3 ${
-          selectedAlternatePartner
-            ? "border-emerald-200 bg-emerald-50/70"
-            : "border-amber-200 bg-amber-50/70"
-        }`}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div
-            className={`text-[10px] font-black uppercase tracking-[0.07em] ${
-              selectedAlternatePartner ? "text-emerald-700" : "text-amber-800"
-            }`}
+      <div className="mt-3 max-w-md">
+        <label className="block text-xs font-black text-slate-700">
+          Choose Partner
+          <select
+            value={selectedAlternatePartner}
+            onChange={(event) =>
+              setAlternatePartners((current) => ({
+                ...current,
+                [finding.id]: event.target.value,
+              }))
+            }
+            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
           >
-            {selectedAlternatePartner ? "Partner selected" : "Alternate partner required"}
-          </div>
-          {!selectedAlternatePartner ? (
-            <span className="text-[10px] font-bold text-amber-700">Required</span>
-          ) : null}
+            <option value="">Select Partner</option>
+            {availablePartners.map((partner) => (
+              <option key={partner.id} value={partner.id}>
+                {partner.displayName}
+                {partner.secondaryLabel ? ` · ${partner.secondaryLabel}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="mt-1 text-[11px] font-semibold text-slate-500">
+          {inspector?.displayName || "The mechanic"} said they cannot perform this work.
         </div>
-        <select
-          value={selectedAlternatePartner}
-          onChange={(event) =>
-            setAlternatePartners((current) => ({
-              ...current,
-              [finding.id]: event.target.value,
-            }))
+      </div>
+    );
+  }
+
+  function renderPartsDisclosure(finding: InventoryFindingView) {
+    const parts = finding.mechanicalSuggestedParts;
+    const cost = summarizeFindingApprovalCost(
+      finding.mechanicalProposedLaborPrice,
+      parts,
+    );
+    const expanded = Boolean(openParts[finding.id]);
+
+    if (!parts.length) {
+      return finding.mechanicalPartsRequired ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+          <span className="font-black">Parts needed:</span> {finding.mechanicalPartsRequired}. Structured part pricing is required before approval.
+        </div>
+      ) : null;
+    }
+
+    const summaryBits = [
+      Math.abs(cost.partsHigh - cost.partsLow) > 0.009
+        ? `${money(cost.partsLow)}–${money(cost.partsHigh)}`
+        : money(cost.partsHigh),
+      cost.purchaseRequiredCount
+        ? `${cost.purchaseRequiredCount} to purchase`
+        : "no purchase parts",
+      cost.inStockCount ? `${cost.inStockCount} in stock` : null,
+      cost.notNeededCount ? `${cost.notNeededCount} not needed` : null,
+    ].filter(Boolean);
+
+    return (
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <button
+          type="button"
+          onClick={() =>
+            setOpenParts((current) => ({ ...current, [finding.id]: !expanded }))
           }
-          className={`mt-2 w-full rounded-lg border bg-white px-3 py-2 text-sm font-bold text-slate-800 ${
-            selectedAlternatePartner ? "border-emerald-300" : "border-amber-300"
-          }`}
+          className="flex w-full items-center justify-between gap-3 text-left"
         >
-          <option value="">Choose partner</option>
-          {availablePartners.map((partner) => (
-            <option key={partner.id} value={partner.id}>
-              {partner.displayName}
-              {partner.secondaryLabel ? ` · ${partner.secondaryLabel}` : ""}
-            </option>
-          ))}
-        </select>
-        <div
-          className={`mt-1.5 text-[10px] font-semibold leading-4 ${
-            selectedAlternatePartner ? "text-emerald-700" : "text-amber-800"
-          }`}
-        >
-          {selectedAlternatePartner
-            ? "This Partner will carry into the Work Plan and Active Work."
-            : `${inspector?.displayName || "The mechanic"} said they cannot perform this work.`}
-        </div>
+          <div className="min-w-0 text-sm font-semibold text-slate-600">
+            <span className="font-black text-slate-900">Parts:</span>{" "}
+            {summaryBits.join(" · ")}
+          </div>
+          <span className="shrink-0 text-xs font-black text-blue-700">
+            {expanded ? "Hide parts" : "View parts & pricing"}
+          </span>
+        </button>
+
+        {expanded ? (
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {parts.map((part, index) => {
+              const price = partPriceLabel(part);
+              const disposition = findingApprovalPartDisposition(part);
+              const sourceUrl = partSourceUrl(part);
+              const note = partDisplayNote(part);
+              const partNumber =
+                part.partNumber && !/^https?:\/\//i.test(part.partNumber)
+                  ? part.partNumber
+                  : null;
+              return (
+                <div
+                  key={`${part.description}-${index}`}
+                  className="rounded-lg border border-slate-200 bg-white p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-black text-slate-900">{part.description}</div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                        Qty {part.quantity}{partNumber ? ` · #${partNumber}` : ""}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-sm font-black text-slate-900">{price.value}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.05em] text-slate-400">
+                        {price.source}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span
+                      className={`text-[10px] font-black ${
+                        disposition === "purchase_required"
+                          ? "text-amber-700"
+                          : disposition === "in_stock"
+                            ? "text-emerald-700"
+                            : "text-slate-500"
+                      }`}
+                    >
+                      {partStatusLabel(part)}
+                    </span>
+                    {sourceUrl && disposition !== "not_needed" ? (
+                      <a
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] font-black text-blue-700 hover:text-blue-900"
+                      >
+                        Source ↗
+                      </a>
+                    ) : null}
+                  </div>
+                  {note ? (
+                    <div className="mt-2 text-[11px] font-semibold leading-4 text-slate-500">
+                      {note}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -573,7 +541,8 @@ export function MechanicalOwnerFindingReviewV2({
     const performerReady =
       finding.mechanicalCanPerform !== null &&
       (!needsDifferentPartner || Boolean(selectedAlternatePartner));
-    const canApprove = cost.pricingComplete && performerReady;
+    const canApprove =
+      cost.pricingComplete && !hasLegacyUnpricedParts(finding) && performerReady;
 
     return (
       <article
@@ -588,7 +557,7 @@ export function MechanicalOwnerFindingReviewV2({
             {finding.description ? (
               <p className="mt-1 text-sm leading-5 text-slate-600">{finding.description}</p>
             ) : null}
-            <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-slate-400">
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 text-[10px] font-bold text-slate-400">
               <span>{sourceLabel(finding.source)}</span>
               <span>·</span>
               <span>{validationLabel(finding.mechanicalValidationStatus)}</span>
@@ -605,12 +574,10 @@ export function MechanicalOwnerFindingReviewV2({
           </span>
         </div>
 
-        <div className="mt-4 space-y-3">
-          {renderAssessment(finding)}
-          {renderPartnerRouting(finding)}
-          {renderApprovalSummary(finding)}
-          {renderParts(finding)}
-        </div>
+        {renderDecisionSummary(finding)}
+        {renderMechanicEvidence(finding)}
+        {renderPartnerChoice(finding)}
+        {renderPartsDisclosure(finding)}
 
         {clarification && finding.mechanicalOwnerReviewNotes ? (
           <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
@@ -675,7 +642,7 @@ export function MechanicalOwnerFindingReviewV2({
               title={
                 finding.mechanicalCanPerform === null
                   ? "Mechanic must confirm whether they can perform this work"
-                  : !cost.pricingComplete
+                  : !cost.pricingComplete || hasLegacyUnpricedParts(finding)
                     ? "Complete labor and purchase-required part pricing before approval"
                     : needsDifferentPartner && !selectedAlternatePartner
                       ? "Choose a Partner before approval"
@@ -755,15 +722,14 @@ export function MechanicalOwnerFindingReviewV2({
           </button>
         </div>
         {expanded ? (
-          <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+          <div className="mt-3 border-t border-slate-200 pt-3">
             {finding.description ? (
               <p className="text-sm text-slate-600">{finding.description}</p>
             ) : null}
-            {renderAssessment(finding)}
-            {accepted ? renderApprovalSummary(finding) : null}
-            {renderParts(finding)}
+            {renderMechanicEvidence(finding)}
+            {renderPartsDisclosure(finding)}
             {accepted && selectedPartner ? (
-              <div className="text-xs font-semibold text-slate-600">
+              <div className="mt-3 text-xs font-semibold text-slate-600">
                 <span className="font-black text-slate-800">Partner:</span>{" "}
                 {selectedPartner.displayName}
                 {selectedPartner.secondaryLabel
@@ -772,7 +738,7 @@ export function MechanicalOwnerFindingReviewV2({
               </div>
             ) : null}
             {finding.mechanicalOwnerReviewNotes ? (
-              <div className="text-xs font-semibold text-slate-600">
+              <div className="mt-3 text-xs font-semibold text-slate-600">
                 <span className="font-black text-slate-800">Owner note:</span>{" "}
                 {finding.mechanicalOwnerReviewNotes}
               </div>
@@ -795,7 +761,7 @@ export function MechanicalOwnerFindingReviewV2({
               : "Owner review complete"}
           </div>
           <div className="mt-1 text-xs font-semibold text-slate-500">
-            Approve the work, its new-spend authorization, and its Partner before it enters the Work Plan.
+            Review the repair amount and Partner, then approve or ask a question.
           </div>
         </div>
         <span
