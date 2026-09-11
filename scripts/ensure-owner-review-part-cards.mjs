@@ -3,6 +3,16 @@ import { readFileSync, writeFileSync } from "node:fs";
 const path = "components/mindful-inventory/mechanical-owner-finding-review.tsx";
 let source = readFileSync(path, "utf8");
 
+const hasDecisionFocusedApprovalCard =
+  source.includes("summarizeFindingApprovalCost") &&
+  source.includes("findingApprovalPartDisposition") &&
+  source.includes("Repair authorization");
+
+if (hasDecisionFocusedApprovalCard) {
+  console.log("Owner Review decision-focused part cards already installed.");
+  process.exit(0);
+}
+
 if (source.includes("function ownerReviewPartStatus(")) {
   console.log("Owner Review suggested-part cards already installed.");
   process.exit(0);
