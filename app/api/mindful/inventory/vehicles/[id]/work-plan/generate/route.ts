@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generatePreliminaryWorkPlan } from "@/lib/ai";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryCarPlanData } from "@/lib/mindful-inventory/car-plan";
+import { summarizeFindingApprovalCost } from "@/lib/mindful-inventory/finding-approval";
 import { getInventoryIntakeInspectionData } from "@/lib/mindful-inventory/intake-inspection";
 import { getInventoryOverviewIntakeData } from "@/lib/mindful-inventory/overview-intake";
 
@@ -64,6 +65,24 @@ export async function POST(
       );
     }
 
+    const acceptedFindings = intakeInspection.findings.filter(
+      (finding) =>
+        finding.status === "open" &&
+        finding.mechanicalValidationStatus !== "not_found" &&
+        finding.mechanicalOwnerReviewStatus === "accepted",
+    );
+
+    const acceptedFindingById = new Map(acceptedFindings.map((finding) => [finding.id, finding]));
+    const approvalCostByFindingId = new Map(
+      acceptedFindings.map((finding) => [
+        finding.id,
+        summarizeFindingApprovalCost(
+          finding.mechanicalProposedLaborPrice,
+          finding.mechanicalSuggestedParts,
+        ),
+      ]),
+    );
+
     const preliminary = await generatePreliminaryWorkPlan({
       vehicle: {
         year: vehicle.year,
@@ -77,32 +96,27 @@ export async function POST(
         initialObservations: intakeInspection.intake?.initialObservations || null,
       },
       mechanicalInspectionSummary: intakeInspection.mechanicalInspection.summary,
-      findings: intakeInspection.findings.flatMap((finding) => {
-        if (finding.status !== "open" || finding.mechanicalValidationStatus === "not_found") {
-          return [];
-        }
-
-        return [{
-          id: finding.id,
-          source: finding.source,
-          title: finding.title,
-          description: finding.description,
-          category: finding.category,
-          severity: finding.severity,
-          confidence: finding.confidence,
-          certainty: finding.certainty,
-          mechanicalValidationStatus: finding.mechanicalValidationStatus,
-          mechanicalValidationNotes: finding.mechanicalValidationNotes,
-          mechanicalRecommendedAction: finding.mechanicalRecommendedAction,
-          mechanicalCanPerform: finding.mechanicalCanPerform,
-          mechanicalLaborHours: finding.mechanicalLaborHours,
-          mechanicalProposedLaborPrice: finding.mechanicalProposedLaborPrice,
-          mechanicalSuggestedParts: finding.mechanicalSuggestedParts,
-          estimatedCostLow: finding.estimatedCostLow,
-          estimatedCostHigh: finding.estimatedCostHigh,
-          estimatedDurationHours: finding.estimatedDurationHours,
-        }];
-      }),
+      findings: acceptedFindings.map((finding) => ({
+        id: finding.id,
+        source: finding.source,
+        title: finding.title,
+        description: finding.description,
+        category: finding.category,
+        severity: finding.severity,
+        confidence: finding.confidence,
+        certainty: finding.certainty,
+        mechanicalValidationStatus: finding.mechanicalValidationStatus,
+        mechanicalValidationNotes: finding.mechanicalValidationNotes,
+        mechanicalRecommendedAction: finding.mechanicalRecommendedAction,
+        mechanicalCanPerform: finding.mechanicalCanPerform,
+        mechanicalLaborHours: finding.mechanicalLaborHours,
+        mechanicalProposedLaborPrice: finding.mechanicalProposedLaborPrice,
+        mechanicalSuggestedParts: finding.mechanicalSuggestedParts,
+        mechanicalConversation: finding.mechanicalConversation,
+        estimatedCostLow: finding.estimatedCostLow,
+        estimatedCostHigh: finding.estimatedCostHigh,
+        estimatedDurationHours: finding.estimatedDurationHours,
+      })),
       upgrades: overview.upgrades
         .filter((upgrade) => upgrade.status === "proposed")
         .map((upgrade) => ({
@@ -128,7 +142,7 @@ export async function POST(
     });
 
     const preferredPartnerByFindingId = new Map(
-      intakeInspection.findings
+      acceptedFindings
         .filter((finding) => finding.ownerPreferredPartnerId)
         .map((finding) => [finding.id, finding.ownerPreferredPartnerId as string]),
     );
@@ -172,6 +186,42 @@ export async function POST(
         ));
         const suggestedPartnerId = preferredPartnerIds.length === 1 ? preferredPartnerIds[0] : null;
 
+        const linkedApprovedFindings = item.findingIds
+          .map((findingId) => acceptedFindingById.get(findingId))
+          .filter(Boolean);
+        const authorizationCosts = item.findingIds
+          .map((findingId) => approvalCostByFindingId.get(findingId))
+          .filter(Boolean);
+        const hasOwnerAuthorizedFindingScope =
+          item.findingIds.length > 0 &&
+          linkedApprovedFindings.length === item.findingIds.length &&
+          authorizationCosts.length === item.findingIds.length &&
+          authorizationCosts.every((cost) => cost?.pricingComplete && cost.totalLow !== null && cost.totalHigh !== null);
+
+        const authorizedLow = hasOwnerAuthorizedFindingScope
+          ? authorizationCosts.reduce((sum, cost) => sum + (cost?.totalLow || 0), 0)
+          : null;
+        const authorizedHigh = hasOwnerAuthorizedFindingScope
+          ? authorizationCosts.reduce((sum, cost) => sum + (cost?.totalHigh || 0), 0)
+          : null;
+        const authorizationUsesAi = hasOwnerAuthorizedFindingScope
+          ? authorizationCosts.some((cost) => cost?.usesAiPartEstimate)
+          : false;
+
+        const estimatedCostLow = hasOwnerAuthorizedFindingScope ? authorizedLow : item.estimatedCostLow;
+        const estimatedCostHigh = hasOwnerAuthorizedFindingScope ? authorizedHigh : item.estimatedCostHigh;
+        const planningAmount = hasOwnerAuthorizedFindingScope && authorizedHigh !== null ? authorizedHigh : item.planningAmount;
+        const decision = hasOwnerAuthorizedFindingScope ? "approved" : item.decision;
+        const managerInvestigationRequired = hasOwnerAuthorizedFindingScope ? false : item.managerInvestigationRequired;
+        const costSource = hasOwnerAuthorizedFindingScope
+          ? authorizationUsesAi ? "ai_estimate" : "known_quote"
+          : item.costSource;
+        const costSourceDetail = hasOwnerAuthorizedFindingScope
+          ? authorizationUsesAi
+            ? "Owner-authorized maximum using mechanic labor quote plus one or more AI-estimated part prices."
+            : "Owner-authorized maximum from mechanic labor and partner part pricing."
+          : item.costSourceDetail;
+
         const { data: insertedItem, error: itemError } = await access.supabase
           .from("mindful_inventory_plan_items")
           .insert({
@@ -182,12 +232,12 @@ export async function POST(
             description: item.description,
             category: item.category,
             classification: item.classification,
-            decision: item.decision,
+            decision,
             priority: item.priority,
             rationale: item.rationale,
-            estimated_cost_low: item.estimatedCostLow,
-            estimated_cost_high: item.estimatedCostHigh,
-            planning_amount: item.planningAmount,
+            estimated_cost_low: estimatedCostLow,
+            estimated_cost_high: estimatedCostHigh,
+            planning_amount: planningAmount,
             estimated_duration_hours: item.estimatedElapsedHours,
             estimated_labor_hours: item.estimatedLaborHours,
             estimated_elapsed_hours: item.estimatedElapsedHours,
@@ -195,15 +245,15 @@ export async function POST(
             sequence_order: (index + 1) * 10,
             confidence: item.confidence,
             assumptions: item.assumptions,
-            manager_investigation_required: item.managerInvestigationRequired,
-            cost_source: item.costSource,
-            cost_source_detail: item.costSourceDetail,
+            manager_investigation_required: managerInvestigationRequired,
+            cost_source: costSource,
+            cost_source_detail: costSourceDetail,
           })
           .select("id")
           .single();
 
         if (itemError) throw new Error(`Work Plan item creation failed for “${item.title}”: ${itemError.message}`);
-        planningTotal += item.planningAmount;
+        planningTotal += planningAmount;
 
         if (item.findingIds.length > 0) {
           const { error: linksError } = await access.supabase
@@ -245,6 +295,7 @@ export async function POST(
           itemCount: preliminary.items.length,
           planningTotal,
           inspectionId: intakeInspection.mechanicalInspection.id,
+          acceptedFindingCount: acceptedFindings.length,
         },
       });
 
