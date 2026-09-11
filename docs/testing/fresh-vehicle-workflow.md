@@ -118,7 +118,25 @@ Rebuild requirement:
 
 Verification:
 
-- Full production `npm run build` passed on Node 22 after the complete source-mutating prebuild chain, Next.js production compilation, and TypeScript validation.
+- Full production `npm run build` passed on Node 22 after the complete source-mutating prebuild chain, Next.js production compilation, and TypeScript validation for the initial authorization implementation.
 - The prebuild verification caught and corrected two legacy-patcher incompatibilities rather than allowing them to reach deployment: exact-match part-type detection and the old Owner-review component reference.
 - Deployed visual review with the fresh GLS finding is still required.
 - Fresh-vehicle runtime verification still needs to confirm that an accepted repair appears once in the generated Work Plan with the displayed authorization maximum and intended Partner.
+
+### Authorization-card refinement after initial build
+
+- The visible Owner card was subsequently reorganized again around the actual decision: Finding identity → Mechanic assessment → Parts detail → Repair authorization → Clarification → Approve/Dismiss.
+- The assigned mechanic/Partner name is now shown directly. If the inspector offered to perform the repair, the card identifies them as the proposed performer; otherwise it requires an alternate Partner.
+- `Estimate` was replaced by the unambiguous `Labor price` label.
+- The Repair authorization box shows labor price, new-parts spend, pricing status, and the exact/range total being authorized.
+- Approval copy now explicitly states that approving authorizes the repair, its spend, its performer, and inclusion in the Work Plan.
+- The primary action now reads `Approve Repair` or `Approve Repair & Route`, rather than the weaker `Accept Finding` wording.
+- A legacy safety case was added: if a finding says parts are required but has no structured part records/pricing, both the UI and review endpoint block approval rather than silently treating the repair as labor-only.
+- Missing labor price, missing purchase-required part price, and unresolved performer status are surfaced separately instead of displaying a misleading total.
+
+Verification status for this refinement:
+
+- Source review confirms compatibility with the existing `ensure-expand-search-source.mjs` Owner-review transformation markers; the new component preserves the exact marker sequence expected by that patcher.
+- Server validation mirrors the client approval gates for performer and pricing completeness, including legacy unstructured required-parts data.
+- A fresh production build has **not yet been observed for the final card-refinement commits**. Do not treat the earlier successful build as verification of these later UI/backend refinements.
+- Next deployed test: open the fresh GLS mechanical review card, confirm the mechanic name and `$710–$880`-style authorization math where applicable, approve one repair, and verify the generated Work Plan carries the same ceiling and intended Partner exactly once.
