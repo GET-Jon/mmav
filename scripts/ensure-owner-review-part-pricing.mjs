@@ -33,21 +33,34 @@ const reviewPath = "components/mindful-inventory/mechanical-owner-finding-review
 let reviewSource = readFileSync(reviewPath, "utf8");
 let reviewUpdated = reviewSource;
 
-const marker = `function sourceLabel(source: string) {\n  return source.toLowerCase() === "ai"\n    ? "AI finding"\n    : source.replaceAll("_", " ");\n}`;
-const helper = `${marker}\n\nfunction partPriceLabel(part: InventoryFindingView["mechanicalSuggestedParts"][number]) {\n  if (part.partnerOfferUnitPrice !== null) return { label: "Inspector price", value: money(part.partnerOfferUnitPrice), tone: "text-emerald-700" };\n  if (part.aiEstimatedUnitPriceLow !== null || part.aiEstimatedUnitPriceHigh !== null) {\n    const low = part.aiEstimatedUnitPriceLow;\n    const high = part.aiEstimatedUnitPriceHigh;\n    const value = low !== null && high !== null ? (low === high ? money(low) : money(low) + "–" + money(high)) : money(low ?? high);\n    return { label: "AI estimate", value, tone: "text-blue-700" };\n  }\n  return null;\n}`;
-if (!reviewUpdated.includes("function partPriceLabel(")) {
-  if (!reviewUpdated.includes(marker)) throw new Error("Could not find owner review sourceLabel helper.");
-  reviewUpdated = reviewUpdated.replace(marker, helper);
-}
+// The current decision-focused Owner review card owns part-price rendering and
+// authorization totals directly through finding-approval helpers. Older builds
+// used this script to inject those concepts into the legacy card. Once the new
+// card is present, this patcher must become a no-op for the review component.
+const hasDecisionFocusedApprovalCard =
+  reviewUpdated.includes("summarizeFindingApprovalCost") &&
+  reviewUpdated.includes("findingApprovalPartDisposition") &&
+  reviewUpdated.includes("partPriceLabel(part: MechanicalSuggestedPart)");
 
-const oldPart = `                <span className="font-black">\n                  {part.quantity}× {part.description}\n                </span>\n                {part.partNumber ? \` · #\${part.partNumber}\` : ""}\n                {part.notes ? \` · \${part.notes}\` : ""}`;
-const newPart = `                <span className="font-black">\n                  {part.quantity}× {part.description}\n                </span>\n                {part.partNumber ? \` · #\${part.partNumber}\` : ""}\n                {partPriceLabel(part) ? (\n                  <span className={\`ml-2 font-black \${partPriceLabel(part)?.tone}\`}>\n                    · {partPriceLabel(part)?.label}: {partPriceLabel(part)?.value}\n                  </span>\n                ) : null}\n                {part.notes ? <span className="block mt-1 text-[11px] font-medium text-slate-500">{part.notes}</span> : null}`;
-if (!reviewUpdated.includes("partPriceLabel(part)?.label")) {
-  if (!reviewUpdated.includes(oldPart)) throw new Error("Could not find Owner review suggested-part rendering.");
-  reviewUpdated = reviewUpdated.replace(oldPart, newPart);
+if (!hasDecisionFocusedApprovalCard) {
+  const marker = `function sourceLabel(source: string) {\n  return source.toLowerCase() === "ai"\n    ? "AI finding"\n    : source.replaceAll("_", " ");\n}`;
+  const helper = `${marker}\n\nfunction partPriceLabel(part: InventoryFindingView["mechanicalSuggestedParts"][number]) {\n  if (part.partnerOfferUnitPrice !== null) return { label: "Inspector price", value: money(part.partnerOfferUnitPrice), tone: "text-emerald-700" };\n  if (part.aiEstimatedUnitPriceLow !== null || part.aiEstimatedUnitPriceHigh !== null) {\n    const low = part.aiEstimatedUnitPriceLow;\n    const high = part.aiEstimatedUnitPriceHigh;\n    const value = low !== null && high !== null ? (low === high ? money(low) : money(low) + "–" + money(high)) : money(low ?? high);\n    return { label: "AI estimate", value, tone: "text-blue-700" };\n  }\n  return null;\n}`;
+  if (!reviewUpdated.includes("function partPriceLabel(")) {
+    if (!reviewUpdated.includes(marker)) throw new Error("Could not find owner review sourceLabel helper.");
+    reviewUpdated = reviewUpdated.replace(marker, helper);
+  }
+
+  const oldPart = `                <span className="font-black">\n                  {part.quantity}× {part.description}\n                </span>\n                {part.partNumber ? \` · #\${part.partNumber}\` : ""}\n                {part.notes ? \` · \${part.notes}\` : ""}`;
+  const newPart = `                <span className="font-black">\n                  {part.quantity}× {part.description}\n                </span>\n                {part.partNumber ? \` · #\${part.partNumber}\` : ""}\n                {partPriceLabel(part) ? (\n                  <span className={\`ml-2 font-black \${partPriceLabel(part)?.tone}\`}>\n                    · {partPriceLabel(part)?.label}: {partPriceLabel(part)?.value}\n                  </span>\n                ) : null}\n                {part.notes ? <span className="block mt-1 text-[11px] font-medium text-slate-500">{part.notes}</span> : null}`;
+  if (!reviewUpdated.includes("partPriceLabel(part)?.label")) {
+    if (!reviewUpdated.includes(oldPart)) throw new Error("Could not find Owner review suggested-part rendering.");
+    reviewUpdated = reviewUpdated.replace(oldPart, newPart);
+  }
 }
 
 if (reviewUpdated !== reviewSource) {
   writeFileSync(reviewPath, reviewUpdated, "utf8");
   console.log("Displayed inspector or AI part pricing in Owner review.");
+} else if (hasDecisionFocusedApprovalCard) {
+  console.log("Owner review already uses decision-focused part pricing and authorization totals.");
 }
