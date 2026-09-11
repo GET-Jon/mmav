@@ -9,7 +9,16 @@ export type InventoryFindingSource = "intake" | "inspection" | "ai" | "partner" 
 export type InventoryFindingStatus = "open" | "resolved" | "dismissed";
 export type InventoryFindingMechanicalValidationStatus = "pending" | "confirmed" | "not_found" | "changed" | "needs_diagnosis";
 export type InventoryFindingOwnerReviewStatus = "accepted" | "dismissed" | "clarification_requested";
-export type MechanicalSuggestedPart = { description: string; quantity: number; partNumber: string | null; notes: string | null };
+export type MechanicalSuggestedPart = {
+  description: string;
+  quantity: number;
+  partNumber: string | null;
+  notes: string | null;
+  aiEstimatedUnitPriceLow: number | null;
+  aiEstimatedUnitPriceHigh: number | null;
+  aiPriceBasis: string | null;
+  partnerOfferUnitPrice: number | null;
+};
 
 export type IntakeFieldConfirmation = { confirmedAt: string; value: unknown };
 
@@ -60,11 +69,20 @@ function normalizeSuggestedParts(value: unknown): MechanicalSuggestedPart[] {
     const description = String(row.description ?? row.name ?? "").trim();
     if (!description) return [];
     const parsedQuantity = Number(row.quantity ?? 1);
+    let aiEstimatedUnitPriceLow = toNullableNumber(row.aiEstimatedUnitPriceLow as number | string | null | undefined ?? row.estimatedUnitPriceLow as number | string | null | undefined);
+    let aiEstimatedUnitPriceHigh = toNullableNumber(row.aiEstimatedUnitPriceHigh as number | string | null | undefined ?? row.estimatedUnitPriceHigh as number | string | null | undefined);
+    if (aiEstimatedUnitPriceLow !== null && aiEstimatedUnitPriceHigh !== null && aiEstimatedUnitPriceHigh < aiEstimatedUnitPriceLow) {
+      [aiEstimatedUnitPriceLow, aiEstimatedUnitPriceHigh] = [aiEstimatedUnitPriceHigh, aiEstimatedUnitPriceLow];
+    }
     return [{
       description,
       quantity: Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1,
       partNumber: String(row.partNumber ?? row.part_number ?? "").trim() || null,
       notes: String(row.notes || "").trim() || null,
+      aiEstimatedUnitPriceLow,
+      aiEstimatedUnitPriceHigh,
+      aiPriceBasis: String(row.aiPriceBasis ?? row.priceBasis ?? "").trim() || null,
+      partnerOfferUnitPrice: toNullableNumber(row.partnerOfferUnitPrice as number | string | null | undefined),
     }];
   });
 }
