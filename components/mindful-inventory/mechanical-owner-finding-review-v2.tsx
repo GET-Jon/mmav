@@ -137,9 +137,9 @@ export function MechanicalOwnerFindingReviewV2({
     finding: InventoryFindingView,
     decision: "accept" | "clarification" | "dismiss",
   ) {
+    const isNotFound = finding.mechanicalValidationStatus === "not_found";
     const needsDifferentPartner =
-      finding.mechanicalCanPerform === false &&
-      finding.mechanicalValidationStatus !== "not_found";
+      finding.mechanicalCanPerform === false && !isNotFound;
     const cost = summarizeFindingApprovalCost(
       finding.mechanicalProposedLaborPrice,
       finding.mechanicalSuggestedParts,
@@ -151,7 +151,7 @@ export function MechanicalOwnerFindingReviewV2({
       return;
     }
 
-    if (decision === "accept" && finding.mechanicalCanPerform === null) {
+    if (decision === "accept" && !isNotFound && finding.mechanicalCanPerform === null) {
       setOpenNotes((current) => ({ ...current, [finding.id]: true }));
       setMessage(
         "The mechanic must confirm whether they can perform this work before you approve it.",
@@ -161,6 +161,7 @@ export function MechanicalOwnerFindingReviewV2({
 
     if (
       decision === "accept" &&
+      !isNotFound &&
       (hasLegacyUnpricedParts(finding) || !cost.pricingComplete)
     ) {
       setOpenNotes((current) => ({ ...current, [finding.id]: true }));
@@ -172,6 +173,7 @@ export function MechanicalOwnerFindingReviewV2({
 
     if (
       decision === "accept" &&
+      !isNotFound &&
       needsDifferentPartner &&
       !(alternatePartners[finding.id] || "").trim()
     ) {
@@ -242,7 +244,9 @@ export function MechanicalOwnerFindingReviewV2({
 
       setMessage(
         decision === "accept"
-          ? `${finding.title} approved for ${approvalAuthorizationLabel(cost)} and added to the Work Plan scope.`
+          ? isNotFound
+            ? `${finding.title}: mechanic result accepted. No repair will enter the Work Plan.`
+            : `${finding.title} approved for ${approvalAuthorizationLabel(cost)} and added to the Work Plan scope.`
           : decision === "dismiss"
             ? `${finding.title} dismissed from the mechanical scope.`
             : `Clarification requested from the mechanic for ${finding.title}.`,
@@ -277,7 +281,9 @@ export function MechanicalOwnerFindingReviewV2({
       finding.mechanicalProposedLaborPrice,
       finding.mechanicalSuggestedParts,
     );
-    if (hasLegacyUnpricedParts(finding) || cost.unknownPartCount) return "Parts pricing incomplete";
+    if (hasLegacyUnpricedParts(finding) || cost.unknownPartCount) {
+      return "Parts pricing incomplete";
+    }
     return Math.abs(cost.partsHigh - cost.partsLow) > 0.009
       ? `${money(cost.partsLow)}–${money(cost.partsHigh)} parts`
       : `${money(cost.partsHigh)} parts`;
@@ -298,46 +304,43 @@ export function MechanicalOwnerFindingReviewV2({
     const ready = pricingReady && performerReady;
 
     return (
-      <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="text-xs font-black text-slate-500">
-              {ready ? `Approve ${scopeNoun(finding)}` : "Approval not ready"}
+      <section className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div>
+              <div className="text-[11px] font-black text-slate-500">
+                {ready ? `Approve ${scopeNoun(finding)}` : "Approval not ready"}
+              </div>
+              <div
+                className={`mt-0.5 text-2xl font-black tracking-tight ${
+                  ready ? "text-slate-950" : "text-amber-900"
+                }`}
+              >
+                {pricingReady ? approvalAuthorizationLabel(cost) : "Pricing incomplete"}
+              </div>
             </div>
-            <div
-              className={`mt-1 text-3xl font-black tracking-tight ${
-                ready ? "text-slate-950" : "text-amber-900"
-              }`}
-            >
-              {pricingReady ? approvalAuthorizationLabel(cost) : "Pricing incomplete"}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-sm font-semibold text-slate-600">
-              <span>{performerSummary(finding)}</span>
-              {finding.mechanicalLaborHours !== null ? (
-                <><span className="text-slate-300">·</span><span>{finding.mechanicalLaborHours} hr</span></>
-              ) : null}
-              <><span className="text-slate-300">·</span><span>{money(cost.laborPrice)} labor</span></>
-              <><span className="text-slate-300">·</span><span>{partsSpendLabel(finding)}</span></>
+            <div className="text-xs font-semibold text-slate-500">
+              {ready
+                ? `Authorizes work and new spend up to ${money(cost.totalHigh)}`
+                : finding.mechanicalCanPerform === null
+                  ? "Performer confirmation required"
+                  : needsDifferentPartner && !selectedAlternatePartner
+                    ? "Choose a Partner"
+                    : legacyPartsMissing || cost.unknownPartCount
+                      ? "Required part pricing missing"
+                      : cost.laborPrice === null
+                        ? "Labor pricing missing"
+                        : "Complete approval details"}
             </div>
           </div>
-          {ready ? (
-            <div className="max-w-sm text-xs font-semibold leading-5 text-slate-500 sm:text-right">
-              Approval authorizes the work, new spend up to {money(cost.totalHigh)}, the performer,
-              and inclusion in the Work Plan.
-            </div>
-          ) : (
-            <div className="max-w-sm text-xs font-bold leading-5 text-amber-800 sm:text-right">
-              {finding.mechanicalCanPerform === null
-                ? "Ask the mechanic who will perform the work."
-                : needsDifferentPartner && !selectedAlternatePartner
-                  ? "Choose a Partner before approval."
-                  : legacyPartsMissing || cost.unknownPartCount
-                    ? "Complete required part pricing before approval."
-                    : cost.laborPrice === null
-                      ? "Complete labor pricing before approval."
-                      : "Complete the missing approval details."}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-x-2 gap-y-1 text-sm font-semibold text-slate-600">
+            <span>{performerSummary(finding)}</span>
+            {finding.mechanicalLaborHours !== null ? (
+              <><span className="text-slate-300">·</span><span>{finding.mechanicalLaborHours} hr</span></>
+            ) : null}
+            <><span className="text-slate-300">·</span><span>{money(cost.laborPrice)} labor</span></>
+            <><span className="text-slate-300">·</span><span>{partsSpendLabel(finding)}</span></>
+          </div>
         </div>
       </section>
     );
@@ -348,7 +351,7 @@ export function MechanicalOwnerFindingReviewV2({
     const recommendation = finding.mechanicalRecommendedAction?.trim() || null;
 
     return (
-      <div className="mt-4 border-t border-slate-100 pt-4">
+      <div className="mt-3 border-t border-slate-100 pt-3">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <span className="font-black text-slate-900">{mechanicName}</span>
           {inspector?.secondaryLabel ? (
@@ -361,12 +364,12 @@ export function MechanicalOwnerFindingReviewV2({
           ) : null}
         </div>
         {recommendation ? (
-          <div className="mt-2 text-sm font-semibold text-slate-700">
+          <div className="mt-1.5 text-sm font-semibold text-slate-700">
             <span className="text-slate-500">Recommended:</span> {recommendation}
           </div>
         ) : null}
         {finding.mechanicalValidationNotes ? (
-          <div className="mt-2 text-sm leading-6 text-slate-700">
+          <div className="mt-1.5 text-sm leading-5 text-slate-700">
             <span className="font-black">Mechanic note:</span>{" "}
             {finding.mechanicalValidationNotes}
           </div>
@@ -380,7 +383,7 @@ export function MechanicalOwnerFindingReviewV2({
 
     if (finding.mechanicalCanPerform === null) {
       return (
-        <div className="mt-3 text-xs font-bold text-amber-800">
+        <div className="mt-2 text-xs font-bold text-amber-800">
           Performer confirmation required before approval.
         </div>
       );
@@ -388,7 +391,7 @@ export function MechanicalOwnerFindingReviewV2({
 
     const selectedAlternatePartner = alternatePartners[finding.id] || "";
     return (
-      <div className="mt-3 max-w-md">
+      <div className="mt-2 max-w-md">
         <label className="block text-xs font-black text-slate-700">
           Choose Partner
           <select
@@ -399,7 +402,7 @@ export function MechanicalOwnerFindingReviewV2({
                 [finding.id]: event.target.value,
               }))
             }
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
           >
             <option value="">Select Partner</option>
             {availablePartners.map((partner) => (
@@ -427,7 +430,7 @@ export function MechanicalOwnerFindingReviewV2({
 
     if (!parts.length) {
       return finding.mechanicalPartsRequired ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
           <span className="font-black">Parts needed:</span> {finding.mechanicalPartsRequired}. Structured part pricing is required before approval.
         </div>
       ) : null;
@@ -437,15 +440,13 @@ export function MechanicalOwnerFindingReviewV2({
       Math.abs(cost.partsHigh - cost.partsLow) > 0.009
         ? `${money(cost.partsLow)}–${money(cost.partsHigh)}`
         : money(cost.partsHigh),
-      cost.purchaseRequiredCount
-        ? `${cost.purchaseRequiredCount} to purchase`
-        : "no purchase parts",
+      cost.purchaseRequiredCount ? `${cost.purchaseRequiredCount} to purchase` : null,
       cost.inStockCount ? `${cost.inStockCount} in stock` : null,
       cost.notNeededCount ? `${cost.notNeededCount} not needed` : null,
     ].filter(Boolean);
 
     return (
-      <div className="mt-4 border-t border-slate-100 pt-3">
+      <div className="mt-3 border-t border-slate-100 pt-2.5">
         <button
           type="button"
           onClick={() =>
@@ -463,7 +464,7 @@ export function MechanicalOwnerFindingReviewV2({
         </button>
 
         {expanded ? (
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {parts.map((part, index) => {
               const price = partPriceLabel(part);
               const disposition = findingApprovalPartDisposition(part);
@@ -476,7 +477,7 @@ export function MechanicalOwnerFindingReviewV2({
               return (
                 <div
                   key={`${part.description}-${index}`}
-                  className="rounded-lg border border-slate-200 bg-white p-3"
+                  className="rounded-lg border border-slate-200 bg-white p-2.5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -492,7 +493,7 @@ export function MechanicalOwnerFindingReviewV2({
                       </div>
                     </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
                     <span
                       className={`text-[10px] font-black ${
                         disposition === "purchase_required"
@@ -516,7 +517,7 @@ export function MechanicalOwnerFindingReviewV2({
                     ) : null}
                   </div>
                   {note ? (
-                    <div className="mt-2 text-[11px] font-semibold leading-4 text-slate-500">
+                    <div className="mt-1.5 text-[11px] font-semibold leading-4 text-slate-500">
                       {note}
                     </div>
                   ) : null}
@@ -529,7 +530,122 @@ export function MechanicalOwnerFindingReviewV2({
     );
   }
 
+  function renderNotFoundFinding(finding: InventoryFindingView) {
+    const clarification = finding.mechanicalOwnerReviewStatus === "clarification_requested";
+    const noteOpen = Boolean(openNotes[finding.id]);
+    const mechanicName = inspector?.displayName || "The mechanic";
+
+    return (
+      <article
+        key={finding.id}
+        className={`rounded-2xl border bg-white px-4 py-3 shadow-sm ${
+          clarification ? "border-amber-300" : "border-emerald-200"
+        }`}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="text-base font-black text-slate-950">{finding.title}</h4>
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-emerald-800">
+                No repair required
+              </span>
+            </div>
+            {finding.description ? (
+              <p className="mt-1 text-sm text-slate-600">{finding.description}</p>
+            ) : null}
+            <div className="mt-1.5 text-[10px] font-bold text-slate-400">
+              {sourceLabel(finding.source)}
+            </div>
+          </div>
+          {clarification ? (
+            <span className="shrink-0 rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-amber-800">
+              Clarification pending
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-2.5 flex items-start gap-2.5 rounded-lg bg-emerald-50 px-3 py-2.5">
+          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-black text-white">✓</span>
+          <div className="min-w-0 text-sm text-emerald-950">
+            <div className="font-black">{mechanicName} did not find this issue during inspection.</div>
+            <div className="mt-0.5 font-semibold text-emerald-800">
+              Accepting this result resolves the finding. No repair, Partner assignment, parts purchase, or spend enters the Work Plan.
+            </div>
+            {finding.mechanicalValidationNotes ? (
+              <div className="mt-1.5 text-emerald-900">
+                <span className="font-black">Mechanic note:</span>{" "}
+                {finding.mechanicalValidationNotes}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {clarification && finding.mechanicalOwnerReviewNotes ? (
+          <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+            <span className="font-black">Question sent:</span>{" "}
+            {finding.mechanicalOwnerReviewNotes}
+          </div>
+        ) : null}
+
+        <div className="mt-2.5 flex flex-col gap-2 border-t border-slate-100 pt-2.5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              {noteOpen ? (
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+                    Owner note / question
+                  </span>
+                  <input
+                    value={notes[finding.id] || ""}
+                    onChange={(event) =>
+                      setNotes((current) => ({ ...current, [finding.id]: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+                    placeholder="Ask what the mechanic checked or what they observed"
+                  />
+                </label>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setOpenNotes((current) => ({ ...current, [finding.id]: true }))}
+                  className="text-xs font-black text-slate-500 hover:text-blue-700"
+                >
+                  + Add note or question
+                </button>
+              )}
+            </div>
+            <button
+              disabled={workingId === finding.id}
+              onClick={() => {
+                if (!(notes[finding.id] || "").trim()) {
+                  setOpenNotes((current) => ({ ...current, [finding.id]: true }));
+                  setMessage("Add your question, then request clarification.");
+                  return;
+                }
+                void review(finding, "clarification");
+              }}
+              className="shrink-0 rounded-lg border border-amber-300 bg-white px-4 py-2 text-xs font-black text-amber-800 hover:bg-amber-50 disabled:opacity-40"
+            >
+              Request Clarification
+            </button>
+          </div>
+          <button
+            disabled={workingId === finding.id}
+            onClick={() => void review(finding, "accept")}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-40"
+          >
+            Accept Inspector Result
+          </button>
+        </div>
+      </article>
+    );
+  }
+
   function renderUnresolvedFinding(finding: InventoryFindingView) {
+    if (finding.mechanicalValidationStatus === "not_found") {
+      return renderNotFoundFinding(finding);
+    }
+
     const clarification = finding.mechanicalOwnerReviewStatus === "clarification_requested";
     const needsDifferentPartner = finding.mechanicalCanPerform === false;
     const selectedAlternatePartner = alternatePartners[finding.id] || "";
@@ -547,17 +663,17 @@ export function MechanicalOwnerFindingReviewV2({
     return (
       <article
         key={finding.id}
-        className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${
+        className={`rounded-2xl border bg-white px-4 py-3 shadow-sm ${
           clarification ? "border-amber-300" : "border-slate-200"
         }`}
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h4 className="text-lg font-black leading-6 text-slate-950">{finding.title}</h4>
+            <h4 className="text-base font-black leading-6 text-slate-950">{finding.title}</h4>
             {finding.description ? (
-              <p className="mt-1 text-sm leading-5 text-slate-600">{finding.description}</p>
+              <p className="mt-0.5 text-sm leading-5 text-slate-600">{finding.description}</p>
             ) : null}
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 text-[10px] font-bold text-slate-400">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[10px] font-bold text-slate-400">
               <span>{sourceLabel(finding.source)}</span>
               <span>·</span>
               <span>{validationLabel(finding.mechanicalValidationStatus)}</span>
@@ -580,13 +696,13 @@ export function MechanicalOwnerFindingReviewV2({
         {renderPartsDisclosure(finding)}
 
         {clarification && finding.mechanicalOwnerReviewNotes ? (
-          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+          <div className="mt-2.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
             <span className="font-black">Question sent:</span>{" "}
             {finding.mechanicalOwnerReviewNotes}
           </div>
         ) : null}
 
-        <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
               {noteOpen ? (
@@ -597,10 +713,7 @@ export function MechanicalOwnerFindingReviewV2({
                   <input
                     value={notes[finding.id] || ""}
                     onChange={(event) =>
-                      setNotes((current) => ({
-                        ...current,
-                        [finding.id]: event.target.value,
-                      }))
+                      setNotes((current) => ({ ...current, [finding.id]: event.target.value }))
                     }
                     className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
                     placeholder="Ask about scope, price, parts, or who will perform the work"
@@ -609,9 +722,7 @@ export function MechanicalOwnerFindingReviewV2({
               ) : (
                 <button
                   type="button"
-                  onClick={() =>
-                    setOpenNotes((current) => ({ ...current, [finding.id]: true }))
-                  }
+                  onClick={() => setOpenNotes((current) => ({ ...current, [finding.id]: true }))}
                   className="text-xs font-black text-slate-500 hover:text-blue-700"
                 >
                   + Add note or question
@@ -634,7 +745,7 @@ export function MechanicalOwnerFindingReviewV2({
             </button>
           </div>
 
-          <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-100 pt-3 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <button
               disabled={workingId === finding.id || !canApprove}
               onClick={() => void review(finding, "accept")}
@@ -670,6 +781,7 @@ export function MechanicalOwnerFindingReviewV2({
 
   function renderResolvedFinding(finding: InventoryFindingView) {
     const accepted = finding.mechanicalOwnerReviewStatus === "accepted";
+    const notFound = finding.mechanicalValidationStatus === "not_found";
     const expanded = Boolean(openResolved[finding.id]);
     const cost = summarizeFindingApprovalCost(
       finding.mechanicalProposedLaborPrice,
@@ -686,25 +798,25 @@ export function MechanicalOwnerFindingReviewV2({
         key={finding.id}
         className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-start gap-2">
-              <span
-                className={`mt-0.5 font-black ${
-                  accepted ? "text-emerald-600" : "text-slate-400"
-                }`}
-              >
-                {accepted ? "✓" : "—"}
-              </span>
-              <div className="min-w-0">
-                <div className="font-black text-slate-900">{finding.title}</div>
-                <div className="mt-0.5 text-xs font-semibold text-slate-500">
-                  {accepted
-                    ? `Approved · ${approvalAuthorizationLabel(cost)}${
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-2">
+            <span
+              className={`mt-0.5 font-black ${
+                accepted ? "text-emerald-600" : "text-slate-400"
+              }`}
+            >
+              {accepted ? "✓" : "—"}
+            </span>
+            <div className="min-w-0">
+              <div className="font-black text-slate-900">{finding.title}</div>
+              <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                {accepted
+                  ? notFound
+                    ? "No repair required · Inspector result accepted"
+                    : `Approved · ${approvalAuthorizationLabel(cost)}${
                         selectedPartner ? ` · ${selectedPartner.displayName}` : ""
                       }`
-                    : "Dismissed"}
-                </div>
+                  : "Dismissed"}
               </div>
             </div>
           </div>
@@ -722,23 +834,37 @@ export function MechanicalOwnerFindingReviewV2({
           </button>
         </div>
         {expanded ? (
-          <div className="mt-3 border-t border-slate-200 pt-3">
+          <div className="mt-2.5 border-t border-slate-200 pt-2.5">
             {finding.description ? (
               <p className="text-sm text-slate-600">{finding.description}</p>
             ) : null}
-            {renderMechanicEvidence(finding)}
-            {renderPartsDisclosure(finding)}
-            {accepted && selectedPartner ? (
-              <div className="mt-3 text-xs font-semibold text-slate-600">
-                <span className="font-black text-slate-800">Partner:</span>{" "}
-                {selectedPartner.displayName}
-                {selectedPartner.secondaryLabel
-                  ? ` · ${selectedPartner.secondaryLabel}`
-                  : ""}
+            {notFound ? (
+              <div className="mt-2 text-sm font-semibold text-emerald-800">
+                {inspector?.displayName || "The mechanic"} did not find the issue during inspection. No work or spend was authorized.
+                {finding.mechanicalValidationNotes ? (
+                  <span className="block mt-1 text-slate-600">
+                    <span className="font-black">Mechanic note:</span>{" "}
+                    {finding.mechanicalValidationNotes}
+                  </span>
+                ) : null}
               </div>
-            ) : null}
+            ) : (
+              <>
+                {renderMechanicEvidence(finding)}
+                {renderPartsDisclosure(finding)}
+                {accepted && selectedPartner ? (
+                  <div className="mt-2 text-xs font-semibold text-slate-600">
+                    <span className="font-black text-slate-800">Partner:</span>{" "}
+                    {selectedPartner.displayName}
+                    {selectedPartner.secondaryLabel
+                      ? ` · ${selectedPartner.secondaryLabel}`
+                      : ""}
+                  </div>
+                ) : null}
+              </>
+            )}
             {finding.mechanicalOwnerReviewNotes ? (
-              <div className="mt-3 text-xs font-semibold text-slate-600">
+              <div className="mt-2 text-xs font-semibold text-slate-600">
                 <span className="font-black text-slate-800">Owner note:</span>{" "}
                 {finding.mechanicalOwnerReviewNotes}
               </div>
@@ -750,8 +876,8 @@ export function MechanicalOwnerFindingReviewV2({
   }
 
   return (
-    <div className="mt-4 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+    <div className="mt-3 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <div className="text-sm font-black text-slate-900">
             {unresolvedFindings.length
@@ -760,8 +886,8 @@ export function MechanicalOwnerFindingReviewV2({
                 } remaining`
               : "Owner review complete"}
           </div>
-          <div className="mt-1 text-xs font-semibold text-slate-500">
-            Review the repair amount and Partner, then approve or ask a question.
+          <div className="mt-0.5 text-xs font-semibold text-slate-500">
+            Approve required work or confirm the mechanic&apos;s no-work result.
           </div>
         </div>
         <span
@@ -777,7 +903,7 @@ export function MechanicalOwnerFindingReviewV2({
 
       {unresolvedFindings.length ? (
         <section>
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <h3 className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">
               Needs your decision
             </h3>
@@ -785,7 +911,7 @@ export function MechanicalOwnerFindingReviewV2({
               {unresolvedFindings.length}
             </span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {unresolvedFindings.map(renderUnresolvedFinding)}
           </div>
         </section>
@@ -793,7 +919,7 @@ export function MechanicalOwnerFindingReviewV2({
 
       {resolvedFindings.length ? (
         <section>
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <h3 className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">
               Resolved
             </h3>
