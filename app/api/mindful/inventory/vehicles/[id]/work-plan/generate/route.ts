@@ -141,6 +141,20 @@ export async function POST(
         })),
     });
 
+    for (const finding of acceptedFindings) {
+      const containingItems = preliminary.items.filter((item) => item.findingIds.includes(finding.id));
+      if (containingItems.length !== 1) {
+        throw new Error(
+          `Accepted finding “${finding.title}” must appear exactly once in the preliminary Work Plan. Regenerate before continuing.`,
+        );
+      }
+      if (containingItems[0].upgradeId) {
+        throw new Error(
+          `Accepted finding “${finding.title}” was combined with an upgrade. Regenerate before continuing so repair authorization remains separate.`,
+        );
+      }
+    }
+
     const preferredPartnerByFindingId = new Map(
       acceptedFindings
         .filter((finding) => finding.ownerPreferredPartnerId)
@@ -193,6 +207,7 @@ export async function POST(
           .map((findingId) => approvalCostByFindingId.get(findingId))
           .filter(Boolean);
         const hasOwnerAuthorizedFindingScope =
+          !item.upgradeId &&
           item.findingIds.length > 0 &&
           linkedApprovedFindings.length === item.findingIds.length &&
           authorizationCosts.length === item.findingIds.length &&
