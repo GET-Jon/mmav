@@ -165,7 +165,7 @@ function applyPartnerTimingModal() {
     '          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">',
     '            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">Quick check</div>',
     '            <h3 id="timing-check-title" className="mt-1 text-xl font-black tracking-[-0.02em] text-slate-950">Double-check your timing</h3>',
-    '            <p className="mt-2 text-sm leading-6 text-slate-600">Your timing is noticeably different from Lot Logic\'s planning estimate. That can be completely fine — we just want to make sure these are the numbers you intended.</p>',
+    '            <p className="mt-2 text-sm leading-6 text-slate-600">Your timing is noticeably different from Lot Logic&apos;s planning estimate. That can be completely fine — we just want to make sure these are the numbers you intended.</p>',
     '            <div className="mt-4 space-y-2">',
     '              {timingCheck.laborComparison ? (',
     '                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">',
