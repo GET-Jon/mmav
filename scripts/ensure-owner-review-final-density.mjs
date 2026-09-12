@@ -33,34 +33,36 @@ if (decisionFunctionStart !== -1 && mechanicEvidenceStart !== -1) {
   const normalCostStart = decisionFunction.lastIndexOf('    const cost = summarizeFindingApprovalCost(');
   if (normalCostStart !== -1) {
     const prefix = decisionFunction.slice(0, normalCostStart);
-    const compactNormal = `    const cost = summarizeFindingApprovalCost(
-      finding.mechanicalProposedLaborPrice,
-      finding.mechanicalSuggestedParts,
-    );
-    const legacyPartsMissing = hasLegacyUnpricedParts(finding);
-    const pricingReady = cost.pricingComplete && !legacyPartsMissing;
-    const performerReady = finding.mechanicalCanPerform !== null;
-
-    return (
-      <section data-owner-review-density="decision-v2" className="mt-2 rounded-lg bg-slate-50/70 px-3 py-2.5">
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
-          <div className={\`text-2xl font-black tracking-tight ${
-            pricingReady && performerReady ? "text-slate-950" : "text-amber-900"
-          }\`}>
-            {pricingReady ? approvalAuthorizationLabel(cost) : "Pricing incomplete"}
-          </div>
-          <div className="pb-0.5 text-sm font-semibold text-slate-600">
-            <span className="font-black text-slate-800">{performerSummary(finding)}</span>
-            {finding.mechanicalLaborHours !== null ? <><span className="text-slate-300"> · </span><span>{finding.mechanicalLaborHours} hr</span></> : null}
-            <span className="text-slate-300"> · </span><span>{money(cost.laborPrice)} labor</span>
-            <span className="text-slate-300"> + </span><span>{partsSpendLabel(finding)}</span>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-`;
+    const compactNormal = [
+      '    const cost = summarizeFindingApprovalCost(',
+      '      finding.mechanicalProposedLaborPrice,',
+      '      finding.mechanicalSuggestedParts,',
+      '    );',
+      '    const legacyPartsMissing = hasLegacyUnpricedParts(finding);',
+      '    const pricingReady = cost.pricingComplete && !legacyPartsMissing;',
+      '    const performerReady = finding.mechanicalCanPerform !== null;',
+      '',
+      '    return (',
+      '      <section data-owner-review-density="decision-v2" className="mt-2 rounded-lg bg-slate-50/70 px-3 py-2.5">',
+      '        <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">',
+      '          <div className={`text-2xl font-black tracking-tight ${',
+      '            pricingReady && performerReady ? "text-slate-950" : "text-amber-900"',
+      '          }`}>',
+      '            {pricingReady ? approvalAuthorizationLabel(cost) : "Pricing incomplete"}',
+      '          </div>',
+      '          <div className="pb-0.5 text-sm font-semibold text-slate-600">',
+      '            <span className="font-black text-slate-800">{performerSummary(finding)}</span>',
+      '            {finding.mechanicalLaborHours !== null ? <><span className="text-slate-300"> · </span><span>{finding.mechanicalLaborHours} hr</span></> : null}',
+      '            <span className="text-slate-300"> · </span><span>{money(cost.laborPrice)} labor</span>',
+      '            <span className="text-slate-300"> + </span><span>{partsSpendLabel(finding)}</span>',
+      '          </div>',
+      '        </div>',
+      '      </section>',
+      '    );',
+      '  }',
+      '',
+      '',
+    ].join('\n');
     source = source.slice(0, decisionFunctionStart) + prefix + compactNormal + source.slice(mechanicEvidenceStart);
     changed = true;
   }
