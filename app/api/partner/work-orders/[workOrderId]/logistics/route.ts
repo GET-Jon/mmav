@@ -14,8 +14,11 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
     const kind = String(body.kind || "");
     const action = String(body.action || "");
     const note = body.note == null ? null : String(body.note).trim().slice(0, 1000);
-    if (!['location', 'parts'].includes(kind) || !['confirm', 'adjust'].includes(action)) {
+    if (!["location", "parts"].includes(kind) || !["confirm", "adjust", "set"].includes(action)) {
       return NextResponse.json({ error: "Invalid logistics action." }, { status: 400 });
+    }
+    if (action === "set" && kind !== "location") {
+      return NextResponse.json({ error: "Only a work location can be set directly." }, { status: 400 });
     }
 
     const admin = createSupabaseAdminClient();
@@ -38,11 +41,15 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
       return NextResponse.json({ error: "You are not the assigned partner for this Work Order." }, { status: 403 });
     }
 
+    if ((action === "adjust" || action === "set") && !note) {
+      return NextResponse.json({ error: kind === "location" ? "Enter where this work will be performed." : "Tell us what is wrong with the parts." }, { status: 400 });
+    }
+
     const now = new Date().toISOString();
     const patch = kind === "location"
       ? {
-          partner_location_confirmation_status: action === "confirm" ? "confirmed" : "adjustment_requested",
-          partner_location_request: action === "adjust" ? note : null,
+          partner_location_confirmation_status: action === "confirm" || action === "set" ? "confirmed" : "adjustment_requested",
+          partner_location_request: action === "set" || action === "adjust" ? note : null,
           updated_at: now,
           updated_by: user.id,
         }
@@ -53,10 +60,6 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
           updated_by: user.id,
         };
 
-    if (action === "adjust" && !note) {
-      return NextResponse.json({ error: kind === "location" ? "Tell us what location needs to change." : "Tell us what is wrong with the parts." }, { status: 400 });
-    }
-
     const { error: updateError } = await admin
       .from("mindful_inventory_work_orders")
       .update(patch)
@@ -64,7 +67,12 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
       .eq("assigned_partner_id", partner.id);
     if (updateError) throw new Error(updateError.message);
 
-    return NextResponse.json({ ok: true, kind, status: action === "confirm" ? "confirmed" : "adjustment_requested" });
+    return NextResponse.json({
+      ok: true,
+      kind,
+      status: action === "confirm" || action === "set" ? "confirmed" : "adjustment_requested",
+      location: kind === "location" && action === "set" ? note : null,
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update logistics confirmation." }, { status: 500 });
   }
