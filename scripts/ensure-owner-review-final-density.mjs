@@ -114,7 +114,8 @@ function applyPartnerTimingModal() {
 
   const stateAnchor = '  const [availabilityText, setAvailabilityText] = useState<Record<string, string>>({});';
   if (!source.includes(stateAnchor)) {
-    throw new Error("Could not find Partner Work timing-modal state anchor.");
+    console.log("Partner timing modal skipped: state anchor was not found.");
+    return false;
   }
   source = source.replace(
     stateAnchor,
@@ -124,7 +125,8 @@ function applyPartnerTimingModal() {
   const warningStart = source.indexOf('      if (response.status === 409 && data.requiresTimingConfirmation && !confirmed) {');
   const warningEnd = warningStart === -1 ? -1 : source.indexOf('      if (!response.ok)', warningStart);
   if (warningStart === -1 || warningEnd === -1) {
-    throw new Error("Could not find the Partner timing browser-confirm block to replace.");
+    console.log("Partner timing modal skipped: timing confirmation block was not found.");
+    return false;
   }
 
   const plainLanguageWarning = [
@@ -153,13 +155,16 @@ function applyPartnerTimingModal() {
   ].join("\n");
   source = source.slice(0, warningStart) + plainLanguageWarning + source.slice(warningEnd);
 
-  const sectionAnchor = '    return <section key={work.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">';
-  if (!source.includes(sectionAnchor)) {
-    throw new Error("Could not find Partner Work card anchor for timing modal.");
+  const sectionStart = source.indexOf('    return <section key={work.id}');
+  const sectionOpenEnd = sectionStart === -1 ? -1 : source.indexOf('>', sectionStart);
+  if (sectionStart === -1 || sectionOpenEnd === -1) {
+    console.log("Partner timing modal skipped: work card opening section was not found.");
+    return false;
   }
 
-  const modal = [
-    sectionAnchor,
+  const sectionOpen = source.slice(sectionStart, sectionOpenEnd + 1);
+  const modalLines = [
+    sectionOpen,
     '      {timingCheck?.workId === work.id ? (',
     '        <div data-partner-timing-modal="plain-language-v1" className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="timing-check-title">',
     '          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">',
@@ -189,8 +194,8 @@ function applyPartnerTimingModal() {
     '        </div>',
     '      ) : null}',
   ].join("\n");
-  source = source.replace(sectionAnchor, modal);
 
+  source = source.slice(0, sectionStart) + modalLines + source.slice(sectionOpenEnd + 1);
   writeFileSync(path, source, "utf8");
   console.log("Replaced Partner timing browser confirmation with plain-language Lot Logic modal.");
   return true;
