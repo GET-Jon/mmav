@@ -36,7 +36,7 @@ if (labelIndex === -1) {
 }
 const locationStart = source.lastIndexOf('<div className="rounded-xl border border-slate-200 p-4">', labelIndex);
 const scheduleLabelIndex = source.indexOf('>4 · Schedule</div>', labelIndex);
-const scheduleStart = scheduleLabelIndex === -1 ? -1 : source.lastIndexOf('<div className=', scheduleLabelIndex);
+const scheduleStart = scheduleLabelIndex === -1 ? -1 : source.lastIndexOf('<div className={`rounded-xl border p-4', scheduleLabelIndex);
 if (locationStart === -1 || scheduleStart === -1 || scheduleStart <= locationStart) {
   console.log("Partner direct location selection skipped: Location card boundaries not found.");
   process.exit(0);
