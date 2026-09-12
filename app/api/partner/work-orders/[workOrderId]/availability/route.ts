@@ -5,6 +5,10 @@ import { createSupabaseServerAuthClient } from "@/lib/supabase/server-auth";
 import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";
 
 const PARTS_ETA_BUFFER_MINUTES = 120;
+const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+type DayKey = (typeof DAY_KEYS)[number];
+type StandardHours = Partial<Record<DayKey, { enabled?: boolean; start?: string; end?: string }>>;
+type Segment = { startAt: string; endAt: string };
 
 function overlaps(startA: number, endA: number, startB: number, endB: number) {
   return startA < endB && endA > startB;
@@ -19,33 +23,87 @@ function fromLocal(year: number, month: number, day: number, hour: number, minut
   return new Date(Date.UTC(year, month, day, hour, minute) + offsetMinutes * 60_000);
 }
 
-type Segment = { startAt: string; endAt: string };
+function minutesFromClock(value: string | undefined, fallback: number) {
+  if (!value || !/^\d{1,2}:\d{2}$/.test(value)) return fallback;
+  const [hour, minute] = value.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+  return hour * 60 + minute;
+}
 
-function laborSegments(startValue: Date, laborMinutes: number, offsetMinutes: number): Segment[] {
+function workWindow(standardHours: StandardHours | null | undefined, weekday: number) {
+  const key = DAY_KEYS[weekday];
+  const configured = standardHours?.[key];
+  if (configured) {
+    if (configured.enabled !== true) return null;
+    const startMinute = minutesFromClock(configured.start, 9 * 60);
+    const endMinute = minutesFromClock(configured.end, 17 * 60);
+    return endMinute > startMinute ? { startMinute, endMinute } : null;
+  }
+  if (weekday === 0 || weekday === 6) return null;
+  return { startMinute: 9 * 60, endMinute: 17 * 60 };
+}
+
+function nextWorkingStart(cursor: Date, offsetMinutes: number, standardHours: StandardHours | null | undefined) {
+  for (let add = 0; add < 8; add += 1) {
+    const base = localParts(new Date(cursor.getTime() + add * 24 * 60 * 60_000), offsetMinutes);
+    const window = workWindow(standardHours, base.weekday);
+    if (!window) continue;
+    return fromLocal(base.year, base.month, base.day, Math.floor(window.startMinute / 60), window.startMinute % 60, offsetMinutes);
+  }
+  return null;
+}
+
+function laborSegments(startValue: Date, laborMinutes: number, offsetMinutes: number, standardHours: StandardHours | null | undefined): Segment[] {
   let remaining = Math.max(1, Math.round(laborMinutes));
   let cursor = new Date(startValue);
   const segments: Segment[] = [];
   let guard = 0;
+
   while (remaining > 0 && guard < 30) {
     guard += 1;
     let p = localParts(cursor, offsetMinutes);
-    if (p.weekday === 0 || p.weekday === 6 || p.hour >= 17) {
-      const daysToAdd = p.weekday === 5 ? 3 : p.weekday === 6 ? 2 : 1;
-      cursor = fromLocal(p.year, p.month, p.day + daysToAdd, 8, 0, offsetMinutes);
+    let window = workWindow(standardHours, p.weekday);
+
+    if (!window) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
       continue;
     }
-    if (p.hour < 8) {
-      cursor = fromLocal(p.year, p.month, p.day, 8, 0, offsetMinutes);
+
+    const currentMinute = p.hour * 60 + p.minute;
+    if (currentMinute < window.startMinute) {
+      cursor = fromLocal(p.year, p.month, p.day, Math.floor(window.startMinute / 60), window.startMinute % 60, offsetMinutes);
       p = localParts(cursor, offsetMinutes);
+    } else if (currentMinute >= window.endMinute) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+      continue;
     }
-    const available = Math.max(0, 17 * 60 - (p.hour * 60 + p.minute));
-    if (!available) { cursor = fromLocal(p.year, p.month, p.day + 1, 8, 0, offsetMinutes); continue; }
+
+    window = workWindow(standardHours, p.weekday);
+    if (!window) continue;
+    const minuteNow = p.hour * 60 + p.minute;
+    const available = Math.max(0, window.endMinute - minuteNow);
+    if (!available) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+      continue;
+    }
+
     const used = Math.min(remaining, available);
     const end = new Date(cursor.getTime() + used * 60_000);
     segments.push({ startAt: cursor.toISOString(), endAt: end.toISOString() });
     remaining -= used;
-    cursor = fromLocal(p.year, p.month, p.day + 1, 8, 0, offsetMinutes);
+    if (remaining > 0) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+    }
   }
+
   return remaining > 0 ? [] : segments;
 }
 
@@ -71,11 +129,12 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
 
     const { data: partner, error: partnerError } = await admin
       .from("mindful_inventory_partners")
-      .select("id,user_id,active,company_id")
+      .select("id,user_id,active,company_id,standard_hours")
       .eq("id", work.assigned_partner_id)
       .maybeSingle();
     if (partnerError) throw new Error(partnerError.message);
     if (!partner || !partner.active || partner.user_id !== user.id) return NextResponse.json({ error: "You are not the assigned partner for this Work Order." }, { status: 403 });
+    const standardHours = (partner.standard_hours || null) as StandardHours | null;
 
     const { data: partRows, error: partsError } = await admin
       .from("mindful_inventory_work_order_parts")
@@ -118,7 +177,7 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
       if (!Number.isFinite(start.getTime()) || start.getTime() > horizonEnd.getTime()) return [];
       const otherLaborRaw = Number(row.estimated_labor_minutes ?? 60);
       const otherLabor = Number.isFinite(otherLaborRaw) && otherLaborRaw > 0 ? otherLaborRaw : 60;
-      return laborSegments(start, otherLabor, offsetMinutes).map((segment) => ({
+      return laborSegments(start, otherLabor, offsetMinutes, standardHours).map((segment) => ({
         start: new Date(segment.startAt).getTime(), end: new Date(segment.endAt).getTime(),
         vehicleId: row.vehicle_id as string, partnerId: row.assigned_partner_id as string | null, resourceId: row.resource_id as string | null,
       }));
@@ -134,18 +193,20 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
     for (let dayOffset = 0; dayOffset < 14 && suggestions.length < 6; dayOffset += 1) {
       const baseNoon = fromLocal(firstLocal.year, firstLocal.month, firstLocal.day + dayOffset, 12, 0, offsetMinutes);
       const p = localParts(baseNoon, offsetMinutes);
-      if (p.weekday === 0 || p.weekday === 6) continue;
+      const window = workWindow(standardHours, p.weekday);
+      if (!window) continue;
       const dayKey = `${p.year}-${p.month}-${p.day}`;
-      for (let minuteOfDay = 8 * 60; minuteOfDay < 17 * 60 && suggestions.length < 6; minuteOfDay += 30) {
+      for (let minuteOfDay = window.startMinute; minuteOfDay < window.endMinute && suggestions.length < 6; minuteOfDay += 30) {
         const start = fromLocal(p.year, p.month, p.day, Math.floor(minuteOfDay / 60), minuteOfDay % 60, offsetMinutes);
         if (start.getTime() < firstCandidate.getTime()) continue;
         if (etaFloor && !parts.readyForExecution && start.getTime() < etaFloor) continue;
         const daySelections = selectedByDay.get(dayKey) || [];
         if (daySelections.length >= 2 || daySelections.some((selected) => Math.abs(start.getTime() - selected) < 2 * 60 * 60_000)) continue;
-        const segments = laborSegments(start, laborMinutes, offsetMinutes);
+        const segments = laborSegments(start, laborMinutes, offsetMinutes, standardHours);
         if (!segments.length) continue;
         const conflict = segments.some((segment) => busy.some((item) => {
-          const segmentStart = new Date(segment.startAt).getTime(); const segmentEnd = new Date(segment.endAt).getTime();
+          const segmentStart = new Date(segment.startAt).getTime();
+          const segmentEnd = new Date(segment.endAt).getTime();
           if (!overlaps(segmentStart, segmentEnd, item.start, item.end)) return false;
           if (item.vehicleId === work.vehicle_id) return true;
           if (item.partnerId === partner.id) return true;
@@ -162,7 +223,7 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
     if (work.parts_review_status !== "resolved") guidance.push("parts review pending");
     else if (!parts.readyForExecution) guidance.push(parts.latestEtaAt ? "suggestions begin after the latest known parts ETA + 2 hr receiving buffer" : "parts ETA unknown · suggestions use known availability constraints only");
     if (!["approved", "not_required"].includes(work.partner_estimate_status || "")) guidance.push("labor quote still pending");
-    if (laborMinutes > 9 * 60) guidance.push(`${Math.round((laborMinutes / 60) * 10) / 10} labor hr allocated across workdays`);
+    if (laborMinutes > 8 * 60) guidance.push(`${Math.round((laborMinutes / 60) * 10) / 10} labor hr allocated across Partner workdays`);
     if (elapsedMinutes > laborMinutes) guidance.push(`${Math.round((elapsedMinutes / 60) * 10) / 10} hr elapsed turnaround tracked separately`);
 
     return NextResponse.json({ laborMinutes, elapsedMinutes, suggestions, guidance: guidance.join(" · ") || null, partsLatestEtaAt: parts.latestEtaAt, partsEtaBufferMinutes: PARTS_ETA_BUFFER_MINUTES });
