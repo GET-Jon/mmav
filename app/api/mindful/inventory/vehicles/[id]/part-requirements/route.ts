@@ -32,7 +32,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const { data: requirement, error: requirementError } = await access.supabase
       .from("mindful_inventory_part_requirements")
-      .select("id,company_id,vehicle_id,work_order_id,linked_part_id,description,quantity,part_number,requirement_status,fulfillment_method")
+      .select("id,company_id,vehicle_id,work_order_id,linked_part_id,description,quantity,part_number,requirement_status,fulfillment_method,partner_offer_unit_price")
       .eq("id", requirementId)
       .eq("vehicle_id", vehicleId)
       .eq("company_id", access.company.companyId)
@@ -89,6 +89,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     let linkedPartId = requirement.linked_part_id as string | null;
     if (normalizedStatus === "required" && requirement.work_order_id && fulfillmentMethod !== "not_required") {
+      const approvedPartnerPrice = fulfillmentMethod === "partner_supplied" ? optionalNumber(requirement.partner_offer_unit_price) : null;
       if (!linkedPartId) {
         const dependencyResolution = fulfillmentMethod === "in_stock" ? "in_stock" : fulfillmentMethod === "partner_supplied" ? "partner_supplied" : fulfillmentMethod === "customer_supplied" ? "customer_supplied" : null;
         const { data: part, error: partError } = await access.supabase.from("mindful_inventory_work_order_parts").insert({
@@ -101,6 +102,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           dependency_resolution: dependencyResolution,
           dependency_resolved_at: dependencyResolution ? now : null,
           dependency_resolved_by: dependencyResolution ? access.userId : null,
+          quoted_unit_price: approvedPartnerPrice,
+          supplier: fulfillmentMethod === "partner_supplied" ? "Partner" : null,
           notes: note,
           created_by: access.userId,
           updated_by: access.userId,
@@ -109,6 +112,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         linkedPartId = part.id;
         const { error: linkError } = await access.supabase.from("mindful_inventory_part_requirements").update({ linked_part_id: linkedPartId }).eq("id", requirement.id);
         if (linkError) throw new Error(linkError.message);
+      } else if (approvedPartnerPrice !== null) {
+        const { error: priceError } = await access.supabase.from("mindful_inventory_work_order_parts").update({
+          quoted_unit_price: approvedPartnerPrice,
+          supplier: "Partner",
+          updated_by: access.userId,
+          updated_at: now,
+        }).eq("id", linkedPartId);
+        if (priceError) throw new Error(priceError.message);
       }
     }
 
@@ -129,6 +140,29 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     });
     if (messageError) throw new Error(messageError.message);
 
+    let partsReviewResolved = false;
+    if (requirement.work_order_id) {
+      const { data: remainingRequirements, error: remainingError } = await access.supabase
+        .from("mindful_inventory_part_requirements")
+        .select("requirement_status,fulfillment_method")
+        .eq("work_order_id", requirement.work_order_id);
+      if (remainingError) throw new Error(remainingError.message);
+      partsReviewResolved = (remainingRequirements || []).every((item) =>
+        item.requirement_status === "not_required" ||
+        (item.requirement_status === "required" && Boolean(item.fulfillment_method) && item.fulfillment_method !== "not_required"),
+      );
+      if (partsReviewResolved) {
+        const { error: reviewError } = await access.supabase.from("mindful_inventory_work_orders").update({
+          parts_review_status: "resolved",
+          parts_reviewed_at: now,
+          parts_reviewed_by_user_id: access.userId,
+          updated_by: access.userId,
+          updated_at: now,
+        }).eq("id", requirement.work_order_id);
+        if (reviewError) throw new Error(reviewError.message);
+      }
+    }
+
     await access.supabase.from("mindful_inventory_history").insert({
       company_id: access.company.companyId,
       vehicle_id: vehicleId,
@@ -137,10 +171,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       entity_id: requirement.id,
       actor_user_id: access.userId,
       summary: `${requirement.description}: ${decisionLabel}.`,
-      metadata: { requirementStatus: normalizedStatus, fulfillmentMethod, sourcingOwner: normalizedOwner, linkedPartId },
+      metadata: { requirementStatus: normalizedStatus, fulfillmentMethod, sourcingOwner: normalizedOwner, linkedPartId, partsReviewResolved },
     });
 
-    return NextResponse.json({ ok: true, requirementId: requirement.id, linkedPartId });
+    return NextResponse.json({ ok: true, requirementId: requirement.id, linkedPartId, partsReviewResolved });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update part requirement." }, { status: 500 });
   }
