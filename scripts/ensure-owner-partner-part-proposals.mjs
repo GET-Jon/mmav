@@ -53,12 +53,12 @@ function patchActiveWork() {
   }
 
   source = source.replace(
-    '  partSuggestions: PartSearchSuggestion[];\n}) {',
-    '  partSuggestions: PartSearchSuggestion[];\n  partRequirements: PartRequirementView[];\n}) {',
-  );
-  source = source.replace(
     'export function InventoryActiveWork({ vehicleId, vehicle: _vehicle, workOrders, performerOptions, locationOptions, resourceOptions, parts, partSuggestions }: {',
     'export function InventoryActiveWork({ vehicleId, vehicle: _vehicle, workOrders, performerOptions, locationOptions, resourceOptions, parts, partSuggestions, partRequirements }: {',
+  );
+  source = source.replace(
+    '  partSuggestions: PartSearchSuggestion[];\n}) {',
+    '  partSuggestions: PartSearchSuggestion[];\n  partRequirements: PartRequirementView[];\n}) {',
   );
 
   const jobPartsLine = '            const jobParts = parts.filter((part) => part.workOrderId === work.id && part.status !== "cancelled");';
@@ -74,8 +74,6 @@ function patchActiveWork() {
     'detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : `${work.pendingPartCount} pending`) : pendingRequirements.length ? `${pendingRequirements.length} proposal${pendingRequirements.length === 1 ? "" : "s"}` : "Review"}',
   );
 
-  const oldPartsBlock = '{(partsActive || editing) ? <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase text-slate-400">1 · Parts</div><div className="mt-1 text-xs font-bold text-slate-700">{work.partsReviewComplete ? (work.partsReadyForExecution ? "Parts resolved and ready." : partsPendingLabel(work)) : "Determine what is needed and resolve the source for every dependency."}</div></div><div className="flex flex-wrap gap-2"><button onClick={() => setPartsWorkOrderId(work.id)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">{work.partsReviewComplete ? "Manage Parts" : "Review Parts"}</button>{!work.partsReviewComplete && jobParts.length === 0 ? <button disabled={workingId === work.id} onClick={() => void confirmNoParts(work)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">No Parts Required</button> : null}</div></div></div> : null}';
-
   const newPartsBlock = [
     '{(partsActive || editing) ? <div data-owner-partner-proposal="true" className="mt-3 rounded-lg border border-slate-200 bg-white p-3">',
     '  <div className="mb-2 flex flex-wrap items-center justify-between gap-3">',
@@ -86,12 +84,13 @@ function patchActiveWork() {
     '</div> : null}',
   ].join('\n');
 
-  if (source.includes(oldPartsBlock)) {
-    source = source.replace(oldPartsBlock, newPartsBlock);
-  } else {
-    console.warn("Owner Partner proposal pass: Parts setup block anchor not found; leaving existing block unchanged.");
+  const partsStart = source.indexOf('{(partsActive || editing) ? <div');
+  const partnerStart = source.indexOf('{(partnerActive || editing)', partsStart);
+  if (partsStart === -1 || partnerStart === -1) {
+    throw new Error("Owner Partner proposal pass could not locate the Parts/Partner setup boundaries.");
   }
 
+  source = source.slice(0, partsStart) + newPartsBlock + '\n\n                      ' + source.slice(partnerStart);
   writeFileSync(path, source, "utf8");
 }
 
