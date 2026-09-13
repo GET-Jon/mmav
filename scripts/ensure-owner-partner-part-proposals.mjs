@@ -84,10 +84,20 @@ function patchActiveWork() {
     '</div> : null}',
   ].join('\n');
 
-  const partsStart = source.indexOf('{(partsActive || editing) ? <div');
-  const partnerStart = source.indexOf('{(partnerActive || editing)', partsStart);
-  if (partsStart === -1 || partnerStart === -1) {
-    throw new Error("Owner Partner proposal pass could not locate the Parts/Partner setup boundaries.");
+  const partsLabel = '>1 · Parts</div>';
+  const partnerLabel = '>2 · Partner</div>';
+  const partsLabelIndex = source.indexOf(partsLabel);
+  const partnerLabelIndex = source.indexOf(partnerLabel, partsLabelIndex + partsLabel.length);
+
+  if (partsLabelIndex === -1 || partnerLabelIndex === -1) {
+    throw new Error("Owner Partner proposal pass could not locate the Parts/Partner step labels.");
+  }
+
+  const partsStart = source.lastIndexOf('{(', partsLabelIndex);
+  const partnerStart = source.lastIndexOf('{(', partnerLabelIndex);
+
+  if (partsStart === -1 || partnerStart === -1 || partnerStart <= partsStart) {
+    throw new Error("Owner Partner proposal pass could not locate the Parts/Partner conditional boundaries.");
   }
 
   source = source.slice(0, partsStart) + newPartsBlock + '\n\n                      ' + source.slice(partnerStart);
