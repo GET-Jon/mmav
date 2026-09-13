@@ -1,109 +1,68 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-function patchWorkPage() {
-  const path = "app/mindful/inventory/[id]/work/page.tsx";
-  let source = readFileSync(path, "utf8");
+const path = "app/mindful/inventory/[id]/work/page.tsx";
+let source = readFileSync(path, "utf8");
 
-  if (!source.includes('getInventoryPartRequirements')) {
-    source = source.replace(
-      'import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";',
-      'import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";\nimport { getInventoryPartRequirements } from "@/lib/mindful-inventory/part-requirements";',
-    );
-  }
-
+if (!source.includes('OwnerPartRequirementReview')) {
   source = source.replace(
-    'const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges] = await Promise.all([',
-    'const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges, partRequirements] = await Promise.all([',
+    'import { PartnerEstimateReviewPanel, type PartnerEstimateReviewItem } from "@/components/mindful-inventory/partner-estimate-review-panel";',
+    'import { PartnerEstimateReviewPanel, type PartnerEstimateReviewItem } from "@/components/mindful-inventory/partner-estimate-review-panel";\nimport { OwnerPartRequirementReview } from "@/components/mindful-inventory/owner-part-requirement-review";',
   );
-
-  const scheduleLoader = '    getPartnerScheduleChanges(access.supabase, vehicle.id),';
-  if (source.includes(scheduleLoader) && !source.includes('getInventoryPartRequirements(access.supabase, access.company.companyId, vehicle.id)')) {
-    source = source.replace(
-      scheduleLoader,
-      scheduleLoader + '\n    getInventoryPartRequirements(access.supabase, access.company.companyId, vehicle.id),',
-    );
-  }
-
-  if (!source.includes('partRequirements={partRequirements}')) {
-    source = source.replace(
-      '      partSuggestions={partSuggestions}\n',
-      '      partSuggestions={partSuggestions}\n      partRequirements={partRequirements}\n',
-    );
-  }
-
-  writeFileSync(path, source, "utf8");
 }
 
-function patchActiveWork() {
-  const path = "components/mindful-inventory/inventory-active-work-v6.tsx";
-  let source = readFileSync(path, "utf8");
-  if (source.includes('data-owner-partner-proposal="true"')) return;
-
-  if (!source.includes('OwnerPartRequirementReview')) {
-    source = source.replace(
-      'import { WorkOrderPartsModal } from "@/components/mindful-inventory/work-order-parts-modal";',
-      'import { WorkOrderPartsModal } from "@/components/mindful-inventory/work-order-parts-modal";\nimport { OwnerPartRequirementReview } from "@/components/mindful-inventory/owner-part-requirement-review";',
-    );
-  }
-  if (!source.includes('type { PartRequirementView }')) {
-    source = source.replace(
-      'import type { PartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";',
-      'import type { PartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";\nimport type { PartRequirementView } from "@/lib/mindful-inventory/part-requirements";',
-    );
-  }
-
+if (!source.includes('getInventoryPartRequirements')) {
   source = source.replace(
-    'export function InventoryActiveWork({ vehicleId, vehicle: _vehicle, workOrders, performerOptions, locationOptions, resourceOptions, parts, partSuggestions }: {',
-    'export function InventoryActiveWork({ vehicleId, vehicle: _vehicle, workOrders, performerOptions, locationOptions, resourceOptions, parts, partSuggestions, partRequirements }: {',
+    'import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";',
+    'import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";\nimport { getInventoryPartRequirements } from "@/lib/mindful-inventory/part-requirements";',
   );
-  source = source.replace(
-    '  partSuggestions: PartSearchSuggestion[];\n}) {',
-    '  partSuggestions: PartSearchSuggestion[];\n  partRequirements: PartRequirementView[];\n}) {',
-  );
+}
 
-  const jobPartsLine = '            const jobParts = parts.filter((part) => part.workOrderId === work.id && part.status !== "cancelled");';
-  if (source.includes(jobPartsLine) && !source.includes('const pendingRequirements = partRequirements.filter')) {
-    source = source.replace(
-      jobPartsLine,
-      jobPartsLine + '\n            const pendingRequirements = partRequirements.filter((requirement) => requirement.workOrderId === work.id && requirement.requirementStatus === "suggested");',
-    );
+source = source.replace(
+  'const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges] = await Promise.all([',
+  'const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges, partRequirements] = await Promise.all([',
+);
+
+const scheduleLoader = '    getPartnerScheduleChanges(access.supabase, vehicle.id),';
+if (source.includes(scheduleLoader) && !source.includes('getInventoryPartRequirements(access.supabase, access.company.companyId, vehicle.id)')) {
+  source = source.replace(
+    scheduleLoader,
+    scheduleLoader + '\n    getInventoryPartRequirements(access.supabase, access.company.companyId, vehicle.id),',
+  );
+}
+
+const suggestionsLine = '  const partSuggestions = workOrders.filter((work) => !["complete", "cancelled"].includes(work.status)).map((work) => buildPartSearchSuggestion(vehicle, work));';
+if (source.includes(suggestionsLine) && !source.includes('const pendingPartnerPartRequirements')) {
+  source = source.replace(
+    suggestionsLine,
+    suggestionsLine + '\n  const pendingPartnerPartRequirements = partRequirements.filter((requirement) => requirement.requirementStatus === "suggested" && Boolean(requirement.suggestedByPartnerId));',
+  );
+}
+
+source = source.replace(/\n\s*partRequirements=\{partRequirements\}/g, '');
+
+if (!source.includes('data-owner-partner-proposals-panel="true"')) {
+  const inventoryAnchor = '    <InventoryActiveWork';
+  if (!source.includes(inventoryAnchor)) {
+    throw new Error("Owner Partner proposal pass could not locate InventoryActiveWork on the Work page.");
   }
 
-  source = source.replace(
-    'detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : `${work.pendingPartCount} pending`) : "Review"}',
-    'detail={work.partsReviewComplete ? (work.partsReadyForExecution ? (jobParts.length ? "Ready" : "None required") : `${work.pendingPartCount} pending`) : pendingRequirements.length ? `${pendingRequirements.length} proposal${pendingRequirements.length === 1 ? "" : "s"}` : "Review"}',
-  );
-
-  const newPartsBlock = [
-    '{(partsActive || editing) ? <div data-owner-partner-proposal="true" className="mt-3 rounded-lg border border-slate-200 bg-white p-3">',
-    '  <div className="mb-2 flex flex-wrap items-center justify-between gap-3">',
-    '    <div><div className="text-[10px] font-black uppercase text-slate-400">1 · Parts</div><div className="mt-1 text-xs font-bold text-slate-700">{work.partsReviewComplete ? (work.partsReadyForExecution ? "Parts resolved and ready." : partsPendingLabel(work)) : pendingRequirements.length ? "Review the Partner proposal below." : "Determine what is needed and resolve the source for every dependency."}</div></div>',
-    '    {pendingRequirements.length === 0 ? <div className="flex flex-wrap gap-2"><button onClick={() => setPartsWorkOrderId(work.id)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">{work.partsReviewComplete ? "Manage Parts" : "Review Parts"}</button>{!work.partsReviewComplete && jobParts.length === 0 ? <button disabled={workingId === work.id} onClick={() => void confirmNoParts(work)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700">No Parts Required</button> : null}</div> : null}',
-    '  </div>',
-    '  {pendingRequirements.length ? <div className="space-y-2">{pendingRequirements.map((requirement) => <OwnerPartRequirementReview key={requirement.id} vehicleId={vehicleId} requirement={requirement} />)}</div> : null}',
-    '</div> : null}',
+  const panel = [
+    '    {pendingPartnerPartRequirements.length ? <section data-owner-partner-proposals-panel="true" className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 shadow-sm">',
+    '      <div className="mb-3">',
+    '        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-800">Owner decision required</div>',
+    '        <div className="mt-1 text-base font-black text-slate-950">Partner parts awaiting your review</div>',
+    '        <div className="mt-1 text-xs font-semibold text-slate-600">Respond to the Partner\'s actual part proposal here. The Execution Plan will update after your decision.</div>',
+    '      </div>',
+    '      <div className="space-y-3">{pendingPartnerPartRequirements.map((requirement) => <div key={requirement.id}>',
+    '        <div className="mb-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">{requirement.workTitle}</div>',
+    '        <OwnerPartRequirementReview vehicleId={vehicle.id} requirement={requirement} />',
+    '      </div>)}</div>',
+    '    </section> : null}',
+    '',
   ].join('\n');
 
-  const partsLabel = '>1 · Parts</div>';
-  const partnerLabel = '>2 · Partner</div>';
-  const partsLabelIndex = source.indexOf(partsLabel);
-  const partnerLabelIndex = source.indexOf(partnerLabel, partsLabelIndex + partsLabel.length);
-
-  if (partsLabelIndex === -1 || partnerLabelIndex === -1) {
-    throw new Error("Owner Partner proposal pass could not locate the Parts/Partner step labels.");
-  }
-
-  const partsStart = source.lastIndexOf('{(', partsLabelIndex);
-  const partnerStart = source.lastIndexOf('{(', partnerLabelIndex);
-
-  if (partsStart === -1 || partnerStart === -1 || partnerStart <= partsStart) {
-    throw new Error("Owner Partner proposal pass could not locate the Parts/Partner conditional boundaries.");
-  }
-
-  source = source.slice(0, partsStart) + newPartsBlock + '\n\n                      ' + source.slice(partnerStart);
-  writeFileSync(path, source, "utf8");
+  source = source.replace(inventoryAnchor, panel + inventoryAnchor);
 }
 
-patchWorkPage();
-patchActiveWork();
-console.log("Owner Execution Plan now surfaces pending Partner part proposals directly.");
+writeFileSync(path, source, "utf8");
+console.log("Owner Work page now surfaces pending Partner part proposals without rewriting Active Work JSX.");
