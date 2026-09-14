@@ -33,12 +33,27 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!vehicle) return NextResponse.json({ error: "Inventory vehicle not found." }, { status: 404 });
 
     if (action === "no_parts_required") {
-      const { count, error: countError } = await access.supabase
-        .from("mindful_inventory_work_order_parts")
-        .select("id", { count: "exact", head: true })
-        .eq("work_order_id", workOrderId)
-        .neq("status", "cancelled");
+      const [{ count, error: countError }, { data: requirementRows, error: requirementsError }] = await Promise.all([
+        access.supabase
+          .from("mindful_inventory_work_order_parts")
+          .select("id", { count: "exact", head: true })
+          .eq("work_order_id", workOrderId)
+          .neq("status", "cancelled"),
+        access.supabase
+          .from("mindful_inventory_part_requirements")
+          .select("requirement_status,fulfillment_method")
+          .eq("work_order_id", workOrderId),
+      ]);
       if (countError) throw new Error(countError.message);
+      if (requirementsError) throw new Error(requirementsError.message);
+
+      const unresolvedRequirements = (requirementRows || []).filter((item) =>
+        item.requirement_status === "suggested" ||
+        (item.requirement_status === "required" && !item.fulfillment_method),
+      );
+      if (unresolvedRequirements.length > 0) {
+        return NextResponse.json({ error: "Resolve the pending part proposal before marking this Work Order as no parts required." }, { status: 409 });
+      }
       if ((count || 0) > 0) {
         return NextResponse.json({ error: "Resolve the tracked part dependencies before completing Parts Review." }, { status: 409 });
       }
