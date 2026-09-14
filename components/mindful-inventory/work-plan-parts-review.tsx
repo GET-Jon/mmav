@@ -27,9 +27,9 @@ function priceRange(low: number | null, high: number | null) {
 }
 
 function decisionLabel(method: PartFulfillmentMethod | null) {
-  if (method === "partner_supplied") return "Partner supplies";
-  if (method === "mindful_purchase") return "Mindful will source";
-  if (method === "in_stock") return "In stock";
+  if (method === "partner_supplied") return "Partner provides";
+  if (method === "mindful_purchase") return "Owner sources";
+  if (method === "in_stock") return "Use in-stock";
   if (method === "customer_supplied") return "Customer supplies";
   if (method === "not_required") return "Not required";
   return null;
@@ -193,21 +193,21 @@ export function WorkPlanPartsReview({
           onClick={() => void decide(item, "partner_supplied")}
           className={`${buttonBase} ${method === "partner_supplied" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
         >
-          Partner supplies
+          Partner provides
         </button>
         <button
           disabled={working === item.id}
           onClick={() => void decide(item, "mindful_purchase")}
           className={`${buttonBase} ${method === "mindful_purchase" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
         >
-          Mindful sources
+          Owner sources
         </button>
         <button
           disabled={working === item.id}
           onClick={() => void decide(item, "in_stock")}
           className={`${buttonBase} ${method === "in_stock" ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
         >
-          In stock
+          Use in-stock
         </button>
         <button
           disabled={working === item.id}
@@ -239,10 +239,10 @@ export function WorkPlanPartsReview({
             Parts Setup
           </div>
           <h2 className="mt-1 text-xl font-black text-slate-950">
-            {unresolvedItems.length ? "Resolve remaining sourcing choices" : "Known parts decisions carried forward"}
+            {unresolvedItems.length ? "Choose who will provide each required part" : "Known parts decisions carried forward"}
           </h2>
           <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-            Inspection decisions are preserved automatically. Lot Logic only asks when a required part still needs a sourcing owner.
+            Inspection decisions are preserved automatically. Lot Logic only asks when a required part still needs someone responsible for getting it.
           </p>
         </div>
         <div
@@ -279,7 +279,7 @@ export function WorkPlanPartsReview({
                       <h3 className="font-black text-slate-950">{item.description}</h3>
                       <span className="text-xs font-bold text-slate-400">×{item.quantity}</span>
                       <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-black uppercase text-amber-900">
-                        Sourcing needed
+                        Source unassigned
                       </span>
                     </div>
                     <div className="mt-1 text-xs font-semibold text-slate-500">
@@ -295,14 +295,14 @@ export function WorkPlanPartsReview({
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                   <span className="text-xs font-semibold text-slate-500">
-                    This part is required; only its sourcing path is unresolved.
+                    This part is required. Choose who will provide it.
                   </span>
                   <button
                     type="button"
                     onClick={() => setOpenSourcing((current) => ({ ...current, [item.id]: !sourcingOpen }))}
                     className="shrink-0 text-xs font-black text-slate-500 hover:text-slate-900"
                   >
-                    {sourcingOpen ? "Hide sourcing references" : "Sourcing references"}
+                    {sourcingOpen ? "Hide sourcing references" : "Find / order part"}
                   </button>
                 </div>
                 {sourcingOpen ? (
