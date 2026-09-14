@@ -53,3 +53,4 @@ function patchAvailabilityGuidance() {
 patchActiveWork();
 patchAvailabilityGuidance();
 console.log("Aligned Active Work with pending schedule proposals and unresolved parts decisions.");
+await import("./ensure-parts-state-coherence.mjs");
