@@ -11,6 +11,8 @@ export type PartnerProfileData = {
   schedulingMode: string;
   standardHours: PartnerStandardHours;
   profileConfirmedAt: string | null;
+  primaryLocationId: string | null;
+  locations: Array<{ id: string; name: string; address: string | null }>;
   capabilities: Array<{ id: string; name: string; active: boolean; selected: boolean }>;
 };
 
@@ -30,7 +32,13 @@ function normalizeHours(value: unknown): PartnerStandardHours {
 
 export async function getPartnerProfileData(access: PartnerPortalAccess): Promise<PartnerProfileData> {
   const admin = createSupabaseAdminClient();
-  const [{ data: partner, error: partnerError }, { data: capabilities, error: capabilityError }, { data: assignments, error: assignmentError }] = await Promise.all([
+  const [
+    { data: partner, error: partnerError },
+    { data: capabilities, error: capabilityError },
+    { data: assignments, error: assignmentError },
+    { data: locations, error: locationsError },
+    { data: partnerLocations, error: partnerLocationsError },
+  ] = await Promise.all([
     admin
       .from("mindful_inventory_partners")
       .select("name,company_name,email,phone,location_text,scheduling_mode,standard_hours,portal_claimed_at,portal_profile_confirmed_at")
@@ -45,11 +53,23 @@ export async function getPartnerProfileData(access: PartnerPortalAccess): Promis
       .from("mindful_inventory_partner_capability_assignments")
       .select("capability_id")
       .eq("partner_id", access.partner.id),
+    admin
+      .from("mindful_inventory_locations")
+      .select("id,name,address_line_1,address_line_2,city,state,postal_code")
+      .eq("company_id", access.partner.companyId)
+      .eq("active", true)
+      .order("name", { ascending: true }),
+    admin
+      .from("mindful_inventory_partner_locations")
+      .select("location_id,is_primary")
+      .eq("partner_id", access.partner.id),
   ]);
 
   if (partnerError) throw new Error(partnerError.message);
   if (capabilityError) throw new Error(capabilityError.message);
   if (assignmentError) throw new Error(assignmentError.message);
+  if (locationsError) throw new Error(locationsError.message);
+  if (partnerLocationsError) throw new Error(partnerLocationsError.message);
 
   if (!partner.portal_claimed_at) {
     const { error: claimError } = await admin
@@ -62,6 +82,7 @@ export async function getPartnerProfileData(access: PartnerPortalAccess): Promis
   }
 
   const selected = new Set((assignments ?? []).map((row) => row.capability_id));
+  const primaryLocation = (partnerLocations ?? []).find((row) => row.is_primary) ?? partnerLocations?.[0] ?? null;
   return {
     name: partner.name,
     companyName: partner.company_name,
@@ -71,6 +92,12 @@ export async function getPartnerProfileData(access: PartnerPortalAccess): Promis
     schedulingMode: partner.scheduling_mode,
     standardHours: normalizeHours(partner.standard_hours),
     profileConfirmedAt: partner.portal_profile_confirmed_at,
+    primaryLocationId: primaryLocation?.location_id ?? null,
+    locations: (locations ?? []).map((location) => ({
+      id: location.id,
+      name: location.name,
+      address: [location.address_line_1, location.address_line_2, location.city, location.state, location.postal_code].filter(Boolean).join(", ") || null,
+    })),
     capabilities: (capabilities ?? []).map((capability) => ({
       id: capability.id,
       name: capability.name,
