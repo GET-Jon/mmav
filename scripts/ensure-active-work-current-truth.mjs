@@ -70,6 +70,13 @@ function patchActiveWork() {
     );
   }
 
+  if (!source.includes('locationDrafts, setLocationDrafts')) {
+    source = source.replace(
+      '  const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>({});',
+      '  const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>({});\n  const [locationDrafts, setLocationDrafts] = useState<Record<string, string>>({});\n  const [resourceDrafts, setResourceDrafts] = useState<Record<string, string>>({});',
+    );
+  }
+
   if (!source.includes('const assignedPerformer = performerOptions.find')) {
     source = source.replace(
       '            const suggestion = !work.performerName && work.partsReviewComplete ? suggestedPerformerForWork(work, performerOptions) : null;',
@@ -77,12 +84,45 @@ function patchActiveWork() {
     );
   }
 
+  if (!source.includes('const locationDraft = locationDrafts[work.id]')) {
+    source = source.replace(
+      '            const assignedPerformer = performerOptions.find((option) => option.key === performerKey(work)) || null;',
+      '            const assignedPerformer = performerOptions.find((option) => option.key === performerKey(work)) || null;\n            const locationDraft = locationDrafts[work.id] ?? work.locationId ?? "";\n            const resourceDraft = resourceDrafts[work.id] ?? work.resourceId ?? "";',
+    );
+  }
+
+  source = source.replace(
+    '            const resources = resourceOptions.filter((resource) => !work.locationId || resource.locationId === work.locationId);',
+    '            const resources = resourceOptions.filter((resource) => !locationDraft || resource.locationId === locationDraft);',
+  );
+
   if (!source.includes('Use partner default')) {
     source = source.replaceAll(
       '<div className="mb-2 text-[10px] font-black uppercase text-slate-400">4 · Location</div><div className="grid gap-2 sm:grid-cols-2">',
-      '<div className="mb-2 text-[10px] font-black uppercase text-slate-400">4 · Location</div>{!work.locationId && assignedPerformer?.type === "partner" && assignedPerformer.primaryLocationId ? <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2"><div className="text-xs font-bold text-blue-900">Default for {assignedPerformer.displayName}: {assignedPerformer.primaryLocationName || "Partner location"}</div><button type="button" disabled={workingId === work.id} onClick={() => void patchWork(work.id, { locationId: assignedPerformer.primaryLocationId }, "Partner default location selected.")} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-black text-white disabled:opacity-50">Use partner default</button></div> : null}<div className="grid gap-2 sm:grid-cols-2">',
+      '<div className="mb-2 text-[10px] font-black uppercase text-slate-400">4 · Location</div>{!work.locationId && assignedPerformer?.type === "partner" && assignedPerformer.primaryLocationId ? <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-2"><div className="text-xs font-bold text-blue-900">Default for {assignedPerformer.displayName}: {assignedPerformer.primaryLocationName || "Partner location"}</div><button type="button" disabled={workingId === work.id} onClick={() => { setLocationDrafts((current) => ({ ...current, [work.id]: assignedPerformer.primaryLocationId || "" })); setResourceDrafts((current) => ({ ...current, [work.id]: "" })); }} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-black text-white disabled:opacity-50">Use partner default</button></div> : null}<div className="grid gap-2 sm:grid-cols-2">',
     );
   }
+
+  source = source.replaceAll(
+    'value={work.locationId || ""} onChange={(event) => void patchWork(work.id, { locationId: event.target.value || null }, "Location updated.")}',
+    'value={locationDraft} onChange={(event) => { const nextLocation = event.target.value; setLocationDrafts((current) => ({ ...current, [work.id]: nextLocation })); setResourceDrafts((current) => ({ ...current, [work.id]: "" })); }}',
+  );
+  source = source.replaceAll(
+    'disabled={workingId === work.id || !work.locationId} value={work.resourceId || ""} onChange={(event) => void patchWork(work.id, { resourceId: event.target.value || null }, "Resource updated.")}',
+    'disabled={workingId === work.id || !locationDraft} value={resourceDraft} onChange={(event) => setResourceDrafts((current) => ({ ...current, [work.id]: event.target.value }))}',
+  );
+
+  if (!source.includes('Save location')) {
+    source = source.replaceAll(
+      '<option value="">No specific resource</option>{resources.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div></div> : null}',
+      '<option value="">No specific resource</option>{resources.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div><div className="mt-2 flex items-center justify-end gap-2"><span className="text-[10px] font-semibold text-slate-500">Choose both fields before saving. This card will stay in place until you submit.</span><button type="button" disabled={workingId === work.id || !locationDraft} onClick={() => void patchWork(work.id, { locationId: locationDraft || null, resourceId: resourceDraft || null }, "Location saved.")} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400">Save location</button></div></div> : null}',
+    );
+  }
+
+  source = source.replace(
+    '      const text = payload.scheduleCleared ? `${success} Previous schedule cleared; choose a new time after setup is ready.` : success;',
+    '      const text = payload.scheduleCleared ? `Saved. ${success} The previously confirmed schedule was cleared because the Work Order setup changed; choose or re-confirm the work time after this setup change.` : `Saved. ${success}`;',
+  );
 
   writeFileSync(path, source, "utf8");
 }
@@ -114,5 +154,5 @@ function patchAvailabilityGuidance() {
 patchActiveWork();
 patchPartnerDefaultLocation();
 patchAvailabilityGuidance();
-console.log("Aligned Active Work with pending schedule truth and Partner default locations.");
+console.log("Aligned Active Work with pending schedule truth, stable location editing, and Partner default locations.");
 await import("./ensure-parts-state-coherence.mjs");
