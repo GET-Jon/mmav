@@ -52,6 +52,7 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
     let patch: Record<string, unknown>;
     let responseLocation: string | null = null;
     let newLocationCandidate = false;
+    let noPartsConfirmed = false;
 
     if (kind === "location") {
       if (action === "set") {
@@ -98,9 +99,28 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
         };
       }
     } else {
+      if (action === "confirm") {
+        const [partsResult, requirementsResult] = await Promise.all([
+          admin
+            .from("mindful_inventory_work_order_parts")
+            .select("id,status")
+            .eq("work_order_id", workOrderId),
+          admin
+            .from("mindful_inventory_part_requirements")
+            .select("id,requirement_status")
+            .eq("work_order_id", workOrderId)
+            .in("requirement_status", ["suggested", "required"]),
+        ]);
+        if (partsResult.error) throw new Error(partsResult.error.message);
+        if (requirementsResult.error) throw new Error(requirementsResult.error.message);
+        const activeParts = (partsResult.data ?? []).filter((part) => part.status !== "cancelled");
+        noPartsConfirmed = activeParts.length === 0 && (requirementsResult.data ?? []).length === 0;
+      }
+
       patch = {
         partner_parts_confirmation_status: action === "confirm" ? "confirmed" : "issue_reported",
         partner_parts_note: action === "adjust" ? note : null,
+        ...(noPartsConfirmed ? { parts_review_status: "resolved" } : {}),
         updated_at: now,
         updated_by: user.id,
       };
@@ -133,12 +153,30 @@ export async function POST(request: Request, context: { params: Promise<{ workOr
       if (historyError) throw new Error(historyError.message);
     }
 
+    if (noPartsConfirmed) {
+      const { error: historyError } = await admin
+        .from("mindful_inventory_history")
+        .insert({
+          company_id: partner.company_id,
+          vehicle_id: work.vehicle_id,
+          event_type: "partner_confirmed_no_parts_required",
+          entity_type: "work_order",
+          entity_id: work.id,
+          actor_user_id: user.id,
+          actor_partner_id: partner.id,
+          summary: "Partner confirmed that no parts are required; Parts Review was resolved automatically.",
+          metadata: { partsReviewResolvedAutomatically: true },
+        });
+      if (historyError) throw new Error(historyError.message);
+    }
+
     return NextResponse.json({
       ok: true,
       kind,
       status: action === "confirm" || action === "set" ? "confirmed" : "adjustment_requested",
       location: responseLocation,
       newLocationCandidate,
+      noPartsConfirmed,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update logistics confirmation." }, { status: 500 });
