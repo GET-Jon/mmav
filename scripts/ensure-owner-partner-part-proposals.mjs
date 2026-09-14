@@ -124,6 +124,29 @@ function patchExecutionPlan() {
   writeFileSync(path, source, "utf8");
 }
 
+function patchResolvedSuggestionState() {
+  const path = "components/mindful-inventory/inventory-part-suggestions-v4.tsx";
+  let source = readFileSync(path, "utf8");
+
+  source = source.replace(
+    '        const workParts = activeParts.filter((p) => p.workOrderId === suggestion.workOrderId);',
+    '        const workParts = activeParts.filter((p) => p.workOrderId === suggestion.workOrderId);\n        const allWorkParts = parts.filter((p) => p.workOrderId === suggestion.workOrderId);',
+  );
+
+  source = source.replace(
+    '              const existing = workParts.find((p) => normalizeName(p.description) === normalizeName(rec.name)) || null;',
+    '              const existing = allWorkParts.find((p) => normalizeName(p.description) === normalizeName(rec.name)) || null;',
+  );
+
+  source = source.replace(
+    '{existing.status === "backordered" ? "Delayed" : labelize(existing.status)}',
+    '{sourceFor(existing) === "not_required" ? "Not Required" : existing.status === "backordered" ? "Delayed" : labelize(existing.status)}',
+  );
+
+  writeFileSync(path, source, "utf8");
+}
+
 patchOwnerWorkPage();
 patchExecutionPlan();
-console.log("Owner Work page now renders Partner part proposals inside the matching Execution Plan Work Order.");
+patchResolvedSuggestionState();
+console.log("Owner Work page renders Partner part proposals inline and resolved suggestions retain their saved disposition.");
