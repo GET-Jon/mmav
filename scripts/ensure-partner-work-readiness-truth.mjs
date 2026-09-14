@@ -31,13 +31,17 @@ function patchPartnerWorkUi() {
   let source = readFileSync(path, "utf8");
   if (source.includes('data-readiness-truth="owner-v1"')) return;
 
+  const awaitingOwnerAnchor = '    const awaitingOwnerSchedule = work.partnerConfirmationStatus === "awaiting_owner";';
   const scheduleConfirmedAnchor = '    const scheduleConfirmed = work.partnerConfirmationStatus === "confirmed" && Boolean(work.scheduledStartAt);';
   if (!source.includes(scheduleConfirmedAnchor)) {
     throw new Error("Partner readiness pass could not locate scheduleConfirmed.");
   }
+  if (!source.includes(awaitingOwnerAnchor)) {
+    source = source.replace(scheduleConfirmedAnchor, scheduleConfirmedAnchor + '\n' + awaitingOwnerAnchor);
+  }
   source = source.replace(
-    scheduleConfirmedAnchor,
-    scheduleConfirmedAnchor + '\n    const ownerPartsReady = work.ownerPartsReviewComplete;\n    const scheduleDisplayState = scheduleConfirmed ? "scheduled" : awaitingOwnerSchedule && hasRequestedSchedule ? "proposed" : hasRequestedSchedule ? "requested" : "none";',
+    awaitingOwnerAnchor,
+    awaitingOwnerAnchor + '\n    const ownerPartsReady = work.ownerPartsReviewComplete;\n    const scheduleDisplayState = scheduleConfirmed ? "scheduled" : awaitingOwnerSchedule && hasRequestedSchedule ? "proposed" : hasRequestedSchedule ? "requested" : "none";',
   );
 
   source = source.replace(
@@ -46,10 +50,11 @@ function patchPartnerWorkUi() {
   );
 
   const currentActionPattern = /const currentAction = ([^;]+);/;
-  const currentMatch = source.match(currentActionPattern);
-  if (!currentMatch) throw new Error("Partner readiness pass could not locate currentAction.");
-  const currentReplacement = 'const currentAction = needsEstimate ? "Submit your labor estimate" : estimateStatus === "awaiting_review" ? "Waiting for estimate approval" : pendingPartRequirements.length ? "Waiting for Owner to review proposed parts" : !partsConfirmed ? "Confirm the parts plan" : !ownerPartsReady ? "Waiting for Owner to complete Parts Review" : !locationConfirmed ? "Set the work location" : scheduleDisplayState === "none" ? "Choose or suggest a work time" : scheduleDisplayState === "proposed" ? "Waiting for Owner to confirm your proposed time" : !scheduleConfirmed ? "Confirm or adjust the requested time" : inProgress ? "Finish the job and mark it complete" : complete ? "Work complete" : "Ready to begin";';
-  source = source.replace(currentActionPattern, currentReplacement);
+  if (!currentActionPattern.test(source)) throw new Error("Partner readiness pass could not locate currentAction.");
+  source = source.replace(
+    currentActionPattern,
+    'const currentAction = needsEstimate ? "Submit your labor estimate" : estimateStatus === "awaiting_review" ? "Waiting for estimate approval" : pendingPartRequirements.length ? "Waiting for Owner to review proposed parts" : !partsConfirmed ? "Confirm the parts plan" : !ownerPartsReady ? "Waiting for Owner to complete Parts Review" : !locationConfirmed ? "Set the work location" : scheduleDisplayState === "none" ? "Choose or suggest a work time" : scheduleDisplayState === "proposed" ? "Waiting for Owner to confirm your proposed time" : !scheduleConfirmed ? "Confirm or adjust the requested time" : inProgress ? "Finish the job and mark it complete" : complete ? "Work complete" : "Ready to begin";',
+  );
 
   source = source.replace(
     '{!hasRequestedSchedule ? <><div className="mt-1 text-sm font-black">No work time proposed yet</div><div className="mt-1 text-xs font-semibold text-slate-500">You can suggest one now. Lot Logic will show conflict-aware available times.</div></> : awaitingOwnerSchedule ? <><div className="mt-1 text-sm font-black">You proposed: {dateTime(work.proposedStartAt)}</div><div className="mt-1 text-xs text-slate-500">Through {dateTime(work.proposedEndAt)}</div><div className="mt-1 text-xs font-bold text-amber-700">Waiting for dealer confirmation.</div></> : <><div className="mt-1 text-sm font-black">Requested: {dateTime(work.proposedStartAt)}</div><div className="mt-1 text-xs text-slate-500">Through {dateTime(work.proposedEndAt)}</div><div className={`mt-1 text-xs font-bold ${scheduleConfirmed ? "text-emerald-700" : "text-amber-700"}`}>{scheduleConfirmed ? `✓ Confirmed for ${dateTime(work.scheduledStartAt)}` : "Confirm this time or choose another available slot."}</div></>}',
@@ -62,26 +67,14 @@ function patchPartnerWorkUi() {
   );
 
   source = source.replace(
-    '<div className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Ready to begin</div>\n              <div className="mt-1 text-lg font-black">Everything is confirmed</div>',
-    '<div data-readiness-truth="owner-v1" className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Ready to begin</div>\n              <div className="mt-1 text-lg font-black">Everything is confirmed</div>',
-  );
-
-  source = source.replace(
-    '{canStart ? <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">',
-    '{canStart ? <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">',
+    '<div className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Ready to begin</div>',
+    '<div data-readiness-truth="owner-v1" className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Ready to begin</div>',
   );
 
   source = source.replace(
     /\{!canStart && !inProgress && !complete \? <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">[^<]*<\/div> : null\}/,
     '{!canStart && !inProgress && !complete ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3"><div className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-700">Waiting</div><div className="mt-1 text-sm font-black text-amber-950">{!ownerPartsReady ? "Owner Parts Review is still required" : currentAction}</div><div className="mt-1 text-xs font-semibold text-amber-800">Start work will unlock automatically when every prerequisite is confirmed.</div></div> : null}',
   );
-
-  if (!source.includes('data-readiness-truth="owner-v1"')) {
-    source = source.replace(
-      '<div className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Ready to begin</div>',
-      '<div data-readiness-truth="owner-v1" className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Ready to begin</div>',
-    );
-  }
 
   writeFileSync(path, source, "utf8");
 }
