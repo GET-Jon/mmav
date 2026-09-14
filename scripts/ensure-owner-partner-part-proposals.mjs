@@ -129,8 +129,28 @@ function patchResolvedSuggestionState() {
   let source = readFileSync(path, "utf8");
 
   source = source.replace(
+    '  const [orderKey, setOrderKey] = useState<string | null>(null);',
+    '  const [orderKey, setOrderKey] = useState<string | null>(null);\n  const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);',
+  );
+
+  source = source.replace(
+    '      await resolve(partId, args.resolution);\n      setMessage(`${args.description}: ${labelize(args.resolution)}.`);',
+    '      await resolve(partId, args.resolution);\n      setSourceEditKey(null);\n      setMessage(`${args.description}: ${labelize(args.resolution)}.`);',
+  );
+
+  source = source.replace(
+    '  function renderSourceChoices(args: { part?: InventoryPartView | null; workOrderId: string; description: string; searchQuery: string; orderKeyValue: string; editing?: boolean }) {\n    const selected = args.part ? sourceFor(args.part) : null;\n    return <div className="flex flex-wrap gap-1.5">',
+    '  function renderSourceChoices(args: { part?: InventoryPartView | null; workOrderId: string; description: string; searchQuery: string; orderKeyValue: string; editing?: boolean }) {\n    const selected = args.part ? sourceFor(args.part) : null;\n    if (selected === "not_required" && !args.editing) {\n      const editingSource = sourceEditKey === args.orderKeyValue;\n      return <div className="flex flex-col items-end gap-2"><div className="flex items-center gap-2"><span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-700">Not Required</span><button type="button" onClick={() => setSourceEditKey((current) => current === args.orderKeyValue ? null : args.orderKeyValue)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-600">{editingSource ? "Close" : "Edit"}</button></div>{editingSource ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">{renderSourceChoices({ ...args, editing: true })}</div> : null}</div>;\n    }\n    return <div className="flex flex-wrap gap-1.5">',
+  );
+
+  source = source.replace(
     '        const workParts = activeParts.filter((p) => p.workOrderId === suggestion.workOrderId);',
     '        const workParts = activeParts.filter((p) => p.workOrderId === suggestion.workOrderId);\n        const allWorkParts = parts.filter((p) => p.workOrderId === suggestion.workOrderId);',
+  );
+
+  source = source.replace(
+    '        const unmatched = workParts.filter((p) => !suggestedNames.has(normalizeName(p.description)));',
+    '        const unmatched = allWorkParts.filter((p) => (p.status !== "cancelled" || sourceFor(p) === "not_required") && !suggestedNames.has(normalizeName(p.description)));',
   );
 
   source = source.replace(
@@ -141,6 +161,11 @@ function patchResolvedSuggestionState() {
   source = source.replace(
     '{existing.status === "backordered" ? "Delayed" : labelize(existing.status)}',
     '{sourceFor(existing) === "not_required" ? "Not Required" : existing.status === "backordered" ? "Delayed" : labelize(existing.status)}',
+  );
+
+  source = source.replace(
+    '{part.status === "backordered" ? "Delayed" : labelize(part.status)}',
+    '{sourceFor(part) === "not_required" ? "Not Required" : part.status === "backordered" ? "Delayed" : labelize(part.status)}',
   );
 
   writeFileSync(path, source, "utf8");
