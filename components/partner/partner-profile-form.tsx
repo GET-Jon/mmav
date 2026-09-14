@@ -15,6 +15,7 @@ export function PartnerProfileForm({ profile, onboarding }: { profile: PartnerPr
   const [companyName, setCompanyName] = useState(profile.companyName ?? "");
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [locationText, setLocationText] = useState(profile.locationText ?? "");
+  const [primaryLocationId, setPrimaryLocationId] = useState(profile.primaryLocationId ?? "");
   const [standardHours, setStandardHours] = useState<PartnerStandardHours>(profile.standardHours);
   const [capabilityIds, setCapabilityIds] = useState<string[]>(profile.capabilities.filter((item) => item.selected).map((item) => item.id));
   const [newCapability, setNewCapability] = useState("");
@@ -51,7 +52,7 @@ export function PartnerProfileForm({ profile, onboarding }: { profile: PartnerPr
       const response = await fetch("/api/partner/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, companyName, phone, locationText, standardHours, capabilityIds, newCapabilityNames }),
+        body: JSON.stringify({ name, companyName, phone, locationText, primaryLocationId: primaryLocationId || null, standardHours, capabilityIds, newCapabilityNames }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Profile could not be saved.");
@@ -82,9 +83,17 @@ export function PartnerProfileForm({ profile, onboarding }: { profile: PartnerPr
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-black">Normal availability</h2>
-      <p className="mt-1 text-sm text-slate-500">Keep this current so Lot Logic can schedule around your real working hours.</p>
-      <div className="mt-4 space-y-2">{days.map(([day,label]) => { const hours = standardHours[day]; return <div key={day} className="grid items-center gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[70px_90px_1fr_1fr]">
+      <h2 className="text-lg font-black">Work location & availability</h2>
+      <p className="mt-1 text-sm text-slate-500">Choose the location Lot Logic should use by default, then keep your normal working hours current.</p>
+      <label className="mt-4 block">
+        <div className="mb-1 text-xs font-black uppercase text-slate-500">Default work location</div>
+        <select className={inputClass} value={primaryLocationId} onChange={(e) => setPrimaryLocationId(e.target.value)}>
+          <option value="">No default location</option>
+          {profile.locations.map((location) => <option key={location.id} value={location.id}>{location.name}{location.address ? ` — ${location.address}` : ""}</option>)}
+        </select>
+        <div className="mt-1 text-[11px] font-semibold text-slate-400">Lot Logic will prefill this location for new work assigned to you. You can still choose a different location for any Work Order.</div>
+      </label>
+      <div className="mt-5 space-y-2">{days.map(([day,label]) => { const hours = standardHours[day]; return <div key={day} className="grid items-center gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[70px_90px_1fr_1fr]">
         <div className="font-black">{label}</div>
         <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={hours.enabled} onChange={(e) => setDay(day,{enabled:e.target.checked})} /> Available</label>
         <input type="time" className={inputClass} disabled={!hours.enabled} value={hours.start} onChange={(e) => setDay(day,{start:e.target.value})} />
