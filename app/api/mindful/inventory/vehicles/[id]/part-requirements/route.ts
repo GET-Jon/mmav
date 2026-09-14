@@ -90,23 +90,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     let linkedPartId = requirement.linked_part_id as string | null;
     if (normalizedStatus === "required" && requirement.work_order_id && fulfillmentMethod !== "not_required") {
       const approvedPartnerPrice = fulfillmentMethod === "partner_supplied" ? optionalNumber(requirement.partner_offer_unit_price) : null;
-      const dependencyResolution = fulfillmentMethod === "in_stock" ? "in_stock" : fulfillmentMethod === "partner_supplied" ? "partner_supplied" : fulfillmentMethod === "customer_supplied" ? "customer_supplied" : null;
-      const normalizedPartStatus = fulfillmentMethod === "in_stock" ? "received" : "needed";
-      const normalizedSupplier = fulfillmentMethod === "partner_supplied" ? "Partner" : null;
-
       if (!linkedPartId) {
+        const dependencyResolution = fulfillmentMethod === "in_stock" ? "in_stock" : fulfillmentMethod === "partner_supplied" ? "partner_supplied" : fulfillmentMethod === "customer_supplied" ? "customer_supplied" : null;
         const { data: part, error: partError } = await access.supabase.from("mindful_inventory_work_order_parts").insert({
           work_order_id: requirement.work_order_id,
           requirement_id: requirement.id,
           description: requirement.description,
           quantity: requirement.quantity,
           part_number: requirement.part_number,
-          status: normalizedPartStatus,
+          status: "needed",
           dependency_resolution: dependencyResolution,
           dependency_resolved_at: dependencyResolution ? now : null,
           dependency_resolved_by: dependencyResolution ? access.userId : null,
           quoted_unit_price: approvedPartnerPrice,
-          supplier: normalizedSupplier,
+          supplier: fulfillmentMethod === "partner_supplied" ? "Partner" : null,
           notes: note,
           created_by: access.userId,
           updated_by: access.userId,
@@ -115,36 +112,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         linkedPartId = part.id;
         const { error: linkError } = await access.supabase.from("mindful_inventory_part_requirements").update({ linked_part_id: linkedPartId }).eq("id", requirement.id);
         if (linkError) throw new Error(linkError.message);
-      } else {
-        const { error: partUpdateError } = await access.supabase.from("mindful_inventory_work_order_parts").update({
-          requirement_id: requirement.id,
-          description: requirement.description,
-          quantity: requirement.quantity,
-          part_number: requirement.part_number,
-          status: normalizedPartStatus,
-          dependency_resolution: dependencyResolution,
-          dependency_resolved_at: dependencyResolution ? now : null,
-          dependency_resolved_by: dependencyResolution ? access.userId : null,
+      } else if (approvedPartnerPrice !== null) {
+        const { error: priceError } = await access.supabase.from("mindful_inventory_work_order_parts").update({
           quoted_unit_price: approvedPartnerPrice,
-          supplier: normalizedSupplier,
-          notes: note,
+          supplier: "Partner",
           updated_by: access.userId,
           updated_at: now,
         }).eq("id", linkedPartId);
-        if (partUpdateError) throw new Error(partUpdateError.message);
+        if (priceError) throw new Error(priceError.message);
       }
     }
 
     if (normalizedStatus === "not_required" && linkedPartId) {
-      const { error: cancelError } = await access.supabase.from("mindful_inventory_work_order_parts").update({
-        requirement_id: requirement.id,
-        status: "cancelled",
-        dependency_resolution: "not_required",
-        dependency_resolved_at: now,
-        dependency_resolved_by: access.userId,
-        updated_by: access.userId,
-        updated_at: now,
-      }).eq("id", linkedPartId);
+      const { error: cancelError } = await access.supabase.from("mindful_inventory_work_order_parts").update({ status: "cancelled", updated_by: access.userId, updated_at: now }).eq("id", linkedPartId);
       if (cancelError) throw new Error(cancelError.message);
     }
 
@@ -171,14 +151,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         item.requirement_status === "not_required" ||
         (item.requirement_status === "required" && Boolean(item.fulfillment_method) && item.fulfillment_method !== "not_required"),
       );
-      const { error: reviewError } = await access.supabase.from("mindful_inventory_work_orders").update({
-        parts_review_status: partsReviewResolved ? "resolved" : "pending",
-        parts_reviewed_at: partsReviewResolved ? now : null,
-        parts_reviewed_by_user_id: partsReviewResolved ? access.userId : null,
-        updated_by: access.userId,
-        updated_at: now,
-      }).eq("id", requirement.work_order_id);
-      if (reviewError) throw new Error(reviewError.message);
+      if (partsReviewResolved) {
+        const { error: reviewError } = await access.supabase.from("mindful_inventory_work_orders").update({
+          parts_review_status: "resolved",
+          parts_reviewed_at: now,
+          parts_reviewed_by_user_id: access.userId,
+          updated_by: access.userId,
+          updated_at: now,
+        }).eq("id", requirement.work_order_id);
+        if (reviewError) throw new Error(reviewError.message);
+      }
     }
 
     await access.supabase.from("mindful_inventory_history").insert({
