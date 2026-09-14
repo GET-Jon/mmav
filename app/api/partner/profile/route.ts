@@ -59,6 +59,7 @@ export async function PUT(request: Request) {
     const phone = clean(body.phone);
     const locationText = clean(body.locationText);
     const companyName = clean(body.companyName);
+    const primaryLocationId = clean(body.primaryLocationId);
     const standardHours = normalizeHours(body.standardHours);
     const capabilityIds = Array.isArray(body.capabilityIds)
       ? Array.from(new Set(body.capabilityIds.filter((id: unknown): id is string => typeof id === "string" && Boolean(id.trim()))))
@@ -72,6 +73,18 @@ export async function PUT(request: Request) {
 
     const admin = createSupabaseAdminClient();
     const selectedCapabilityIds = new Set(capabilityIds);
+
+    if (primaryLocationId) {
+      const { data: allowedLocation, error: locationError } = await admin
+        .from("mindful_inventory_locations")
+        .select("id")
+        .eq("id", primaryLocationId)
+        .eq("company_id", access.partner.companyId)
+        .eq("active", true)
+        .maybeSingle();
+      if (locationError) throw new Error(locationError.message);
+      if (!allowedLocation) return NextResponse.json({ error: "That default work location is not available." }, { status: 400 });
+    }
 
     if (capabilityIds.length) {
       const { data: allowed, error: allowedError } = await admin
@@ -144,6 +157,25 @@ export async function PUT(request: Request) {
       .eq("portal_access_enabled", true);
     if (partnerError) throw new Error(partnerError.message);
 
+    const { error: clearPrimaryError } = await admin
+      .from("mindful_inventory_partner_locations")
+      .update({ is_primary: false })
+      .eq("partner_id", access.partner.id)
+      .eq("is_primary", true);
+    if (clearPrimaryError) throw new Error(clearPrimaryError.message);
+
+    if (primaryLocationId) {
+      const { error: locationLinkError } = await admin
+        .from("mindful_inventory_partner_locations")
+        .upsert({
+          partner_id: access.partner.id,
+          location_id: primaryLocationId,
+          is_primary: true,
+          can_work_mobile: false,
+        }, { onConflict: "partner_id,location_id" });
+      if (locationLinkError) throw new Error(locationLinkError.message);
+    }
+
     const { error: deleteError } = await admin
       .from("mindful_inventory_partner_capability_assignments")
       .delete()
@@ -162,6 +194,7 @@ export async function PUT(request: Request) {
       saved: true,
       firstConfirmation: !access.partner.profileConfirmedAt,
       addedCapabilities: newCapabilityNames.length,
+      primaryLocationId,
     });
   } catch (error) {
     return NextResponse.json(
