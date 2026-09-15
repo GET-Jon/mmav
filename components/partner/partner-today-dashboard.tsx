@@ -44,16 +44,12 @@ function greeting() {
 }
 
 function sameWeekFuture(date: string, todayKey: string) {
-  const target = new Date(date);
-  const now = new Date();
-  const targetKey = dateKey(target);
+  const targetKey = dateKey(date);
   if (targetKey <= todayKey) return false;
-  const weekday = Number(new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "short" }).formatToParts(now).find(() => false));
-  const dayNumber = Number(new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, day: "numeric" }).format(now));
-  const end = new Date(now);
+  const now = new Date();
   const localWeekday = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "short" }).format(now);
   const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  end.setDate(dayNumber + (6 - (map[localWeekday] ?? 0)));
+  const end = new Date(now.getTime() + (6 - (map[localWeekday] ?? 0)) * 24 * 60 * 60 * 1000);
   return targetKey <= dateKey(end);
 }
 
@@ -148,7 +144,7 @@ export function PartnerTodayDashboard({
         {upNextWork ? <div className="mt-3"><div className="text-sm font-bold text-slate-600">{upNextWork.vehicleLabel}</div><div className="mt-1 text-xs font-bold text-slate-500">{upNextWork.scheduledStartAt ? `${dayLabel(upNextWork.scheduledStartAt)} · ${timeLabel(upNextWork.scheduledStartAt)}` : "Time not set"}{upNextWork.locationName ? ` · ${upNextWork.locationName}` : ""}</div>{workAttention(upNextWork) ? <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-black text-amber-900">Before you start: {workAttention(upNextWork)}</div> : <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs font-black text-emerald-800">Setup looks ready.</div>}</div> : <p className="mt-4 text-sm font-semibold text-slate-500">There is no open work assigned to you.</p>}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+      <section id="schedule" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
         <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Schedule</div><h2 className="mt-1 text-xl font-black">Today & next</h2></div><Link href="/partner/work?view=all" className="text-xs font-black text-blue-700">View all work →</Link></div>
         {schedule.length ? <div className="mt-4 divide-y divide-slate-100">{schedule.map((item) => <div key={item.id} className="grid gap-1 py-3 sm:grid-cols-[155px_90px_1fr] sm:items-center"><div className="text-xs font-black text-slate-500">{dayLabel(item.at)} · {timeLabel(item.at)}</div><div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">{item.kind}</div><div className="text-sm font-black text-slate-800">{item.title}</div></div>)}</div> : <p className="mt-4 text-sm font-semibold text-slate-500">Nothing scheduled yet.</p>}
       </section>
