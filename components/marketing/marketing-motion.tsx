@@ -22,9 +22,9 @@ export function MarketingMotion() {
       if (inner && sectionIndex > 0) {
         inner.dataset.motionReveal = "true";
         inner.style.opacity = "0";
-        inner.style.transform = "translate3d(0, 22px, 0)";
+        inner.style.transform = "translate3d(0, 46px, 0)";
         inner.style.transition =
-          "opacity 700ms cubic-bezier(0.22,1,0.36,1), transform 850ms cubic-bezier(0.22,1,0.36,1)";
+          "opacity 760ms cubic-bezier(0.22,1,0.36,1), transform 980ms cubic-bezier(0.22,1,0.36,1)";
         inner.style.willChange = "opacity, transform";
         revealTargets.push(inner);
       }
@@ -50,7 +50,7 @@ export function MarketingMotion() {
           observer.unobserve(target);
         });
       },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+      { threshold: 0.08, rootMargin: "0px 0px -10% 0px" },
     );
 
     revealTargets.forEach((target) => observer.observe(target));
@@ -58,21 +58,41 @@ export function MarketingMotion() {
     const hero = document.querySelector<HTMLElement>("main > section:first-of-type");
     const heroBackground = hero?.children[0] as HTMLElement | undefined;
     const heroContent = hero?.children[1] as HTMLElement | undefined;
+    const heroCopy = heroContent?.children[0] as HTMLElement | undefined;
     const heroVisual = heroContent?.children[1] as HTMLElement | undefined;
+
+    const depthPanels = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "main > section:nth-of-type(n+3) [class*='shadow-[0_20px_55px'], main > section:nth-of-type(n+3) [class*='shadow-[0_18px_50px']",
+      ),
+    );
 
     let frame = 0;
 
     const updateParallax = () => {
       frame = 0;
-      const scrollY = Math.min(window.scrollY, 900);
+      const scrollY = Math.min(window.scrollY, 1100);
 
       if (heroBackground) {
-        heroBackground.style.transform = `translate3d(0, ${scrollY * 0.11}px, 0) scale(1.04)`;
+        heroBackground.style.transform = `translate3d(0, ${scrollY * 0.2}px, 0) scale(1.09)`;
+      }
+
+      if (heroCopy) {
+        heroCopy.style.transform = `translate3d(0, ${scrollY * 0.025}px, 0)`;
       }
 
       if (heroVisual) {
-        heroVisual.style.transform = `translate3d(0, ${scrollY * -0.035}px, 0)`;
+        heroVisual.style.transform = `translate3d(0, ${scrollY * -0.09}px, 0) rotate(${Math.min(scrollY * 0.0012, 0.7)}deg)`;
       }
+
+      const viewportMid = window.innerHeight / 2;
+      depthPanels.forEach((panel, index) => {
+        const rect = panel.getBoundingClientRect();
+        const panelMid = rect.top + rect.height / 2;
+        const distance = panelMid - viewportMid;
+        const offset = Math.max(-18, Math.min(18, distance * -0.035));
+        panel.style.transform = `translate3d(0, ${offset}px, 0) rotate(${index % 2 === 0 ? -0.18 : 0.18}deg)`;
+      });
     };
 
     const onScroll = () => {
@@ -80,22 +100,26 @@ export function MarketingMotion() {
       frame = window.requestAnimationFrame(updateParallax);
     };
 
-    if (heroBackground) {
-      heroBackground.style.willChange = "transform";
-      heroBackground.style.transition = "transform 80ms linear";
-    }
+    [heroBackground, heroCopy, heroVisual, ...depthPanels].forEach((element) => {
+      if (!element) return;
+      element.style.willChange = "transform";
+    });
 
-    if (heroVisual) {
-      heroVisual.style.willChange = "transform";
-      heroVisual.style.transition = "transform 120ms linear";
-    }
+    if (heroBackground) heroBackground.style.transition = "transform 70ms linear";
+    if (heroCopy) heroCopy.style.transition = "transform 90ms linear";
+    if (heroVisual) heroVisual.style.transition = "transform 95ms linear";
+    depthPanels.forEach((panel) => {
+      panel.style.transition = "transform 120ms linear";
+    });
 
     updateParallax();
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
 
     return () => {
       observer.disconnect();
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
       if (frame) window.cancelAnimationFrame(frame);
 
       revealTargets.forEach((target) => {
@@ -108,58 +132,55 @@ export function MarketingMotion() {
 
       cardTargets.forEach((card) => delete card.dataset.motionCard);
 
-      if (heroBackground) {
-        heroBackground.style.transform = "";
-        heroBackground.style.transition = "";
-        heroBackground.style.willChange = "";
-      }
-
-      if (heroVisual) {
-        heroVisual.style.transform = "";
-        heroVisual.style.transition = "";
-        heroVisual.style.willChange = "";
-      }
+      [heroBackground, heroCopy, heroVisual, ...depthPanels].forEach((element) => {
+        if (!element) return;
+        element.style.transform = "";
+        element.style.transition = "";
+        element.style.willChange = "";
+      });
     };
   }, []);
 
   return (
     <style>{`
       @media (prefers-reduced-motion: no-preference) {
+        html { scroll-behavior: smooth; }
+
         [data-motion-card="true"] {
-          transition: transform 280ms cubic-bezier(0.22,1,0.36,1), box-shadow 280ms ease, border-color 280ms ease;
+          transition: transform 320ms cubic-bezier(0.22,1,0.36,1), box-shadow 320ms ease, border-color 320ms ease;
         }
 
         [data-motion-card="true"]:hover {
-          transform: translate3d(0, -4px, 0);
+          transform: translate3d(0, -8px, 0) scale(1.012);
         }
 
         main a svg {
-          transition: transform 220ms cubic-bezier(0.22,1,0.36,1);
+          transition: transform 240ms cubic-bezier(0.22,1,0.36,1);
         }
 
         main a:hover svg {
-          transform: translateX(3px);
+          transform: translateX(5px);
         }
 
         main > section:first-of-type [class*="blur-2xl"] {
-          animation: lot-logic-breathe 7s ease-in-out infinite alternate;
+          animation: lot-logic-breathe 5.2s ease-in-out infinite alternate;
         }
 
         #recon svg,
         main [class*="text-violet-700"] svg {
-          animation: lot-logic-spark 4.5s ease-in-out infinite;
+          animation: lot-logic-spark 3.4s ease-in-out infinite;
           transform-origin: center;
         }
 
         @keyframes lot-logic-breathe {
-          from { opacity: .68; transform: scale(.98); }
-          to { opacity: 1; transform: scale(1.035); }
+          from { opacity: .55; transform: scale(.94) translate3d(-6px, 3px, 0); }
+          to { opacity: 1; transform: scale(1.08) translate3d(8px, -4px, 0); }
         }
 
         @keyframes lot-logic-spark {
-          0%, 72%, 100% { transform: rotate(0deg) scale(1); }
-          80% { transform: rotate(7deg) scale(1.08); }
-          88% { transform: rotate(-4deg) scale(1.03); }
+          0%, 66%, 100% { transform: rotate(0deg) scale(1); }
+          76% { transform: rotate(10deg) scale(1.16); }
+          86% { transform: rotate(-7deg) scale(1.07); }
         }
       }
     `}</style>
