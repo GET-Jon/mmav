@@ -19,7 +19,10 @@ export default async function PartnerProfilePage({ searchParams }: Props) {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex w-full max-w-[1100px] items-center justify-between gap-4 px-4 py-4 sm:px-5 lg:px-7">
         <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Lot Logic Partner Portal</div><div className="mt-0.5 text-lg font-black">{onboarding ? "Welcome" : "Profile"}</div></div>
-        {!onboarding ? <nav className="flex gap-2">{access.partner.mechanicalInspectionEligible ? <Link href="/partner/inspections" className="rounded-lg px-3 py-2 text-sm font-black text-slate-600">Inspections</Link> : null}<Link href="/partner/work" className="rounded-lg px-3 py-2 text-sm font-black text-slate-600">My Work</Link><Link href="/partner/profile" className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-black text-white">Profile</Link></nav> : null}
+        <div className="flex items-center gap-2">
+          {!onboarding ? <nav className="flex gap-2">{access.partner.mechanicalInspectionEligible ? <Link href="/partner/inspections" className="rounded-lg px-3 py-2 text-sm font-black text-slate-600">Inspections</Link> : null}<Link href="/partner/work" className="rounded-lg px-3 py-2 text-sm font-black text-slate-600">My Work</Link><Link href="/partner/profile" className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-black text-white">Profile</Link></nav> : null}
+          <form action="/api/partner/logout" method="post"><button type="submit" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-600 hover:border-slate-500 hover:text-slate-950">Log out</button></form>
+        </div>
       </div>
     </header>
     <div className="mx-auto w-full max-w-[1100px] px-4 py-6 sm:px-5 lg:px-7">
