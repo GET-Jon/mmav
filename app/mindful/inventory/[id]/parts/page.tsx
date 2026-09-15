@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { InventoryPartsBoard } from "@/components/mindful-inventory/inventory-parts-board";
 import { InventoryTransportOnly } from "@/components/mindful-inventory/inventory-transport-only";
+import { TrackedPartDetailsEditor } from "@/components/mindful-inventory/tracked-part-details-editor";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventoryPartRequirements } from "@/lib/mindful-inventory/part-requirements";
 import { buildPartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
@@ -28,6 +29,7 @@ export default async function InventoryPartsPage({ params }: { params: Promise<{
   return (
     <div className="space-y-6">
       <InventoryPartsBoard vehicleId={vehicle.id} requirements={requirements} suggestions={suggestions} />
+      <TrackedPartDetailsEditor vehicleId={vehicle.id} data={data} />
       <InventoryTransportOnly vehicleId={vehicle.id} data={data} />
     </div>
   );
