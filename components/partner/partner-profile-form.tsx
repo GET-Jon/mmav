@@ -16,6 +16,10 @@ export function PartnerProfileForm({ profile, onboarding }: { profile: PartnerPr
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [locationText, setLocationText] = useState(profile.locationText ?? "");
   const [primaryLocationId, setPrimaryLocationId] = useState(profile.primaryLocationId ?? "");
+  const [locations, setLocations] = useState(profile.locations);
+  const [addingLocation, setAddingLocation] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationDraft, setLocationDraft] = useState({ name: "", addressLine1: "", addressLine2: "", city: "", state: "SC", postalCode: "" });
   const [standardHours, setStandardHours] = useState<PartnerStandardHours>(profile.standardHours);
   const [capabilityIds, setCapabilityIds] = useState<string[]>(profile.capabilities.filter((item) => item.selected).map((item) => item.id));
   const [newCapability, setNewCapability] = useState("");
@@ -43,6 +47,30 @@ export function PartnerProfileForm({ profile, onboarding }: { profile: PartnerPr
     }
     setNewCapabilityNames((current) => [...current, clean]);
     setNewCapability("");
+  }
+
+  async function addDefaultLocation() {
+    setLocationSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/partner/profile/location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(locationDraft),
+      });
+      const payload = await response.json() as { error?: string; primaryLocationId?: string; location?: { id: string; name: string; address: string | null } };
+      if (!response.ok || !payload.location || !payload.primaryLocationId) throw new Error(payload.error || "Default work location could not be added.");
+      setLocations((current) => [...current.filter((location) => location.id !== payload.location!.id), payload.location!]);
+      setPrimaryLocationId(payload.primaryLocationId);
+      setLocationDraft({ name: "", addressLine1: "", addressLine2: "", city: "", state: "SC", postalCode: "" });
+      setAddingLocation(false);
+      setMessage(`${payload.location.name} is now your default work location.`);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Default work location could not be added.");
+    } finally {
+      setLocationSaving(false);
+    }
   }
 
   async function save() {
@@ -85,14 +113,28 @@ export function PartnerProfileForm({ profile, onboarding }: { profile: PartnerPr
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-black">Work location & availability</h2>
       <p className="mt-1 text-sm text-slate-500">Choose the location Lot Logic should use by default, then keep your normal working hours current.</p>
-      <label className="mt-4 block">
-        <div className="mb-1 text-xs font-black uppercase text-slate-500">Default work location</div>
+      <div className="mt-4">
+        <div className="mb-1 flex items-center justify-between gap-3"><div className="text-xs font-black uppercase text-slate-500">Default work location</div><button type="button" onClick={() => setAddingLocation((current) => !current)} className="text-xs font-black text-blue-700">{addingLocation ? "Cancel" : "+ Add default location"}</button></div>
         <select className={inputClass} value={primaryLocationId} onChange={(e) => setPrimaryLocationId(e.target.value)}>
           <option value="">No default location</option>
-          {profile.locations.map((location) => <option key={location.id} value={location.id}>{location.name}{location.address ? ` — ${location.address}` : ""}</option>)}
+          {locations.map((location) => <option key={location.id} value={location.id}>{location.name}{location.address ? ` — ${location.address}` : ""}</option>)}
         </select>
         <div className="mt-1 text-[11px] font-semibold text-slate-400">Lot Logic will prefill this location for new work assigned to you. You can still choose a different location for any Work Order.</div>
-      </label>
+      </div>
+
+      {addingLocation ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+        <div className="text-sm font-black">Add your default work location</div>
+        <p className="mt-1 text-xs text-slate-600">Use this for a shop or other regular place where you perform work. This becomes your saved default location.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="sm:col-span-2"><div className="mb-1 text-[10px] font-black uppercase text-slate-500">Location name</div><input className={inputClass} value={locationDraft.name} onChange={(e) => setLocationDraft((current) => ({ ...current, name: e.target.value }))} placeholder="e.g. Ari's Shop" /></label>
+          <label className="sm:col-span-2"><div className="mb-1 text-[10px] font-black uppercase text-slate-500">Street address</div><input className={inputClass} value={locationDraft.addressLine1} onChange={(e) => setLocationDraft((current) => ({ ...current, addressLine1: e.target.value }))} placeholder="123 Main St" /></label>
+          <label className="sm:col-span-2"><div className="mb-1 text-[10px] font-black uppercase text-slate-500">Suite / unit</div><input className={inputClass} value={locationDraft.addressLine2} onChange={(e) => setLocationDraft((current) => ({ ...current, addressLine2: e.target.value }))} placeholder="Optional" /></label>
+          <label><div className="mb-1 text-[10px] font-black uppercase text-slate-500">City</div><input className={inputClass} value={locationDraft.city} onChange={(e) => setLocationDraft((current) => ({ ...current, city: e.target.value }))} /></label>
+          <div className="grid grid-cols-[1fr_1fr] gap-3"><label><div className="mb-1 text-[10px] font-black uppercase text-slate-500">State</div><input className={inputClass} value={locationDraft.state} onChange={(e) => setLocationDraft((current) => ({ ...current, state: e.target.value.toUpperCase().slice(0, 2) }))} /></label><label><div className="mb-1 text-[10px] font-black uppercase text-slate-500">ZIP</div><input className={inputClass} value={locationDraft.postalCode} onChange={(e) => setLocationDraft((current) => ({ ...current, postalCode: e.target.value }))} /></label></div>
+        </div>
+        <div className="mt-3 flex justify-end"><button type="button" disabled={locationSaving} onClick={() => void addDefaultLocation()} className="rounded-xl bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{locationSaving ? "Saving…" : "Save as default location"}</button></div>
+      </div> : null}
+
       <div className="mt-5 space-y-2">{days.map(([day,label]) => { const hours = standardHours[day]; return <div key={day} className="grid items-center gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[70px_90px_1fr_1fr]">
         <div className="font-black">{label}</div>
         <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={hours.enabled} onChange={(e) => setDay(day,{enabled:e.target.checked})} /> Available</label>
