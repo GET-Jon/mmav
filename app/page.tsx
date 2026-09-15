@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { EvaluationWorkspace } from "@/components/evaluation/evaluation-workspace";
 import { LotLogicMarketingSite } from "@/components/marketing/lot-logic-marketing-site";
+import { MarketingMotion } from "@/components/marketing/marketing-motion";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
@@ -9,7 +10,12 @@ export default async function Home() {
   const user = await getCurrentUser();
 
   if (!user) {
-    return <LotLogicMarketingSite />;
+    return (
+      <>
+        <MarketingMotion />
+        <LotLogicMarketingSite />
+      </>
+    );
   }
 
   const admin = createSupabaseAdminClient();
