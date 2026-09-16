@@ -4830,18 +4830,15 @@ export function EvaluationWorkspace({
             <article
               className={`flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}
             >
-              <div>
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
-                  <span className="grid h-4 w-4 place-items-center rounded-full bg-white/70 text-[10px] font-black text-slate-500">i</span>
-                </div>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="whitespace-nowrap text-base font-black text-slate-950">Lot Logic Verdict</h2>
 
-                <div className="mt-3 flex flex-col items-start gap-2">
-                  <span className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-black ${decisionBadgeTone}`}>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>
                     {lotLogicIcon}{lotLogicLabel}
                   </span>
                   {hasEvaluationData ? (
-                    <span className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-[10px] font-black ${dealerFitPillTone}`}>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[9px] font-black ${dealerFitPillTone}`}>
                       Dealer Fit: {dealerFitResult.label} · {dealerFitResult.score}/100
                     </span>
                   ) : null}
@@ -4859,9 +4856,14 @@ export function EvaluationWorkspace({
                       : "—"}
                   </div>
                   <div className="mt-1 text-[9px] font-bold leading-4 text-slate-500 sm:text-[10px]">
-                    {hasEvaluationData && valuationInput.currentBid > 0
-                      ? `${money(valuationInput.currentBid)} bid + ≈ ${money(displayedReconReserve)} recon`
-                      : "Bid + recon reserve"}
+                    {hasEvaluationData && valuationInput.currentBid > 0 ? (
+                      <>
+                        {money(valuationInput.currentBid)} bid +<br />
+                        ≈ {money(displayedReconReserve)} recon
+                      </>
+                    ) : (
+                      <>Bid +<br />recon reserve</>
+                    )}
                   </div>
                 </div>
 
@@ -4873,7 +4875,7 @@ export function EvaluationWorkspace({
                     {hasEvaluationData && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}
                   </div>
                   <div className="mt-1 text-[9px] font-bold leading-4 text-slate-500 sm:text-[10px]">
-                    Comp-supported sale value
+                    Comp-supported<br />sale value
                   </div>
                 </div>
 
@@ -4885,7 +4887,7 @@ export function EvaluationWorkspace({
                     {hasEvaluationData ? money(valuation.expectedGrossProfit) : "—"}
                   </div>
                   <div className="mt-1 text-[9px] font-bold leading-4 text-slate-500 sm:text-[10px]">
-                    After modeled fees, costs & reserves
+                    After modeled fees,<br />costs & reserves
                   </div>
                 </div>
               </div>
@@ -4931,11 +4933,11 @@ export function EvaluationWorkspace({
                       : "Save to Pipeline"}
                 </button>
 
-                <div className="mt-2 text-center text-[10px] font-semibold text-slate-500">
-                  {hasEvaluationData
-                    ? "Based on market data, visible costs, condition, and dealer fit."
-                    : "Enter vehicle details and run an evaluation to calculate the bid, sale value, and projected profit."}
-                </div>
+                {!hasEvaluationData ? (
+                  <div className="mt-2 text-center text-[10px] font-semibold text-slate-500">
+                    Enter vehicle details and run an evaluation to calculate the bid, sale value, and projected profit.
+                  </div>
+                ) : null}
 
                 {saveStatus ? (
                   <div className="mt-2 text-center text-xs font-bold text-slate-600">
