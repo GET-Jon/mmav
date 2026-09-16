@@ -22,6 +22,9 @@ jobs:
       - name: Apply comp/profile refinement
         run: python .github/scripts/refine_comp_and_profile_flow.py
 
+      - name: Fix comp-market region type
+        run: python .github/scripts/fix_comp_region_type.py
+
       - name: Update comp-search safety guard
         run: python .github/scripts/update_expand_guard_for_edit_comps.py
 
