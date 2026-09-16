@@ -1,4 +1,8 @@
 import { POST as runStrictMarketCheckSearch } from "./strict-search";
+import {
+  evaluateVehicleEquivalence,
+  type VehicleIdentity,
+} from "@/lib/marketcheck/vehicle-equivalence";
 
 function normalizeIdentity(value: unknown) {
   return String(value || "")
@@ -6,6 +10,26 @@ function normalizeIdentity(value: unknown) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function canonicalFuelIdentity(value: unknown) {
+  const normalized = normalizeIdentity(value);
+  if (!normalized) return "";
+  if (normalized.includes("plug in hybrid") || normalized.includes("phev")) return "plug-in hybrid";
+  if (normalized.includes("electric") || normalized === "ev" || normalized.includes("battery")) return "electric";
+  if (normalized.includes("hybrid") || normalized.includes("hev")) return "hybrid";
+  if (normalized.includes("diesel") || normalized.includes("tdi")) return "diesel";
+  if (
+    normalized.includes("gasoline") ||
+    normalized === "gas" ||
+    normalized.includes("petrol") ||
+    normalized.includes("unleaded") ||
+    normalized.includes("regular fuel") ||
+    normalized.includes("premium fuel") ||
+    normalized === "regular" ||
+    normalized === "premium"
+  ) return "gasoline";
+  return normalized;
 }
 
 function canonicalizeMercedesSearch(body: Record<string, unknown>) {
@@ -30,9 +54,16 @@ type RankedComp = {
   year?: number;
   mileage?: number;
   distance?: number;
+  model?: string;
   trim?: string;
   askingPrice?: number;
   qualityScore?: number;
+  equivalenceTier?: "direct" | "near" | "supporting" | "reject";
+  equivalenceReasons?: string[];
+  autoIncludeEligible?: boolean;
+  targetClassification?: string | null;
+  candidateClassification?: string | null;
+  needsClassificationReview?: boolean;
   marketCheckDetails?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -44,6 +75,12 @@ type TargetIdentity = {
   trim: string;
   fuelType: string;
   mileage: number;
+  drivetrain?: string;
+  bodyType?: string;
+  engine?: string;
+  transmission?: string;
+  doors?: number | null;
+  cylinders?: number | null;
 };
 
 function hasValue(value: unknown) {
@@ -77,20 +114,116 @@ function yearPenalty(yearDelta: number) {
   return Math.min(36, 24 + Math.max(0, yearDelta - 3) * 3);
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stripMakeFromModel(model: unknown, make: string) {
+  const value = String(model || "").trim();
+  const normalizedMake = normalizeIdentity(make);
+  const normalizedModel = normalizeIdentity(value);
+
+  if (!value || !normalizedMake) return value;
+
+  if (normalizedModel.startsWith(`${normalizedMake} `)) {
+    return value.slice(make.length).trim();
+  }
+
+  return value;
+}
+
+function buildTargetVehicle(target: TargetIdentity): VehicleIdentity {
+  return {
+    year: target.year,
+    make: target.make,
+    model: target.model,
+    trim: target.trim,
+    fuelType: canonicalFuelIdentity(target.fuelType),
+    drivetrain: target.drivetrain,
+    bodyType: target.bodyType,
+    engine: target.engine,
+    transmission: target.transmission,
+    doors: target.doors,
+    cylinders: target.cylinders,
+  };
+}
+
+function buildCandidateVehicle(
+  comp: RankedComp,
+  target: TargetIdentity,
+): VehicleIdentity {
+  const details = comp.marketCheckDetails || {};
+  const raw = asRecord(details.raw);
+  const build = asRecord(raw.build);
+
+  const make = String(build.make || raw.make || target.make || "").trim();
+  const rawModel =
+    build.model ||
+    raw.model ||
+    stripMakeFromModel(comp.model, make || target.make) ||
+    target.model;
+
+  return {
+    year: Number(comp.year || build.year || raw.year || 0),
+    make,
+    model: String(rawModel || "").trim(),
+    trim: String(comp.trim || build.trim || raw.trim || "").trim(),
+    bodyType: String(
+      details.bodyType || build.body_type || build.body_style || "",
+    ).trim(),
+    drivetrain: String(
+      details.drivetrain || build.drivetrain || build.drive_type || "",
+    ).trim(),
+    fuelType: canonicalFuelIdentity(
+      details.fuelType || build.fuel_type || build.fuel || "",
+    ),
+    engine: String(
+      details.engine || build.engine || build.engine_description || "",
+    ).trim(),
+    transmission: String(
+      details.transmission || build.transmission || "",
+    ).trim(),
+    doors: Number(details.doors || build.doors || 0) || null,
+    cylinders: Number(details.cylinders || build.cylinders || 0) || null,
+  };
+}
+
+const equivalenceRank = {
+  direct: 0,
+  near: 1,
+  supporting: 2,
+  reject: 3,
+} as const;
+
 function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentity) {
   if (!Array.isArray(payload.comps) || !target.year) return payload;
 
   const original = payload.comps as RankedComp[];
   const originalIncludedCount = original.filter((comp) => comp.included === true).length;
+  const targetVehicle = buildTargetVehicle(target);
+  const minimumQualityScore = Number(payload.minimumQualityScore || 55);
 
   const ranked = original.map((comp) => {
     const compYear = Number(comp.year || 0);
     const delta = compYear && target.year ? Math.abs(compYear - target.year) : 99;
     const currentScore = Number(comp.qualityScore || 40);
     const previousYearPenalty = delta === 0 ? 0 : 20;
-    const fitScore = Math.max(
+    const yearAdjustedScore = Math.max(
       30,
       Math.min(100, Math.round(currentScore + previousYearPenalty - yearPenalty(delta))),
+    );
+
+    const candidateVehicle = buildCandidateVehicle(comp, target);
+    const equivalence = evaluateVehicleEquivalence({
+      target: targetVehicle,
+      candidate: candidateVehicle,
+    });
+
+    const fitScore = Math.max(
+      0,
+      Math.min(100, Math.round(yearAdjustedScore + equivalence.scoreModifier)),
     );
 
     const mileage = Number(comp.mileage || 0);
@@ -100,6 +233,12 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
     return {
       ...comp,
       qualityScore: fitScore,
+      equivalenceTier: equivalence.tier,
+      equivalenceReasons: equivalence.reasons,
+      autoIncludeEligible: equivalence.autoIncludeEligible,
+      targetClassification: equivalence.targetClassification || null,
+      candidateClassification: equivalence.candidateClassification || null,
+      needsClassificationReview: equivalence.needsClassificationReview === true,
       marketCheckDetails: {
         ...details,
         targetYear: target.year,
@@ -124,12 +263,21 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
           distanceMiles: Number(comp.distance || 0),
           trimAvailable: Boolean(String(comp.trim || "").trim()),
           originalScore: currentScore,
+          equivalenceTier: equivalence.tier,
+          equivalenceReasons: equivalence.reasons,
+          autoIncludeEligible: equivalence.autoIncludeEligible,
+          needsClassificationReview: equivalence.needsClassificationReview === true,
         },
       },
     };
   });
 
   ranked.sort((a, b) => {
+    const aTier = equivalenceRank[a.equivalenceTier || "supporting"];
+    const bTier = equivalenceRank[b.equivalenceTier || "supporting"];
+
+    if (aTier !== bTier) return aTier - bTier;
+
     const aDelta = Math.abs(Number(a.year || 0) - target.year);
     const bDelta = Math.abs(Number(b.year || 0) - target.year);
     const aPreferred = aDelta <= 2 ? 0 : 1;
@@ -143,17 +291,70 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
     return Number(a.distance || 0) - Number(b.distance || 0);
   });
 
-  const withInclusions = ranked.map((comp, index) => ({
-    ...comp,
-    included: originalIncludedCount > 0 ? index < originalIncludedCount : false,
-  }));
+  let included = 0;
+  const desiredIncludedCount = Math.min(6, Math.max(0, originalIncludedCount));
 
-  return { ...payload, comps: withInclusions };
+  const withInclusions = ranked.map((comp) => {
+    const scorePasses = Number(comp.qualityScore || 0) >= minimumQualityScore;
+    const eligible =
+      comp.autoIncludeEligible === true &&
+      (comp.equivalenceTier === "direct" || comp.equivalenceTier === "near") &&
+      scorePasses;
+
+    const shouldInclude = eligible && included < desiredIncludedCount;
+    if (shouldInclude) included += 1;
+
+    return {
+      ...comp,
+      included: shouldInclude,
+    };
+  });
+
+  const directCount = withInclusions.filter(
+    (comp) => comp.equivalenceTier === "direct",
+  ).length;
+  const nearCount = withInclusions.filter(
+    (comp) => comp.equivalenceTier === "near",
+  ).length;
+  const supportingCount = withInclusions.filter(
+    (comp) => comp.equivalenceTier === "supporting",
+  ).length;
+  const rejectedCount = withInclusions.filter(
+    (comp) => comp.equivalenceTier === "reject",
+  ).length;
+  const aiReviewCandidateCount = withInclusions.filter(
+    (comp) => comp.needsClassificationReview === true,
+  ).length;
+  const qualityPassingEquivalentCount = withInclusions.filter(
+    (comp) =>
+      (comp.equivalenceTier === "direct" || comp.equivalenceTier === "near") &&
+      Number(comp.qualityScore || 0) >= minimumQualityScore,
+  ).length;
+
+  return {
+    ...payload,
+    lowConfidenceFallback: false,
+    comps: withInclusions,
+    equivalenceSummary: {
+      directCount,
+      nearCount,
+      supportingCount,
+      rejectedCount,
+      aiReviewCandidateCount,
+      qualityPassingEquivalentCount,
+      autoIncludedCount: included,
+      valuationReady: included > 0,
+      methodology:
+        "Vehicle equivalence and quality thresholds are evaluated before mileage normalization. Only Direct/Near comps that pass the quality floor are auto-included; weak fallback rows never create an automatic valuation.",
+    },
+  };
 }
 
 export async function POST(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
   const normalizedBody = canonicalizeMercedesSearch(body);
+  const decodedVehicle = asRecord(normalizedBody.decodedVehicle);
+  const nestedVehicle = asRecord(normalizedBody.vehicle);
 
   const forwardedRequest = new Request(request.url, {
     method: "POST",
@@ -166,12 +367,56 @@ export async function POST(request: Request) {
 
   const payload = (await response.json()) as Record<string, unknown>;
   const rankedPayload = rerankByCompFit(payload, {
-    year: Number(normalizedBody.year || 0),
-    make: String(normalizedBody.make || "").trim(),
-    model: String(normalizedBody.model || "").trim(),
-    trim: String(normalizedBody.trim || "").trim(),
-    fuelType: String(normalizedBody.fuelType || "").trim(),
-    mileage: Number(normalizedBody.targetMileage || 0),
+    year: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0),
+    make: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim(),
+    model: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim(),
+    trim: String(normalizedBody.trim || decodedVehicle.trim || nestedVehicle.trim || "").trim(),
+    fuelType: canonicalFuelIdentity(
+      normalizedBody.fuelType ||
+        normalizedBody.targetFuelType ||
+        decodedVehicle.fuelType ||
+        nestedVehicle.fuelType ||
+        "",
+    ),
+    mileage: Number(
+      normalizedBody.targetMileage ||
+        normalizedBody.mileage ||
+        decodedVehicle.mileage ||
+        nestedVehicle.mileage ||
+        0,
+    ),
+    drivetrain: String(
+      normalizedBody.drivetrain ||
+        decodedVehicle.drivetrain ||
+        nestedVehicle.drivetrain ||
+        "",
+    ).trim(),
+    bodyType: String(
+      normalizedBody.bodyType ||
+        decodedVehicle.bodyType ||
+        decodedVehicle.bodyStyle ||
+        nestedVehicle.bodyType ||
+        nestedVehicle.bodyStyle ||
+        "",
+    ).trim(),
+    engine: String(
+      normalizedBody.engine || decodedVehicle.engine || nestedVehicle.engine || "",
+    ).trim(),
+    transmission: String(
+      normalizedBody.transmission ||
+        decodedVehicle.transmission ||
+        nestedVehicle.transmission ||
+        "",
+    ).trim(),
+    doors: Number(
+      normalizedBody.doors || decodedVehicle.doors || nestedVehicle.doors || 0,
+    ) || null,
+    cylinders: Number(
+      normalizedBody.cylinders ||
+        decodedVehicle.cylinders ||
+        nestedVehicle.cylinders ||
+        0,
+    ) || null,
   });
 
   return Response.json(rankedPayload, { status: response.status });

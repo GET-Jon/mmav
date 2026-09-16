@@ -29,7 +29,7 @@ export default async function InventoryPartsPage({ params }: { params: Promise<{
   return (
     <div className="space-y-6">
       <InventoryPartsBoard vehicleId={vehicle.id} requirements={requirements} suggestions={suggestions} />
-      <TrackedPartDetailsEditor vehicleId={vehicle.id} data={data} />
+      <TrackedPartDetailsEditor vehicleId={vehicle.id} parts={data.parts} />
       <InventoryTransportOnly vehicleId={vehicle.id} data={data} />
     </div>
   );
