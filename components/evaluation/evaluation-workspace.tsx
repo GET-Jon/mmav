@@ -2688,6 +2688,37 @@ export function EvaluationWorkspace({
     )
     .slice(0, 6);
 
+  const conditionIssueBullets = (conditionAnalysis?.issues || [])
+    .filter((issue) => issue.includeInValuation)
+    .sort((a, b) => b.planningEstimate - a.planningEstimate);
+
+  const dealStrengthBullets = [
+    profitabilityScore >= 82 && valuation.expectedGrossProfit > 0
+      ? `Strong economics: ${money(valuation.expectedGrossProfit)} expected gross at the current assumptions.`
+      : null,
+    compSummary.includedCount >= 6 && finalTargetUsed > 0
+      ? `${compSummary.includedCount} strong comps support an expected sale value near ${money(finalTargetUsed)}.`
+      : null,
+    conditionAnalysisApplied && getEffectiveConditionPlanningEstimate() > 0
+      ? `${money(getEffectiveConditionPlanningEstimate())} of selected recon is already reflected in the deal economics.`
+      : null,
+    ...dealerFitResult.reasons.slice(0, 2),
+  ].filter((item): item is string => Boolean(item));
+
+  const dealConcernBullets = [
+    ...conditionIssueBullets
+      .filter((issue) => issue.severity !== "minor")
+      .slice(0, 4)
+      .map((issue) => `${issue.description} · ${money(issue.planningEstimate)} planning estimate.`),
+    comps.length > 0 && String(compSummary.confidence || "").toLowerCase() === "low"
+      ? "The current comp set is still thin; expand the market before relying heavily on the resale target."
+      : null,
+  ].filter((item): item is string => Boolean(item));
+
+  const dealerFitContext = hasEvaluationData
+    ? `${dealerFitResult.label} · ${dealerFitResult.score}/100`
+    : "Not calculated";
+
   const suggestedBidDisplay = !hasEvaluationData
     ? "—"
     : valuationInput.currentBid <= 0
@@ -2709,18 +2740,18 @@ export function EvaluationWorkspace({
             tone: "over" as const,
             text: `Current bid is ${money(
               currentBidDifference,
-            )} above the Max Smart Bid.`,
+            )} above the Recommended Max Buy.`,
           }
         : currentBidDifference < 0
           ? {
               tone: "under" as const,
               text: `${money(
                 Math.abs(currentBidDifference),
-              )} remains before reaching the Max Smart Bid.`,
+              )} remains before reaching the Recommended Max Buy.`,
             }
           : {
               tone: "at" as const,
-              text: "Current bid is at the Max Smart Bid.",
+              text: "Current bid is at the Recommended Max Buy.",
             };
 
   const hasManualQuickEvalBasics =
@@ -2764,12 +2795,14 @@ export function EvaluationWorkspace({
     }
   }
 
-  const hasSevereCondition = Object.values(conditionAssessments).some(
-    (assessment) => assessment.severity === "severe",
+  const materialConditionIssues = (conditionAnalysis?.issues || []).filter(
+    (issue) =>
+      issue.includeInValuation &&
+      issue.severity === "severe" &&
+      ["mechanical", "history", "structural", "title"].includes(issue.category),
   );
 
-  const hasHighConditionRisk =
-    String(conditionAnalysis?.overallRisk || "").toLowerCase() === "high";
+  const hasMaterialConditionRisk = materialConditionIssues.length > 0;
 
   const hasLowCompConfidence =
     comps.length > 0 &&
@@ -2781,17 +2814,11 @@ export function EvaluationWorkspace({
     hasEvaluationData &&
     valuation.decision !== "Pass" &&
     valuation.decision !== "Watch / Stretch Only" &&
-    (hasLowCompConfidence ||
-      hasLimitedDealerFit ||
-      hasSevereCondition ||
-      hasHighConditionRisk);
+    (hasLowCompConfidence || hasMaterialConditionRisk);
 
   const reviewReasons = [
-    hasLowCompConfidence ? "low comp confidence" : null,
-    hasLimitedDealerFit ? "limited dealer fit" : null,
-    hasSevereCondition || hasHighConditionRisk
-      ? "significant condition concerns"
-      : null,
+    hasLowCompConfidence ? "market evidence is still thin" : null,
+    hasMaterialConditionRisk ? "a material vehicle-specific risk needs review" : null,
   ].filter((reason): reason is string => Boolean(reason));
 
   const lotLogicLabel = !hasEvaluationData
@@ -3244,7 +3271,7 @@ export function EvaluationWorkspace({
                           compSummary.includedCount,
                       ),
                     ],
-                    ["Comp Confidence", compSummary.confidence || "—"],
+                    ["Market Evidence", compSummary.confidence || "—"],
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -4039,7 +4066,7 @@ export function EvaluationWorkspace({
                 </select>
               </FormRow>
 
-              <FormRow label="Sale Value Used">
+              <FormRow label="Expected Sale Value">
                 <div>
                   <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                     <span className="pl-3 text-sm text-slate-400">$</span>
@@ -4058,7 +4085,7 @@ export function EvaluationWorkspace({
                   </div>
 
                   <p className="mt-1.5 text-right text-[10px] font-semibold leading-4 text-slate-400">
-                    Defaults to the Fast-Sale Value. Enter a different amount to
+                    Defaults to the Conservative Sale Value. Enter a different amount to
                     override it.
                   </p>
                 </div>
@@ -4517,11 +4544,18 @@ export function EvaluationWorkspace({
                   </span>
                 </div>
 
-                <span
-                  className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-black ${decisionBadgeTone}`}
-                >
-                  {lotLogicIcon}{lotLogicLabel}
-                </span>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {hasEvaluationData ? (
+                    <span className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-[10px] font-black ${dealerFitResult.score >= 72 ? "bg-blue-50 text-blue-700" : dealerFitResult.score >= 55 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
+                      Dealer Fit: {dealerFitResult.label}
+                    </span>
+                  ) : null}
+                  <span
+                    className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-black ${decisionBadgeTone}`}
+                  >
+                    {lotLogicIcon}{lotLogicLabel}
+                  </span>
+                </div>
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
@@ -4628,9 +4662,14 @@ export function EvaluationWorkspace({
             </article>
 
             <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
-              <h2 className="text-base font-black text-slate-950">
-                Why Lot Logic Thinks This
-              </h2>
+              <div>
+                <h2 className="text-base font-black text-slate-950">
+                  Why Lot Logic Thinks This
+                </h2>
+                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                  Deal economics and market evidence drive the verdict. Dealer fit is supporting context.
+                </p>
+              </div>
 
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex justify-between gap-4">
@@ -4743,36 +4782,94 @@ export function EvaluationWorkspace({
                 </div>
               }
             >
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,.65fr)]">
+              <div className="grid gap-5 lg:grid-cols-2">
                 <div>
-                  <p className="max-w-3xl text-sm font-semibold leading-6 text-slate-600">
-                    Paste auction announcements, condition-report notes, seller comments, inspection observations, known damage, warning lights, service history, or anything else that could affect value or reconditioning. Lot Logic will turn the messy notes into specific issues you can confirm.
-                  </p>
+                  {!conditionAnalysis ? (
+                    <>
+                      <p className="max-w-3xl text-sm font-semibold leading-6 text-slate-600">
+                        Paste auction announcements, condition-report notes, seller comments, inspection observations, known damage, warning lights, service history, or anything else that could affect value or reconditioning. Lot Logic will turn the messy notes into specific issues you can confirm.
+                      </p>
 
-                  <textarea
-                    value={conditionSourceText}
-                    onChange={(event) => {
-                      setConditionSourceText(event.target.value);
-                      setConditionAnalysisApplied(false);
-                    }}
-                    disabled={!hasEvaluationData}
-                    placeholder={hasEvaluationData ? "Example: rear tires are around 3/32, windshield has a chip, front bumper is scuffed, CEL is on, seller says brakes were replaced recently..." : "Enter a vehicle first, then add everything you know about its condition."}
-                    className="mt-4 min-h-[150px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none transition focus:border-violet-300 focus:bg-white disabled:cursor-not-allowed disabled:bg-slate-100"
-                  />
+                      <textarea
+                        value={conditionSourceText}
+                        onChange={(event) => {
+                          setConditionSourceText(event.target.value);
+                          setConditionAnalysisApplied(false);
+                        }}
+                        disabled={!hasEvaluationData}
+                        placeholder={hasEvaluationData ? "Example: rear tires are around 3/32, windshield has a chip, front bumper is scuffed, CEL is on, seller says brakes were replaced recently..." : "Enter a vehicle first, then add everything you know about its condition."}
+                        className="mt-4 min-h-[190px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none transition focus:border-violet-300 focus:bg-white disabled:cursor-not-allowed disabled:bg-slate-100"
+                      />
 
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-xs font-semibold text-slate-400">
-                      Better vehicle context improves recon, risk, and the recommended buy economics.
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-xs font-semibold text-slate-400">
+                          Better vehicle context improves recon, risk, and the recommended buy economics.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void analyzeConditionInformation()}
+                          disabled={conditionAnalysisLoading || !hasEvaluationData || !conditionSourceText.trim()}
+                          className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          {conditionAnalysisLoading ? "Analyzing..." : "Analyze Vehicle Notes"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-600">Lot Logic Vehicle Read</div>
+                          <h3 className="mt-1 text-lg font-black text-slate-950">What helps — and what actually needs attention</h3>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-black ${dealerFitResult.score >= 72 ? "bg-blue-50 text-blue-700" : dealerFitResult.score >= 55 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
+                          Dealer Fit: {dealerFitContext}
+                        </span>
+                      </div>
+
+                      <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                        <div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">What strengthens the deal</div>
+                          <ul className="mt-3 space-y-2.5">
+                            {(dealStrengthBullets.length ? dealStrengthBullets : ["No specific positive signal has been established yet."]).slice(0, 5).map((item) => (
+                              <li key={item} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700">
+                                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-700">What needs attention</div>
+                          <ul className="mt-3 space-y-2.5">
+                            {(dealConcernBullets.length ? dealConcernBullets : ["No material vehicle-specific concern has been identified from the supplied notes."]).slice(0, 5).map((item) => (
+                              <li key={item} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700">
+                                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                        <p className="text-[10px] font-semibold leading-4 text-slate-400">
+                          Only vehicle-specific evidence and supported deal signals are shown here. Generic buying hygiene is intentionally excluded.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConditionAnalysis(null);
+                            setConditionAnalysisApplied(false);
+                          }}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+                        >
+                          Edit vehicle notes
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void analyzeConditionInformation()}
-                      disabled={conditionAnalysisLoading || !hasEvaluationData || !conditionSourceText.trim()}
-                      className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {conditionAnalysisLoading ? "Analyzing..." : conditionAnalysis ? "Analyze Again" : "Analyze Vehicle Notes"}
-                    </button>
-                  </div>
+                  )}
 
                   {conditionAnalysisError ? (
                     <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
@@ -4783,10 +4880,10 @@ export function EvaluationWorkspace({
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                   {!conditionAnalysis ? (
-                    <div className="flex h-full min-h-[210px] flex-col justify-center text-center">
-                      <div className="text-sm font-black text-slate-800">AI recon starts with what you know.</div>
+                    <div className="flex h-full min-h-[260px] flex-col justify-center text-center">
+                      <div className="text-sm font-black text-slate-800">AI-detected recon will appear here.</div>
                       <p className="mx-auto mt-2 max-w-sm text-xs font-semibold leading-5 text-slate-500">
-                        Lot Logic will propose likely recon items and costs. Nothing affects the valuation until you review and apply it.
+                        Analyze the vehicle notes, then confirm or uncheck each proposed item before it affects the valuation.
                       </p>
                     </div>
                   ) : (
