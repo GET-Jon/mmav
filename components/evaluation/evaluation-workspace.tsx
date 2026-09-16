@@ -4851,7 +4851,7 @@ export function EvaluationWorkspace({
               <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
                 <div className="min-w-0">
                   <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-500 sm:text-[10px]">
-                    Estimated All-In Cost
+                    All-In Cost
                   </div>
                   <div className="mt-2 text-[25px] font-black tracking-[-0.04em] text-slate-950">
                     {hasEvaluationData && valuationInput.currentBid > 0
