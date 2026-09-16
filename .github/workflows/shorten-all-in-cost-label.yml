@@ -1,0 +1,26 @@
+name: Shorten all-in cost label
+
+on:
+  push:
+    branches:
+      - lot-logic-public-site
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lot-logic-public-site
+          fetch-depth: 0
+      - run: python .github/scripts/shorten_all_in_cost_label.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/evaluation/evaluation-workspace.tsx
+          git commit -m "Shorten all-in cost label"
+          git push origin HEAD:lot-logic-public-site
