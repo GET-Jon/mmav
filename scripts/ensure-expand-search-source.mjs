@@ -18,7 +18,9 @@ const evaluatorChanged = updateFile(evaluatorPath, (source) => {
 
   const correctedGate = `                  {marketCheckSearchMeta &&\n                  marketCheckSearchMeta.searchStage !== "metro" &&\n                  !marketCheckLoading ? (`;
 
-  if (source.includes(correctedGate)) {
+  const strongCompGate = `                  {marketCheckSearchMeta &&\n                  compSummary.includedCount < 6 &&\n                  marketCheckSearchMeta.searchStage !== "metro" &&\n                  !marketCheckLoading ? (`;
+
+  if (source.includes(strongCompGate) || source.includes(correctedGate)) {
     return source;
   }
 

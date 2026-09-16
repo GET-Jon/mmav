@@ -1941,7 +1941,7 @@ export function EvaluationWorkspace({
 
     if (nextRegions.length === 0) {
       setMarketCheckStatus(
-        "All configured regions have already been searched. Major metropolitan search is available next.",
+        "Nearby configured markets have been searched. Major reference markets are available as the final expansion step.",
       );
       return;
     }
@@ -1979,7 +1979,7 @@ export function EvaluationWorkspace({
 
     if (metroRegions.length === 0) {
       setMarketCheckStatus(
-        "Major metropolitan areas have already been searched for this vehicle.",
+        "Major reference markets have already been searched for this vehicle.",
       );
       return;
     }
@@ -3238,7 +3238,7 @@ export function EvaluationWorkspace({
                       String(marketCheckApiUsage?.apiCallsMade ?? 0),
                     ],
                     [
-                      "Usable Comps",
+                      "Strong Comps",
                       String(
                         marketCheckApiUsage?.usableCompCount ??
                           compSummary.includedCount,
@@ -4353,7 +4353,7 @@ export function EvaluationWorkspace({
                       bodyClass: manualVehicle.bodyClass,
                     });
 
-                    await pullMarketCheckComps(manualOverride);
+                    setMarketCheckStatus("Vehicle ready. Use Find Comps when you are ready to search the market.");
                     return;
                   }
 
@@ -4373,7 +4373,7 @@ export function EvaluationWorkspace({
                     bodyClass: newlyDecodedVehicle.bodyClass,
                   });
 
-                  await pullMarketCheckComps(newlyDecodedVehicle);
+                  setMarketCheckStatus("Vehicle ready. Use Find Comps when you are ready to search the market.");
                 }}
                 disabled={
                   vinDecodeLoading ||
@@ -4527,7 +4527,7 @@ export function EvaluationWorkspace({
               <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Max Smart Bid
+                    Recommended Max Buy
                   </div>
 
                   <div
@@ -4543,7 +4543,7 @@ export function EvaluationWorkspace({
 
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Sale Value Used
+                    Expected Sale Value
                   </div>
 
                   <div className="mt-2 text-[25px] font-black tracking-[-0.04em] text-slate-950">
@@ -4555,7 +4555,7 @@ export function EvaluationWorkspace({
 
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Projected Profit
+                    Expected Gross
                   </div>
 
                   <div
@@ -4629,13 +4629,13 @@ export function EvaluationWorkspace({
 
             <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
               <h2 className="text-base font-black text-slate-950">
-                Market &amp; Fit Summary
+                Why Lot Logic Thinks This
               </h2>
 
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Comp Confidence
+                    Market Evidence
                   </dt>
                   <dd
                     className={`text-right font-black ${
@@ -4648,7 +4648,7 @@ export function EvaluationWorkspace({
 
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Included Comps
+                    Strong Comps Used
                   </dt>
                   <dd
                     className={`text-right font-black ${
@@ -4661,7 +4661,7 @@ export function EvaluationWorkspace({
 
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Median Adjusted Value
+                    Comp-Supported Value
                   </dt>
                   <dd
                     className={`text-right font-black ${
@@ -4679,7 +4679,7 @@ export function EvaluationWorkspace({
 
                 <div className="flex justify-between gap-4">
                   <dt className="font-semibold text-slate-500">
-                    Fast-Sale Value
+                    Conservative Sale Value
                   </dt>
                   <dd
                     className={`text-right font-black ${
@@ -4697,14 +4697,14 @@ export function EvaluationWorkspace({
 
               <div className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-5">
                 <ScoreRing
-                  label="Profitability Score"
+                  label="Deal Economics"
                   score={profitabilityScoreDisplay}
                   tone="green"
                   isEmpty={!hasEvaluationData}
                 />
 
                 <ScoreRing
-                  label="Dealer-Fit Score"
+                  label="Dealer Fit"
                   score={dealerFitScoreDisplay}
                   tone="blue"
                   isEmpty={!hasEvaluationData}
@@ -4717,465 +4717,127 @@ export function EvaluationWorkspace({
                 disabled={!hasEvaluationData}
                 className="mx-auto mt-4 block text-xs font-extrabold text-blue-700 hover:text-blue-900 disabled:cursor-not-allowed disabled:text-slate-400"
               >
-                View Scoring Details →
+                See how these scores are built →
               </button>
             </article>
           </section>
 
-          <section className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(350px,.85fr)]">
-            <div className="h-full overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-              <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-black tracking-[-0.02em] text-slate-950">
-                      Mindful Intelligence
-                    </h2>
+          <section className="mt-4">
+            <SectionCard
+              title="Tell Lot Logic What You Know About This Vehicle"
+              action={
+                <div className="flex items-center gap-2">
+                  {conditionAnalysis ? (
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ${conditionAnalysisApplied ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"}`}>
+                      {conditionAnalysisApplied ? "Applied to valuation" : "Review before applying"}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={openConditionAnalysis}
+                    disabled={!hasEvaluationData}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                  >
+                    Detailed editor
+                  </button>
+                </div>
+              }
+            >
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,.65fr)]">
+                <div>
+                  <p className="max-w-3xl text-sm font-semibold leading-6 text-slate-600">
+                    Paste auction announcements, condition-report notes, seller comments, inspection observations, known damage, warning lights, service history, or anything else that could affect value or reconditioning. Lot Logic will turn the messy notes into specific issues you can confirm.
+                  </p>
 
-                    {hasEvaluationData ? (
-                      <div className="mt-1 text-xs font-semibold text-slate-500">
-                        {mindfulIntelligenceDisplay.title}
-                      </div>
-                    ) : (
-                      <div className="mt-1 text-xs font-semibold text-slate-500">
-                        Available after evaluation
-                      </div>
-                    )}
+                  <textarea
+                    value={conditionSourceText}
+                    onChange={(event) => {
+                      setConditionSourceText(event.target.value);
+                      setConditionAnalysisApplied(false);
+                    }}
+                    disabled={!hasEvaluationData}
+                    placeholder={hasEvaluationData ? "Example: rear tires are around 3/32, windshield has a chip, front bumper is scuffed, CEL is on, seller says brakes were replaced recently..." : "Enter a vehicle first, then add everything you know about its condition."}
+                    className="mt-4 min-h-[150px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none transition focus:border-violet-300 focus:bg-white disabled:cursor-not-allowed disabled:bg-slate-100"
+                  />
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs font-semibold text-slate-400">
+                      Better vehicle context improves recon, risk, and the recommended buy economics.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void analyzeConditionInformation()}
+                      disabled={conditionAnalysisLoading || !hasEvaluationData || !conditionSourceText.trim()}
+                      className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {conditionAnalysisLoading ? "Analyzing..." : conditionAnalysis ? "Analyze Again" : "Analyze Vehicle Notes"}
+                    </button>
                   </div>
 
-                  {hasEvaluationData ? (
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-[10px] font-black ${mindfulRecommendationTone}`}
-                      >
-                        Recommendation: {mindfulRecommendation}
-                      </span>
+                  {conditionAnalysisError ? (
+                    <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      {conditionAnalysisError}
+                    </div>
+                  ) : null}
+                </div>
 
-                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black text-violet-700">
-                        Vehicle Fit:{" "}
-                        {mindfulIntelligenceDisplay.verdict === "strong_fit"
-                          ? "Strong"
-                          : mindfulIntelligenceDisplay.verdict ===
-                              "conditional_fit"
-                            ? "Selective"
-                            : "Limited"}
-                      </span>
-
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
-                        {mindfulIntelligenceDisplay.confidence} confidence
-                      </span>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  {!conditionAnalysis ? (
+                    <div className="flex h-full min-h-[210px] flex-col justify-center text-center">
+                      <div className="text-sm font-black text-slate-800">AI recon starts with what you know.</div>
+                      <p className="mx-auto mt-2 max-w-sm text-xs font-semibold leading-5 text-slate-500">
+                        Lot Logic will propose likely recon items and costs. Nothing affects the valuation until you review and apply it.
+                      </p>
                     </div>
                   ) : (
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                      Awaiting evaluation
-                    </span>
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-600">AI-detected recon</div>
+                          <div className="mt-1 text-2xl font-black text-slate-950">{money(getEffectiveConditionPlanningEstimate())}</div>
+                          <div className="mt-1 text-[10px] font-bold text-slate-500">
+                            {conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} selected · {conditionAnalysis.overallRisk} risk
+                          </div>
+                        </div>
+                        <div className="text-right text-[10px] font-bold text-slate-500">
+                          <div>Estimated range</div>
+                          <div className="mt-1 text-xs font-black text-slate-800">{money(conditionAnalysis.estimatedCostLow)}–{money(conditionAnalysis.estimatedCostHigh)}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 max-h-[230px] space-y-2 overflow-y-auto pr-1">
+                        {conditionAnalysis.issues.map((issue) => (
+                          <label key={issue.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 ${issue.includeInValuation ? "border-violet-200 bg-white" : "border-slate-200 bg-slate-100/60 opacity-70"}`}>
+                            <input
+                              type="checkbox"
+                              checked={issue.includeInValuation}
+                              onChange={() => toggleConditionAnalysisIssue(issue.id)}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-violet-700"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-xs font-black leading-4 text-slate-800">{issue.description}</span>
+                              <span className="mt-1 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                                <span className="capitalize">{issue.category.replaceAll("_", " ")}</span>
+                                <span>{money(issue.planningEstimate)}</span>
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={applyConditionAnalysis}
+                        className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black text-white ${conditionAnalysisApplied ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-950 hover:bg-slate-800"}`}
+                      >
+                        {conditionAnalysisApplied
+                          ? `Applied · ${money(getEffectiveConditionPlanningEstimate())} recon`
+                          : `Apply ${conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} items · ${money(getEffectiveConditionPlanningEstimate())}`}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
-
-              {hasEvaluationData ? (
-                <>
-              <div className="border-b border-violet-100 px-5">
-                <div
-                  className="flex gap-6"
-                  role="tablist"
-                  aria-label="Mindful Intelligence sections"
-                >
-                  {[
-                    {
-                      id: "verdict" as const,
-                      label: "Verdict",
-                    },
-                    {
-                      id: "thesis" as const,
-                      label: "Deal Thesis",
-                    },
-                    {
-                      id: "checks" as const,
-                      label: "Checks",
-                    },
-                  ].map((tab) => {
-                    const isActive = activeMindfulIntelligenceTab === tab.id;
-
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        onClick={() => setActiveMindfulIntelligenceTab(tab.id)}
-                        className={`relative py-3 text-xs font-black transition ${
-                          isActive
-                            ? "text-violet-700"
-                            : "text-slate-400 hover:text-slate-700"
-                        }`}
-                      >
-                        {tab.label}
-
-                        <span
-                          aria-hidden="true"
-                          className={`absolute inset-x-0 bottom-0 h-0.5 rounded-full transition ${
-                            isActive ? "bg-violet-600" : "bg-transparent"
-                          }`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {activeMindfulIntelligenceTab === "verdict" ? (
-                <div className="px-5 py-5">
-                  <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                    Mindful verdict
-                  </div>
-
-                  <div
-                    className={`mt-2 text-base font-black ${
-                      mindfulRecommendation === "PURSUE"
-                        ? "text-emerald-700"
-                        : mindfulRecommendation === "SELECTIVE"
-                          ? "text-amber-700"
-                          : "text-red-700"
-                    }`}
-                  >
-                    {mindfulRecommendationLead}
-                  </div>
-
-                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
-                    {mindfulLeadExplanation}
-                  </p>
-
-                  {mindfulSupportingNegativeEvidence.length ? (
-                    <div className="mt-5">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600">
-                        {mindfulRecommendation === "AVOID"
-                          ? "Why we're passing"
-                          : "What concerns us"}
-                      </div>
-
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulSupportingNegativeEvidence.map((item) => (
-                          <li
-                            key={item}
-                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {mindfulPositiveEvidence.length ? (
-                    <div className="mt-5">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">
-                        What we like
-                      </div>
-
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulPositiveEvidence.map((item) => (
-                          <li
-                            key={item}
-                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {mindfulConditionalEvidence.length ? (
-                    <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-700">
-                        {mindfulRecommendation === "AVOID"
-                          ? "What could change the verdict"
-                          : "What to verify next"}
-                      </div>
-
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulConditionalEvidence.map((item) => (
-                          <li
-                            key={item}
-                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {activeMindfulIntelligenceTab === "thesis" ? (
-                <div className="px-5 py-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
-                        AI Deal Thesis
-                      </div>
-
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        Uses evaluator data and Mindful Intelligence context.
-                      </p>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveThesisMode("financial");
-                          void generateAiSummary("financial");
-                        }}
-                        disabled={Boolean(aiSummaryLoadingMode)}
-                        className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                          activeThesisMode === "financial"
-                            ? "bg-blue-700 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        {aiSummaryLoadingMode === "financial"
-                          ? "Generating..."
-                          : "Financial"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveThesisMode("enthusiast");
-                          void generateAiSummary("enthusiast");
-                        }}
-                        disabled={Boolean(aiSummaryLoadingMode)}
-                        className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                          activeThesisMode === "enthusiast"
-                            ? "bg-slate-950 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        {aiSummaryLoadingMode === "enthusiast"
-                          ? "Generating..."
-                          : "Enthusiast"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {aiSummaryError ? (
-                    <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                      {aiSummaryError}
-                    </div>
-                  ) : null}
-
-                  <textarea
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    placeholder="Generate a financial or enthusiast thesis using the current evaluator data."
-                    className="mt-4 min-h-[220px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-violet-300 focus:bg-white"
-                  />
-
-                  <div className="mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-400">
-                    <span>
-                      {activeThesisMode === "financial"
-                        ? "Financial thesis"
-                        : "Enthusiast thesis"}
-                    </span>
-
-                    <span>{notes.trim().length} characters</span>
-                  </div>
-                </div>
-              ) : null}
-
-              {activeMindfulIntelligenceTab === "checks" ? (
-                <div className="px-5 py-5">
-                  <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
-                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
-                      Priority checks
-                    </div>
-
-                    {mindfulIntelligenceDisplay.verificationItems.length ? (
-                      <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                        {mindfulIntelligenceDisplay.verificationItems
-                          .slice(0, 8)
-                          .map((item) => (
-                            <li
-                              key={item}
-                              className="flex gap-2.5 text-xs font-semibold leading-5 text-slate-700"
-                            >
-                              <span
-                                aria-hidden="true"
-                                className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500"
-                              />
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs font-semibold text-slate-500">
-                        No vehicle-specific verification items are currently
-                        attached to this profile.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                      Source
-                    </div>
-
-                    <div className="mt-1 text-xs font-bold text-slate-700">
-                      {mindfulIntelligenceDisplay.source.sectionTitle}
-                    </div>
-
-                    <div className="mt-2 text-[10px] font-semibold leading-4 text-violet-700">
-                      {mindfulIntelligencePreview
-                        ? "Matched company knowledge informs the AI thesis but does not alter valuation, bid guidance, or the current dealer-fit score."
-                        : "No dedicated company profile was found. This general read uses current vehicle data and dealer-fit rules and does not alter valuation or bid guidance."}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-                </>
-              ) : (
-                <div className="px-5 py-8">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-7 text-center">
-                    <div className="text-sm font-bold text-slate-700">
-                      Mindful verdict, deal thesis, and priority checks will
-                      appear here after the vehicle and market data are evaluated.
-                    </div>
-
-                    <div className="mt-2 text-xs font-semibold text-slate-500">
-                      Run an evaluation to generate vehicle-specific guidance.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <SectionCard
-              title="Condition & Reconditioning"
-              action={
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                    hasEvaluationData
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {hasEvaluationData
-                    ? "Pre-purchase analysis"
-                    : "Awaiting vehicle"}
-                </span>
-              }
-            >
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-5">
-                <div className="text-sm font-black text-slate-900">
-                  Add known auction or seller issues
-                </div>
-
-                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                  Paste condition-report notes, auction announcements, seller
-                  disclosures, mechanical concerns, cosmetic damage, or title
-                  and transportation issues.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={openConditionAnalysis}
-                  disabled={!hasEvaluationData}
-                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
-                >
-                  Add Condition Information
-                </button>
-              </div>
-
-              {hasEvaluationData ? (
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  {conditionAssessmentDefinitions.map((definition) => {
-                    const assessment = conditionAssessments[definition.key];
-
-                    return (
-                      <div
-                        key={definition.key}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center"
-                      >
-                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                          {definition.key === "history"
-                            ? "History"
-                            : definition.key}
-                        </div>
-                        <div className="mt-1 text-xs font-black capitalize text-slate-700">
-                          {assessment.severity}
-                        </div>
-                        <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                          {money(assessment.reserve)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-center text-xs font-semibold leading-5 text-slate-500">
-                  Mechanical, cosmetic, and history-related costs will appear
-                  here after the vehicle is entered.
-                </div>
-              )}
-
-              {conditionAnalysis ? (
-                <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-violet-600">
-                        AI Planning Estimate
-                      </div>
-                      <div className="mt-1 text-xl font-black text-violet-800">
-                        {money(getEffectiveConditionPlanningEstimate())}
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                        Range
-                      </div>
-                      <div className="mt-1 text-xs font-bold text-slate-700">
-                        {money(conditionAnalysis.estimatedCostLow)}–
-                        {money(conditionAnalysis.estimatedCostHigh)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>
-                      {conditionAnalysis.issues.length} issues ·{" "}
-                      {conditionAnalysis.overallRisk} risk
-                    </span>
-                    <span>
-                      {getEffectiveConditionReadyDaysLow()}–
-                      {getEffectiveConditionReadyDaysHigh()} days ·{" "}
-                      {conditionAnalysisApplied ? "Applied" : "Not applied"}
-                    </span>
-                  </div>
-                </div>
-              ) : hasEvaluationData ? (
-                <div className="mt-4 rounded-xl bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-800">
-                  No AI condition analysis has been generated for this vehicle.
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-xs font-semibold leading-5 text-slate-500">
-                  Add a vehicle to begin condition analysis.
-                </div>
-              )}
             </SectionCard>
           </section>
 
@@ -5183,13 +4845,22 @@ export function EvaluationWorkspace({
             <SectionCard
               title="Comparable Vehicles"
               action={
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void pullMarketCheckComps()}
+                    disabled={!hasEvaluationData || marketCheckLoading}
+                    className="rounded-lg bg-blue-700 px-3.5 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {marketCheckLoading ? "Finding Comps..." : comps.length ? "Refresh Comps" : "Find Comps"}
+                  </button>
+
                   <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
-                    {compSummary.includedCount} Usable Comps
+                    {compSummary.includedCount} Strong Comps
                   </span>
 
                   {marketCheckSearchMeta &&
-                  marketCheckSearchMeta.loadedCount === 0 &&
+                  compSummary.includedCount < 6 &&
                   marketCheckSearchMeta.searchStage !== "metro" &&
                   !marketCheckLoading ? (
                     marketCheckSearchMeta.searchStage === "expanded" ||
@@ -5206,7 +4877,7 @@ export function EvaluationWorkspace({
                         onClick={searchMajorMetropolitanAreas}
                         className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
                       >
-                        Major Metropolitan Areas
+                        Search Major Markets
                       </button>
                     ) : (
                       <button
@@ -5214,7 +4885,7 @@ export function EvaluationWorkspace({
                         onClick={expandMarketCheckSearch}
                         className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
                       >
-                        Expand Search
+                        Add Nearby Markets
                       </button>
                     )
                   ) : null}
@@ -5245,7 +4916,7 @@ export function EvaluationWorkspace({
                       : "—",
                   ],
                   [
-                    "Usable Comps",
+                    "Strong Comps",
                     `${compSummary.includedCount} / ${comps.length}`,
                   ],
                   [
@@ -5283,9 +4954,7 @@ export function EvaluationWorkspace({
               ) : null}
 
               <div className="mt-3 text-[10px] font-semibold leading-4 text-slate-400">
-                Values are adjusted using the active mileage, market, and
-                company-assumption rules. Toggle individual comps to include or
-                exclude them from the valuation.
+                Lot Logic ranks true comparables by vehicle equivalence, mileage, geography, and market relevance. Keep the strongest evidence selected; uncheck a listing that does not belong. If the local set is thin, add nearby markets before using major national reference markets.
               </div>
             </SectionCard>
           </section>
