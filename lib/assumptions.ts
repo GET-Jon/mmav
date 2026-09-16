@@ -143,6 +143,8 @@ export const defaultAssumptions: Assumptions = {
 
   compSettings: {
     mileageAdjustmentPerThousand: 125,
+    maxMileageAdjustmentDollars: 5000,
+    maxMileageAdjustmentPercentOfAsk: 0.2,
     fastSaleDiscount: 0.03,
     minimumQualityScore: 55,
     minimumCompsForMediumConfidence: 4,
