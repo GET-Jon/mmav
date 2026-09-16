@@ -638,6 +638,10 @@ export function EvaluationWorkspace({
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
   const [compMarketEditorOpen, setCompMarketEditorOpen] = useState(false);
   const [selectedCompMarketZips, setSelectedCompMarketZips] = useState<string[]>([]);
+  const [compSuggestionCount, setCompSuggestionCount] = useState(3);
+  const [customCompZip, setCustomCompZip] = useState("");
+  const [customCompMarkets, setCustomCompMarkets] = useState<Array<{ market: string; zip: string }>>([]);
+  const [compTrimRelaxed, setCompTrimRelaxed] = useState(false);
   const [dealerProfileOpen, setDealerProfileOpen] = useState(false);
   const [conditionProfitabilityOpen, setConditionProfitabilityOpen] =
     useState(false);
@@ -1715,7 +1719,10 @@ export function EvaluationWorkspace({
     const year = vehicleOverride?.year || vehicleYear;
     const make = vehicleOverride?.make || vehicleMake;
     const model = vehicleOverride?.model || vehicleModel;
-    const trim = vehicleOverride?.trim || vehicleTrim;
+    const trim =
+      vehicleOverride && Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
+        ? String(vehicleOverride.trim || "")
+        : vehicleTrim;
     const fuelType =
       vehicleOverride?.fuelType || decodedVehicle?.fuelType || null;
 
@@ -1927,25 +1934,71 @@ export function EvaluationWorkspace({
   function openCompMarketEditor() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
     const suggested = activeAssumptions.regionalMarkets
-      .filter((market) => market.enabled && !searched.has(market.zip))
+      .filter((market) => !searched.has(market.zip))
       .sort((a, b) => a.order - b.order)
       .slice(0, 3)
       .map((market) => market.zip);
 
+    setCompSuggestionCount(3);
     setSelectedCompMarketZips(suggested);
+    setCustomCompZip("");
     setCompMarketEditorOpen(true);
+  }
+
+  function suggestMoreCompMarkets() {
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const available = activeAssumptions.regionalMarkets
+      .filter((market) => !searched.has(market.zip))
+      .sort((a, b) => a.order - b.order);
+    const nextCount = Math.min(available.length, compSuggestionCount + 3);
+    const nextSuggested = available.slice(0, nextCount).map((market) => market.zip);
+    setCompSuggestionCount(nextCount);
+    setSelectedCompMarketZips((current) => Array.from(new Set([...current, ...nextSuggested])));
+  }
+
+  function addCustomCompZip() {
+    const zip = customCompZip.trim();
+    if (!/^\d{5}$/.test(zip)) {
+      setMarketCheckStatus("Enter a valid 5-digit ZIP code.");
+      return;
+    }
+    if ((marketCheckSearchMeta?.searchedZips || []).includes(zip)) {
+      setMarketCheckStatus(`${zip} has already been searched.`);
+      return;
+    }
+    setCustomCompMarkets((current) =>
+      current.some((market) => market.zip === zip)
+        ? current
+        : [...current, { market: `Custom market ${zip}`, zip }],
+    );
+    setSelectedCompMarketZips((current) => Array.from(new Set([...current, zip])));
+    setCustomCompZip("");
   }
 
   async function searchSelectedCompMarkets() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const regions = activeAssumptions.regionalMarkets
+    const configuredRegions = activeAssumptions.regionalMarkets
       .filter(
         (market) =>
-          market.enabled &&
           selectedCompMarketZips.includes(market.zip) &&
           !searched.has(market.zip),
       )
-      .sort((a, b) => a.order - b.order);
+      .sort((a, b) => a.order - b.order)
+      .map((market) => ({ ...market, enabled: true }));
+
+    const customRegions = customCompMarkets
+      .filter(
+        (market) =>
+          selectedCompMarketZips.includes(market.zip) &&
+          !searched.has(market.zip),
+      )
+      .map((market, index) => ({
+        ...market,
+        order: configuredRegions.length + index + 1,
+        enabled: true,
+      }));
+
+    const regions = [...configuredRegions, ...customRegions];
 
     if (!regions.length) {
       setMarketCheckStatus('Choose at least one new market to search.');
@@ -1958,6 +2011,37 @@ export function EvaluationWorkspace({
       regions,
       mergeResults: true,
     });
+  }
+
+  async function broadenCompVehicleMatch() {
+    if (!vehicleMake || !vehicleModel || !vehicleTrim) {
+      setMarketCheckStatus("There is no trim-level specificity to relax for this vehicle.");
+      return;
+    }
+
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const regions = activeAssumptions.regionalMarkets
+      .filter((market) => searched.has(market.zip))
+      .sort((a, b) => a.order - b.order)
+      .map((market) => ({ ...market, enabled: true }));
+
+    setCompTrimRelaxed(true);
+    setMarketCheckStatus(`Broadening the vehicle match from ${vehicleMake} ${vehicleModel} ${vehicleTrim} to ${vehicleMake} ${vehicleModel}.`);
+
+    await pullMarketCheckComps(
+      {
+        year: String(vehicleYear || ""),
+        make: vehicleMake,
+        model: vehicleModel,
+        trim: "",
+        fuelType: decodedVehicle?.fuelType || null,
+      },
+      {
+        searchStage: "expanded",
+        regions: regions.length ? regions : undefined,
+        mergeResults: false,
+      },
+    );
   }
 
   async function expandMarketCheckSearch() {
@@ -4040,23 +4124,45 @@ export function EvaluationWorkspace({
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Edit Comp Markets</h2>
                 <p className="mt-1 max-w-md text-sm font-semibold leading-5 text-slate-500">
-                  Lot Logic keeps markets already searched and preselects the next three configured regions. Add or remove markets before searching again.
+                  Markets already searched stay locked. Lot Logic suggests the next three regions, but you can add more suggestions or enter a ZIP manually.
                 </p>
               </div>
               <button type="button" onClick={() => setCompMarketEditorOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-50">Close</button>
             </div>
 
+            <div className="border-b border-slate-100 px-6 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={suggestMoreCompMarkets}
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
+                >
+                  Suggest 3 More Markets
+                </button>
+                <div className="flex min-w-[220px] flex-1 items-center gap-2">
+                  <input
+                    value={customCompZip}
+                    onChange={(event) => setCustomCompZip(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                    onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomCompZip(); } }}
+                    placeholder="Advanced: add ZIP"
+                    inputMode="numeric"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
+                  />
+                  <button type="button" onClick={addCustomCompZip} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">Add ZIP</button>
+                </div>
+              </div>
+            </div>
+
             <div className="max-h-[430px] space-y-2 overflow-y-auto px-6 py-5">
-              {activeAssumptions.regionalMarkets
-                .filter((market) => market.enabled)
+              {[...activeAssumptions.regionalMarkets, ...customCompMarkets.map((market, index) => ({ ...market, order: 1000 + index, enabled: true }))]
                 .sort((a, b) => a.order - b.order)
                 .map((market) => {
                   const searched = marketCheckSearchMeta?.searchedZips.includes(market.zip) || false;
                   const selected = searched || selectedCompMarketZips.includes(market.zip);
                   const nextRecommended = !searched && activeAssumptions.regionalMarkets
-                    .filter((candidate) => candidate.enabled && !(marketCheckSearchMeta?.searchedZips || []).includes(candidate.zip))
+                    .filter((candidate) => !(marketCheckSearchMeta?.searchedZips || []).includes(candidate.zip))
                     .sort((a, b) => a.order - b.order)
-                    .slice(0, 3)
+                    .slice(0, compSuggestionCount)
                     .some((candidate) => candidate.zip === market.zip);
 
                   return (
@@ -5146,12 +5252,52 @@ export function EvaluationWorkspace({
                 </div>
               }
             >
-              <MarketCompsTable
-                comps={comps}
-                targetMileage={targetMileage}
-                assumptions={activeAssumptions}
-                onToggleIncluded={toggleCompIncluded}
-              />
+              {comps.length ? (
+                <MarketCompsTable
+                  comps={comps}
+                  targetMileage={targetMileage}
+                  assumptions={activeAssumptions}
+                  onToggleIncluded={toggleCompIncluded}
+                />
+              ) : (
+                <div className="flex min-h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center">
+                  <div className="max-w-2xl">
+                    <div className="text-sm font-extrabold text-slate-800">
+                      {marketCheckSearchMeta
+                        ? marketCheckApiUsage?.filterDiagnostics?.returnedListings
+                          ? "Listings found, but none qualified as strong comps"
+                          : `No strong comps found after searching ${marketCheckSearchMeta.regionsChecked.length} ${marketCheckSearchMeta.regionsChecked.length === 1 ? "region" : "regions"}`
+                        : "No comparable vehicles loaded"}
+                    </div>
+                    <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                      {marketCheckSearchMeta
+                        ? marketCheckApiUsage?.filterDiagnostics?.returnedListings
+                          ? "Lot Logic found listings, but the current vehicle-match rules did not produce usable evidence. Use Edit Comps to expand geography or broaden the vehicle match below."
+                          : `Lot Logic searched ${marketCheckSearchMeta.regionsChecked.join(", ") || "the selected markets"} without finding usable comps. Use Edit Comps above to expand the search.`
+                        : "Run the evaluation to search the local market for a usable comp set."}
+                    </div>
+
+                    {marketCheckSearchMeta && vehicleTrim && marketCheckSearchMeta.regionsChecked.length >= 4 && !compTrimRelaxed ? (
+                      <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-left">
+                        <div className="text-xs font-black uppercase tracking-[0.08em] text-amber-800">Vehicle match may be too specific</div>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-amber-900/80">
+                          We are searching for {vehicleMake} {vehicleModel} {vehicleTrim}. The trim may be narrowing the evidence more than it helps. Lot Logic can keep the model, year, mileage, and other relevance checks while relaxing trim specificity.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void broadenCompVehicleMatch()}
+                          disabled={marketCheckLoading}
+                          className="mt-3 rounded-lg bg-amber-700 px-4 py-2 text-xs font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
+                        >
+                          Search as {vehicleMake} {vehicleModel}
+                        </button>
+                      </div>
+                    ) : compTrimRelaxed ? (
+                      <div className="mt-4 text-xs font-bold text-blue-700">Vehicle match broadened to {vehicleMake} {vehicleModel}; trim is no longer required.</div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 text-center sm:grid-cols-5">
                 {[
