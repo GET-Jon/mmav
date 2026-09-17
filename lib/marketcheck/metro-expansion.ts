@@ -109,22 +109,41 @@ function haversineMiles(a: MetroSeed, b: MetroSeed) {
   return 2 * earthRadiusMiles * Math.asin(Math.sqrt(h));
 }
 
-function findAnchor(configured: RegionalMarket[], searchedZips: string[]) {
-  const bySearchedZip = searchedZips
-    .map((zip) => metroSeeds.find((seed) => seed.zip === zip))
-    .find(Boolean);
-  if (bySearchedZip) return bySearchedZip;
+function findSeedByMarketLabel(value: string) {
+  const normalized = normalizeMarketName(value.replace(/\(\d{5}\)/g, " "));
+  if (!normalized) return null;
+
+  return (
+    metroSeeds.find((seed) => {
+      const seedName = normalizeMarketName(seed.market);
+      const seedCity = seedName.split(" ").slice(0, -1).join(" ");
+      return normalized.includes(seedName) || normalized.includes(seedCity);
+    }) || null
+  );
+}
+
+function getSearchedSeeds(searchedZips: string[], searchedRegions: string[]) {
+  const seeds = [
+    ...searchedZips.map((zip) => metroSeeds.find((seed) => seed.zip === zip) || null),
+    ...searchedRegions.map((region) => findSeedByMarketLabel(region)),
+  ].filter(Boolean) as MetroSeed[];
+
+  return Array.from(new Map(seeds.map((seed) => [seed.zip, seed])).values());
+}
+
+function findAnchor(
+  configured: RegionalMarket[],
+  searchedZips: string[],
+  searchedRegions: string[],
+) {
+  const searchedSeeds = getSearchedSeeds(searchedZips, searchedRegions);
+  if (searchedSeeds.length) return searchedSeeds[0];
 
   for (const market of configured) {
     const exactZip = metroSeeds.find((seed) => seed.zip === market.zip);
     if (exactZip) return exactZip;
 
-    const normalized = normalizeMarketName(market.market);
-    const byName = metroSeeds.find((seed) => {
-      const seedName = normalizeMarketName(seed.market);
-      const seedCity = seedName.split(" ").slice(0, -1).join(" ");
-      return normalized.includes(seedCity) || seedName.includes(normalized);
-    });
+    const byName = findSeedByMarketLabel(market.market);
     if (byName) return byName;
   }
 
@@ -134,6 +153,7 @@ function findAnchor(configured: RegionalMarket[], searchedZips: string[]) {
 export function buildExpansionMarkets(
   configuredMarkets: RegionalMarket[],
   searchedZips: string[] = [],
+  searchedRegions: string[] = [],
 ): ExpansionMarket[] {
   const configured = configuredMarkets
     .filter(
@@ -142,17 +162,32 @@ export function buildExpansionMarkets(
     )
     .sort((a, b) => a.order - b.order);
 
-  const anchor = findAnchor(configured, searchedZips);
+  const anchor = findAnchor(configured, searchedZips, searchedRegions);
+  const searchedSeeds = getSearchedSeeds(searchedZips, searchedRegions);
+  const searchedZipSet = new Set(searchedZips);
   const configuredZips = new Set(configured.map((market) => market.zip));
   const configuredNames = new Set(
     configured.map((market) => normalizeMarketName(market.market)),
   );
 
+  const isFarEnoughFromSearched = (seed: MetroSeed) =>
+    searchedSeeds.length === 0 ||
+    searchedSeeds.every((searchedSeed) => haversineMiles(searchedSeed, seed) >= 100);
+
+  const configuredForExpansion = configured.filter((market) => {
+    if (searchedZipSet.has(market.zip)) return true;
+    const seed =
+      metroSeeds.find((candidate) => candidate.zip === market.zip) ||
+      findSeedByMarketLabel(market.market);
+    return !seed || isFarEnoughFromSearched(seed);
+  });
+
   const seeded = metroSeeds
     .filter(
       (seed) =>
         !configuredZips.has(seed.zip) &&
-        !configuredNames.has(normalizeMarketName(seed.market)),
+        !configuredNames.has(normalizeMarketName(seed.market)) &&
+        isFarEnoughFromSearched(seed),
     )
     .map((seed) => ({
       seed,
@@ -161,7 +196,7 @@ export function buildExpansionMarkets(
     .sort((a, b) => a.distanceMiles - b.distanceMiles);
 
   return [
-    ...configured.map((market) => ({
+    ...configuredForExpansion.map((market) => ({
       ...market,
       source: "configured" as const,
     })),

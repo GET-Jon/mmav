@@ -1745,6 +1745,7 @@ export function EvaluationWorkspace({
         enabled: boolean;
       }>;
       mergeResults?: boolean;
+      maxApiCallsPerSearch?: number;
     },
   ) {
     if (marketCheckInFlightRef.current || marketCheckLoading) {
@@ -1815,13 +1816,16 @@ export function EvaluationWorkspace({
                 enabled: market.enabled,
               })),
           radius: 100,
-          rows: 10,
+          // Pull a broader candidate pool per region before spending another API call.
+      // Lot Logic still qualifies/ranks the returned listings strictly.
+      rows: 25,
           liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
           maxApiCallsPerSearch:
-            options?.searchStage === "expanded" ||
+            options?.maxApiCallsPerSearch ??
+            (options?.searchStage === "expanded" ||
             options?.searchStage === "metro"
               ? 3
-              : marketCheckApiControls.maxApiCallsPerSearch,
+              : marketCheckApiControls.maxApiCallsPerSearch),
           minUsableCompsToStop: marketCheckApiControls.minUsableCompsToStop,
           minInitialRegions:
             options?.searchStage === "expanded" ||
@@ -1971,6 +1975,7 @@ export function EvaluationWorkspace({
     return buildExpansionMarkets(
       activeAssumptions.regionalMarkets,
       marketCheckSearchMeta?.searchedZips || [],
+      marketCheckSearchMeta?.regionsChecked || [],
     );
   }
 
@@ -2060,17 +2065,32 @@ export function EvaluationWorkspace({
     });
   }
 
+  function getPreviouslySearchedCompRegions() {
+    const labels = marketCheckSearchMeta?.regionsChecked || [];
+    const searchedZips = marketCheckSearchMeta?.searchedZips || [];
+
+    return searchedZips.map((zip, index) => {
+      const label = labels[index] || "";
+      const match = label.match(/^(.*)\s+\((\d{5})\)$/);
+      return {
+        market: match?.[1]?.trim() || `Previously searched market ${index + 1}`,
+        zip,
+        order: index + 1,
+        enabled: true,
+      };
+    });
+  }
+
   async function broadenCompVehicleMatch() {
     if (!vehicleMake || !vehicleModel || !vehicleTrim) {
       setMarketCheckStatus("There is no trim-level specificity to relax for this vehicle.");
       return;
     }
 
-    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const regions = activeAssumptions.regionalMarkets
-      .filter((market) => searched.has(market.zip))
-      .sort((a, b) => a.order - b.order)
-      .map((market) => ({ ...market, enabled: true }));
+    // When the user deliberately relaxes trim, rerun the geography they actually
+    // searched — including generated and custom markets — rather than falling
+    // back to the original configured-region list.
+    const regions = getPreviouslySearchedCompRegions();
 
     setCompTrimRelaxed(true);
     setMarketCheckStatus(`Broadening the vehicle match from ${vehicleMake} ${vehicleModel} ${vehicleTrim} to ${vehicleMake} ${vehicleModel}.`);
@@ -2087,6 +2107,7 @@ export function EvaluationWorkspace({
         searchStage: "expanded",
         regions: regions.length ? regions : undefined,
         mergeResults: false,
+        maxApiCallsPerSearch: Math.min(10, Math.max(3, regions.length)),
       },
     );
   }
@@ -4336,10 +4357,10 @@ export function EvaluationWorkspace({
 
                 {vehicleTrim ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
-                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Broader model match</div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Secondary recovery step</div>
                     <div className="mt-1 text-lg font-black text-slate-950">Search as {vehicleMake} {vehicleModel}</div>
                     <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
-                      Remove trim specificity from the comp search. This is useful when the VIN decoder returns a package or trim designation that is narrowing the market too aggressively. Other equivalence and relevance safeguards remain active.
+                      Lot Logic prefers an exact-trim comp from a farther non-overlapping market over a looser match nearby. Expand Geography first when practical. Use this option after exact-configuration evidence remains thin; it removes trim specificity while keeping the other equivalence and relevance safeguards active.
                     </p>
                     {compTrimRelaxed ? (
                       <div className="mt-4 rounded-xl bg-blue-100 px-3 py-2 text-xs font-black text-blue-800">
@@ -5461,16 +5482,20 @@ export function EvaluationWorkspace({
                   <div className="max-w-2xl">
                     <div className="text-sm font-extrabold text-slate-800">
                       {marketCheckSearchMeta
-                        ? marketCheckApiUsage?.filterDiagnostics?.returnedListings
-                          ? "Listings found, but none qualified as strong comps"
-                          : `No strong comps found after searching ${marketCheckSearchMeta.regionsChecked.length} ${marketCheckSearchMeta.regionsChecked.length === 1 ? "region" : "regions"}`
+                        ? compTrimRelaxed
+                          ? `Broader ${vehicleMake} ${vehicleModel} search completed — no strong comps yet`
+                          : marketCheckApiUsage?.filterDiagnostics?.returnedListings
+                            ? "Listings found, but none qualified as strong comps"
+                            : `No strong comps found after searching ${marketCheckSearchMeta.regionsChecked.length} ${marketCheckSearchMeta.regionsChecked.length === 1 ? "region" : "regions"}`
                         : "No comparable vehicles loaded"}
                     </div>
                     <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
                       {marketCheckSearchMeta
-                        ? marketCheckApiUsage?.filterDiagnostics?.returnedListings
-                          ? "Lot Logic found listings, but the current vehicle-match rules did not produce usable evidence. Use Edit Comps to expand geography or broaden the vehicle match below."
-                          : `Lot Logic searched ${marketCheckSearchMeta.regionsChecked.join(", ") || "the selected markets"} without finding usable comps. Use Edit Comps above to expand the search.`
+                        ? compTrimRelaxed
+                          ? `Lot Logic reran ${vehicleMake} ${vehicleModel} with trim ignored across ${marketCheckSearchMeta.regionsChecked.join(", ") || "the previously searched markets"}. It reviewed ${marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0} returned listings, but none met the strong-comp criteria. Use Edit Comps to expand geography further or review the match strategy.`
+                          : marketCheckApiUsage?.filterDiagnostics?.returnedListings
+                            ? "Lot Logic found listings, but the current vehicle-match rules did not produce usable evidence. Keep the exact configuration and expand geography first; broaden Vehicle Match only when exact-trim evidence remains thin."
+                            : `Lot Logic searched ${marketCheckSearchMeta.regionsChecked.join(", ") || "the selected markets"} without finding usable comps. Keep the exact configuration and use Edit Comps to expand into additional non-overlapping markets.`
                         : "Run the evaluation to search the local market for a usable comp set."}
                     </div>
 
@@ -5490,7 +5515,7 @@ export function EvaluationWorkspace({
                         </button>
                       </div>
                     ) : compTrimRelaxed ? (
-                      <div className="mt-4 text-xs font-bold text-blue-700">Vehicle match broadened to {vehicleMake} {vehicleModel}; trim is no longer required.</div>
+                      <div className="mt-4 text-xs font-bold text-blue-700">✓ Broader vehicle search completed: {vehicleMake} {vehicleModel} (trim ignored).</div>
                     ) : null}
                   </div>
                 </div>
