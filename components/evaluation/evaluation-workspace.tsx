@@ -4248,7 +4248,18 @@ export function EvaluationWorkspace({
                 </div>
 
                 <div className="flex-1 space-y-2 overflow-y-auto px-6 py-5">
-                  {[...getCompExpansionMarkets(), ...customCompMarkets.map((market, index) => ({ ...market, order: 10000 + index, enabled: true }))]
+                  {[
+                    ...getCompExpansionMarkets().filter((market) => {
+                      const searchedZips = marketCheckSearchMeta?.searchedZips || [];
+                      if (searchedZips.includes(market.zip)) return true;
+
+                      return getCompExpansionMarkets()
+                        .filter((candidate) => !searchedZips.includes(candidate.zip))
+                        .slice(0, compSuggestionCount)
+                        .some((candidate) => candidate.zip === market.zip);
+                    }),
+                    ...customCompMarkets.map((market, index) => ({ ...market, order: 10000 + index, enabled: true })),
+                  ]
                     .sort((a, b) => a.order - b.order)
                     .map((market) => {
                       const searched = marketCheckSearchMeta?.searchedZips.includes(market.zip) || false;
