@@ -681,6 +681,7 @@ export function EvaluationWorkspace({
         ? initialSavedPayload.conditionReadyDaysHighOverride
         : null,
     );
+  const [conditionReconOverrideEditing, setConditionReconOverrideEditing] = useState(false);
   const [conditionAnalysisLoading, setConditionAnalysisLoading] =
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
@@ -5177,7 +5178,43 @@ export function EvaluationWorkspace({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-600">AI Recon Planning Reserve</div>
-                          <div className="mt-1 text-2xl font-black text-slate-950">≈ {money(getEffectiveConditionPlanningEstimate())}</div>
+                          <div className="mt-1 flex items-center gap-2">
+                            {conditionReconOverrideEditing ? (
+                              <div className="flex items-center rounded-lg border border-violet-200 bg-white px-2 py-1">
+                                <span className="text-lg font-black text-slate-500">≈ $</span>
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={formatNumberInput(getEffectiveConditionPlanningEstimate())}
+                                  onFocus={(event) => event.currentTarget.select()}
+                                  onChange={(event) => {
+                                    setConditionPlanningEstimateOverride(Math.max(0, toNumber(event.target.value)));
+                                    setConditionAnalysisApplied(false);
+                                  }}
+                                  onBlur={() => setConditionReconOverrideEditing(false)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === 'Escape') {
+                                      event.currentTarget.blur();
+                                    }
+                                  }}
+                                  className="w-24 bg-transparent px-1 text-2xl font-black text-slate-950 outline-none"
+                                  aria-label="User recon override"
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-2xl font-black text-slate-950">≈ {money(getEffectiveConditionPlanningEstimate())}</div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setConditionReconOverrideEditing(true)}
+                              title="User Recon Override"
+                              aria-label="User Recon Override"
+                              className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 bg-white text-sm text-slate-500 shadow-sm hover:border-violet-200 hover:text-violet-700"
+                            >
+                              ✎
+                            </button>
+                          </div>
                           <div className="mt-1 text-[10px] font-black text-slate-600">Planning estimate — not a repair quote</div>
                           <div className="mt-1 text-[10px] font-bold text-slate-500">
                             {conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} selected · {conditionAnalysis.overallRisk} risk
