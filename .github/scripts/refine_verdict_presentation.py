@@ -107,6 +107,27 @@ if old not in text:
     raise RuntimeError('verdict presentation block not found')
 text = text.replace(old, new, 1)
 
+old = '''  const decisionBadgeTone =
+    presentationDecision === "pass"
+      ? "bg-red-100 text-red-700"
+      : presentationDecision === "watch" ||
+          presentationDecision === "review"
+        ? "bg-amber-100 text-amber-700"
+        : presentationDecision === "pursue"
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-slate-100 text-slate-600";'''
+new = '''  const decisionBadgeTone =
+    presentationDecision === "pass"
+      ? "bg-red-100 text-red-700"
+      : presentationDecision === "review"
+        ? "bg-amber-100 text-amber-700"
+        : presentationDecision === "pursue"
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-slate-100 text-slate-600";'''
+if old not in text:
+    raise RuntimeError('decision badge tone block not found')
+text = text.replace(old, new, 1)
+
 old = '''  const decisionBannerTone =
     presentationDecision === "pass"
       ? "border-red-200/80 bg-red-50/60 text-red-950"
