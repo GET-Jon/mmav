@@ -1,0 +1,36 @@
+name: Prefer exact trim comp search
+
+on:
+  push:
+    branches:
+      - lot-logic-public-site
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lot-logic-public-site
+          fetch-depth: 0
+      - run: python .github/scripts/prefer_exact_trim_comp_search.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/marketcheck/metro-expansion.ts components/evaluation/evaluation-workspace.tsx
+          if git diff --cached --quiet; then
+            echo "No comp strategy changes to commit."
+            exit 0
+          fi
+          git commit -m "Prefer exact trim before broadening comp match"
+          git push origin HEAD:lot-logic-public-site
