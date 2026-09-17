@@ -1816,9 +1816,9 @@ export function EvaluationWorkspace({
                 enabled: market.enabled,
               })),
           radius: 100,
-          // Pull a broader candidate pool per region before spending another API call.
-      // Lot Logic still qualifies/ranks the returned listings strictly.
-      rows: 25,
+          // Pull the full standard MarketCheck candidate pool per region before
+      // spending another API call. Lot Logic still qualifies/ranks strictly.
+      rows: 50,
           liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
           maxApiCallsPerSearch:
             options?.maxApiCallsPerSearch ??

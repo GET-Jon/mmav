@@ -380,20 +380,23 @@ function calculateQualityScore({
   }
 
   if (preferredTrim && !trimMatches({ listingTrim, preferredTrim })) {
-    score -= 10;
+    // Trim/configuration fidelity is intentionally more important than a
+    // moderate distance advantage. Search farther before matching looser.
+    score -= 28;
   }
 
   if (targetMileage && mileage) {
     const mileageDelta = Math.abs(mileage - targetMileage);
-    score -= Math.min(24, Math.round(mileageDelta / 2500));
+    score -= Math.min(22, Math.round(mileageDelta / 3000));
   } else {
     score -= 10;
   }
 
   if (distance) {
-    score -= Math.min(16, Math.round(distance / 10));
+    // Geography matters, but it should not overpower an exact configuration.
+    score -= Math.min(8, Math.round(distance / 30));
   } else {
-    score -= 3;
+    score -= 2;
   }
 
   if (!listing.price && !listing.list_price && !listing.msrp) {
@@ -1030,7 +1033,7 @@ export async function POST(request: Request) {
       0,
     );
     const radius = Math.min(toNumber(body.radius, 100), 100);
-    const rows = Math.min(toNumber(body.rows, 10), 25);
+    const rows = Math.min(toNumber(body.rows, 25), 50);
     const debug = Boolean(body.debug);
     const reason = String(body.reason || "explicit-user-comp-search");
 
@@ -1546,18 +1549,16 @@ export async function POST(request: Request) {
 
     const exactSearches = await runProgressiveRegionSearches({
       attemptName: taxonomyRetrieval
-        ? `taxonomy-retrieval-${model}-via-${taxonomyRetrieval.fallbackModel}`
+        ? `exact-year-taxonomy-${model}-via-${taxonomyRetrieval.fallbackModel}`
         : aliasRetrievalModel
-          ? `model-alias-${model}-via-${aliasRetrievalModel}`
-          : generationCompRule
-            ? `generation-aware-make-model-${generationCompRule.generation}`
-            : "exact-year-make-model",
-      attemptYear: generationCompRule ? undefined : year,
+          ? `exact-year-model-alias-${model}-via-${aliasRetrievalModel}`
+          : "exact-year-make-model",
+      // Always retrieve the requested model year first. Generation rules remain
+      // a qualification safeguard, but no longer cause older-generation cars
+      // to fill the first MarketCheck result page.
+      attemptYear: year,
       attemptModel: retrievalModel,
-      attemptRows:
-        taxonomyRetrieval || aliasRetrievalModel
-          ? 25
-          : undefined,
+      attemptRows: 50,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
@@ -1575,38 +1576,10 @@ export async function POST(request: Request) {
 
     const exactSummary = buildCompSummary(exactSearches);
 
-    // Do not broaden vehicle identity when the primary search returns no results.
-    // For vehicles without a generation rule, we may still widen the YEAR search
-    // while keeping the exact same make/model.
-    if (exactSummary.rawCount === 0 && !generationCompRule) {
-      const remainingApiCalls = Math.max(
-        0,
-        apiControls.maxApiCallsPerSearch - searches.length,
-      );
-
-      const fallbackSearches =
-        remainingApiCalls > 0
-          ? await runProgressiveRegionSearches({
-              attemptName: "same-model-year-expanded",
-              maxApiCallsOverride: remainingApiCalls,
-            })
-          : [];
-
-      const failedFallbackSearch = fallbackSearches.find(
-        (search) => !search.ok,
-      );
-
-      if (failedFallbackSearch) {
-        return buildFailedMarketCheckResponse({
-          failedSearch: failedFallbackSearch,
-          searches: [...searches, ...fallbackSearches],
-          orderedRegions,
-          apiControls,
-        });
-      }
-
-      searches = [...searches, ...fallbackSearches];
-    }
+    // Keep this action exact-year. If evidence remains thin, Lot Logic expands
+    // non-overlapping geography first. Broader year/trim matching is a later,
+    // explicit recovery step rather than a silent retrieval change.
+    void exactSummary;
 
     const {
       allListings,
