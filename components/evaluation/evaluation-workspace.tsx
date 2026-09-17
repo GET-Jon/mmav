@@ -17,7 +17,7 @@ import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
-import { calculateValuation } from "@/lib/valuation";
+import { calculateDealEconomicsScore, calculateValuation } from "@/lib/valuation";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
@@ -1452,7 +1452,7 @@ export function EvaluationWorkspace({
       ...initialEvaluation,
       currentBid: valuationInput.currentBid,
       targetResaleUsed: valuationInput.targetResaleUsed,
-      targetProfit: valuationInput.targetProfit,
+      targetProfit: valuation.desiredProfitTarget,
       hasAvoidFlag: false,
       costs: {
         ...initialEvaluation.costs,
@@ -2610,23 +2610,10 @@ export function EvaluationWorkspace({
       ? valuation.safeBid
       : valuation.maxSmartBid;
 
-  const targetProfitForScore = Math.max(valuationInput.targetProfit || 0, 1);
-  const profitRatio = valuation.expectedGrossProfit / targetProfitForScore;
-
-  const profitabilityScore =
-    valuation.expectedGrossProfit <= 0
-      ? 30
-      : profitRatio >= 1.5
-        ? 95
-        : profitRatio >= 1.25
-          ? 90
-          : profitRatio >= 1
-            ? 82
-            : profitRatio >= 0.75
-              ? 68
-              : profitRatio >= 0.5
-                ? 55
-                : 42;
+  const profitabilityScore = calculateDealEconomicsScore(
+    valuation.expectedGrossProfit,
+    valuation.allInCost,
+  );
 
   const profitabilityLabel =
     profitabilityScore >= 90
@@ -2660,7 +2647,7 @@ export function EvaluationWorkspace({
         },
         financial: {
           expectedGrossProfit: valuation.expectedGrossProfit,
-          targetProfit: valuationInput.targetProfit,
+          targetProfit: valuation.desiredProfitTarget,
           finalRetailTarget: finalTargetUsed,
           currentBid: valuationInput.currentBid,
           compConfidence: compSummary.confidence,
@@ -4389,7 +4376,7 @@ export function EvaluationWorkspace({
                 </div>
               </FormRow>
 
-              <FormRow label="Target Profit">
+              <FormRow label="Profit Target Override">
                 <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                   <span className="pl-3 text-sm text-slate-400">$</span>
                   <input
@@ -4406,6 +4393,9 @@ export function EvaluationWorkspace({
                     className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
                   />
                 </div>
+                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                  Leave at $0 to use the Lot Logic automatic target: at least $2,500, scaling to roughly 20% of the pre-recon acquisition basis. Current target: {money(valuation.desiredProfitTarget)}.
+                </p>
               </FormRow>
 
               <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
