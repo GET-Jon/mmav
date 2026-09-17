@@ -2863,14 +2863,15 @@ export function EvaluationWorkspace({
     ? `${dealerFitResult.label} · ${dealerFitResult.score}/100`
     : "Not calculated";
 
-  const displayedReconReserve = conditionAssessmentsTouched
-    ? conditionTotals.reserveAdd
-    : 0;
+  const displayedReconReserve =
+    valuationInput.costs.recon +
+    valuationInput.costs.conditionRiskAdd +
+    valuationInput.costs.titleHistoryRiskAdd;
   const displayedCurrentCost = Math.max(0, valuationInput.currentBid) + displayedReconReserve;
   const dealerFitPillTone =
-    dealerFitResult.score >= 72
+    dealerFitResult.score >= 70
       ? "bg-emerald-100 text-emerald-700"
-      : dealerFitResult.score >= 55
+      : dealerFitResult.score >= 40
         ? "bg-amber-100 text-amber-700"
         : "bg-red-100 text-red-700";
 
@@ -2965,43 +2966,55 @@ export function EvaluationWorkspace({
 
   const hasLimitedDealerFit = dealerFitResult.score < 55;
 
+  const isAboveRecommendedBuy =
+    hasEvaluationData &&
+    valuationInput.currentBid > 0 &&
+    suggestedBid > 0 &&
+    valuationInput.currentBid > suggestedBid;
+
+  const hasHardPass =
+    hasEvaluationData &&
+    (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
+
   const requiresReview =
     hasEvaluationData &&
-    valuation.decision !== "Pass" &&
-    valuation.decision !== "Watch / Stretch Only" &&
-    (hasLowCompConfidence || hasMaterialConditionRisk);
+    !hasHardPass &&
+    (isAboveRecommendedBuy ||
+      valuation.decision === "Watch / Stretch Only" ||
+      hasLowCompConfidence ||
+      hasMaterialConditionRisk);
 
   const reviewReasons = [
+    isAboveRecommendedBuy ? "the current bid is above the Recommended Max Buy" : null,
     hasLowCompConfidence ? "market evidence is still thin" : null,
     hasMaterialConditionRisk ? "a material vehicle-specific risk needs review" : null,
   ].filter((reason): reason is string => Boolean(reason));
 
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
-    : valuation.decision === "Pass"
+    : hasHardPass
       ? "PASS"
-      : valuation.decision === "Watch / Stretch Only"
-        ? "WATCH CLOSELY"
-        : requiresReview
-          ? "REVIEW REQUIRED"
-          : "WORTH PURSUING";
+      : isAboveRecommendedBuy
+        ? "ABOVE TARGET PRICE"
+        : valuation.decision === "Watch / Stretch Only"
+          ? "WATCH CLOSELY"
+          : requiresReview
+            ? "REVIEW REQUIRED"
+            : "WORTH PURSUING";
 
   const presentationDecision =
     !hasEvaluationData
       ? "awaiting"
-      : valuation.decision === "Pass"
+      : hasHardPass
         ? "pass"
-        : valuation.decision === "Watch / Stretch Only"
-          ? "watch"
-          : requiresReview
-            ? "review"
-            : "pursue";
+        : requiresReview
+          ? "review"
+          : "pursue";
 
   const decisionBadgeTone =
     presentationDecision === "pass"
       ? "bg-red-100 text-red-700"
-      : presentationDecision === "watch" ||
-          presentationDecision === "review"
+      : presentationDecision === "review"
         ? "bg-amber-100 text-amber-700"
         : presentationDecision === "pursue"
           ? "bg-emerald-100 text-emerald-700"
@@ -3010,16 +3023,16 @@ export function EvaluationWorkspace({
   const decisionBannerTone =
     presentationDecision === "pass"
       ? "border-red-200/80 bg-red-50/60 text-red-950"
-      : presentationDecision === "watch" ||
-          presentationDecision === "review"
+      : presentationDecision === "review"
         ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
-        : "border-slate-200 bg-white text-slate-950";
+        : presentationDecision === "pursue"
+          ? "border-emerald-200/80 bg-emerald-50/40 text-emerald-950"
+          : "border-slate-200 bg-white text-slate-950";
 
   const decisionTextTone =
     presentationDecision === "pass"
       ? "text-red-700"
-      : presentationDecision === "watch" ||
-          presentationDecision === "review"
+      : presentationDecision === "review"
         ? "text-amber-700"
         : presentationDecision === "pursue"
           ? "text-emerald-700"
@@ -4944,8 +4957,7 @@ export function EvaluationWorkspace({
                   className={`w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
                     presentationDecision === "pass"
                       ? "bg-red-700 hover:bg-red-800"
-                      : presentationDecision === "watch" ||
-                          presentationDecision === "review"
+                      : presentationDecision === "review"
                         ? "bg-amber-600 hover:bg-amber-700"
                         : "bg-emerald-700 hover:bg-emerald-800"
                   }`}
