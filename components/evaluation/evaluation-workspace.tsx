@@ -13,6 +13,7 @@ import {
   type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
+import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
@@ -1966,11 +1967,17 @@ export function EvaluationWorkspace({
     }
   }
 
+  function getCompExpansionMarkets() {
+    return buildExpansionMarkets(
+      activeAssumptions.regionalMarkets,
+      marketCheckSearchMeta?.searchedZips || [],
+    );
+  }
+
   function openCompMarketEditor() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const suggested = activeAssumptions.regionalMarkets
-      .filter((market) => market.enabled && /^\d{5}$/.test(market.zip) && market.market.trim() && !searched.has(market.zip))
-      .sort((a, b) => a.order - b.order)
+    const suggested = getCompExpansionMarkets()
+      .filter((market) => !searched.has(market.zip))
       .slice(0, 3)
       .map((market) => market.zip);
 
@@ -1983,9 +1990,8 @@ export function EvaluationWorkspace({
 
   function suggestMoreCompMarkets() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const available = activeAssumptions.regionalMarkets
-      .filter((market) => market.enabled && /^\d{5}$/.test(market.zip) && market.market.trim() && !searched.has(market.zip))
-      .sort((a, b) => a.order - b.order);
+    const available = getCompExpansionMarkets()
+      .filter((market) => !searched.has(market.zip));
     const nextCount = Math.min(available.length, compSuggestionCount + 3);
     const nextSuggested = available.slice(0, nextCount).map((market) => market.zip);
     setCompSuggestionCount(nextCount);
@@ -2013,14 +2019,19 @@ export function EvaluationWorkspace({
 
   async function searchSelectedCompMarkets() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const configuredRegions = activeAssumptions.regionalMarkets
+    const configuredRegions = getCompExpansionMarkets()
       .filter(
         (market) =>
           selectedCompMarketZips.includes(market.zip) &&
           !searched.has(market.zip),
       )
       .sort((a, b) => a.order - b.order)
-      .map((market) => ({ ...market, enabled: true }));
+      .map((market) => ({
+        market: market.market,
+        zip: market.zip,
+        order: market.order,
+        enabled: true,
+      }));
 
     const customRegions = customCompMarkets
       .filter(
@@ -4171,7 +4182,7 @@ export function EvaluationWorkspace({
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Edit Comps</h2>
                 <p className="mt-1 max-w-lg text-sm font-semibold leading-5 text-slate-500">
-                  Expand where Lot Logic looks, or broaden how specifically it matches this vehicle.
+                  Expand where Lot Logic looks, or broaden how specifically it matches this vehicle. Geography suggestions keep widening outward from your starting market.
                 </p>
               </div>
               <button type="button" onClick={() => setCompMarketEditorOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-50">Close</button>
@@ -4209,11 +4220,11 @@ export function EvaluationWorkspace({
                     <button
                       type="button"
                       onClick={suggestMoreCompMarkets}
-                      disabled={activeAssumptions.regionalMarkets.filter((market) => market.enabled && /^\d{5}$/.test(market.zip) && market.market.trim() && !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip)).length <= compSuggestionCount}
+                      disabled={getCompExpansionMarkets().filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip)).length <= compSuggestionCount}
                       className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
                     >
-                      {activeAssumptions.regionalMarkets.filter((market) => market.enabled && /^\d{5}$/.test(market.zip) && market.market.trim() && !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip)).length <= compSuggestionCount
-                        ? "No More Suggested Markets"
+                      {getCompExpansionMarkets().filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip)).length <= compSuggestionCount
+                        ? "All Metro Suggestions Loaded"
                         : "Suggest 3 More Markets"}
                     </button>
                     <div className="flex min-w-[220px] flex-1 items-center gap-2">
@@ -4237,14 +4248,13 @@ export function EvaluationWorkspace({
                 </div>
 
                 <div className="flex-1 space-y-2 overflow-y-auto px-6 py-5">
-                  {[...activeAssumptions.regionalMarkets.filter((market) => market.enabled && /^\d{5}$/.test(market.zip) && market.market.trim()), ...customCompMarkets.map((market, index) => ({ ...market, order: 1000 + index, enabled: true }))]
+                  {[...getCompExpansionMarkets(), ...customCompMarkets.map((market, index) => ({ ...market, order: 10000 + index, enabled: true }))]
                     .sort((a, b) => a.order - b.order)
                     .map((market) => {
                       const searched = marketCheckSearchMeta?.searchedZips.includes(market.zip) || false;
                       const selected = searched || selectedCompMarketZips.includes(market.zip);
-                      const nextRecommended = !searched && activeAssumptions.regionalMarkets
-                        .filter((candidate) => candidate.enabled && /^\d{5}$/.test(candidate.zip) && candidate.market.trim() && !(marketCheckSearchMeta?.searchedZips || []).includes(candidate.zip))
-                        .sort((a, b) => a.order - b.order)
+                      const nextRecommended = !searched && getCompExpansionMarkets()
+                        .filter((candidate) => !(marketCheckSearchMeta?.searchedZips || []).includes(candidate.zip))
                         .slice(0, compSuggestionCount)
                         .some((candidate) => candidate.zip === market.zip);
 
@@ -4266,7 +4276,15 @@ export function EvaluationWorkspace({
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-black text-slate-800">{market.market} <span className="text-slate-400">({market.zip})</span></span>
                             <span className="mt-0.5 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
-                              {searched ? "Already searched" : nextRecommended ? "Recommended next market" : customCompMarkets.some((item) => item.zip === market.zip) ? "Custom ZIP" : "Available market"}
+                              {searched
+                                ? "Already searched"
+                                : nextRecommended
+                                  ? "Recommended next market"
+                                  : customCompMarkets.some((item) => item.zip === market.zip)
+                                    ? "Custom ZIP"
+                                    : activeAssumptions.regionalMarkets.some((item) => item.zip === market.zip)
+                                      ? "Configured market"
+                                      : "Expanded metro market"}
                             </span>
                           </span>
                         </label>
