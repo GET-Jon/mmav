@@ -162,5 +162,11 @@ if old not in text:
     raise RuntimeError('save button tone block not found')
 text = text.replace(old, new, 1)
 
+# Remove any remaining color-only checks for the retired presentation state.
+text = text.replace(
+    'presentationDecision === "watch" ||\n          presentationDecision === "review"',
+    'presentationDecision === "review"',
+)
+
 path.write_text(text)
 print('Refined verdict hierarchy and effective recon display')
