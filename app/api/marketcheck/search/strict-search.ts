@@ -29,6 +29,14 @@ type MarketCheckSearchResult = {
   payload: Record<string, any>;
 };
 
+type MarketCheckModelDiscovery = {
+  ok: boolean;
+  status: number;
+  zip: string;
+  models: Array<{ item: string; count: number }>;
+  retryAfter: string | null;
+};
+
 type CachedMarketCheckResponse = {
   createdAt: string;
   expiresAt: number;
@@ -209,7 +217,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-low-confidence-v9-model-aliases",
+    cacheVersion: "progressive-regions-v10-model-facet-recovery",
   });
 }
 
@@ -759,6 +767,122 @@ async function searchMarketCheck({
       : 0,
     payload,
   };
+}
+
+
+async function discoverMarketCheckModels({
+  apiKey,
+  year,
+  make,
+  zip,
+  radius,
+  searchKey,
+  reason,
+}: {
+  apiKey: string;
+  year: number;
+  make: string;
+  zip: string;
+  radius: number;
+  searchKey: string;
+  reason: string;
+}): Promise<MarketCheckModelDiscovery> {
+  const params = new URLSearchParams({
+    api_key: apiKey,
+    car_type: "used",
+    make,
+    year: String(year),
+    zip,
+    radius: String(radius),
+    rows: "0",
+    facets: "model|0|200|0",
+    facet_sort: "count",
+  });
+
+  const endpoint = "/v2/search/car/active";
+  const marketCheckUrl = `https://api.marketcheck.com/v2/search/car/active?${params.toString()}`;
+
+  await waitForMarketCheckSlot();
+
+  logMarketCheckCall({
+    endpoint,
+    searchKey,
+    cacheHit: false,
+    reason,
+    details: {
+      attemptName: "model-facet-discovery",
+      zip,
+      year,
+      make,
+      radius,
+      rows: 0,
+      facets: "model",
+    },
+  });
+
+  const response = await fetch(marketCheckUrl, { cache: "no-store" });
+  const rawPayload = await response.text();
+
+  let payload: Record<string, any> = {};
+  try {
+    payload = rawPayload ? JSON.parse(rawPayload) : {};
+  } catch {
+    payload = { message: rawPayload };
+  }
+
+  const rawModels = Array.isArray(payload?.facets?.model)
+    ? payload.facets.model
+    : [];
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    zip,
+    models: rawModels
+      .map((entry: any) => ({
+        item: String(entry?.item || "").trim(),
+        count: toNumber(entry?.count),
+      }))
+      .filter((entry: { item: string }) => Boolean(entry.item)),
+    retryAfter: response.headers.get("retry-after"),
+  };
+}
+
+function resolveMarketCheckModelCandidates(
+  requestedModel: string,
+  discoveredModels: Array<{ item: string; count: number }>,
+) {
+  const requested = normalize(requestedModel)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!requested) {
+    return [];
+  }
+
+  const candidates = discoveredModels
+    .filter(({ item }) => {
+      const candidate = normalize(item)
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      return (
+        candidate === requested ||
+        candidate.startsWith(`${requested} `) ||
+        requested.startsWith(`${candidate} `)
+      );
+    })
+    .sort((a, b) => {
+      const aExact = normalize(a.item) === requested ? 1 : 0;
+      const bExact = normalize(b.item) === requested ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+      return b.count - a.count;
+    })
+    .map(({ item }) => item);
+
+  return [...new Set(candidates)].slice(0, 5);
 }
 
 async function runMarketCheckSearches({
@@ -1575,11 +1699,87 @@ export async function POST(request: Request) {
     let searches = exactSearches;
 
     const exactSummary = buildCompSummary(exactSearches);
+    let taxonomyDiscovery:
+      | {
+          attempted: boolean;
+          zip: string;
+          discoveredModels: string[];
+          resolvedModels: string[];
+          apiCallsMade: number;
+          status?: number;
+        }
+      | null = null;
 
-    // Keep this action exact-year. If evidence remains thin, Lot Logic expands
-    // non-overlapping geography first. Broader year/trim matching is a later,
-    // explicit recovery step rather than a silent retrieval change.
-    void exactSummary;
+    // MarketCheck requires categorical model values to match its own taxonomy.
+    // If a perfectly valid exact-year search returns zero everywhere, discover
+    // the canonical model labels once, then retry the same year/geography.
+    // This is an exceptional recovery path; ordinary successful searches do
+    // not spend the extra calls.
+    if (
+      exactSummary.rawCount === 0 &&
+      orderedRegions.length > 0 &&
+      !taxonomyRetrieval &&
+      !aliasRetrievalModel
+    ) {
+      const discoveryZip = orderedRegions[0].zip;
+      const discovery = await discoverMarketCheckModels({
+        apiKey: marketCheckApiKey,
+        year,
+        make,
+        zip: discoveryZip,
+        radius,
+        searchKey,
+        reason,
+      });
+
+      const resolvedModels = discovery.ok
+        ? resolveMarketCheckModelCandidates(model, discovery.models)
+        : [];
+
+      taxonomyDiscovery = {
+        attempted: true,
+        zip: discoveryZip,
+        discoveredModels: discovery.models.map(({ item }) => item),
+        resolvedModels,
+        apiCallsMade: 1,
+        status: discovery.status,
+      };
+
+      const requestedNormalized = normalize(model);
+      const materiallyDifferentModels = resolvedModels.filter(
+        (candidate) => normalize(candidate) !== requestedNormalized,
+      );
+
+      if (discovery.ok && materiallyDifferentModels.length > 0) {
+        const canonicalModelQuery = materiallyDifferentModels.join(",");
+
+        const taxonomyRetrySearches = await runProgressiveRegionSearches({
+          attemptName: `exact-year-model-facet-${canonicalModelQuery}`,
+          attemptYear: year,
+          attemptModel: canonicalModelQuery,
+          attemptRows: 50,
+          // Taxonomy recovery is allowed to retry the regions the user already
+          // asked us to search. It is intentionally outside the normal 3-call
+          // budget because the first calls proved the category label was wrong.
+          maxApiCallsOverride: Math.min(orderedRegions.length, 3),
+        });
+
+        const failedTaxonomyRetry = taxonomyRetrySearches.find(
+          (search) => !search.ok,
+        );
+
+        if (failedTaxonomyRetry) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: failedTaxonomyRetry,
+            searches: [...searches, ...taxonomyRetrySearches],
+            orderedRegions,
+            apiControls,
+          });
+        }
+
+        searches = taxonomyRetrySearches;
+      }
+    }
 
     const {
       allListings,
@@ -1628,7 +1828,14 @@ export async function POST(request: Request) {
       (comp) => comp.qualityScore >= minimumQualityScore,
     ).length;
 
-    const hitApiCallCap = searches.length >= apiControls.maxApiCallsPerSearch;
+    const taxonomyDiscoveryCalls = taxonomyDiscovery?.apiCallsMade || 0;
+    const totalApiCallsMade =
+      exactSearches.length +
+      taxonomyDiscoveryCalls +
+      (searches === exactSearches ? 0 : searches.length);
+    const hitApiCallCap =
+      searches === exactSearches &&
+      searches.length >= apiControls.maxApiCallsPerSearch;
 
     const stopReason = searches.some((search) => !search.ok)
       ? "Stopped because a MarketCheck request failed."
@@ -1665,6 +1872,7 @@ export async function POST(request: Request) {
         radius,
         rows,
         generationFilter: generationCompRule,
+        taxonomyDiscovery,
       },
       rawCount,
       totalListingsReturned: allListings.length,
@@ -1673,7 +1881,7 @@ export async function POST(request: Request) {
       minimumQualityScore,
       apiControls,
       apiUsage: {
-        apiCallsMade: searches.length,
+        apiCallsMade: totalApiCallsMade,
         cacheHit: false,
         stopReason,
         usableCompCount,
@@ -1681,8 +1889,9 @@ export async function POST(request: Request) {
         filterDiagnostics,
         marketTiming,
         marketTimingDebug,
+        taxonomyDiscovery,
       },
-      apiCallsMade: searches.length,
+      apiCallsMade: totalApiCallsMade,
       usableCompCount,
       stopReason,
       searchLog,
