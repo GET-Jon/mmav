@@ -2184,9 +2184,9 @@ export function EvaluationWorkspace({
   }
 
   function openMethodology() {
-    setMethodologyControls(marketCheckApiControls);
-    setMethodologyStatus("");
-    setMethodologyOpen(true);
+    // Skip the intermediate methodology modal. The settings page contains the
+    // actual search controls, API usage audit trail, and filtering diagnostics.
+    window.location.assign("/settings?tab=api");
   }
 
   function updateMethodologyControl(next: Partial<MarketCheckApiControls>) {
