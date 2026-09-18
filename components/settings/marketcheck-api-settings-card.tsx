@@ -60,6 +60,8 @@ type LastApiUsage = {
   apiCallsMade?: number;
   cacheHit?: boolean;
   stopReason?: string;
+  retrievalStopReason?: string;
+  candidateCompCount?: number;
   usableCompCount?: number;
   failedStatus?: number;
   retryAfter?: string | null;
@@ -444,7 +446,15 @@ export function MarketCheckApiSettingsCard() {
                 </span>
               </span>
               <span>
-                Usable comps{" "}
+                Candidate comps{" "}
+                <span className="font-bold">
+                  {lastApiUsage.candidateCompCount ??
+                    lastApiUsage.filterDiagnostics?.usableListings ??
+                    0}
+                </span>
+              </span>
+              <span>
+                Qualified comps{" "}
                 <span className="font-bold">
                   {lastApiUsage.usableCompCount ?? 0}
                 </span>
@@ -455,8 +465,8 @@ export function MarketCheckApiSettingsCard() {
               <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800">
                 {lastApiUsage.stopReason}
                 <span className="ml-2 font-semibold text-slate-500">
-                  The API can return more usable comps than the stop threshold
-                  in a single call.
+                  Candidate retrieval and final vehicle-equivalence qualification
+                  are tracked separately.
                 </span>
               </div>
             ) : null}
@@ -467,7 +477,7 @@ export function MarketCheckApiSettingsCard() {
                   Comp Filtering Diagnostics
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Explains why returned MarketCheck listings did or did not become usable comps.
+                  Shows the retrieval-level candidate pool before final vehicle-equivalence qualification.
                 </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -491,9 +501,9 @@ export function MarketCheckApiSettingsCard() {
 
                   <div className="rounded-xl bg-slate-50 px-3 py-3">
                     <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-                      Usable
+                      Candidates
                     </div>
-                    <div className="mt-1 text-lg font-black text-emerald-700">
+                    <div className="mt-1 text-lg font-black text-blue-700">
                       {lastApiUsage.filterDiagnostics.usableListings ?? 0}
                     </div>
                   </div>
