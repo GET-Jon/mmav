@@ -331,6 +331,108 @@ function ScoreRing({
   );
 }
 
+
+function MarketLiquidityVisual({
+  soldLow,
+  soldHigh,
+  soldMedian,
+  activeDays,
+  label,
+  confidence,
+  sampleSize,
+}: {
+  soldLow: number;
+  soldHigh: number;
+  soldMedian: number;
+  activeDays: number;
+  label: string;
+  confidence: "low" | "medium" | "high" | "unknown";
+  sampleSize: number;
+}) {
+  const hasSoldRange = soldLow > 0 && soldHigh > 0;
+  const hasActive = activeDays > 0;
+  const scaleMax = Math.max(
+    60,
+    soldHigh > 0 ? soldHigh * 1.35 : 0,
+    activeDays > 0 ? activeDays * 1.25 : 0,
+  );
+  const pct = (days: number) =>
+    Math.max(0, Math.min(100, (days / scaleMax) * 100));
+  const rangeLeft = pct(soldLow);
+  const rangeWidth = Math.max(5, pct(soldHigh) - rangeLeft);
+  const activeLeft = pct(activeDays);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-extrabold text-slate-600">
+            Market Liquidity
+          </div>
+          <div className="mt-1 text-lg font-black text-slate-950">{label}</div>
+        </div>
+        {hasSoldRange ? (
+          <div className="text-right">
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+              Typical retail window
+            </div>
+            <div className="mt-0.5 text-sm font-black text-slate-800">
+              {Math.round(soldLow)}–{Math.round(soldHigh)} days
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-5">
+        <div className="relative h-3 rounded-full bg-slate-200">
+          {hasSoldRange ? (
+            <div
+              className="absolute top-0 h-3 rounded-full bg-emerald-400/80"
+              style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
+              title="Middle 50% of recent sold-listing days on market"
+            />
+          ) : null}
+          {hasActive ? (
+            <div
+              className="absolute -top-1.5 h-6 w-1 rounded-full bg-blue-700 shadow-sm"
+              style={{ left: `calc(${activeLeft}% - 2px)` }}
+              title={`Current active market age: ${Math.round(activeDays)} days`}
+            />
+          ) : null}
+        </div>
+
+        <div className="mt-2 flex justify-between text-[9px] font-bold text-slate-400">
+          <span>0 days</span>
+          <span>{Math.round(scaleMax)}+ days</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-bold text-slate-500">
+        {hasSoldRange ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-4 rounded-full bg-emerald-400/80" />
+            Recent sold pace
+          </span>
+        ) : null}
+        {hasActive ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-1 rounded-full bg-blue-700" />
+            Active market · {Math.round(activeDays)}d
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 text-[10px] font-semibold leading-4 text-slate-400">
+        {sampleSize > 0
+          ? `${sampleSize} recent sold observations · ${confidence} confidence`
+          : soldMedian > 0
+            ? `Recent sold median: ${Math.round(soldMedian)} days`
+            : "Sell-through history is not available for this market yet."}
+      </div>
+    </div>
+  );
+}
+
 function CurrencyInput({
   label,
   value,
@@ -605,6 +707,22 @@ export function EvaluationWorkspace({
       averageDealerDays?: number;
       averageMarketDays?: number;
     };
+    marketLiquidity?: {
+      historicalSoldCount?: number;
+      soldMedianDays?: number;
+      soldP25Days?: number;
+      soldP75Days?: number;
+      soldAverageDays?: number;
+      currentActiveAverageDays?: number;
+      currentDealerAverageDays?: number;
+      region?: string;
+      zip?: string;
+      radius?: number;
+      generation?: string | null;
+      yearQuery?: string;
+      source?: string;
+      confidence?: "low" | "medium" | "high";
+    } | null;
     marketTimingDebug?: {
       statsKeys?: string[];
       statsSample?: unknown;
@@ -646,6 +764,7 @@ export function EvaluationWorkspace({
   const [customCompMarkets, setCustomCompMarkets] = useState<Array<{ market: string; zip: string }>>([]);
   const [compTrimRelaxed, setCompTrimRelaxed] = useState(false);
   const [dealerProfileOpen, setDealerProfileOpen] = useState(false);
+  const [whyLotLogicOpen, setWhyLotLogicOpen] = useState(false);
   const [conditionProfitabilityOpen, setConditionProfitabilityOpen] =
     useState(false);
   const [conditionModalTab, setConditionModalTab] = useState<"ai" | "manual">(
@@ -1835,6 +1954,7 @@ export function EvaluationWorkspace({
             options?.searchStage === "metro"
               ? 3
               : marketCheckApiControls.minInitialRegions,
+          includeMarketLiquidity: !options?.mergeResults,
         }),
       });
 
@@ -2614,6 +2734,7 @@ export function EvaluationWorkspace({
     setVinDecodeLoading(false);
 
     setVehicleDetailsOpen(false);
+    setWhyLotLogicOpen(false);
     setBidLogicOpen(false);
     setMethodologyOpen(false);
     setMethodologySaving(false);
@@ -3104,6 +3225,52 @@ export function EvaluationWorkspace({
 
   const compConfidenceDisplay =
     comps.length > 0 ? compSummary.confidence : "—";
+
+  const liquidity = marketCheckApiUsage?.marketLiquidity || null;
+  const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
+  const liquiditySoldHigh = Math.max(0, liquidity?.soldP75Days || 0);
+  const liquiditySoldMedian = Math.max(0, liquidity?.soldMedianDays || 0);
+  const liquidityActiveDays = Math.max(
+    0,
+    liquidity?.currentActiveAverageDays ||
+      marketTimingAverageMarketDays ||
+      marketTimingAverageDealerDays ||
+      0,
+  );
+  const liquiditySampleSize = Math.max(0, liquidity?.historicalSoldCount || 0);
+  const liquidityConfidence =
+    liquidity?.confidence || (liquiditySampleSize ? "low" : "unknown");
+
+  const liquidityLabel = (() => {
+    if (!liquiditySoldMedian && !liquidityActiveDays) return "Not enough data";
+    const reference = liquiditySoldMedian || liquidityActiveDays;
+    if (reference <= 30) return "Fast";
+    if (reference <= 50) return "Good";
+    if (reference <= 75) return "Normal";
+    if (reference <= 110) return "Slow";
+    return "Very Slow";
+  })();
+
+  const liquidityInterpretation = (() => {
+    if (!liquiditySoldMedian) {
+      return liquidityActiveDays
+        ? `Current comparable inventory is averaging about ${Math.round(liquidityActiveDays)} days on market, but recent sold-history is too thin for a reliable retail window.`
+        : "Lot Logic does not yet have enough timing evidence for this vehicle and market.";
+    }
+
+    if (!liquidityActiveDays) {
+      return `Recent similar vehicles sold in a typical ${Math.round(liquiditySoldLow || liquiditySoldMedian)}–${Math.round(liquiditySoldHigh || liquiditySoldMedian)} day window.`;
+    }
+
+    const delta = liquidityActiveDays - liquiditySoldMedian;
+    if (delta >= 15) {
+      return `Current inventory is aging about ${Math.round(delta)} days longer than the recent sold median, suggesting the market may be slowing.`;
+    }
+    if (delta <= -15) {
+      return "Current inventory is materially younger than the recent sold median, suggesting healthy near-term demand.";
+    }
+    return "Current inventory age is broadly in line with recent regional sell-through.";
+  })();
 
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
@@ -4433,6 +4600,201 @@ export function EvaluationWorkspace({
         </div>
       ) : null}
 
+      {whyLotLogicOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setWhyLotLogicOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Why Lot Logic thinks this"
+            className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
+                  Decision details
+                </div>
+                <h2 className="mt-1 text-xl font-black text-slate-950">
+                  Why Lot Logic Thinks This
+                </h2>
+                <p className="mt-1 max-w-3xl text-sm font-semibold leading-5 text-slate-500">
+                  Market evidence and deal economics drive the verdict. Dealer fit and market liquidity add dealership-specific context.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhyLotLogicOpen(false)}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close decision details"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-[calc(92vh-92px)] overflow-y-auto px-6 py-6">
+              <div className="grid gap-5 lg:grid-cols-2">
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Market Evidence
+                  </div>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Confidence</dt>
+                      <dd className="text-right font-black text-slate-900">{compConfidenceDisplay}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Strong comps used</dt>
+                      <dd className="text-right font-black text-slate-900">{compSummary.includedCount || "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Comp-supported value</dt>
+                      <dd className="text-right font-black text-slate-950">
+                        {compSummary.includedCount
+                          ? money(
+                              (compSummary as { medianAdjusted?: number }).medianAdjusted ||
+                                compSummary.averageAdjusted,
+                            )
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Conservative sale value</dt>
+                      <dd className="text-right font-black text-slate-950">
+                        {compSummary.fastSaleTarget > 0 ? money(compSummary.fastSaleTarget) : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWhyLotLogicOpen(false);
+                      compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    className="mt-4 text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    View comp evidence ↓
+                  </button>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Deal Economics
+                  </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Current bid</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(valuationInput.currentBid)}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Recon reserve</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(displayedReconReserve)}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">All-in cost</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(displayedCurrentCost)}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Expected profit</dt>
+                      <dd className="mt-1 font-black text-emerald-700">
+                        {!needsCompSearch ? money(valuation.expectedGrossProfit) : "—"}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Recommended max buy</dt>
+                      <dd className="mt-1 font-black text-blue-700">{suggestedBid > 0 ? money(suggestedBid) : "—"}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Dealer Fit
+                  </div>
+                  <div className="mt-1 text-lg font-black text-slate-950">
+                    {dealerFitResult.label} · {dealerFitResult.score}/100
+                  </div>
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                    Dealer Fit measures how well this vehicle matches the kinds of vehicles your dealership prefers and is positioned to retail. It does not determine whether the deal is profitable.
+                  </p>
+                  <ul className="mt-4 space-y-2">
+                    {[...dealerFitResult.reasons, ...dealerFitResult.cautions]
+                      .slice(0, 5)
+                      .map((item) => (
+                        <li key={item} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700">
+                          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                          {item}
+                        </li>
+                      ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWhyLotLogicOpen(false);
+                      setDealerProfileOpen(true);
+                    }}
+                    className="mt-4 text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Dealer Profile & Preferences →
+                  </button>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Market Liquidity
+                  </div>
+                  <div className="mt-3">
+                    <MarketLiquidityVisual
+                      soldLow={liquiditySoldLow}
+                      soldHigh={liquiditySoldHigh}
+                      soldMedian={liquiditySoldMedian}
+                      activeDays={liquidityActiveDays}
+                      label={liquidityLabel}
+                      confidence={liquidityConfidence}
+                      sampleSize={liquiditySampleSize}
+                    />
+                  </div>
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">
+                    {liquidityInterpretation}
+                  </p>
+                  {liquidity?.region ? (
+                    <p className="mt-2 text-[10px] font-semibold text-slate-400">
+                      Based on recent sold and active listings around {liquidity.region} ({liquidity.zip}) within {liquidity.radius || 100} miles
+                      {liquidity.generation ? ` · ${liquidity.generation} generation` : ""}.
+                    </p>
+                  ) : null}
+                </section>
+              </div>
+
+              {(reviewReasons.length || needsCompSearch) ? (
+                <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">
+                    What deserves another look
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {[
+                      needsCompSearch ? "Market evidence is incomplete; expand the comp search before relying on the sale estimate." : null,
+                      ...reviewReasons,
+                    ].filter(Boolean).map((item) => (
+                      <li key={String(item)} className="flex gap-2 text-xs font-semibold leading-5 text-amber-900">
+                        <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {dealerProfileOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -5206,83 +5568,29 @@ export function EvaluationWorkspace({
                     {saveStatus}
                   </div>
                 ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => setWhyLotLogicOpen(true)}
+                  disabled={!hasEvaluationData}
+                  className="mx-auto mt-4 block text-xs font-extrabold text-blue-700 hover:text-blue-900 disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  Why Lot Logic thinks this →
+                </button>
               </div>
             </article>
 
             <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
               <div>
                 <h2 className="text-base font-black text-slate-950">
-                  Why Lot Logic Thinks This
+                  Deal Snapshot
                 </h2>
                 <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
-                  Deal economics and market evidence drive the verdict. Dealer fit is supporting context.
+                  Profitability, dealership fit, and expected market turn at a glance.
                 </p>
               </div>
 
-              <dl className="mt-4 space-y-3 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Market Evidence
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      comps.length ? "text-slate-900" : "text-slate-400"
-                    }`}
-                  >
-                    {compConfidenceDisplay}
-                  </dd>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Strong Comps Used
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      comps.length ? "text-slate-900" : "text-slate-400"
-                    }`}
-                  >
-                    {comps.length ? compSummary.includedCount : "—"}
-                  </dd>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Comp-Supported Value
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      comps.length ? "text-slate-950" : "text-slate-400"
-                    }`}
-                  >
-                    {comps.length
-                      ? money(
-                          (compSummary as { medianAdjusted?: number })
-                            .medianAdjusted || compSummary.averageAdjusted,
-                        )
-                      : "—"}
-                  </dd>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Conservative Sale Value
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      hasEvaluationData && compSummary.fastSaleTarget > 0
-                        ? "text-slate-950"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {hasEvaluationData && compSummary.fastSaleTarget > 0
-                      ? money(compSummary.fastSaleTarget)
-                      : "—"}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-5">
+              <div className="mt-5 grid grid-cols-2 gap-4">
                 <ScoreRing
                   label="Deal Economics"
                   score={profitabilityScoreDisplay}
@@ -5295,6 +5603,18 @@ export function EvaluationWorkspace({
                   score={dealerFitScoreDisplay}
                   tone="blue"
                   isEmpty={!hasEvaluationData}
+                />
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <MarketLiquidityVisual
+                  soldLow={liquiditySoldLow}
+                  soldHigh={liquiditySoldHigh}
+                  soldMedian={liquiditySoldMedian}
+                  activeDays={liquidityActiveDays}
+                  label={hasEvaluationData ? liquidityLabel : "Not calculated"}
+                  confidence={liquidityConfidence}
+                  sampleSize={liquiditySampleSize}
                 />
               </div>
 
