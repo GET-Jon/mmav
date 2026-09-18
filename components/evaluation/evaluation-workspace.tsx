@@ -688,6 +688,8 @@ export function EvaluationWorkspace({
   const [conditionAnalysisLoading, setConditionAnalysisLoading] =
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
+  const [conditionAnalysisRetryable, setConditionAnalysisRetryable] =
+    useState(false);
   const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
     Boolean(initialSavedPayload?.conditionAnalysisApplied),
   );
@@ -2350,6 +2352,7 @@ export function EvaluationWorkspace({
 
     setConditionAnalysisLoading(true);
     setConditionAnalysisError("");
+    setConditionAnalysisRetryable(false);
     setConditionAnalysisApplied(false);
 
     try {
@@ -2377,9 +2380,12 @@ export function EvaluationWorkspace({
       const data = (await response.json()) as {
         analysis?: ConditionAnalysis;
         error?: string;
+        code?: string;
+        retryable?: boolean;
       };
 
       if (!response.ok || !data.analysis) {
+        setConditionAnalysisRetryable(data.retryable === true);
         throw new Error(data.error || "Condition analysis failed.");
       }
 
@@ -2591,6 +2597,7 @@ export function EvaluationWorkspace({
     setConditionReadyDaysLowOverride(null);
     setConditionReadyDaysHighOverride(null);
     setConditionAnalysisError("");
+    setConditionAnalysisRetryable(false);
     setConditionAnalysisLoading(false);
     setConditionAnalysisApplied(false);
 
@@ -3688,8 +3695,19 @@ export function EvaluationWorkspace({
                     </div>
 
                     {conditionAnalysisError ? (
-                      <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      <div
+                        className={`mt-4 rounded-xl border px-4 py-3 text-sm font-bold ${
+                          conditionAnalysisRetryable
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-red-200 bg-red-50 text-red-700"
+                        }`}
+                      >
                         {conditionAnalysisError}
+                        {conditionAnalysisRetryable ? (
+                          <div className="mt-1 text-xs font-semibold text-amber-700">
+                            Your pasted condition notes are still here. Try Analyze Condition again in a moment.
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </section>
