@@ -630,6 +630,7 @@ export function EvaluationWorkspace({
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
+  const compSectionRef = useRef<HTMLElement | null>(null);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -2994,6 +2995,13 @@ export function EvaluationWorkspace({
 
   const hasMaterialConditionRisk = materialConditionIssues.length > 0;
 
+  // Zero strong comps is an evidence state, not a negative verdict.
+  // Do not manufacture sale/profit conclusions until market evidence exists.
+  const needsCompSearch =
+    hasEvaluationData &&
+    !marketCheckLoading &&
+    compSummary.includedCount === 0;
+
   const hasLowCompConfidence =
     comps.length > 0 &&
     String(compSummary.confidence || "").toLowerCase() === "low";
@@ -3008,10 +3016,12 @@ export function EvaluationWorkspace({
 
   const hasHardPass =
     hasEvaluationData &&
+    !needsCompSearch &&
     (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
 
   const requiresReview =
     hasEvaluationData &&
+    !needsCompSearch &&
     !hasHardPass &&
     (isAboveRecommendedBuy ||
       valuation.decision === "Watch / Stretch Only" ||
@@ -3026,8 +3036,10 @@ export function EvaluationWorkspace({
 
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
-    : hasHardPass
-      ? "PASS"
+    : needsCompSearch
+      ? "COMP SEARCH NEEDED"
+      : hasHardPass
+        ? "PASS"
       : isAboveRecommendedBuy
         ? "ABOVE TARGET PRICE"
         : valuation.decision === "Watch / Stretch Only"
@@ -3039,17 +3051,21 @@ export function EvaluationWorkspace({
   const presentationDecision =
     !hasEvaluationData
       ? "awaiting"
-      : hasHardPass
-        ? "pass"
-        : requiresReview
-          ? "review"
-          : "pursue";
+      : needsCompSearch
+        ? "comps"
+        : hasHardPass
+          ? "pass"
+          : requiresReview
+            ? "review"
+            : "pursue";
 
   const decisionBadgeTone =
     presentationDecision === "pass"
       ? "bg-red-100 text-red-700"
-      : presentationDecision === "review"
-        ? "bg-amber-100 text-amber-700"
+      : presentationDecision === "comps"
+        ? "bg-amber-100 text-amber-800"
+        : presentationDecision === "review"
+          ? "bg-amber-100 text-amber-700"
         : presentationDecision === "pursue"
           ? "bg-emerald-100 text-emerald-700"
           : "bg-slate-100 text-slate-600";
@@ -3057,8 +3073,10 @@ export function EvaluationWorkspace({
   const decisionBannerTone =
     presentationDecision === "pass"
       ? "border-red-200/80 bg-red-50/60 text-red-950"
-      : presentationDecision === "review"
-        ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
+      : presentationDecision === "comps"
+        ? "border-amber-200/80 bg-amber-50/35 text-amber-950"
+        : presentationDecision === "review"
+          ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
         : presentationDecision === "pursue"
           ? "border-emerald-200/80 bg-emerald-50/40 text-emerald-950"
           : "border-slate-200 bg-white text-slate-950";
@@ -3066,8 +3084,10 @@ export function EvaluationWorkspace({
   const decisionTextTone =
     presentationDecision === "pass"
       ? "text-red-700"
-      : presentationDecision === "review"
+      : presentationDecision === "comps"
         ? "text-amber-700"
+        : presentationDecision === "review"
+          ? "text-amber-700"
         : presentationDecision === "pursue"
           ? "text-emerald-700"
           : "text-slate-400";
@@ -5044,10 +5064,16 @@ export function EvaluationWorkspace({
                     Sale Estimate
                   </div>
                   <div className="mt-2 text-[25px] font-black tracking-[-0.04em] text-slate-950">
-                    {hasEvaluationData && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}
+                    {!needsCompSearch && hasEvaluationData && finalTargetUsed > 0
+                      ? money(finalTargetUsed)
+                      : "—"}
                   </div>
                   <div className="mt-1 text-[9px] font-bold leading-4 text-slate-500 sm:text-[10px]">
-                    Comp-supported<br />sale value
+                    {needsCompSearch ? (
+                      <>No usable<br />comps yet</>
+                    ) : (
+                      <>Comp-supported<br />sale value</>
+                    )}
                   </div>
                 </div>
 
@@ -5055,14 +5081,59 @@ export function EvaluationWorkspace({
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
                     Estimated Profit
                   </div>
-                  <div className={`mt-2 text-[25px] font-black tracking-[-0.04em] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                    {hasEvaluationData ? money(valuation.expectedGrossProfit) : "—"}
+                  <div className={`mt-2 text-[25px] font-black tracking-[-0.04em] ${
+                    needsCompSearch
+                      ? "text-slate-400"
+                      : valuation.expectedGrossProfit >= 0
+                        ? "text-emerald-700"
+                        : "text-red-700"
+                  }`}>
+                    {hasEvaluationData && !needsCompSearch
+                      ? money(valuation.expectedGrossProfit)
+                      : "—"}
                   </div>
                   <div className="mt-1 text-[9px] font-bold leading-4 text-slate-500 sm:text-[10px]">
-                    After modeled fees,<br />costs & reserves
+                    {needsCompSearch ? (
+                      <>Waiting on<br />market evidence</>
+                    ) : (
+                      <>After modeled fees,<br />costs & reserves</>
+                    )}
                   </div>
                 </div>
               </div>
+
+              {needsCompSearch ? (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center">
+                  <div className="text-xs font-black text-amber-900">
+                    No strong comps found yet.
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold leading-4 text-amber-800">
+                    Expand the search to establish a market-supported sale value before Lot Logic makes a deal verdict.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openCompMarketEditor}
+                      disabled={marketCheckLoading}
+                      className="rounded-lg bg-blue-700 px-3.5 py-2 text-[11px] font-black text-white hover:bg-blue-800 disabled:bg-slate-300"
+                    >
+                      Expand Comp Search
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        compSectionRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        })
+                      }
+                      className="rounded-lg border border-amber-300 bg-white px-3.5 py-2 text-[11px] font-black text-amber-800 hover:bg-amber-50"
+                    >
+                      View Comp Details ↓
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               {presentationDecision === "review" && reviewReasons.length ? (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-2.5 text-center text-xs font-bold leading-5 text-amber-800">
@@ -5070,7 +5141,7 @@ export function EvaluationWorkspace({
                 </div>
               ) : null}
 
-              {currentBidPosition ? (
+              {!needsCompSearch && currentBidPosition ? (
                 <div
                   className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${
                     currentBidPosition.tone === "over"
@@ -5092,9 +5163,11 @@ export function EvaluationWorkspace({
                   className={`w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
                     presentationDecision === "pass"
                       ? "bg-red-700 hover:bg-red-800"
-                      : presentationDecision === "review"
-                        ? "bg-amber-600 hover:bg-amber-700"
-                        : "bg-emerald-700 hover:bg-emerald-800"
+                      : presentationDecision === "comps"
+                        ? "bg-blue-700 hover:bg-blue-800"
+                        : presentationDecision === "review"
+                          ? "bg-amber-600 hover:bg-amber-700"
+                          : "bg-emerald-700 hover:bg-emerald-800"
                   }`}
                 >
                   {saveLoading
@@ -5196,7 +5269,7 @@ export function EvaluationWorkspace({
                   label="Deal Economics"
                   score={profitabilityScoreDisplay}
                   tone="green"
-                  isEmpty={!hasEvaluationData}
+                  isEmpty={!hasEvaluationData || needsCompSearch}
                 />
 
                 <ScoreRing
@@ -5442,7 +5515,7 @@ export function EvaluationWorkspace({
             </SectionCard>
           </section>
 
-          <section className="mt-4">
+          <section ref={compSectionRef} className="mt-4 scroll-mt-4">
             <SectionCard
               title="Comparable Vehicles"
               action={
