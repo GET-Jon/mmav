@@ -1061,6 +1061,121 @@ function getPayloadStat(payload: Record<string, any>, keys: string[]) {
   return 0;
 }
 
+
+function getStatDistribution(payload: Record<string, any>, key: string) {
+  const raw = payload?.stats?.[key];
+
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const record = raw as Record<string, any>;
+  const percentiles =
+    record.percentiles && typeof record.percentiles === "object"
+      ? (record.percentiles as Record<string, unknown>)
+      : {};
+
+  const numberFrom = (value: unknown) => {
+    const parsed = toNumber(value);
+    return parsed > 0 ? parsed : 0;
+  };
+
+  const count = numberFrom(record.count);
+  const mean = numberFrom(record.mean ?? record.avg ?? record.average);
+  const median = numberFrom(
+    record.median ?? percentiles["50.0"] ?? percentiles["50"],
+  );
+  const p25 = numberFrom(percentiles["25.0"] ?? percentiles["25"]);
+  const p75 = numberFrom(percentiles["75.0"] ?? percentiles["75"]);
+
+  if (!count && !mean && !median && !p25 && !p75) {
+    return null;
+  }
+
+  return {
+    count,
+    mean: Math.round(mean),
+    median: Math.round(median || mean),
+    p25: Math.round(p25 || median || mean),
+    p75: Math.round(p75 || median || mean),
+  };
+}
+
+async function getHistoricalMarketLiquidity({
+  apiKey,
+  yearQuery,
+  make,
+  model,
+  zip,
+  radius,
+  searchKey,
+  reason,
+}: {
+  apiKey: string;
+  yearQuery: string;
+  make: string;
+  model: string;
+  zip: string;
+  radius: number;
+  searchKey: string;
+  reason: string;
+}) {
+  const params = new URLSearchParams({
+    api_key: apiKey,
+    car_type: "used",
+    sold: "true",
+    make,
+    model,
+    year: yearQuery,
+    zip,
+    radius: String(radius),
+    rows: "0",
+    stats: "dom_active,dos_active",
+  });
+
+  const endpoint = "/v2/search/car/recents";
+  const url = `https://api.marketcheck.com${endpoint}?${params.toString()}`;
+
+  await waitForMarketCheckSlot();
+
+  logMarketCheckCall({
+    endpoint,
+    searchKey,
+    cacheHit: false,
+    reason,
+    details: {
+      attemptName: "historical-liquidity",
+      zip,
+      year: yearQuery,
+      make,
+      model,
+      radius,
+      rows: 0,
+      sold: true,
+      stats: "dom_active,dos_active",
+    },
+  });
+
+  const response = await fetch(url, { cache: "no-store" });
+  const rawPayload = await response.text();
+
+  let payload: Record<string, any> = {};
+  try {
+    payload = rawPayload ? JSON.parse(rawPayload) : {};
+  } catch {
+    payload = { message: rawPayload };
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    retryAfter: response.headers.get("retry-after"),
+    numFound: toNumber(payload?.num_found),
+    domActive: getStatDistribution(payload, "dom_active"),
+    dosActive: getStatDistribution(payload, "dos_active"),
+  };
+}
+
 function averagePositive(values: number[]) {
   const positiveValues = values.filter((value) => value > 0);
 
@@ -1159,6 +1274,7 @@ export async function POST(request: Request) {
     const radius = Math.min(toNumber(body.radius, 100), 100);
     const rows = Math.min(toNumber(body.rows, 25), 50);
     const debug = Boolean(body.debug);
+    const includeMarketLiquidity = body.includeMarketLiquidity !== false;
     const reason = String(body.reason || "explicit-user-comp-search");
 
     const apiControls = {
@@ -1977,6 +2093,78 @@ export async function POST(request: Request) {
     const marketTiming = getMarketTimingStats(searches);
     const marketTimingDebug = getMarketTimingDebug(searches);
 
+
+    let marketLiquidity:
+      | {
+          historicalSoldCount: number;
+          soldMedianDays: number;
+          soldP25Days: number;
+          soldP75Days: number;
+          soldAverageDays: number;
+          currentActiveAverageDays: number;
+          currentDealerAverageDays: number;
+          region: string;
+          zip: string;
+          radius: number;
+          generation: string | null;
+          yearQuery: string;
+          source: "marketcheck-past-90-days";
+          confidence: "low" | "medium" | "high";
+        }
+      | null = null;
+
+    let historicalLiquidityApiCalls = 0;
+
+    if (
+      includeMarketLiquidity &&
+      usableCompCount > 0 &&
+      orderedRegions.length > 0
+    ) {
+      const primaryRegion = orderedRegions[0];
+      const liquidityYears = generationCompRule
+        ? [
+            year,
+            ...generationYears,
+          ].filter((value, index, values) => values.indexOf(value) === index)
+        : [year];
+
+      const historical = await getHistoricalMarketLiquidity({
+        apiKey: marketCheckApiKey,
+        yearQuery: liquidityYears.join(","),
+        make,
+        model: activeRetrievalModel,
+        zip: primaryRegion.zip,
+        radius,
+        searchKey,
+        reason,
+      });
+
+      historicalLiquidityApiCalls = 1;
+
+      if (historical.ok && historical.domActive) {
+        const soldCount =
+          historical.domActive.count || historical.numFound || 0;
+
+        marketLiquidity = {
+          historicalSoldCount: soldCount,
+          soldMedianDays: historical.domActive.median,
+          soldP25Days: historical.domActive.p25,
+          soldP75Days: historical.domActive.p75,
+          soldAverageDays: historical.domActive.mean,
+          currentActiveAverageDays: marketTiming.averageMarketDays,
+          currentDealerAverageDays: marketTiming.averageDealerDays,
+          region: primaryRegion.market,
+          zip: primaryRegion.zip,
+          radius,
+          generation: generationCompRule?.generation || null,
+          yearQuery: liquidityYears.join(","),
+          source: "marketcheck-past-90-days",
+          confidence:
+            soldCount >= 20 ? "high" : soldCount >= 8 ? "medium" : "low",
+        };
+      }
+    }
+
     const responsePayload = {
       search: {
         year,
@@ -2017,13 +2205,14 @@ export async function POST(request: Request) {
       minimumQualityScore,
       apiControls,
       apiUsage: {
-        apiCallsMade: totalApiCallsMade,
+        apiCallsMade: totalApiCallsMade + historicalLiquidityApiCalls,
         cacheHit: false,
         stopReason,
         usableCompCount,
         searchLog,
         filterDiagnostics,
         marketTiming,
+        marketLiquidity,
         marketTimingDebug,
         generationWidening: generationCompRule
           ? {
@@ -2036,7 +2225,7 @@ export async function POST(request: Request) {
           : null,
         taxonomyDiscovery,
       },
-      apiCallsMade: totalApiCallsMade,
+      apiCallsMade: totalApiCallsMade + historicalLiquidityApiCalls,
       usableCompCount,
       stopReason,
       searchLog,
