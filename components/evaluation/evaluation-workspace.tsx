@@ -359,8 +359,18 @@ function MarketLiquidityVisual({
   const pct = (days: number) =>
     Math.max(0, Math.min(100, (days / scaleMax) * 100));
   const rangeLeft = pct(soldLow);
-  const rangeWidth = Math.max(5, pct(soldHigh) - rangeLeft);
+  const rangeWidth = Math.max(6, pct(soldHigh) - rangeLeft);
+  const medianLeft = pct(soldMedian);
   const activeLeft = pct(activeDays);
+
+  const labelTone =
+    label === "Fast" || label === "Good"
+      ? "text-emerald-700"
+      : label === "Normal"
+        ? "text-amber-700"
+        : label === "Slow" || label === "Very Slow"
+          ? "text-orange-700"
+          : "text-slate-700";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
@@ -369,8 +379,9 @@ function MarketLiquidityVisual({
           <div className="text-xs font-extrabold text-slate-600">
             Market Liquidity
           </div>
-          <div className="mt-1 text-lg font-black text-slate-950">{label}</div>
+          <div className={`mt-1 text-lg font-black ${labelTone}`}>{label}</div>
         </div>
+
         {hasSoldRange ? (
           <div className="text-right">
             <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
@@ -384,40 +395,73 @@ function MarketLiquidityVisual({
       </div>
 
       <div className="mt-5">
-        <div className="relative h-3 rounded-full bg-slate-200">
-          {hasSoldRange ? (
-            <div
-              className="absolute top-0 h-3 rounded-full bg-emerald-400/80"
-              style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
-              title="Middle 50% of recent sold-listing days on market"
-            />
-          ) : null}
-          {hasActive ? (
-            <div
-              className="absolute -top-1.5 h-6 w-1 rounded-full bg-blue-700 shadow-sm"
-              style={{ left: `calc(${activeLeft}% - 2px)` }}
-              title={`Current active market age: ${Math.round(activeDays)} days`}
-            />
-          ) : null}
+        <div className="mb-2 flex justify-between text-[9px] font-black uppercase tracking-[0.06em] text-slate-400">
+          <span>Fast</span>
+          <span>Balanced</span>
+          <span>Slow</span>
         </div>
 
-        <div className="mt-2 flex justify-between text-[9px] font-bold text-slate-400">
-          <span>0 days</span>
-          <span>{Math.round(scaleMax)}+ days</span>
+        <div className="relative pt-9 pb-4">
+          <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-400 via-amber-300 to-orange-400 shadow-inner">
+            {hasSoldRange ? (
+              <div
+                className="absolute top-1/2 h-6 -translate-y-1/2 rounded-full border border-white/80 bg-white/45 shadow-sm backdrop-blur-[1px]"
+                style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
+                title="Typical recent sold range"
+              />
+            ) : null}
+
+            {hasSoldRange && soldMedian > 0 ? (
+              <div
+                className="absolute top-1/2 h-7 w-[2px] -translate-y-1/2 bg-emerald-950/65"
+                style={{ left: `calc(${medianLeft}% - 1px)` }}
+                title={`Recent sold median: ${Math.round(soldMedian)} days`}
+              />
+            ) : null}
+
+            {hasActive ? (
+              <>
+                <div
+                  className="absolute top-1/2 h-7 w-7 -translate-y-1/2 rounded-full border-2 border-white bg-blue-700 shadow-[0_4px_14px_rgba(37,99,235,0.35)]"
+                  style={{ left: `calc(${activeLeft}% - 14px)` }}
+                  title={`Current active market age: ${Math.round(activeDays)} days`}
+                />
+                <div
+                  className="absolute -top-1 -translate-x-1/2 -translate-y-full rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black text-white shadow-md"
+                  style={{ left: `${activeLeft}%` }}
+                >
+                  {Math.round(activeDays)}d
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          <div className="mt-2 flex justify-between text-[9px] font-bold text-slate-400">
+            <span>0 days</span>
+            <span>{Math.round(scaleMax)}+ days</span>
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-bold text-slate-500">
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-slate-500">
         {hasSoldRange ? (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-4 rounded-full bg-emerald-400/80" />
-            Recent sold pace
+            <span className="h-3 w-5 rounded-full border border-slate-300 bg-white/70" />
+            Typical sold range
           </span>
         ) : null}
+
+        {hasSoldRange && soldMedian > 0 ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-[2px] bg-emerald-950/65" />
+            Sold median
+          </span>
+        ) : null}
+
         {hasActive ? (
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-3 w-1 rounded-full bg-blue-700" />
-            Active market · {Math.round(activeDays)}d
+            <span className="h-3 w-3 rounded-full bg-blue-700" />
+            Current active market
           </span>
         ) : null}
       </div>
@@ -425,8 +469,8 @@ function MarketLiquidityVisual({
       <div className="mt-3 text-[10px] font-semibold leading-4 text-slate-400">
         {sampleSize > 0
           ? `${sampleSize} recent sold observations · ${confidence} confidence`
-          : soldMedian > 0
-            ? `Recent sold median: ${Math.round(soldMedian)} days`
+          : hasActive
+            ? "Showing current active-market timing only. Recent sold-history is not yet available."
             : "Sell-through history is not available for this market yet."}
       </div>
     </div>
