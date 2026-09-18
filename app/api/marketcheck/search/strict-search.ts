@@ -17,7 +17,7 @@ type MarketCheckSearchResult = {
   attemptName: string;
   retryAfter: string | null;
   requested: {
-    year?: number;
+    year?: number | string;
     make: string;
     model?: string;
     zip: string;
@@ -217,7 +217,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v10-model-facet-recovery",
+    cacheVersion: "progressive-regions-v11-generation-widening",
   });
 }
 
@@ -681,7 +681,7 @@ async function searchMarketCheck({
   reason,
 }: {
   apiKey: string;
-  year?: number;
+  year?: number | string;
   make: string;
   model?: string;
   zip: string;
@@ -1592,6 +1592,63 @@ export async function POST(request: Request) {
       };
     }
 
+    function generationYearsInPreferenceOrder() {
+      if (!generationCompRule) return [];
+
+      const years: number[] = [];
+      for (
+        let candidateYear = generationCompRule.startYear;
+        candidateYear <= generationCompRule.endYear;
+        candidateYear += 1
+      ) {
+        if (candidateYear !== year) years.push(candidateYear);
+      }
+
+      const refreshBoundaries = [
+        generationCompRule.startYear,
+        ...(generationCompRule.refreshYears || []),
+      ]
+        .filter((value, index, values) =>
+          Number.isFinite(value) &&
+          value >= generationCompRule.startYear &&
+          value <= generationCompRule.endYear &&
+          values.indexOf(value) === index
+        )
+        .sort((a, b) => a - b);
+
+      let targetEraStart = generationCompRule.startYear;
+      let targetEraEnd = generationCompRule.endYear;
+
+      for (let index = 0; index < refreshBoundaries.length; index += 1) {
+        const boundary = refreshBoundaries[index];
+        const nextBoundary = refreshBoundaries[index + 1];
+
+        if (year >= boundary && (!nextBoundary || year < nextBoundary)) {
+          targetEraStart = boundary;
+          targetEraEnd = nextBoundary
+            ? Math.min(generationCompRule.endYear, nextBoundary - 1)
+            : generationCompRule.endYear;
+          break;
+        }
+      }
+
+      return years.sort((a, b) => {
+        const aSameRefreshEra = a >= targetEraStart && a <= targetEraEnd ? 0 : 1;
+        const bSameRefreshEra = b >= targetEraStart && b <= targetEraEnd ? 0 : 1;
+
+        if (aSameRefreshEra !== bSameRefreshEra) {
+          return aSameRefreshEra - bSameRefreshEra;
+        }
+
+        const aDelta = Math.abs(a - year);
+        const bDelta = Math.abs(b - year);
+        if (aDelta !== bDelta) return aDelta - bDelta;
+
+        // If equally distant, newer evidence is generally preferable.
+        return b - a;
+      });
+    }
+
     async function runProgressiveRegionSearches({
       attemptName,
       attemptYear,
@@ -1601,7 +1658,7 @@ export async function POST(request: Request) {
       reserveOneCallWhenNoResults,
     }: {
       attemptName: string;
-      attemptYear?: number;
+      attemptYear?: number | string;
       attemptModel?: string;
       attemptRows?: number;
       maxApiCallsOverride?: number;
@@ -1697,6 +1754,8 @@ export async function POST(request: Request) {
     }
 
     let searches = exactSearches;
+    let taxonomyRetrySearches: MarketCheckSearchResult[] = [];
+    let activeRetrievalModel = retrievalModel;
 
     const exactSummary = buildCompSummary(exactSearches);
     let taxonomyDiscovery:
@@ -1753,7 +1812,7 @@ export async function POST(request: Request) {
       if (discovery.ok && materiallyDifferentModels.length > 0) {
         const canonicalModelQuery = materiallyDifferentModels.join(",");
 
-        const taxonomyRetrySearches = await runProgressiveRegionSearches({
+        taxonomyRetrySearches = await runProgressiveRegionSearches({
           attemptName: `exact-year-model-facet-${canonicalModelQuery}`,
           attemptYear: year,
           attemptModel: canonicalModelQuery,
@@ -1778,7 +1837,73 @@ export async function POST(request: Request) {
         }
 
         searches = taxonomyRetrySearches;
+        activeRetrievalModel = canonicalModelQuery;
       }
+    }
+
+    // If exact-year evidence is still thin, widen model years within the
+    // resolved generation before asking the user to expand geography or relax
+    // trim/configuration. MarketCheck accepts comma-separated year values, so
+    // one request can cover the nearby same-generation years efficiently.
+    const generationYears = generationYearsInPreferenceOrder();
+    let generationSearches: MarketCheckSearchResult[] = [];
+
+    if (
+      generationCompRule &&
+      generationYears.length > 0 &&
+      buildCompSummary(searches).comps.length < MIN_USABLE_COMPS
+    ) {
+      const generationYearQuery = generationYears.join(",");
+      const maxGenerationRegionCalls = Math.min(2, orderedRegions.length);
+
+      for (
+        let regionIndex = 0;
+        regionIndex < maxGenerationRegionCalls;
+        regionIndex += 1
+      ) {
+        const region = orderedRegions[regionIndex];
+
+        const result = await searchMarketCheck({
+          apiKey: marketCheckApiKey,
+          year: generationYearQuery,
+          make,
+          model: activeRetrievalModel,
+          zip: region.zip,
+          radius,
+          rows: 50,
+          attemptName: `same-generation-${generationCompRule.generation}-nearby-years`,
+          searchKey,
+          reason,
+        });
+
+        generationSearches.push(result);
+
+        if (!result.ok) break;
+
+        const combinedSummary = buildCompSummary([
+          ...searches,
+          ...generationSearches,
+        ]);
+
+        if (combinedSummary.comps.length >= MIN_USABLE_COMPS) {
+          break;
+        }
+      }
+
+      const failedGenerationSearch = generationSearches.find(
+        (search) => !search.ok,
+      );
+
+      if (failedGenerationSearch) {
+        return buildFailedMarketCheckResponse({
+          failedSearch: failedGenerationSearch,
+          searches: [...searches, ...generationSearches],
+          orderedRegions,
+          apiControls,
+        });
+      }
+
+      searches = [...searches, ...generationSearches];
     }
 
     const {
@@ -1832,10 +1957,12 @@ export async function POST(request: Request) {
     const totalApiCallsMade =
       exactSearches.length +
       taxonomyDiscoveryCalls +
-      (searches === exactSearches ? 0 : searches.length);
+      taxonomyRetrySearches.length +
+      generationSearches.length;
     const hitApiCallCap =
-      searches === exactSearches &&
-      searches.length >= apiControls.maxApiCallsPerSearch;
+      exactSearches.length >= apiControls.maxApiCallsPerSearch &&
+      generationSearches.length === 0 &&
+      taxonomyRetrySearches.length === 0;
 
     const stopReason = searches.some((search) => !search.ok)
       ? "Stopped because a MarketCheck request failed."
@@ -1872,6 +1999,15 @@ export async function POST(request: Request) {
         radius,
         rows,
         generationFilter: generationCompRule,
+        generationWidening: generationCompRule
+          ? {
+              attempted: generationSearches.length > 0,
+              generation: generationCompRule.generation,
+              exactYear: year,
+              widenedYears: generationYears,
+              apiCallsMade: generationSearches.length,
+            }
+          : null,
         taxonomyDiscovery,
       },
       rawCount,
@@ -1889,6 +2025,15 @@ export async function POST(request: Request) {
         filterDiagnostics,
         marketTiming,
         marketTimingDebug,
+        generationWidening: generationCompRule
+          ? {
+              attempted: generationSearches.length > 0,
+              generation: generationCompRule.generation,
+              exactYear: year,
+              widenedYears: generationYears,
+              apiCallsMade: generationSearches.length,
+            }
+          : null,
         taxonomyDiscovery,
       },
       apiCallsMade: totalApiCallsMade,
