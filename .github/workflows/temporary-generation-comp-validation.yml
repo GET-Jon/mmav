@@ -1,0 +1,22 @@
+name: Temporary generation comp validation
+
+on:
+  push:
+    branches:
+      - lot-logic-public-site
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate A5 generation resolution
+        run: npx --yes tsx@4.20.5 -e "import { findGenerationCompRule } from './lib/marketcheck/generation-comps.ts'; const rule=findGenerationCompRule({year:2025,make:'Audi',model:'A5',trim:'S Line quattro Premium'}); console.log(rule); if(!rule || rule.generation!=='F5' || rule.startYear!==2018 || rule.endYear!==2025) process.exit(1);"
+      - name: Run vehicle equivalence regressions
+        run: npx --yes tsx@4.20.5 -e "import { assertVehicleEquivalenceRegressionCases } from './lib/marketcheck/vehicle-equivalence-regression.ts'; console.log(assertVehicleEquivalenceRegressionCases());"
+      - run: npm run build
