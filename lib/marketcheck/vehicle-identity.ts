@@ -103,7 +103,7 @@ function canonicalMercedesFamily(model: string, modelCompact: string) {
     ["a class", ["amga35", "amga45", "a35", "a45"]],
     ["c class", ["amgc43", "amgc63", "c250", "c300", "c350", "c400", "c43", "c450", "c63"]],
     ["e class", ["amge53", "amge63", "e300", "e350", "e400", "e450", "e53", "e550", "e63"]],
-    ["s class", ["s450", "s500", "s550", "s560", "s580", "m760i"]],
+    ["s class", ["s450", "s500", "s550", "s560", "s580"]],
     ["cla class", ["amgcla35", "amgcla45", "cla35", "cla45"]],
     ["glc", ["glc300", "glc350", "glc43", "glc63"]],
     ["gle", ["gle350", "gle400", "gle450", "gle53", "gle580", "gle63"]],
