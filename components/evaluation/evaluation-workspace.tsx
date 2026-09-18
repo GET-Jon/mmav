@@ -293,10 +293,10 @@ function ScoreRing({
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="mb-2 text-xs font-extrabold text-slate-600">{label}</div>
+      <div className="mb-1.5 text-xs font-extrabold text-slate-600">{label}</div>
 
       <div
-        className="relative grid h-[86px] w-[86px] place-items-center rounded-full"
+        className="relative grid h-[78px] w-[78px] place-items-center rounded-full"
         style={{
           background: isEmpty
             ? "#e2e8f0"
@@ -305,9 +305,9 @@ function ScoreRing({
               }deg, #e2e8f0 0deg)`,
         }}
       >
-        <div className="grid h-[70px] w-[70px] place-items-center rounded-full bg-white shadow-inner">
+        <div className="grid h-[64px] w-[64px] place-items-center rounded-full bg-white shadow-inner">
           <div>
-            <div className={`text-[25px] font-black leading-none tracking-[-0.04em] ${
+            <div className={`text-[23px] font-black leading-none tracking-[-0.04em] ${
               isEmpty ? "text-slate-400" : "text-slate-950"
             }`}>
               {isEmpty ? "—" : normalizedScore}
@@ -373,13 +373,15 @@ function MarketLiquidityVisual({
           : "text-slate-700";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-extrabold text-slate-600">
-            Time to Sell
+          <div className="flex items-baseline gap-2">
+            <div className="text-xs font-extrabold text-slate-600">
+              Time to Sell
+            </div>
+            <div className={`text-base font-black ${labelTone}`}>{label}</div>
           </div>
-          <div className={`mt-1 text-lg font-black ${labelTone}`}>{label}</div>
         </div>
 
         {hasSoldRange ? (
@@ -392,25 +394,20 @@ function MarketLiquidityVisual({
             </div>
           </div>
         ) : hasActive ? (
-          <div className="text-right">
-            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
-              Current market age
-            </div>
-            <div className="mt-0.5 text-sm font-black text-slate-800">
-              {Math.round(activeDays)} days
-            </div>
+          <div className="text-right text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+            Current market age
           </div>
         ) : null}
       </div>
 
-      <div className="mt-3">
-        <div className="mb-1.5 flex justify-between text-[9px] font-black uppercase tracking-[0.06em] text-slate-400">
+      <div className="mt-2.5">
+        <div className="mb-1 flex justify-between text-[8px] font-black uppercase tracking-[0.06em] text-slate-400">
           <span>Quick turn</span>
           <span>Typical</span>
           <span>Slow turn</span>
         </div>
 
-        <div className="relative pt-7 pb-2">
+        <div className="relative pt-6 pb-1">
           <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-400 via-amber-300 to-orange-400 shadow-inner">
             {hasSoldRange ? (
               <div
@@ -445,7 +442,7 @@ function MarketLiquidityVisual({
             ) : null}
           </div>
 
-          <div className="mt-2 flex justify-between text-[9px] font-bold text-slate-400">
+          <div className="mt-1.5 flex justify-between text-[8px] font-bold text-slate-400">
             <span>0 days</span>
             <span>{Math.round(scaleMax)}+ days</span>
           </div>
@@ -467,19 +464,13 @@ function MarketLiquidityVisual({
           </span>
         ) : null}
 
-        {hasActive ? (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-blue-700" />
-            Current active market
-          </span>
-        ) : null}
       </div>
 
       <div className="mt-2 text-[10px] font-semibold leading-4 text-slate-400">
         {sampleSize > 0
           ? `${sampleSize} recent sold observations · ${confidence} confidence`
           : hasActive
-            ? "Showing current active-market timing only. Recent sold-history is not yet available."
+            ? "Active-market timing only · recent sold history unavailable."
             : "Sell-through history is not available for this market yet."}
       </div>
     </div>
@@ -5348,8 +5339,8 @@ export function EvaluationWorkspace({
             ) : null}
           </section>
 
-          <section className="grid items-start gap-4 lg:grid-cols-[1.05fr_1.1fr_1fr]">
-            <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
+          <section className="grid gap-4 lg:grid-cols-[1.05fr_1.1fr_1fr]">
+            <article className="h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
               <div className="flex items-start justify-between gap-3">
                 <h2 className="text-base font-black text-slate-950">
                   Vehicle Snapshot
@@ -5453,7 +5444,7 @@ export function EvaluationWorkspace({
             </article>
 
             <article
-              className={`flex flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}
+              className={`flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <h2 className="whitespace-nowrap text-base font-black text-slate-950">Lot Logic Verdict</h2>
@@ -5588,7 +5579,7 @@ export function EvaluationWorkspace({
                 </div>
               ) : null}
 
-              <div className="pt-5">
+              <div className="mt-auto pt-5">
                 <button
                   type="button"
                   onClick={saveEvaluation}
@@ -5633,7 +5624,7 @@ export function EvaluationWorkspace({
               </div>
             </article>
 
-            <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
+            <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
               <div>
                 <h2 className="text-base font-black text-slate-950">
                   Deal Snapshot
@@ -5643,7 +5634,7 @@ export function EvaluationWorkspace({
                 </p>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-4">
+              <div className="mt-3 grid grid-cols-2 gap-4">
                 <ScoreRing
                   label="Deal Economics"
                   score={profitabilityScoreDisplay}
@@ -5659,7 +5650,7 @@ export function EvaluationWorkspace({
                 />
               </div>
 
-              <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="mt-3 border-t border-slate-100 pt-3">
                 <MarketLiquidityVisual
                   soldLow={liquiditySoldLow}
                   soldHigh={liquiditySoldHigh}
@@ -5675,7 +5666,7 @@ export function EvaluationWorkspace({
                 type="button"
                 onClick={() => setDealerProfileOpen(true)}
                 disabled={!hasEvaluationData}
-                className="mx-auto mt-4 block text-xs font-extrabold text-blue-700 hover:text-blue-900 disabled:cursor-not-allowed disabled:text-slate-400"
+                className="mx-auto mt-auto block pt-3 text-xs font-extrabold text-blue-700 hover:text-blue-900 disabled:cursor-not-allowed disabled:text-slate-400"
               >
                 Dealer Profile & Preferences →
               </button>
