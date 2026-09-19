@@ -291,7 +291,7 @@ export function normalizeAssumptions(input: unknown): Assumptions {
       ? (input as Partial<Assumptions>)
       : {};
 
-  const compSettings =
+  const compSettings: Partial<Assumptions["compSettings"]> =
     candidate.compSettings && typeof candidate.compSettings === "object"
       ? candidate.compSettings
       : {};
