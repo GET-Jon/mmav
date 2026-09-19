@@ -433,49 +433,64 @@ export function AssumptionsTabs({
             Most dealerships should leave these settings alone. They control confidence and risk guardrails, not ordinary buying preferences. Dealership preferences belong in <strong>Insights → Teach Lot Logic</strong>.
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid items-stretch gap-5 lg:grid-cols-2">
             <SettingCard
               title="Market Confidence"
               description="Controls when Lot Logic calls a comp set medium or high confidence."
             >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Medium confidence"
-                  helper="Minimum usable comp count."
-                >
-                  <NumberInput
-                    value={draft.compSettings.minimumCompsForMediumConfidence}
-                    onChange={(value) =>
-                      updateCompSetting("minimumCompsForMediumConfidence", value)
-                    }
-                  />
-                </Field>
+              <div className="grid gap-5 sm:grid-cols-3">
+                <div>
+                  <div className="text-sm font-black text-slate-800">
+                    Medium confidence
+                  </div>
+                  <div className="mt-0.5 min-h-[40px] text-xs font-semibold leading-5 text-slate-500">
+                    Minimum usable comp count.
+                  </div>
+                  <div className="mt-2">
+                    <NumberInput
+                      value={draft.compSettings.minimumCompsForMediumConfidence}
+                      onChange={(value) =>
+                        updateCompSetting("minimumCompsForMediumConfidence", value)
+                      }
+                    />
+                  </div>
+                </div>
 
-                <Field
-                  label="High confidence"
-                  helper="Minimum usable comp count before spread is considered."
-                >
-                  <NumberInput
-                    value={draft.compSettings.minimumCompsForHighConfidence}
-                    onChange={(value) =>
-                      updateCompSetting("minimumCompsForHighConfidence", value)
-                    }
-                  />
-                </Field>
+                <div>
+                  <div className="text-sm font-black text-slate-800">
+                    High confidence
+                  </div>
+                  <div className="mt-0.5 min-h-[40px] text-xs font-semibold leading-5 text-slate-500">
+                    Minimum comp count before spread matters.
+                  </div>
+                  <div className="mt-2">
+                    <NumberInput
+                      value={draft.compSettings.minimumCompsForHighConfidence}
+                      onChange={(value) =>
+                        updateCompSetting("minimumCompsForHighConfidence", value)
+                      }
+                    />
+                  </div>
+                </div>
 
-                <Field
-                  label="Maximum high-confidence spread"
-                  helper="A wider comp-price spread reduces confidence."
-                >
-                  <NumberInput
-                    value={draft.compSettings.maxSpreadForHighConfidence * 100}
-                    onChange={(value) =>
-                      updateCompSetting("maxSpreadForHighConfidence", value / 100)
-                    }
-                    suffix="%"
-                    step={0.1}
-                  />
-                </Field>
+                <div>
+                  <div className="text-sm font-black text-slate-800">
+                    Max spread
+                  </div>
+                  <div className="mt-0.5 min-h-[40px] text-xs font-semibold leading-5 text-slate-500">
+                    Wider comp-price spread lowers confidence.
+                  </div>
+                  <div className="mt-2">
+                    <NumberInput
+                      value={draft.compSettings.maxSpreadForHighConfidence * 100}
+                      onChange={(value) =>
+                        updateCompSetting("maxSpreadForHighConfidence", value / 100)
+                      }
+                      suffix="%"
+                      step={0.1}
+                    />
+                  </div>
+                </div>
               </div>
             </SettingCard>
 
@@ -483,31 +498,51 @@ export function AssumptionsTabs({
               title="Risk Thresholds"
               description="These thresholds convert the evaluator's internal condition-risk score into Low, Medium, High, or Avoid."
             >
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="Medium" helper="Risk score where caution begins.">
-                  <NumberInput
-                    value={draft.bidSettings.mediumRiskThreshold}
-                    onChange={(value) =>
-                      updateRiskThreshold("mediumRiskThreshold", value)
-                    }
-                  />
-                </Field>
-                <Field label="High" helper="Risk score considered high risk.">
-                  <NumberInput
-                    value={draft.bidSettings.highRiskThreshold}
-                    onChange={(value) =>
-                      updateRiskThreshold("highRiskThreshold", value)
-                    }
-                  />
-                </Field>
-                <Field label="Avoid" helper="Risk score that creates a hard-stop recommendation.">
-                  <NumberInput
-                    value={draft.bidSettings.avoidRiskThreshold}
-                    onChange={(value) =>
-                      updateRiskThreshold("avoidRiskThreshold", value)
-                    }
-                  />
-                </Field>
+              <div className="grid gap-5 sm:grid-cols-3">
+                <div>
+                  <div className="text-sm font-black text-slate-800">Medium</div>
+                  <div className="mt-0.5 min-h-[40px] text-xs font-semibold leading-5 text-slate-500">
+                    Caution begins at this score.
+                  </div>
+                  <div className="mt-2">
+                    <NumberInput
+                      value={draft.bidSettings.mediumRiskThreshold}
+                      onChange={(value) =>
+                        updateRiskThreshold("mediumRiskThreshold", value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm font-black text-slate-800">High</div>
+                  <div className="mt-0.5 min-h-[40px] text-xs font-semibold leading-5 text-slate-500">
+                    High-risk territory begins here.
+                  </div>
+                  <div className="mt-2">
+                    <NumberInput
+                      value={draft.bidSettings.highRiskThreshold}
+                      onChange={(value) =>
+                        updateRiskThreshold("highRiskThreshold", value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm font-black text-slate-800">Avoid</div>
+                  <div className="mt-0.5 min-h-[40px] text-xs font-semibold leading-5 text-slate-500">
+                    Hard-stop recommendation begins here.
+                  </div>
+                  <div className="mt-2">
+                    <NumberInput
+                      value={draft.bidSettings.avoidRiskThreshold}
+                      onChange={(value) =>
+                        updateRiskThreshold("avoidRiskThreshold", value)
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </SettingCard>
           </div>
