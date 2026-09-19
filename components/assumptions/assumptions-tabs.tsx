@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 
-import { defaultAssumptions } from "@/lib/assumptions";
+import { normalizeAssumptions } from "@/lib/assumptions";
 import type {
   Assumptions,
   CompSettings,
   CostDefault,
-  SourceDiscount,
 } from "@/types/assumptions";
 
 type Tab = "strategy" | "market" | "advanced";
@@ -98,42 +97,7 @@ export function AssumptionsTabs({
 }: {
   assumptions: Assumptions;
 }) {
-  const normalizedAssumptions: Assumptions = {
-    ...defaultAssumptions,
-    ...assumptions,
-    bidSettings: {
-      ...defaultAssumptions.bidSettings,
-      ...assumptions.bidSettings,
-    },
-    compSettings: {
-      ...defaultAssumptions.compSettings,
-      ...assumptions.compSettings,
-      sourceDiscounts:
-        assumptions.compSettings?.sourceDiscounts?.length
-          ? assumptions.compSettings.sourceDiscounts
-          : defaultAssumptions.compSettings.sourceDiscounts,
-    },
-    costDefaults:
-      assumptions.costDefaults?.length
-        ? assumptions.costDefaults
-        : defaultAssumptions.costDefaults,
-    conditionRules:
-      assumptions.conditionRules?.length
-        ? assumptions.conditionRules
-        : defaultAssumptions.conditionRules,
-    auctionFeeRules:
-      assumptions.auctionFeeRules?.length
-        ? assumptions.auctionFeeRules
-        : defaultAssumptions.auctionFeeRules,
-    regionalMarkets:
-      assumptions.regionalMarkets?.length
-        ? assumptions.regionalMarkets
-        : defaultAssumptions.regionalMarkets,
-    vehicleClassificationRules:
-      assumptions.vehicleClassificationRules?.length
-        ? assumptions.vehicleClassificationRules
-        : defaultAssumptions.vehicleClassificationRules,
-  };
+  const normalizedAssumptions = normalizeAssumptions(assumptions);
 
   const [activeTab, setActiveTab] = useState<Tab>("strategy");
   const [draft, setDraft] = useState<Assumptions>(normalizedAssumptions);
@@ -161,24 +125,6 @@ export function AssumptionsTabs({
       compSettings: {
         ...previous.compSettings,
         [key]: value,
-      },
-    }));
-    setDirty(true);
-  }
-
-  function updateSourceDiscount(
-    index: number,
-    key: keyof SourceDiscount,
-    value: string | number,
-  ) {
-    setDraft((previous) => ({
-      ...previous,
-      compSettings: {
-        ...previous.compSettings,
-        sourceDiscounts: previous.compSettings.sourceDiscounts.map(
-          (row, rowIndex) =>
-            rowIndex === index ? { ...row, [key]: value } : row,
-        ),
       },
     }));
     setDirty(true);
@@ -565,41 +511,6 @@ export function AssumptionsTabs({
               </div>
             </SettingCard>
           </div>
-
-          <SettingCard
-            title="Source Ask Adjustments"
-            description="Legacy source-level cushions that still affect comp calculations. Keep these conservative; better market evidence should increasingly replace blanket source assumptions."
-          >
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Source</th>
-                    <th className="px-4 py-3">Ask adjustment</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {draft.compSettings.sourceDiscounts.map((row, index) => (
-                    <tr key={row.source}>
-                      <td className="px-4 py-3 font-black text-slate-800">
-                        {row.source}
-                      </td>
-                      <td className="max-w-[220px] px-4 py-3">
-                        <NumberInput
-                          value={row.askDiscount * 100}
-                          onChange={(value) =>
-                            updateSourceDiscount(index, "askDiscount", value / 100)
-                          }
-                          suffix="%"
-                          step={0.1}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </SettingCard>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
