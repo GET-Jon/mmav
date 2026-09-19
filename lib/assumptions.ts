@@ -150,28 +150,7 @@ export const defaultAssumptions: Assumptions = {
     minimumCompsForMediumConfidence: 4,
     minimumCompsForHighConfidence: 8,
     maxSpreadForHighConfidence: 0.15,
-    sourceDiscounts: [
-      {
-        source: "MarketCheck/API",
-        askDiscount: 0.05,
-      },
-      {
-        source: "CarMax",
-        askDiscount: 0.02,
-      },
-      {
-        source: "Facebook",
-        askDiscount: 0.08,
-      },
-      {
-        source: "Private Party",
-        askDiscount: 0.07,
-      },
-      {
-        source: "Manual",
-        askDiscount: 0.05,
-      },
-    ],
+
   },
 
   vehicleClassificationRules: [
@@ -300,3 +279,72 @@ export const defaultAssumptions: Assumptions = {
     },
   ],
 };
+
+
+export function normalizeAssumptions(input: unknown): Assumptions {
+  const candidate =
+    input && typeof input === "object"
+      ? (input as Partial<Assumptions>)
+      : {};
+
+  const compSettings =
+    candidate.compSettings && typeof candidate.compSettings === "object"
+      ? candidate.compSettings
+      : {};
+
+  return {
+    bidSettings: {
+      ...defaultAssumptions.bidSettings,
+      ...(candidate.bidSettings || {}),
+    },
+    costDefaults:
+      Array.isArray(candidate.costDefaults) && candidate.costDefaults.length
+        ? candidate.costDefaults
+        : defaultAssumptions.costDefaults,
+    conditionRules:
+      Array.isArray(candidate.conditionRules) && candidate.conditionRules.length
+        ? candidate.conditionRules
+        : defaultAssumptions.conditionRules,
+    auctionFeeRules:
+      Array.isArray(candidate.auctionFeeRules) && candidate.auctionFeeRules.length
+        ? candidate.auctionFeeRules
+        : defaultAssumptions.auctionFeeRules,
+    compSettings: {
+      mileageAdjustmentPerThousand:
+        Number(compSettings.mileageAdjustmentPerThousand) ||
+        defaultAssumptions.compSettings.mileageAdjustmentPerThousand,
+      maxMileageAdjustmentDollars:
+        Number(compSettings.maxMileageAdjustmentDollars) ||
+        defaultAssumptions.compSettings.maxMileageAdjustmentDollars,
+      maxMileageAdjustmentPercentOfAsk:
+        Number(compSettings.maxMileageAdjustmentPercentOfAsk) ||
+        defaultAssumptions.compSettings.maxMileageAdjustmentPercentOfAsk,
+      fastSaleDiscount:
+        typeof compSettings.fastSaleDiscount === "number"
+          ? compSettings.fastSaleDiscount
+          : defaultAssumptions.compSettings.fastSaleDiscount,
+      minimumQualityScore:
+        Number(compSettings.minimumQualityScore) ||
+        defaultAssumptions.compSettings.minimumQualityScore,
+      minimumCompsForMediumConfidence:
+        Number(compSettings.minimumCompsForMediumConfidence) ||
+        defaultAssumptions.compSettings.minimumCompsForMediumConfidence,
+      minimumCompsForHighConfidence:
+        Number(compSettings.minimumCompsForHighConfidence) ||
+        defaultAssumptions.compSettings.minimumCompsForHighConfidence,
+      maxSpreadForHighConfidence:
+        typeof compSettings.maxSpreadForHighConfidence === "number"
+          ? compSettings.maxSpreadForHighConfidence
+          : defaultAssumptions.compSettings.maxSpreadForHighConfidence,
+    },
+    regionalMarkets:
+      Array.isArray(candidate.regionalMarkets) && candidate.regionalMarkets.length
+        ? candidate.regionalMarkets
+        : defaultAssumptions.regionalMarkets,
+    vehicleClassificationRules:
+      Array.isArray(candidate.vehicleClassificationRules) &&
+      candidate.vehicleClassificationRules.length
+        ? candidate.vehicleClassificationRules
+        : defaultAssumptions.vehicleClassificationRules,
+  };
+}
