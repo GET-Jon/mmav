@@ -142,7 +142,10 @@ export default async function InsightsPage() {
           </div>
         ) : null}
 
-        <InsightsDashboard evaluations={evaluations} />
+        <InsightsDashboard
+          evaluations={evaluations}
+          canTeach={companyRole === "company_admin"}
+        />
       </div>
     </main>
   );
