@@ -115,7 +115,7 @@ function detectSpecialVariant(vehicle: VehicleIdentity) {
 
   if (make === "audi") {
     const modelVariant = compact(vehicle.model);
-    const variants = ["rsq8", "rs7", "rs6", "rs5", "rs4", "rs3", "sq5", "s8", "s7", "s6", "s5", "s4", "s3"];
+    const variants = ["ttrs", "tts", "rsq8", "rs7", "rs6", "rs5", "rs4", "rs3", "sq5", "s8", "s7", "s6", "s5", "s4", "s3"];
     for (const variant of variants) {
       if (modelVariant === variant || phraseMatches(text, variant)) return variant;
     }
