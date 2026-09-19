@@ -7,12 +7,11 @@ import { AccountSettingsCard } from "@/components/settings/account-settings-card
 import { LotLogicEvidenceCard } from "@/components/settings/lot-logic-evidence-card";
 import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
-import { defaultAssumptions } from "@/lib/assumptions";
+import { defaultAssumptions, normalizeAssumptions } from "@/lib/assumptions";
 import { listIntelligenceSettingsData } from "@/lib/lot-logic-intelligence/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
-import type { Assumptions } from "@/types/assumptions";
 
 export const dynamic = "force-dynamic";
 
@@ -76,9 +75,9 @@ async function loadSettingsContext(userId: string) {
     company,
     memberCount: count || 0,
     intelligence,
-    assumptions:
-      (assumptionsResult.data?.payload as Assumptions | null) ||
-      defaultAssumptions,
+    assumptions: assumptionsResult.data?.payload
+      ? normalizeAssumptions(assumptionsResult.data.payload)
+      : defaultAssumptions,
   };
 }
 
