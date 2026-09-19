@@ -143,9 +143,7 @@ export function AssumptionsTabs({
 
   function updateCost(
     index: number,
-    key: Pick<CostDefault, "auctionFee" | "transport" | "detailAdmin"> extends never
-      ? never
-      : "auctionFee" | "transport" | "detailAdmin",
+    key: "auctionFee" | "transport" | "detailAdmin",
     value: number,
   ) {
     setDraft((previous) => ({
