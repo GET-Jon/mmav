@@ -44,6 +44,7 @@ function startsWithAny(value: string, prefixes: string[]) {
 
 function canonicalAudiFamily(modelCompact: string) {
   const families: Array<[string, string[]]> = [
+    ["tt", ["ttrs", "tts", "tt"]],
     ["a3", ["rs3", "s3", "a3"]],
     ["a4", ["rs4", "s4", "a4"]],
     ["a5", ["rs5", "s5", "a5"]],
