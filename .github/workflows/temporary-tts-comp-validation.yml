@@ -1,0 +1,21 @@
+name: Temporary TTS comp validation
+
+on:
+  push:
+    branches:
+      - lot-logic-public-site
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save tsx
+      - name: Run vehicle equivalence regressions
+        run: npx tsx -e 'import { assertVehicleEquivalenceRegressionCases } from "./lib/marketcheck/vehicle-equivalence-regression.ts"; console.log(assertVehicleEquivalenceRegressionCases());'
+      - run: npm run build
