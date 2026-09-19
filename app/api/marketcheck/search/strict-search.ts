@@ -217,7 +217,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v11-generation-widening",
+    cacheVersion: "progressive-regions-v12-tts-taxonomy",
   });
 }
 
