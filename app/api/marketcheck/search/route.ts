@@ -331,9 +331,28 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
       Number(comp.qualityScore || 0) >= minimumQualityScore,
   ).length;
 
+  const apiUsage = asRecord(payload.apiUsage);
+  const retrievalCandidateCount = Number(apiUsage.usableCompCount || 0);
+  const retrievalStopReason = String(apiUsage.stopReason || "").trim();
+  const finalStopReason =
+    qualityPassingEquivalentCount > 0
+      ? `Retrieved ${retrievalCandidateCount} candidate comp${retrievalCandidateCount === 1 ? "" : "s"}; ${qualityPassingEquivalentCount} qualified after vehicle-equivalence checks.`
+      : retrievalCandidateCount > 0
+        ? `Retrieved ${retrievalCandidateCount} candidate comp${retrievalCandidateCount === 1 ? "" : "s"}, but none qualified after vehicle-equivalence checks.`
+        : retrievalStopReason;
+
   return {
     ...payload,
     lowConfidenceFallback: false,
+    usableCompCount: qualityPassingEquivalentCount,
+    stopReason: finalStopReason,
+    apiUsage: {
+      ...apiUsage,
+      retrievalStopReason,
+      candidateCompCount: retrievalCandidateCount,
+      usableCompCount: qualityPassingEquivalentCount,
+      stopReason: finalStopReason,
+    },
     comps: withInclusions,
     equivalenceSummary: {
       directCount,

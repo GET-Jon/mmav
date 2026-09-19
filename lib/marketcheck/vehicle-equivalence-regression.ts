@@ -3,6 +3,7 @@ import {
   type VehicleEquivalenceTier,
   type VehicleIdentity,
 } from "./vehicle-equivalence";
+import { canonicalIdentitySnapshot } from "./vehicle-identity";
 
 type RegressionCase = {
   name: string;
@@ -18,6 +19,159 @@ const base = {
 } as const;
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
+  {
+    name: "Audi A5 VIN naming vs A5 Sportback is near, not rejected",
+    target: {
+      year: 2025,
+      make: "Audi",
+      model: "A5",
+      trim: "S Line quattro Premium",
+      bodyType: "Hatchback",
+      drivetrain: "AWD",
+      fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2025,
+      make: "Audi",
+      model: "A5 Sportback",
+      trim: "Premium",
+      bodyType: "Hatchback",
+      drivetrain: "4WD",
+      fuelType: "Gasoline",
+    },
+    expected: "near",
+  },
+  {
+    name: "Audi A5 vs S5 Sportback preserves performance distinction",
+    target: {
+      year: 2025,
+      make: "Audi",
+      model: "A5",
+      trim: "Premium",
+      bodyType: "Hatchback",
+      drivetrain: "AWD",
+      fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2025,
+      make: "Audi",
+      model: "S5 Sportback",
+      trim: "Premium",
+      bodyType: "Hatchback",
+      drivetrain: "4WD",
+      fuelType: "Gasoline",
+    },
+    expected: "supporting",
+  },
+  {
+    name: "Audi A5 vs RS5 Sportback preserves performance distinction",
+    target: {
+      year: 2025,
+      make: "Audi",
+      model: "A5",
+      trim: "Premium",
+      bodyType: "Hatchback",
+      drivetrain: "AWD",
+      fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2025,
+      make: "Audi",
+      model: "RS5 Sportback",
+      trim: "Premium",
+      bodyType: "Hatchback",
+      drivetrain: "AWD",
+      fuelType: "Gasoline",
+    },
+    expected: "supporting",
+  },
+  {
+    name: "Audi A5 Cabriolet vs Sportback is supporting body configuration",
+    target: {
+      year: 2025,
+      make: "Audi",
+      model: "A5 Cabriolet",
+      trim: "Premium",
+      bodyType: "Convertible",
+      drivetrain: "AWD",
+      fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2025,
+      make: "Audi",
+      model: "A5 Sportback",
+      trim: "Premium",
+      bodyType: "Hatchback",
+      drivetrain: "4WD",
+      fuelType: "Gasoline",
+    },
+    expected: "supporting",
+  },
+  {
+    name: "BMW 430i Gran Coupe vs 4 Series normalizes to same family",
+    target: {
+      year: 2024,
+      make: "BMW",
+      model: "430i Gran Coupe",
+      trim: "430i",
+      bodyType: "Hatchback",
+      drivetrain: "RWD",
+      fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2024,
+      make: "BMW",
+      model: "4 Series",
+      trim: "430i",
+      bodyType: "Hatchback",
+      drivetrain: "RWD",
+      fuelType: "Gasoline",
+    },
+    expected: "direct",
+  },
+  {
+    name: "Mercedes C300 model code vs C-Class normalizes to same family",
+    target: {
+      year: 2024,
+      make: "Mercedes-Benz",
+      model: "C300",
+      trim: "C300",
+      bodyType: "Sedan",
+      drivetrain: "RWD",
+      fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2024,
+      make: "Mercedes-Benz",
+      model: "C-Class",
+      trim: "C300",
+      bodyType: "Sedan",
+      drivetrain: "RWD",
+      fuelType: "Gasoline",
+    },
+    expected: "direct",
+  },
+  {
+    name: "Range Rover Sport remains distinct from Range Rover",
+    target: {
+      ...base,
+      make: "Land Rover",
+      model: "Range Rover Sport",
+      trim: "HSE",
+      bodyType: "SUV",
+      drivetrain: "AWD",
+    },
+    candidate: {
+      ...base,
+      make: "Land Rover",
+      model: "Range Rover",
+      trim: "HSE",
+      bodyType: "SUV",
+      drivetrain: "AWD",
+    },
+    expected: "reject",
+  },
+
   {
     name: "Wrangler TJ SE vs same SE is direct",
     target: { year: 2005, make: "Jeep", model: "Wrangler", trim: "SE", fuelType: "Gasoline", drivetrain: "4WD" },
@@ -146,6 +300,84 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   },
 ];
 
+
+type IdentityRegressionCase = {
+  name: string;
+  vehicle: VehicleIdentity;
+  expected: Partial<ReturnType<typeof canonicalIdentitySnapshot>>;
+};
+
+export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
+  {
+    name: "Audi Sportback descriptor stays in configuration, not model family",
+    vehicle: {
+      year: 2025,
+      make: "Audi",
+      model: "A5 Sportback",
+      trim: "Premium",
+      bodyType: "",
+      drivetrain: "4WD",
+      fuelType: "Gasoline",
+    },
+    expected: {
+      make: "audi",
+      modelFamily: "a5",
+      bodyClass: "hatchback",
+      tractionClass: "all-wheel",
+      fuelType: "gasoline",
+    },
+  },
+  {
+    name: "BMW model code and Gran Coupe descriptor normalize to 4 Series",
+    vehicle: {
+      year: 2024,
+      make: "BMW",
+      model: "430i Gran Coupe",
+      trim: "430i",
+      drivetrain: "RWD",
+      fuelType: "Gasoline",
+    },
+    expected: {
+      modelFamily: "4 series",
+      bodyClass: "hatchback",
+      tractionClass: "two-wheel",
+    },
+  },
+  {
+    name: "Mercedes model code normalizes to class family",
+    vehicle: {
+      year: 2024,
+      make: "Mercedes",
+      model: "C300 4MATIC",
+      trim: "C300",
+      drivetrain: "AWD",
+      fuelType: "Gas",
+    },
+    expected: {
+      make: "mercedes benz",
+      modelFamily: "c class",
+      tractionClass: "all-wheel",
+      fuelType: "gasoline",
+    },
+  },
+  {
+    name: "Range Rover Sport is not collapsed into Range Rover",
+    vehicle: {
+      year: 2024,
+      make: "Land Rover",
+      model: "Range Rover Sport",
+      trim: "HSE",
+      bodyType: "SUV",
+      drivetrain: "AWD",
+      fuelType: "Gasoline",
+    },
+    expected: {
+      modelFamily: "range rover sport",
+      bodyClass: "suv",
+    },
+  },
+];
+
 export function assertVehicleEquivalenceRegressionCases() {
   const failures: string[] = [];
 
@@ -160,12 +392,27 @@ export function assertVehicleEquivalenceRegressionCases() {
     }
   }
 
+  for (const testCase of vehicleIdentityRegressionCases) {
+    const actual = canonicalIdentitySnapshot(testCase.vehicle);
+
+    for (const [key, expectedValue] of Object.entries(testCase.expected)) {
+      const actualValue = actual[key as keyof typeof actual];
+      if (actualValue !== expectedValue) {
+        failures.push(
+          `${testCase.name}: expected ${key}=${String(expectedValue)}, received ${String(actualValue)}`,
+        );
+      }
+    }
+  }
+
   if (failures.length) {
     throw new Error(`Vehicle-equivalence regression failure:\n${failures.join("\n")}`);
   }
 
   return {
-    passed: vehicleEquivalenceRegressionCases.length,
+    passed:
+      vehicleEquivalenceRegressionCases.length +
+      vehicleIdentityRegressionCases.length,
     failed: 0,
   };
 }

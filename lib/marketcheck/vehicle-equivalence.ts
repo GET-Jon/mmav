@@ -1,3 +1,15 @@
+import {
+  canonicalBodyClass,
+  canonicalDrivetrain,
+  canonicalFuelType,
+  canonicalModelFamily,
+  canonicalTractionClass,
+  canonicalTransmission,
+  canonicalVehicleMake,
+  compactVehicleText,
+  normalizeVehicleText,
+} from "./vehicle-identity";
+
 export type VehicleEquivalenceTier =
   | "direct"
   | "near"
@@ -51,17 +63,9 @@ type VehicleTaxonomyRule = {
   notes: string;
 };
 
-function normalize(value: unknown) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function compact(value: unknown) {
-  return normalize(value).replace(/\s+/g, "");
-}
+const normalize = normalizeVehicleText;
+const compact = compactVehicleText;
+const canonicalMake = canonicalVehicleMake;
 
 function phraseMatches(text: string, phrase: string) {
   const normalizedText = ` ${normalize(text)} `;
@@ -86,91 +90,6 @@ function vehicleText(vehicle: VehicleIdentity) {
       .filter(Boolean)
       .join(" "),
   );
-}
-
-function canonicalMake(value: unknown) {
-  const make = normalize(value);
-  if (make === "mercedes" || make === "mercedes benz" || make === "mercedesbenz") {
-    return "mercedes benz";
-  }
-  return make;
-}
-
-function canonicalModelFamily(vehicle: VehicleIdentity) {
-  const make = canonicalMake(vehicle.make);
-  const model = normalize(vehicle.model);
-  const modelCompact = compact(vehicle.model);
-
-  if (make === "bmw") {
-    const aliases: Record<string, string> = {
-      m2: "2 series",
-      m3: "3 series",
-      m4: "4 series",
-      m5: "5 series",
-      m8: "8 series",
-    };
-    return aliases[modelCompact] || model;
-  }
-
-  if (make === "mercedes benz") {
-    if (["c43", "c63", "amgc43", "amgc63"].includes(modelCompact)) return "c class";
-    if (["e53", "e63", "amge53", "amge63"].includes(modelCompact)) return "e class";
-    if (["a35", "a45", "amga35", "amga45"].includes(modelCompact)) return "a class";
-    if (["cla35", "cla45", "amgcla35", "amgcla45"].includes(modelCompact)) return "cla class";
-  }
-
-  if (make === "audi") {
-    const aliases: Record<string, string> = {
-      s3: "a3",
-      rs3: "a3",
-      s4: "a4",
-      rs4: "a4",
-      s5: "a5",
-      rs5: "a5",
-      s6: "a6",
-      rs6: "a6",
-      s7: "a7",
-      rs7: "a7",
-      s8: "a8",
-      sq5: "q5",
-      rsq8: "q8",
-    };
-    return aliases[modelCompact] || model;
-  }
-
-  if (make === "ford") {
-    if (["f150raptor", "raptor", "f150raptorr"].includes(modelCompact)) return "f 150";
-  }
-
-  if (make === "honda" && ["civictyper", "typer"].includes(modelCompact)) {
-    return "civic";
-  }
-
-  if (make === "cadillac" && ["ct5vblackwing", "ct5blackwing"].includes(modelCompact)) {
-    return "ct5";
-  }
-
-  if (make === "lexus" && ["rcf"].includes(modelCompact)) {
-    return "rc";
-  }
-
-  if (make === "volkswagen" && ["golfr", "golfgti", "gti"].includes(modelCompact)) {
-    return "golf";
-  }
-
-  if (make === "subaru" && ["wrxsti", "sti"].includes(modelCompact)) {
-    return "wrx";
-  }
-
-  if (make === "hyundai" && ["elantran"].includes(modelCompact)) {
-    return "elantra";
-  }
-
-  if (make === "jeep" && model.startsWith("wrangler unlimited")) {
-    return "wrangler";
-  }
-
-  return model;
 }
 
 function detectSpecialVariant(vehicle: VehicleIdentity) {
@@ -294,44 +213,11 @@ function detectSpecialVariant(vehicle: VehicleIdentity) {
   return null;
 }
 
-function canonicalBodyClass(vehicle: VehicleIdentity) {
-  const text = normalize([vehicle.bodyType, vehicle.configuration, vehicle.trim].filter(Boolean).join(" "));
-  if (!text) return null;
-  if (containsAny(text, ["convertible", "cabriolet", "cabrio", "roadster", "spyder"])) return "convertible";
-  if (containsAny(text, ["coupe", "2 door coupe"])) return "coupe";
-  if (containsAny(text, ["wagon", "estate", "avant", "touring"])) return "wagon";
-  if (containsAny(text, ["hatchback", "hatch"])) return "hatchback";
-  if (containsAny(text, ["pickup", "truck"])) return "pickup";
-  if (containsAny(text, ["sedan", "saloon"])) return "sedan";
-  if (containsAny(text, ["suv", "sport utility", "crossover"])) return "suv";
-  if (containsAny(text, ["van", "minivan"])) return "van";
-  return null;
-}
-
 function canonicalCabClass(vehicle: VehicleIdentity) {
   const text = vehicleText(vehicle);
   if (containsAny(text, ["crew cab", "double cab", "supercrew", "crewmax", "mega cab"])) return "crew";
   if (containsAny(text, ["extended cab", "access cab", "supercab", "king cab", "quad cab"])) return "extended";
   if (containsAny(text, ["regular cab", "single cab", "standard cab"])) return "regular";
-  return null;
-}
-
-function canonicalDrive(value: unknown) {
-  const text = normalize(value);
-  if (!text) return null;
-  if (text.includes("4wd") || text.includes("4x4") || text.includes("four wheel")) return "4wd";
-  if (text.includes("awd") || text.includes("all wheel")) return "awd";
-  if (text.includes("fwd") || text.includes("front wheel")) return "fwd";
-  if (text.includes("rwd") || text.includes("rear wheel")) return "rwd";
-  if (text.includes("2wd") || text.includes("4x2") || text.includes("two wheel")) return "2wd";
-  return text;
-}
-
-function canonicalTransmission(value: unknown) {
-  const text = normalize(value);
-  if (!text) return null;
-  if (text.includes("manual") || text.includes("stick")) return "manual";
-  if (text.includes("automatic") || text.includes("auto") || text.includes("dct") || text.includes("cvt")) return "automatic";
   return null;
 }
 
@@ -509,8 +395,8 @@ export function evaluateVehicleEquivalence({
     }
   }
 
-  const targetFuel = normalize(target.fuelType);
-  const candidateFuel = normalize(candidate.fuelType);
+  const targetFuel = canonicalFuelType(target.fuelType);
+  const candidateFuel = canonicalFuelType(candidate.fuelType);
   if (targetFuel && candidateFuel && targetFuel !== candidateFuel) {
     return {
       tier: "reject",
@@ -538,18 +424,22 @@ export function evaluateVehicleEquivalence({
     reasons.push(`cab configuration differs: ${targetCab} vs ${candidateCab}`);
   }
 
-  const targetDrive = canonicalDrive(target.drivetrain);
-  const candidateDrive = canonicalDrive(candidate.drivetrain);
+  const targetDrive = canonicalDrivetrain(target.drivetrain);
+  const candidateDrive = canonicalDrivetrain(candidate.drivetrain);
   if (targetDrive && candidateDrive && targetDrive !== candidateDrive && tier !== "reject") {
-    const targetTraction = targetDrive === "awd" || targetDrive === "4wd";
-    const candidateTraction = candidateDrive === "awd" || candidateDrive === "4wd";
+    const targetTraction = canonicalTractionClass(target.drivetrain);
+    const candidateTraction = canonicalTractionClass(candidate.drivetrain);
 
     if (targetTraction !== candidateTraction) {
       tier = "supporting";
-    } else {
+      reasons.push(`drivetrain differs: ${targetDrive} vs ${candidateDrive}`);
+    } else if (targetTraction === "two-wheel") {
+      // FWD vs RWD can materially affect desirability/value. AWD vs 4WD is
+      // frequently only a source-taxonomy naming difference (quattro/xDrive,
+      // etc.), so equivalent all-wheel traction does not incur a penalty.
       tier = downgradeTier(tier);
+      reasons.push(`drivetrain differs: ${targetDrive} vs ${candidateDrive}`);
     }
-    reasons.push(`drivetrain differs: ${targetDrive} vs ${candidateDrive}`);
   }
 
   if (

@@ -18,7 +18,15 @@ const evaluatorChanged = updateFile(evaluatorPath, (source) => {
 
   const correctedGate = `                  {marketCheckSearchMeta &&\n                  marketCheckSearchMeta.searchStage !== "metro" &&\n                  !marketCheckLoading ? (`;
 
-  if (source.includes(correctedGate)) {
+  const strongCompGate = `                  {marketCheckSearchMeta &&\n                  compSummary.includedCount < 6 &&\n                  marketCheckSearchMeta.searchStage !== "metro" &&\n                  !marketCheckLoading ? (`;
+
+  const editCompsFlow =
+    source.includes('Dealer Profile & Preferences →') &&
+    (source.includes('Edit Comp Markets') || source.includes('Edit Comps')) &&
+    source.includes('Search Selected Markets') &&
+    source.includes('Vehicle Match');
+
+  if (editCompsFlow || source.includes(strongCompGate) || source.includes(correctedGate)) {
     return source;
   }
 

@@ -10,6 +10,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 export type AppTopNavPage =
   | "evaluator"
   | "pipeline"
+  | "insights"
   | "inventory"
   | "schedule"
   | "rules"
@@ -97,14 +98,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="relative mx-auto flex max-w-[1480px] items-center px-5 py-3 lg:px-7">
-        <Link href="/" aria-label="Lot Logic evaluator" className="shrink-0 text-slate-950 transition-opacity hover:opacity-75">
+        <Link href="/" aria-label="Lot Logic home" className="shrink-0 text-slate-950 transition-opacity hover:opacity-75">
           <div className="sm:hidden"><LotLogicLogo compact /></div>
           <div className="hidden sm:block"><LotLogicLogo /></div>
         </Link>
 
         <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
-          <Link href="/" className={navClass(active === "evaluator")}>Evaluator</Link>
+          <Link href="/evaluate" className={navClass(active === "evaluator")}>Evaluator</Link>
           <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
+          <Link href="/insights" className={navClass(active === "insights")}>Insights</Link>
           {isAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
           {isAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
           <Link href="/assumptions" className={navClass(active === "rules")}>Rules</Link>
@@ -114,7 +116,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
           {onNewEvaluation ? (
             <button type="button" onClick={onNewEvaluation} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</button>
           ) : (
-            <Link href="/" className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
+            <Link href="/evaluate" className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
           )}
 
           <div ref={menuRef} className="relative">
