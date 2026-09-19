@@ -150,7 +150,6 @@ export const defaultAssumptions: Assumptions = {
     minimumCompsForMediumConfidence: 4,
     minimumCompsForHighConfidence: 8,
     maxSpreadForHighConfidence: 0.15,
-
   },
 
   vehicleClassificationRules: [
@@ -281,6 +280,11 @@ export const defaultAssumptions: Assumptions = {
 };
 
 
+function finiteNumberOrDefault(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export function normalizeAssumptions(input: unknown): Assumptions {
   const candidate =
     input && typeof input === "object"
@@ -310,28 +314,34 @@ export function normalizeAssumptions(input: unknown): Assumptions {
         ? candidate.auctionFeeRules
         : defaultAssumptions.auctionFeeRules,
     compSettings: {
-      mileageAdjustmentPerThousand:
-        Number(compSettings.mileageAdjustmentPerThousand) ||
+      mileageAdjustmentPerThousand: finiteNumberOrDefault(
+        compSettings.mileageAdjustmentPerThousand,
         defaultAssumptions.compSettings.mileageAdjustmentPerThousand,
-      maxMileageAdjustmentDollars:
-        Number(compSettings.maxMileageAdjustmentDollars) ||
+      ),
+      maxMileageAdjustmentDollars: finiteNumberOrDefault(
+        compSettings.maxMileageAdjustmentDollars,
         defaultAssumptions.compSettings.maxMileageAdjustmentDollars,
-      maxMileageAdjustmentPercentOfAsk:
-        Number(compSettings.maxMileageAdjustmentPercentOfAsk) ||
+      ),
+      maxMileageAdjustmentPercentOfAsk: finiteNumberOrDefault(
+        compSettings.maxMileageAdjustmentPercentOfAsk,
         defaultAssumptions.compSettings.maxMileageAdjustmentPercentOfAsk,
+      ),
       fastSaleDiscount:
         typeof compSettings.fastSaleDiscount === "number"
           ? compSettings.fastSaleDiscount
           : defaultAssumptions.compSettings.fastSaleDiscount,
-      minimumQualityScore:
-        Number(compSettings.minimumQualityScore) ||
+      minimumQualityScore: finiteNumberOrDefault(
+        compSettings.minimumQualityScore,
         defaultAssumptions.compSettings.minimumQualityScore,
-      minimumCompsForMediumConfidence:
-        Number(compSettings.minimumCompsForMediumConfidence) ||
+      ),
+      minimumCompsForMediumConfidence: finiteNumberOrDefault(
+        compSettings.minimumCompsForMediumConfidence,
         defaultAssumptions.compSettings.minimumCompsForMediumConfidence,
-      minimumCompsForHighConfidence:
-        Number(compSettings.minimumCompsForHighConfidence) ||
+      ),
+      minimumCompsForHighConfidence: finiteNumberOrDefault(
+        compSettings.minimumCompsForHighConfidence,
         defaultAssumptions.compSettings.minimumCompsForHighConfidence,
+      ),
       maxSpreadForHighConfidence:
         typeof compSettings.maxSpreadForHighConfidence === "number"
           ? compSettings.maxSpreadForHighConfidence
