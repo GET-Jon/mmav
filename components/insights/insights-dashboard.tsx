@@ -211,8 +211,10 @@ function StatCard({
 
 export function InsightsDashboard({
   evaluations,
+  canTeach,
 }: {
   evaluations: InsightEvaluation[];
+  canTeach: boolean;
 }) {
   const [days, setDays] = useState<WindowDays>(30);
   const [answeringId, setAnsweringId] = useState<string | null>(null);
@@ -221,6 +223,10 @@ export function InsightsDashboard({
     {},
   );
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [knowledgeFile, setKnowledgeFile] = useState<File | null>(null);
+  const [knowledgeTitle, setKnowledgeTitle] = useState("");
+  const [uploadingKnowledge, setUploadingKnowledge] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
 
   const rows = useMemo(
     () => filterByWindow(evaluations, days),
@@ -304,6 +310,8 @@ export function InsightsDashboard({
   );
 
   async function saveAnswer(question: (typeof questions)[number]) {
+    if (!canTeach) return;
+
     const answer = String(answers[question.id] || "").trim();
     if (!answer) return;
 
@@ -339,6 +347,59 @@ export function InsightsDashboard({
       );
     } finally {
       setAnsweringId(null);
+    }
+  }
+
+
+  async function uploadDealershipKnowledge() {
+    if (!canTeach || !knowledgeFile) return;
+
+    setUploadingKnowledge(true);
+    setUploadMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", knowledgeFile);
+
+      const cleanTitle = knowledgeTitle.trim();
+      if (cleanTitle) formData.set("title", cleanTitle);
+
+      const response = await fetch("/api/intelligence/knowledge/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        assertionCount?: number;
+        summary?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error || "Lot Logic could not process that document.",
+        );
+      }
+
+      const assertionCount = Number(payload.assertionCount || 0);
+      setUploadMessage(
+        `Document learned successfully · ${assertionCount} explicit dealership ${assertionCount === 1 ? "fact" : "facts"} added.`,
+      );
+      setKnowledgeFile(null);
+      setKnowledgeTitle("");
+
+      const input = document.getElementById(
+        "dealership-knowledge-upload",
+      ) as HTMLInputElement | null;
+      if (input) input.value = "";
+    } catch (error) {
+      setUploadMessage(
+        error instanceof Error
+          ? error.message
+          : "Lot Logic could not process that document.",
+      );
+    } finally {
+      setUploadingKnowledge(false);
     }
   }
 
@@ -608,13 +669,100 @@ export function InsightsDashboard({
             Teach Lot Logic
           </div>
           <h3 className="mt-1 text-xl font-black text-slate-950">
-            Questions Lot Logic has for you
+            Help Lot Logic understand your dealership
           </h3>
           <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
-            These questions are surfaced from your actual evaluator behavior.
-            Answering them adds explicit company knowledge that future
-            recommendations can use.
+            Upload dealership knowledge or answer questions surfaced from your
+            evaluator behavior. Explicit knowledge becomes available to future
+            recommendations.
           </p>
+
+          {canTeach ? (
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="font-black text-slate-950">
+                    Upload dealership knowledge
+                  </div>
+                  <p className="mt-1 max-w-xl text-xs font-semibold leading-5 text-slate-600">
+                    Dealer playbooks, buying notes, customer sweet spots, brand
+                    preferences, recon capabilities, or other team guidance.
+                    Lot Logic extracts only explicit statements supported by the
+                    document.
+                  </p>
+                </div>
+                <div className="shrink-0 rounded-lg bg-white px-3 py-2 text-[10px] font-bold leading-4 text-slate-500 shadow-sm">
+                  PDF · TXT · MD · CSV · RTF · JSON
+                  <br />
+                  Up to 10 MB
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1.3fr_auto] md:items-end">
+                <label className="block">
+                  <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                    Optional title
+                  </div>
+                  <input
+                    value={knowledgeTitle}
+                    onChange={(event) => setKnowledgeTitle(event.target.value)}
+                    placeholder="Mindful Motors dealer insights"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                    Document
+                  </div>
+                  <input
+                    id="dealership-knowledge-upload"
+                    type="file"
+                    accept=".pdf,.txt,.md,.markdown,.csv,.rtf,.json,application/pdf,text/plain,text/markdown,text/csv,text/rtf,application/json"
+                    onChange={(event) =>
+                      setKnowledgeFile(event.target.files?.[0] || null)
+                    }
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-black file:text-slate-700"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  disabled={!knowledgeFile || uploadingKnowledge}
+                  onClick={() => void uploadDealershipKnowledge()}
+                  className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {uploadingKnowledge ? "Learning..." : "Upload & Learn"}
+                </button>
+              </div>
+
+              <div className="mt-2 text-[10px] font-semibold leading-4 text-slate-500">
+                Word documents: export or save as PDF first. Lot Logic stores
+                the extracted dealership knowledge and source metadata; the
+                original file is not retained in this first version.
+              </div>
+
+              {uploadMessage ? (
+                <div className="mt-3 rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs font-bold text-blue-800">
+                  {uploadMessage}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+              An organization administrator can add dealership knowledge and
+              answer training questions.
+            </div>
+          )}
+
+          <div className="mt-5">
+            <div className="font-black text-slate-950">
+              Questions Lot Logic has for you
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+              These are generated from patterns in your evaluator activity.
+            </p>
+          </div>
 
           {saveMessage ? (
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-800">
@@ -644,7 +792,7 @@ export function InsightsDashboard({
                   ) : null}
                 </div>
 
-                {!savedQuestions[question.id] ? (
+                {!savedQuestions[question.id] && canTeach ? (
                   <>
                     <textarea
                       rows={2}
