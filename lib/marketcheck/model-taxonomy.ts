@@ -77,6 +77,17 @@ export const modelTaxonomyFallbacks: ModelTaxonomyFallback[] = [
       "Used only when a direct E63 search returns zero. Rejects AMG Line and lower AMG/non-AMG variants.",
   },
   {
+    id: "audi-tts",
+    make: "Audi",
+    requestedModels: ["TTS"],
+    fallbackModel: "TT",
+    fallbackLabel: "Audi TT candidate pool, filtered to true TTS listings",
+    mustInclude: ["tts"],
+    rejectIfIncludes: ["tt rs", "ttrs"],
+    notes:
+      "MarketCheck may group TTS inventory under the broader TT model. TT is retrieval-only; ordinary TT and TT RS listings must not qualify as TTS comps.",
+  },
+  {
     id: "audi-s4",
     make: "Audi",
     requestedModels: ["S4"],
