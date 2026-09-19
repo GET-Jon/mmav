@@ -7,6 +7,7 @@ import {
 } from "@/lib/marketcheck/generation-comps";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
+import { resolveMarketCheckModelCandidates } from "@/lib/marketcheck/model-discovery";
 
 type MarketCheckListing = Record<string, any>;
 
@@ -217,7 +218,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v12-tts-taxonomy",
+    cacheVersion: "progressive-regions-v13-canonical-family-recovery",
   });
 }
 
@@ -846,43 +847,6 @@ async function discoverMarketCheckModels({
       .filter((entry: { item: string }) => Boolean(entry.item)),
     retryAfter: response.headers.get("retry-after"),
   };
-}
-
-function resolveMarketCheckModelCandidates(
-  requestedModel: string,
-  discoveredModels: Array<{ item: string; count: number }>,
-) {
-  const requested = normalize(requestedModel)
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!requested) {
-    return [];
-  }
-
-  const candidates = discoveredModels
-    .filter(({ item }) => {
-      const candidate = normalize(item)
-        .replace(/[^a-z0-9]+/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      return (
-        candidate === requested ||
-        candidate.startsWith(`${requested} `) ||
-        requested.startsWith(`${candidate} `)
-      );
-    })
-    .sort((a, b) => {
-      const aExact = normalize(a.item) === requested ? 1 : 0;
-      const bExact = normalize(b.item) === requested ? 1 : 0;
-      if (aExact !== bExact) return bExact - aExact;
-      return b.count - a.count;
-    })
-    .map(({ item }) => item);
-
-  return [...new Set(candidates)].slice(0, 5);
 }
 
 async function runMarketCheckSearches({
@@ -1908,7 +1872,11 @@ export async function POST(request: Request) {
       });
 
       const resolvedModels = discovery.ok
-        ? resolveMarketCheckModelCandidates(model, discovery.models)
+        ? resolveMarketCheckModelCandidates({
+            make,
+            requestedModel: model,
+            discoveredModels: discovery.models,
+          })
         : [];
 
       taxonomyDiscovery = {
