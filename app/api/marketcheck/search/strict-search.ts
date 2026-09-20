@@ -218,7 +218,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v15-generation-geography-first",
+    cacheVersion: "progressive-regions-v16-direct-model-first",
   });
 }
 
@@ -1436,6 +1436,16 @@ export async function POST(request: Request) {
       zips.length,
     );
 
+    // One real MarketCheck budget for the entire request. Exact retrieval,
+    // fallback retrieval, taxonomy discovery, generation widening, and optional
+    // liquidity can no longer quietly exceed the configured limit.
+    let marketCheckCallsUsed = 0;
+    const marketCheckCallLimit = apiControls.maxApiCallsPerSearch;
+
+    function remainingMarketCheckCalls() {
+      return Math.max(0, marketCheckCallLimit - marketCheckCallsUsed);
+    }
+
     function buildCompSummary(currentSearches: MarketCheckSearchResult[]) {
       const allListings = currentSearches.flatMap(
         (search): MarketCheckListing[] => {
@@ -1735,21 +1745,25 @@ export async function POST(request: Request) {
       attemptModel,
       attemptRows,
       maxApiCallsOverride,
-      reserveOneCallWhenNoResults,
+      reserveCallsWhenNoResults = 0,
     }: {
       attemptName: string;
       attemptYear?: number | string;
       attemptModel?: string;
       attemptRows?: number;
       maxApiCallsOverride?: number;
-      reserveOneCallWhenNoResults?: boolean;
+      reserveCallsWhenNoResults?: number;
     }) {
       const progressiveSearches: MarketCheckSearchResult[] = [];
+      const localCallCap = Math.min(
+        maxApiCallsOverride ?? marketCheckCallLimit,
+        remainingMarketCheckCalls(),
+      );
 
       for (let regionIndex = 0; regionIndex < zips.length; regionIndex += 1) {
         if (
-          progressiveSearches.length >=
-          (maxApiCallsOverride ?? apiControls.maxApiCallsPerSearch)
+          progressiveSearches.length >= localCallCap ||
+          remainingMarketCheckCalls() <= 0
         ) {
           break;
         }
@@ -1769,6 +1783,7 @@ export async function POST(request: Request) {
           reason,
         });
 
+        marketCheckCallsUsed += 1;
         progressiveSearches.push(result);
 
         if (!result.ok) {
@@ -1777,15 +1792,12 @@ export async function POST(request: Request) {
 
         const summary = buildCompSummary(progressiveSearches);
         const searchedMinimumRegions = regionIndex + 1 >= MIN_INITIAL_REGIONS;
-        const effectiveApiCallCap =
-          maxApiCallsOverride ?? apiControls.maxApiCallsPerSearch;
-        const shouldReserveFallbackCall =
-          reserveOneCallWhenNoResults &&
-          effectiveApiCallCap > 1 &&
-          summary.rawCount === 0 &&
-          progressiveSearches.length >= effectiveApiCallCap - 1;
 
-        if (shouldReserveFallbackCall) {
+        if (
+          reserveCallsWhenNoResults > 0 &&
+          summary.rawCount === 0 &&
+          remainingMarketCheckCalls() <= reserveCallsWhenNoResults
+        ) {
           break;
         }
 
@@ -1803,23 +1815,29 @@ export async function POST(request: Request) {
     const taxonomyRetrieval = findModelTaxonomyFallback({ make, model });
     const modelAliases = findMarketCheckModelAliases({ make, model });
     const aliasRetrievalModel = modelAliases[0] || null;
-    const retrievalModel =
-      taxonomyRetrieval?.fallbackModel ||
-      aliasRetrievalModel ||
-      model;
+    const explicitFallbackModel =
+      taxonomyRetrieval?.fallbackModel || aliasRetrievalModel || null;
+
+    // Always search the requested model first. Explicit fallback definitions
+    // are recovery pools only; they must never replace a valid direct model
+    // query up front.
+    const exactReserve =
+      explicitFallbackModel || generationCompRule
+        ? 1
+        : marketCheckCallLimit >= 3
+          ? 2
+          : 1;
 
     const exactSearches = await runProgressiveRegionSearches({
-      attemptName: taxonomyRetrieval
-        ? `exact-year-taxonomy-${model}-via-${taxonomyRetrieval.fallbackModel}`
-        : aliasRetrievalModel
-          ? `exact-year-model-alias-${model}-via-${aliasRetrievalModel}`
-          : "exact-year-make-model",
-      // Always retrieve the requested model year first. Generation rules remain
-      // a qualification safeguard, but no longer cause older-generation cars
-      // to fill the first MarketCheck result page.
+      attemptName: "exact-year-requested-model",
       attemptYear: year,
-      attemptModel: retrievalModel,
+      attemptModel: model,
       attemptRows: 50,
+      maxApiCallsOverride: Math.min(
+        Math.max(1, MIN_INITIAL_REGIONS),
+        marketCheckCallLimit,
+      ),
+      reserveCallsWhenNoResults: exactReserve,
     });
 
     const failedExactSearch = exactSearches.find((search) => !search.ok);
@@ -1833,9 +1851,9 @@ export async function POST(request: Request) {
       });
     }
 
-    let searches = exactSearches;
+    let searches = [...exactSearches];
     let taxonomyRetrySearches: MarketCheckSearchResult[] = [];
-    let activeRetrievalModel = retrievalModel;
+    let activeRetrievalModel = model;
 
     const exactSummary = buildCompSummary(exactSearches);
     let taxonomyDiscovery:
@@ -1849,16 +1867,56 @@ export async function POST(request: Request) {
         }
       | null = null;
 
-    // MarketCheck requires categorical model values to match its own taxonomy.
-    // If a perfectly valid exact-year search returns zero everywhere, discover
-    // the canonical model labels once, then retry the same year/geography.
-    // This is an exceptional recovery path; ordinary successful searches do
-    // not spend the extra calls.
+    // A known fallback is used only after the requested model truly returns
+    // zero. Use same-generation years in that one recovery request when
+    // available so a rare vehicle gets maximum value from the fallback call.
     if (
       exactSummary.rawCount === 0 &&
+      explicitFallbackModel &&
+      remainingMarketCheckCalls() > 0
+    ) {
+      const fallbackYears = generationYearsInPreferenceOrder();
+      const fallbackYearQuery =
+        generationCompRule && fallbackYears.length
+          ? [year, ...fallbackYears].join(",")
+          : year;
+
+      taxonomyRetrySearches = await runProgressiveRegionSearches({
+        attemptName: taxonomyRetrieval
+          ? `fallback-taxonomy-${model}-via-${explicitFallbackModel}`
+          : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
+        attemptYear: fallbackYearQuery,
+        attemptModel: explicitFallbackModel,
+        attemptRows: 50,
+        maxApiCallsOverride: remainingMarketCheckCalls(),
+      });
+
+      const failedTaxonomyRetry = taxonomyRetrySearches.find(
+        (search) => !search.ok,
+      );
+
+      if (failedTaxonomyRetry) {
+        return buildFailedMarketCheckResponse({
+          failedSearch: failedTaxonomyRetry,
+          searches: [...searches, ...taxonomyRetrySearches],
+          orderedRegions,
+          apiControls,
+        });
+      }
+
+      searches = [...searches, ...taxonomyRetrySearches];
+      activeRetrievalModel = explicitFallbackModel;
+    }
+
+    // Unknown taxonomy mismatch: use active-inventory facet discovery only when
+    // there is enough budget left for BOTH discovery and a retry. Otherwise
+    // return the direct result and let a later user expansion spend a fresh
+    // budget rather than burning a call that cannot produce listings.
+    if (
+      buildCompSummary(searches).rawCount === 0 &&
+      !explicitFallbackModel &&
       orderedRegions.length > 0 &&
-      !taxonomyRetrieval &&
-      !aliasRetrievalModel
+      remainingMarketCheckCalls() >= 2
     ) {
       const discoveryZip = orderedRegions[0].zip;
       const discovery = await discoverMarketCheckModels({
@@ -1870,6 +1928,7 @@ export async function POST(request: Request) {
         searchKey,
         reason,
       });
+      marketCheckCallsUsed += 1;
 
       const resolvedModels = discovery.ok
         ? resolveMarketCheckModelCandidates({
@@ -1893,18 +1952,19 @@ export async function POST(request: Request) {
         (candidate) => normalize(candidate) !== requestedNormalized,
       );
 
-      if (discovery.ok && materiallyDifferentModels.length > 0) {
+      if (
+        discovery.ok &&
+        materiallyDifferentModels.length > 0 &&
+        remainingMarketCheckCalls() > 0
+      ) {
         const canonicalModelQuery = materiallyDifferentModels.join(",");
 
         taxonomyRetrySearches = await runProgressiveRegionSearches({
-          attemptName: `exact-year-model-facet-${canonicalModelQuery}`,
+          attemptName: `fallback-model-facet-${canonicalModelQuery}`,
           attemptYear: year,
           attemptModel: canonicalModelQuery,
           attemptRows: 50,
-          // Taxonomy recovery is allowed to retry the regions the user already
-          // asked us to search. It is intentionally outside the normal 3-call
-          // budget because the first calls proved the category label was wrong.
-          maxApiCallsOverride: Math.min(orderedRegions.length, 3),
+          maxApiCallsOverride: remainingMarketCheckCalls(),
         });
 
         const failedTaxonomyRetry = taxonomyRetrySearches.find(
@@ -1920,7 +1980,7 @@ export async function POST(request: Request) {
           });
         }
 
-        searches = taxonomyRetrySearches;
+        searches = [...searches, ...taxonomyRetrySearches];
         activeRetrievalModel = canonicalModelQuery;
       }
     }
@@ -1938,16 +1998,18 @@ export async function POST(request: Request) {
       buildCompSummary(searches).comps.length < MIN_USABLE_COMPS
     ) {
       const generationYearQuery = generationYears.join(",");
-      // Rare/specialty vehicles need more geographic breadth before we ask
-      // the user to loosen vehicle identity. Search up to five nearby markets
-      // across the same generation automatically.
-      const maxGenerationRegionCalls = Math.min(5, orderedRegions.length);
+      const maxGenerationRegionCalls = Math.min(
+        remainingMarketCheckCalls(),
+        orderedRegions.length,
+      );
 
       for (
         let regionIndex = 0;
         regionIndex < maxGenerationRegionCalls;
         regionIndex += 1
       ) {
+        if (remainingMarketCheckCalls() <= 0) break;
+
         const region = orderedRegions[regionIndex];
 
         const result = await searchMarketCheck({
@@ -1963,6 +2025,7 @@ export async function POST(request: Request) {
           reason,
         });
 
+        marketCheckCallsUsed += 1;
         generationSearches.push(result);
 
         if (!result.ok) break;
@@ -2040,21 +2103,14 @@ export async function POST(request: Request) {
       (comp) => comp.qualityScore >= minimumQualityScore,
     ).length;
 
-    const taxonomyDiscoveryCalls = taxonomyDiscovery?.apiCallsMade || 0;
-    const totalApiCallsMade =
-      exactSearches.length +
-      taxonomyDiscoveryCalls +
-      taxonomyRetrySearches.length +
-      generationSearches.length;
+    const totalApiCallsMade = marketCheckCallsUsed;
     const hitApiCallCap =
-      exactSearches.length >= apiControls.maxApiCallsPerSearch &&
-      generationSearches.length === 0 &&
-      taxonomyRetrySearches.length === 0;
+      marketCheckCallsUsed >= marketCheckCallLimit;
 
     const stopReason = searches.some((search) => !search.ok)
       ? "Stopped because a MarketCheck request failed."
       : hitApiCallCap && usableCompCount < MIN_USABLE_COMPS
-        ? `Stopped after reaching the initial API-call limit of ${apiControls.maxApiCallsPerSearch}.`
+        ? `Stopped after reaching the MarketCheck call limit of ${apiControls.maxApiCallsPerSearch} for this search.`
         : rawCount === 0
           ? "Checked configured regions and no MarketCheck listings were returned."
           : usableCompCount >= MIN_USABLE_COMPS
@@ -2089,7 +2145,8 @@ export async function POST(request: Request) {
     if (
       includeMarketLiquidity &&
       usableCompCount > 0 &&
-      orderedRegions.length > 0
+      orderedRegions.length > 0 &&
+      remainingMarketCheckCalls() > 0
     ) {
       const primaryRegion = orderedRegions[0];
       const liquidityYears = generationCompRule
@@ -2111,6 +2168,7 @@ export async function POST(request: Request) {
       });
 
       historicalLiquidityApiCalls = 1;
+      marketCheckCallsUsed += 1;
 
       if (historical.ok && historical.domActive) {
         const soldCount =
@@ -2176,7 +2234,7 @@ export async function POST(request: Request) {
       minimumQualityScore,
       apiControls,
       apiUsage: {
-        apiCallsMade: totalApiCallsMade + historicalLiquidityApiCalls,
+        apiCallsMade: marketCheckCallsUsed,
         cacheHit: false,
         stopReason,
         usableCompCount,
@@ -2196,7 +2254,7 @@ export async function POST(request: Request) {
           : null,
         taxonomyDiscovery,
       },
-      apiCallsMade: totalApiCallsMade + historicalLiquidityApiCalls,
+      apiCallsMade: marketCheckCallsUsed,
       usableCompCount,
       stopReason,
       searchLog,
