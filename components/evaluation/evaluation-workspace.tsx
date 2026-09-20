@@ -2264,18 +2264,6 @@ export function EvaluationWorkspace({
       return;
     }
 
-    const searchedRegionCount =
-      marketCheckSearchMeta?.regionsChecked?.length || 0;
-
-    if (searchedRegionCount < 5) {
-      setCompEditorTab("geography");
-      setCompMarketEditorOpen(true);
-      setMarketCheckStatus(
-        "Search more geography before loosening the vehicle match. Lot Logic prefers the right vehicle farther away over a weaker nearby substitute.",
-      );
-      return;
-    }
-
     // When the user deliberately relaxes trim, rerun the geography they actually
     // searched — including generated and custom markets — rather than falling
     // back to the original configured-region list.
@@ -4629,37 +4617,33 @@ export function EvaluationWorkspace({
 
                 {vehicleTrim ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
-                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Secondary recovery step</div>
-                    <div className="mt-1 text-lg font-black text-slate-950">Search as {vehicleMake} {vehicleModel}</div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Alternate vehicle search</div>
+                    <div className="mt-1 text-lg font-black text-slate-950">Broaden {vehicleMake} {vehicleModel} match</div>
                     <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
-                      Lot Logic prefers an exact-trim comp from a farther non-overlapping market over a looser match nearby. Expand Geography first when practical. Use this option after exact-configuration evidence remains thin; it removes trim specificity while keeping the other equivalence and relevance safeguards active.
+                      If you believe valid comps exist in the markets already searched, you can try a broader vehicle lookup now. Lot Logic will remove trim specificity and can use its MarketCheck taxonomy fallback while keeping model-identity, generation, mileage, drivetrain, geography, and relevance safeguards active.
                     </p>
                     {compTrimRelaxed ? (
                       <div className="mt-4 rounded-xl bg-blue-100 px-3 py-2 text-xs font-black text-blue-800">
                         Vehicle match is already broadened to {vehicleMake} {vehicleModel}.
                       </div>
-                    ) : (marketCheckSearchMeta?.regionsChecked.length || 0) < 5 ? (
-                      <div className="mt-4">
-                        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-900">
-                          Lot Logic has only searched {marketCheckSearchMeta?.regionsChecked.length || 0} distinct markets. Search farther for the correct vehicle before loosening the match.
-                        </div>
+                    ) : (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setCompMarketEditorOpen(false); void broadenCompVehicleMatch(); }}
+                          disabled={marketCheckLoading}
+                          className="rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
+                        >
+                          Try Broader Vehicle Match
+                        </button>
                         <button
                           type="button"
                           onClick={() => setCompEditorTab("geography")}
-                          className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800"
+                          className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-black text-blue-700 hover:bg-blue-50"
                         >
-                          Expand Geography First
+                          Expand Geography Instead
                         </button>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => { setCompMarketEditorOpen(false); void broadenCompVehicleMatch(); }}
-                        disabled={marketCheckLoading}
-                        className="mt-4 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
-                      >
-                        Search as {vehicleMake} {vehicleModel}
-                      </button>
                     )}
                   </div>
                 ) : (
