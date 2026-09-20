@@ -2254,6 +2254,18 @@ export function EvaluationWorkspace({
       return;
     }
 
+    const searchedRegionCount =
+      marketCheckSearchMeta?.regionsChecked?.length || 0;
+
+    if (searchedRegionCount < 5) {
+      setCompEditorTab("geography");
+      setCompMarketEditorOpen(true);
+      setMarketCheckStatus(
+        "Search more geography before loosening the vehicle match. Lot Logic prefers the right vehicle farther away over a weaker nearby substitute.",
+      );
+      return;
+    }
+
     // When the user deliberately relaxes trim, rerun the geography they actually
     // searched — including generated and custom markets — rather than falling
     // back to the original configured-region list.
@@ -4615,6 +4627,19 @@ export function EvaluationWorkspace({
                       <div className="mt-4 rounded-xl bg-blue-100 px-3 py-2 text-xs font-black text-blue-800">
                         Vehicle match is already broadened to {vehicleMake} {vehicleModel}.
                       </div>
+                    ) : (marketCheckSearchMeta?.regionsChecked.length || 0) < 5 ? (
+                      <div className="mt-4">
+                        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-900">
+                          Lot Logic has only searched {marketCheckSearchMeta?.regionsChecked.length || 0} distinct markets. Search farther for the correct vehicle before loosening the match.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCompEditorTab("geography")}
+                          className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800"
+                        >
+                          Expand Geography First
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -5954,7 +5979,7 @@ export function EvaluationWorkspace({
                         : "Run the evaluation to search the local market for a usable comp set."}
                     </div>
 
-                    {marketCheckSearchMeta && vehicleTrim && marketCheckSearchMeta.regionsChecked.length >= 4 && !compTrimRelaxed ? (
+                    {marketCheckSearchMeta && vehicleTrim && marketCheckSearchMeta.regionsChecked.length >= 5 && !compTrimRelaxed ? (
                       <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-left">
                         <div className="text-xs font-black uppercase tracking-[0.08em] text-amber-800">Vehicle match may be too specific</div>
                         <p className="mt-1 text-xs font-semibold leading-5 text-amber-900/80">
