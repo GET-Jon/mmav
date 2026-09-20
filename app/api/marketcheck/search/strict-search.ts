@@ -200,6 +200,8 @@ function makeStableSearchKey({
   zips,
   radius,
   rows,
+  preferTaxonomyFallback,
+  useTaxonomyFallbackTrim,
 }: {
   year: number;
   make: string;
@@ -211,6 +213,8 @@ function makeStableSearchKey({
   zips: string[];
   radius: number;
   rows: number;
+  preferTaxonomyFallback: boolean;
+  useTaxonomyFallbackTrim: boolean;
 }) {
   return JSON.stringify({
     year,
@@ -223,8 +227,10 @@ function makeStableSearchKey({
     zips: [...zips].map((zip) => String(zip).trim()).filter(Boolean),
     radius,
     rows,
+    preferTaxonomyFallback,
+    useTaxonomyFallbackTrim,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v17-vin-native-match",
+    cacheVersion: "progressive-regions-v18-retrieval-strategy",
   });
 }
 
@@ -1411,6 +1417,8 @@ export async function POST(request: Request) {
       zips,
       radius,
       rows,
+      preferTaxonomyFallback,
+      useTaxonomyFallbackTrim,
     });
 
     const cached = getCachedResponse(searchKey);
@@ -2011,7 +2019,10 @@ export async function POST(request: Request) {
 
         searches = [...taxonomyRetrySearches];
         activeRetrievalModel = explicitFallbackModel;
-        activeRetrievalTrim = taxonomyRetrieval?.fallbackTrim || "";
+        activeRetrievalTrim =
+          useTaxonomyFallbackTrim
+            ? taxonomyRetrieval?.fallbackTrim || ""
+            : "";
       } else {
         const exactReserve =
           explicitFallbackModel || generationCompRule
@@ -2085,7 +2096,10 @@ export async function POST(request: Request) {
 
         searches = [...searches, ...taxonomyRetrySearches];
         activeRetrievalModel = explicitFallbackModel;
-        activeRetrievalTrim = taxonomyRetrieval?.fallbackTrim || "";
+        activeRetrievalTrim =
+          useTaxonomyFallbackTrim
+            ? taxonomyRetrieval?.fallbackTrim || ""
+            : "";
         }
       }
 
