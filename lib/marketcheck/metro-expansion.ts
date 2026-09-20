@@ -170,9 +170,13 @@ export function buildExpansionMarkets(
     configured.map((market) => normalizeMarketName(market.market)),
   );
 
+  // MarketCheck's free/basic search radius is capped at 100 miles.
+  // Two 100-mile circles need ~200 miles between centers to avoid materially
+  // re-querying the same inventory. Expansion suggestions should therefore
+  // prefer genuinely new coverage, not merely a new city label.
   const isFarEnoughFromSearched = (seed: MetroSeed) =>
     searchedSeeds.length === 0 ||
-    searchedSeeds.every((searchedSeed) => haversineMiles(searchedSeed, seed) >= 100);
+    searchedSeeds.every((searchedSeed) => haversineMiles(searchedSeed, seed) >= 200);
 
   const configuredForExpansion = configured.filter((market) => {
     if (searchedZipSet.has(market.zip)) return true;
