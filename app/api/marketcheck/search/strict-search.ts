@@ -21,6 +21,8 @@ type MarketCheckSearchResult = {
     year?: number | string;
     make: string;
     model?: string;
+    vins?: string;
+    match?: string;
     zip: string;
     radius: number;
     rows: number;
@@ -191,6 +193,7 @@ function makeStableSearchKey({
   make,
   model,
   preferredTrim,
+  targetVin,
   targetFuelType,
   targetMileage,
   zips,
@@ -201,6 +204,7 @@ function makeStableSearchKey({
   make: string;
   model: string;
   preferredTrim: string;
+  targetVin: string;
   targetFuelType: string;
   targetMileage: number;
   zips: string[];
@@ -212,13 +216,14 @@ function makeStableSearchKey({
     make: normalize(make),
     model: normalize(model),
     trim: normalize(preferredTrim),
+    vin: targetVin,
     fuelType: normalizeFuelType(targetFuelType),
     targetMileage,
     zips: [...zips].map((zip) => String(zip).trim()).filter(Boolean),
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v16-direct-model-first",
+    cacheVersion: "progressive-regions-v17-vin-native-match",
   });
 }
 
@@ -674,6 +679,8 @@ async function searchMarketCheck({
   year,
   make,
   model,
+  similarVin,
+  matchFields,
   zip,
   radius,
   rows,
@@ -685,6 +692,8 @@ async function searchMarketCheck({
   year?: number | string;
   make: string;
   model?: string;
+  similarVin?: string;
+  matchFields?: string;
   zip: string;
   radius: number;
   rows: number;
@@ -695,7 +704,6 @@ async function searchMarketCheck({
   const params = new URLSearchParams({
     api_key: apiKey,
     car_type: "used",
-    make,
     zip,
     radius: String(radius),
     rows: String(rows),
@@ -703,12 +711,18 @@ async function searchMarketCheck({
     stats: "dom,d om_180,dom_active,dos_active".replace("d om", "dom"),
   });
 
-  if (year) {
-    params.set("year", String(year));
+  if (similarVin) {
+    params.set("vins", similarVin);
+    params.set("match", matchFields || "year,make,model,trim");
+  } else {
+    params.set("make", make);
+    if (model) {
+      params.set("model", model);
+    }
   }
 
-  if (model) {
-    params.set("model", model);
+  if (year) {
+    params.set("year", String(year));
   }
 
   const endpoint = "/v2/search/car/active";
@@ -727,6 +741,8 @@ async function searchMarketCheck({
       year,
       make,
       model,
+      vins: similarVin || undefined,
+      match: matchFields || undefined,
       radius,
       rows,
     },
@@ -758,6 +774,8 @@ async function searchMarketCheck({
       year,
       make,
       model,
+      vins: similarVin || undefined,
+      match: matchFields || undefined,
       zip,
       radius,
       rows,
@@ -1224,6 +1242,10 @@ export async function POST(request: Request) {
     const make = String(body.make || "").trim();
     const model = String(body.model || "").trim();
     const preferredTrim = String(body.trim || "").trim();
+    const requestedVin = String(body.vin || "").trim().toUpperCase();
+    const targetVin = /^[A-HJ-NPR-Z0-9]{17}$/.test(requestedVin)
+      ? requestedVin
+      : "";
     const targetFuelType = String(
       body.fuelType ||
         body.targetFuelType ||
@@ -1373,6 +1395,7 @@ export async function POST(request: Request) {
       make,
       model,
       preferredTrim,
+      targetVin,
       targetFuelType,
       targetMileage,
       zips,
@@ -1423,6 +1446,7 @@ export async function POST(request: Request) {
         make,
         model,
         preferredTrim,
+        vinNativeMatch: Boolean(targetVin),
         targetMileage,
         radius,
         rows,
