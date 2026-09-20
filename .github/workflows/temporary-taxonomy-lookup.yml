@@ -1,0 +1,15 @@
+name: Temporary taxonomy lookup
+
+on:
+  push:
+    branches:
+      - lot-logic-public-site
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 20
+      - name: Inspect Audi taxonomy
+        run: |
+          curl -sS 'https://deploy-preview-3--mmav.netlify.app/api/marketcheck/taxonomy-diagnostic?make=Audi&year=2012' | jq .
