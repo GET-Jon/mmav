@@ -218,7 +218,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v13-canonical-family-recovery",
+    cacheVersion: "progressive-regions-v14-tt-generation-widening",
   });
 }
 
