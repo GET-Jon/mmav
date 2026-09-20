@@ -218,7 +218,7 @@ function makeStableSearchKey({
     radius,
     rows,
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v14-tt-generation-widening",
+    cacheVersion: "progressive-regions-v15-generation-geography-first",
   });
 }
 
@@ -1938,7 +1938,10 @@ export async function POST(request: Request) {
       buildCompSummary(searches).comps.length < MIN_USABLE_COMPS
     ) {
       const generationYearQuery = generationYears.join(",");
-      const maxGenerationRegionCalls = Math.min(2, orderedRegions.length);
+      // Rare/specialty vehicles need more geographic breadth before we ask
+      // the user to loosen vehicle identity. Search up to five nearby markets
+      // across the same generation automatically.
+      const maxGenerationRegionCalls = Math.min(5, orderedRegions.length);
 
       for (
         let regionIndex = 0;
