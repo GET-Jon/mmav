@@ -1912,6 +1912,7 @@ export function EvaluationWorkspace({
       }>;
       mergeResults?: boolean;
       maxApiCallsPerSearch?: number;
+      useVinMatch?: boolean;
     },
   ) {
     if (marketCheckInFlightRef.current || marketCheckLoading) {
@@ -1928,6 +1929,14 @@ export function EvaluationWorkspace({
         : vehicleTrim;
     const fuelType =
       vehicleOverride?.fuelType || decodedVehicle?.fuelType || null;
+    const candidateVin = String(decodedVehicle?.vin || vin || "")
+      .trim()
+      .toUpperCase();
+    const marketCheckVin =
+      options?.useVinMatch === false ||
+      !/^[A-HJ-NPR-Z0-9]{17}$/.test(candidateVin)
+        ? null
+        : candidateVin;
 
     if (!year || !make || !model) {
       setMarketCheckStatus(
@@ -1965,6 +1974,7 @@ export function EvaluationWorkspace({
           make,
           model,
           trim,
+          vin: marketCheckVin,
           fuelType,
           targetMileage,
           regions:
@@ -2286,6 +2296,7 @@ export function EvaluationWorkspace({
         searchStage: "expanded",
         regions: regions.length ? regions : undefined,
         mergeResults: false,
+        useVinMatch: false,
         maxApiCallsPerSearch: Math.min(10, Math.max(3, regions.length)),
       },
     );
