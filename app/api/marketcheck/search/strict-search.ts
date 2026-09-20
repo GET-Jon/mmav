@@ -21,6 +21,7 @@ type MarketCheckSearchResult = {
     year?: number | string;
     make: string;
     model?: string;
+    trim?: string;
     vins?: string;
     match?: string;
     zip: string;
@@ -679,6 +680,7 @@ async function searchMarketCheck({
   year,
   make,
   model,
+  trim,
   similarVin,
   matchFields,
   zip,
@@ -692,6 +694,7 @@ async function searchMarketCheck({
   year?: number | string;
   make: string;
   model?: string;
+  trim?: string;
   similarVin?: string;
   matchFields?: string;
   zip: string;
@@ -719,6 +722,9 @@ async function searchMarketCheck({
     if (model) {
       params.set("model", model);
     }
+    if (trim) {
+      params.set("trim", trim);
+    }
   }
 
   if (year) {
@@ -741,6 +747,7 @@ async function searchMarketCheck({
       year,
       make,
       model,
+      trim: trim || undefined,
       vins: similarVin || undefined,
       match: matchFields || undefined,
       radius,
@@ -774,6 +781,7 @@ async function searchMarketCheck({
       year,
       make,
       model,
+      trim: trim || undefined,
       vins: similarVin || undefined,
       match: matchFields || undefined,
       zip,
@@ -1262,6 +1270,7 @@ export async function POST(request: Request) {
     const debug = Boolean(body.debug);
     const includeMarketLiquidity = body.includeMarketLiquidity !== false;
     const reason = String(body.reason || "explicit-user-comp-search");
+    const preferTaxonomyFallback = body.preferTaxonomyFallback === true;
 
     const apiControls = {
       ...MARKETCHECK_API_CONTROLS,
@@ -1767,6 +1776,7 @@ export async function POST(request: Request) {
       attemptName,
       attemptYear,
       attemptModel,
+      attemptTrim,
       attemptRows,
       maxApiCallsOverride,
       reserveCallsWhenNoResults = 0,
@@ -1774,6 +1784,7 @@ export async function POST(request: Request) {
       attemptName: string;
       attemptYear?: number | string;
       attemptModel?: string;
+      attemptTrim?: string;
       attemptRows?: number;
       maxApiCallsOverride?: number;
       reserveCallsWhenNoResults?: number;
@@ -1799,6 +1810,7 @@ export async function POST(request: Request) {
           year: attemptYear,
           make,
           model: attemptModel ?? model,
+          trim: attemptTrim,
           zip,
           radius,
           rows: attemptRows ?? rows,
@@ -1847,6 +1859,7 @@ export async function POST(request: Request) {
     let taxonomyRetrySearches: MarketCheckSearchResult[] = [];
     let generationSearches: MarketCheckSearchResult[] = [];
     let activeRetrievalModel = model;
+    let activeRetrievalTrim = "";
     let usedVinNativeMatch = false;
     let vinNativeFallbackReason: string | null = null;
 
@@ -1962,44 +1975,7 @@ export async function POST(request: Request) {
     // Manual-entry evaluations, deliberately relaxed vehicle matches, or VINs
     // MarketCheck cannot decode use the explicit model search/recovery path.
     if (!usedVinNativeMatch) {
-      const exactReserve =
-        explicitFallbackModel || generationCompRule
-          ? 1
-          : marketCheckCallLimit >= 3
-            ? 2
-            : 1;
-
-      exactSearches = await runProgressiveRegionSearches({
-        attemptName: "exact-year-requested-model",
-        attemptYear: year,
-        attemptModel: model,
-        attemptRows: 50,
-        maxApiCallsOverride: Math.min(
-          Math.max(1, MIN_INITIAL_REGIONS),
-          remainingMarketCheckCalls(),
-        ),
-        reserveCallsWhenNoResults: exactReserve,
-      });
-
-      const failedExactSearch = exactSearches.find((search) => !search.ok);
-
-      if (failedExactSearch) {
-        return buildFailedMarketCheckResponse({
-          failedSearch: failedExactSearch,
-          searches: exactSearches,
-          orderedRegions,
-          apiControls,
-        });
-      }
-
-      searches = [...exactSearches];
-      const exactSummary = buildCompSummary(exactSearches);
-
-      if (
-        exactSummary.rawCount === 0 &&
-        explicitFallbackModel &&
-        remainingMarketCheckCalls() > 0
-      ) {
+      if (preferTaxonomyFallback && explicitFallbackModel) {
         const fallbackYearQuery =
           generationCompRule && generationYears.length
             ? [year, ...generationYears].join(",")
@@ -2011,6 +1987,78 @@ export async function POST(request: Request) {
             : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
           attemptYear: fallbackYearQuery,
           attemptModel: explicitFallbackModel,
+          attemptTrim: taxonomyRetrieval?.fallbackTrim || undefined,
+          attemptRows: 50,
+          maxApiCallsOverride: remainingMarketCheckCalls(),
+        });
+
+        const failedTaxonomyRetry = taxonomyRetrySearches.find(
+          (search) => !search.ok,
+        );
+
+        if (failedTaxonomyRetry) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: failedTaxonomyRetry,
+            searches: taxonomyRetrySearches,
+            orderedRegions,
+            apiControls,
+          });
+        }
+
+        searches = [...taxonomyRetrySearches];
+        activeRetrievalModel = explicitFallbackModel;
+        activeRetrievalTrim = taxonomyRetrieval?.fallbackTrim || "";
+      } else {
+        const exactReserve =
+          explicitFallbackModel || generationCompRule
+            ? 1
+            : marketCheckCallLimit >= 3
+              ? 2
+              : 1;
+
+        exactSearches = await runProgressiveRegionSearches({
+          attemptName: "exact-year-requested-model",
+          attemptYear: year,
+          attemptModel: model,
+          attemptRows: 50,
+          maxApiCallsOverride: Math.min(
+            Math.max(1, MIN_INITIAL_REGIONS),
+            remainingMarketCheckCalls(),
+          ),
+          reserveCallsWhenNoResults: exactReserve,
+        });
+
+        const failedExactSearch = exactSearches.find((search) => !search.ok);
+
+        if (failedExactSearch) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: failedExactSearch,
+            searches: exactSearches,
+            orderedRegions,
+            apiControls,
+          });
+        }
+
+        searches = [...exactSearches];
+        const exactSummary = buildCompSummary(exactSearches);
+
+        if (
+          exactSummary.rawCount === 0 &&
+          explicitFallbackModel &&
+          remainingMarketCheckCalls() > 0
+        ) {
+        const fallbackYearQuery =
+          generationCompRule && generationYears.length
+            ? [year, ...generationYears].join(",")
+            : year;
+
+        taxonomyRetrySearches = await runProgressiveRegionSearches({
+          attemptName: taxonomyRetrieval
+            ? `fallback-taxonomy-${model}-via-${explicitFallbackModel}`
+            : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
+          attemptYear: fallbackYearQuery,
+          attemptModel: explicitFallbackModel,
+          attemptTrim: taxonomyRetrieval?.fallbackTrim || undefined,
           attemptRows: 50,
           maxApiCallsOverride: remainingMarketCheckCalls(),
         });
@@ -2030,6 +2078,8 @@ export async function POST(request: Request) {
 
         searches = [...searches, ...taxonomyRetrySearches];
         activeRetrievalModel = explicitFallbackModel;
+        activeRetrievalTrim = taxonomyRetrieval?.fallbackTrim || "";
+        }
       }
 
       if (
@@ -2131,6 +2181,7 @@ export async function POST(request: Request) {
             year: generationYearQuery,
             make,
             model: activeRetrievalModel,
+            trim: activeRetrievalTrim || undefined,
             zip: region.zip,
             radius,
             rows: 50,
