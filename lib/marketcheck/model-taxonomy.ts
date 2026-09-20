@@ -3,6 +3,7 @@ export type ModelTaxonomyFallback = {
   make: string;
   requestedModels: string[];
   fallbackModel: string;
+  fallbackTrim?: string;
   fallbackLabel: string;
   mustInclude: string[];
   rejectIfIncludes: string[];
@@ -81,6 +82,7 @@ export const modelTaxonomyFallbacks: ModelTaxonomyFallback[] = [
     make: "Audi",
     requestedModels: ["TTS"],
     fallbackModel: "TT",
+    fallbackTrim: "TTS",
     fallbackLabel: "Audi TT candidate pool, filtered to true TTS listings",
     mustInclude: ["tts"],
     rejectIfIncludes: ["tt rs", "ttrs"],
