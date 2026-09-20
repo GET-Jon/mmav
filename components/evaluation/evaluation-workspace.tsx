@@ -14,6 +14,7 @@ import {
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
+import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
@@ -1317,6 +1318,15 @@ export function EvaluationWorkspace({
   const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
   const vehicleModel = decodedVehicle?.model || manualVehicle.model || "";
   const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
+  const compTaxonomyFallback = findModelTaxonomyFallback({
+    make: vehicleMake,
+    model: vehicleModel,
+  });
+  const compRetrievalLabel = compTaxonomyFallback
+    ? [vehicleMake, compTaxonomyFallback.fallbackModel, compTaxonomyFallback.fallbackTrim]
+        .filter(Boolean)
+        .join(" / ")
+    : [vehicleMake, vehicleModel].filter(Boolean).join(" ");
   const vehicleBodyClass =
     decodedVehicle?.bodyClass || manualVehicle.bodyClass || "";
 
@@ -1348,6 +1358,10 @@ export function EvaluationWorkspace({
       .filter(Boolean)
       .join(" ")
       .trim() || "New Auction Evaluation";
+
+  useEffect(() => {
+    setCompTrimRelaxed(false);
+  }, [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]);
 
   function normalizeMatchText(value: string | number | null | undefined) {
     return String(value || "").toLowerCase();
@@ -2272,7 +2286,11 @@ export function EvaluationWorkspace({
     const regions = getPreviouslySearchedCompRegions();
 
     setCompTrimRelaxed(true);
-    setMarketCheckStatus(`Broadening the vehicle match from ${vehicleMake} ${vehicleModel} ${vehicleTrim} to ${vehicleMake} ${vehicleModel}.`);
+    setMarketCheckStatus(
+      compTaxonomyFallback
+        ? `Searching MarketCheck as ${vehicleMake} ${compTaxonomyFallback.fallbackModel}${compTaxonomyFallback.fallbackTrim ? ` / ${compTaxonomyFallback.fallbackTrim}` : ""} while retaining ${vehicleMake} ${vehicleModel} as the final qualification target.`
+        : `Broadening retrieval for ${vehicleMake} ${vehicleModel} while retaining strict final vehicle qualification.`,
+    );
 
     await pullMarketCheckComps(
       {
@@ -3763,12 +3781,14 @@ export function EvaluationWorkspace({
 
                   <div className="rounded-xl bg-slate-50 px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                      Fallback Status
+                      Retrieval Strategy
                     </div>
                     <div className="mt-1 text-sm font-bold text-slate-900">
-                      {marketCheckSearchMeta?.lowConfidenceFallback
-                        ? "Low-confidence fallback applied"
-                        : "None"}
+                      {compTrimRelaxed
+                        ? compRetrievalLabel
+                        : marketCheckSearchMeta?.lowConfidenceFallback
+                          ? "Low-confidence comp fallback applied"
+                          : "Exact vehicle"}
                     </div>
                   </div>
                 </div>
@@ -4611,7 +4631,7 @@ export function EvaluationWorkspace({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                   <div className="text-[10px] font-black uppercase tracking-[0.09em] text-slate-400">Current vehicle match</div>
                   <div className="mt-1 text-base font-black text-slate-950">
-                    {[vehicleYear, vehicleMake, vehicleModel, compTrimRelaxed ? null : vehicleTrim].filter(Boolean).join(" ") || "Vehicle details unavailable"}
+                    {[vehicleYear, vehicleMake, vehicleModel, vehicleTrim].filter(Boolean).join(" ") || "Vehicle details unavailable"}
                   </div>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
                     Lot Logic still uses year, mileage, body/configuration, drivetrain, geography, and relevance checks when ranking the evidence.
@@ -4620,14 +4640,21 @@ export function EvaluationWorkspace({
 
                 {vehicleTrim ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
-                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Alternate vehicle search</div>
-                    <div className="mt-1 text-lg font-black text-slate-950">Broaden {vehicleMake} {vehicleModel} match</div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Alternate MarketCheck classification</div>
+                    <div className="mt-1 text-lg font-black text-slate-950">
+                      {compTaxonomyFallback
+                        ? `Search MarketCheck as ${vehicleMake} ${compTaxonomyFallback.fallbackModel}`
+                        : `Broaden ${vehicleMake} ${vehicleModel} retrieval`}
+                    </div>
                     <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
-                      If you believe valid comps exist in the markets already searched, you can try a broader vehicle lookup now. Lot Logic will remove trim specificity and can use its MarketCheck taxonomy fallback while keeping model-identity, generation, mileage, drivetrain, geography, and relevance safeguards active.
+                      {compTaxonomyFallback
+                        ? `MarketCheck may classify this ${vehicleModel} under model ${compTaxonomyFallback.fallbackModel}${compTaxonomyFallback.fallbackTrim ? ` with trim ${compTaxonomyFallback.fallbackTrim}` : ""}. This changes retrieval only — Lot Logic still requires the returned listing to prove it is a true ${vehicleModel} before it can qualify as a comp.`
+                        : "If you believe valid comps exist in the markets already searched, Lot Logic can broaden the retrieval query while keeping final vehicle-equivalence safeguards active."}
                     </p>
                     {compTrimRelaxed ? (
-                      <div className="mt-4 rounded-xl bg-blue-100 px-3 py-2 text-xs font-black text-blue-800">
-                        Vehicle match is already broadened to {vehicleMake} {vehicleModel}.
+                      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-bold leading-5 text-blue-900">
+                        <div className="font-black">MarketCheck retrieval: {compRetrievalLabel}</div>
+                        <div className="mt-1">Lot Logic target remains: {vehicleMake} {vehicleModel}{vehicleTrim ? ` ${vehicleTrim}` : ""}. Related base-model vehicles still cannot qualify unless they prove the requested variant.</div>
                       </div>
                     ) : (
                       <div className="mt-4 flex flex-wrap gap-2">
@@ -4637,7 +4664,9 @@ export function EvaluationWorkspace({
                           disabled={marketCheckLoading}
                           className="rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
                         >
-                          Try Broader Vehicle Match
+                          {compTaxonomyFallback
+                            ? `Search as ${vehicleMake} ${compTaxonomyFallback.fallbackModel}${compTaxonomyFallback.fallbackTrim ? ` + ${compTaxonomyFallback.fallbackTrim} trim` : ""}`
+                            : "Try Broader Retrieval"}
                         </button>
                         <button
                           type="button"
@@ -5993,7 +6022,9 @@ export function EvaluationWorkspace({
                         </button>
                       </div>
                     ) : compTrimRelaxed ? (
-                      <div className="mt-4 text-xs font-bold text-blue-700">✓ Broader vehicle search completed: {vehicleMake} {vehicleModel} (trim ignored).</div>
+                      <div className="mt-4 text-xs font-bold text-blue-700">
+                        ✓ Alternate retrieval completed: {compRetrievalLabel}. Final qualification still requires a true {vehicleMake} {vehicleModel}.
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -6012,10 +6043,10 @@ export function EvaluationWorkspace({
                     `${compSummary.includedCount} / ${comps.length}`,
                   ],
                   [
-                    "Fallback Status",
-                    marketCheckSearchMeta?.lowConfidenceFallback
-                      ? "Applied"
-                      : "None",
+                    "Retrieval Strategy",
+                    compTrimRelaxed
+                      ? compRetrievalLabel
+                      : "Exact vehicle",
                   ],
                   [
                     "Live Lookup",
