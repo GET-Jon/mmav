@@ -1271,6 +1271,7 @@ export async function POST(request: Request) {
     const includeMarketLiquidity = body.includeMarketLiquidity !== false;
     const reason = String(body.reason || "explicit-user-comp-search");
     const preferTaxonomyFallback = body.preferTaxonomyFallback === true;
+    const useTaxonomyFallbackTrim = body.useTaxonomyFallbackTrim !== false;
 
     const apiControls = {
       ...MARKETCHECK_API_CONTROLS,
@@ -1987,7 +1988,10 @@ export async function POST(request: Request) {
             : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
           attemptYear: fallbackYearQuery,
           attemptModel: explicitFallbackModel,
-          attemptTrim: taxonomyRetrieval?.fallbackTrim || undefined,
+          attemptTrim:
+            useTaxonomyFallbackTrim
+              ? taxonomyRetrieval?.fallbackTrim || undefined
+              : undefined,
           attemptRows: 50,
           maxApiCallsOverride: remainingMarketCheckCalls(),
         });
@@ -2058,7 +2062,10 @@ export async function POST(request: Request) {
             : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
           attemptYear: fallbackYearQuery,
           attemptModel: explicitFallbackModel,
-          attemptTrim: taxonomyRetrieval?.fallbackTrim || undefined,
+          attemptTrim:
+            useTaxonomyFallbackTrim
+              ? taxonomyRetrieval?.fallbackTrim || undefined
+              : undefined,
           attemptRows: 50,
           maxApiCallsOverride: remainingMarketCheckCalls(),
         });
