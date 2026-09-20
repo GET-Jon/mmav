@@ -16,5 +16,5 @@ jobs:
           set -euo pipefail
           body="$(curl -sS 'https://deploy-preview-3--mmav.netlify.app/api/marketcheck/taxonomy-diagnostic?make=Audi&year=2012')"
           compact="$(printf '%s' "$body" | jq -c .)"
-          echo "::error title=MarketCheck taxonomy::$compact"
+          printf 'TAXONOMY_RESULT=%s\n' "$compact" >&2
           exit 1
