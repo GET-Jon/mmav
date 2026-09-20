@@ -2217,6 +2217,9 @@ export function EvaluationWorkspace({
     setCustomCompZip("");
   }
 
+  // Geography expansion must preserve the user's current retrieval strategy.
+  // If the user switched to a taxonomy fallback (for example TTS -> TT bucket),
+  // every later region search must keep that strategy instead of reverting to VIN/exact matching.
   async function searchSelectedCompMarkets() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
     const configuredRegions = getCompExpansionMarkets()
@@ -2257,6 +2260,9 @@ export function EvaluationWorkspace({
       searchStage: 'expanded',
       regions,
       mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
     });
   }
 
@@ -2343,6 +2349,9 @@ export function EvaluationWorkspace({
       searchStage: "expanded",
       regions: nextRegions,
       mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
     });
   }
 
@@ -2381,6 +2390,9 @@ export function EvaluationWorkspace({
       searchStage: "metro",
       regions: metroRegions,
       mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
     });
   }
 
