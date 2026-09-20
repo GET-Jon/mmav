@@ -1842,44 +1842,14 @@ export async function POST(request: Request) {
     const explicitFallbackModel =
       taxonomyRetrieval?.fallbackModel || aliasRetrievalModel || null;
 
-    // Always search the requested model first. Explicit fallback definitions
-    // are recovery pools only; they must never replace a valid direct model
-    // query up front.
-    const exactReserve =
-      explicitFallbackModel || generationCompRule
-        ? 1
-        : marketCheckCallLimit >= 3
-          ? 2
-          : 1;
-
-    const exactSearches = await runProgressiveRegionSearches({
-      attemptName: "exact-year-requested-model",
-      attemptYear: year,
-      attemptModel: model,
-      attemptRows: 50,
-      maxApiCallsOverride: Math.min(
-        Math.max(1, MIN_INITIAL_REGIONS),
-        marketCheckCallLimit,
-      ),
-      reserveCallsWhenNoResults: exactReserve,
-    });
-
-    const failedExactSearch = exactSearches.find((search) => !search.ok);
-
-    if (failedExactSearch) {
-      return buildFailedMarketCheckResponse({
-        failedSearch: failedExactSearch,
-        searches: exactSearches,
-        orderedRegions,
-        apiControls,
-      });
-    }
-
-    let searches = [...exactSearches];
+    let searches: MarketCheckSearchResult[] = [];
+    let exactSearches: MarketCheckSearchResult[] = [];
     let taxonomyRetrySearches: MarketCheckSearchResult[] = [];
+    let generationSearches: MarketCheckSearchResult[] = [];
     let activeRetrievalModel = model;
+    let usedVinNativeMatch = false;
+    let vinNativeFallbackReason: string | null = null;
 
-    const exactSummary = buildCompSummary(exactSearches);
     let taxonomyDiscovery:
       | {
           attempted: boolean;
@@ -1891,102 +1861,156 @@ export async function POST(request: Request) {
         }
       | null = null;
 
-    // A known fallback is used only after the requested model truly returns
-    // zero. Use same-generation years in that one recovery request when
-    // available so a rare vehicle gets maximum value from the fallback call.
-    if (
-      exactSummary.rawCount === 0 &&
-      explicitFallbackModel &&
-      remainingMarketCheckCalls() > 0
-    ) {
-      const fallbackYears = generationYearsInPreferenceOrder();
-      const fallbackYearQuery =
-        generationCompRule && fallbackYears.length
-          ? [year, ...fallbackYears].join(",")
-          : year;
+    const generationYears = generationYearsInPreferenceOrder();
 
-      taxonomyRetrySearches = await runProgressiveRegionSearches({
-        attemptName: taxonomyRetrieval
-          ? `fallback-taxonomy-${model}-via-${explicitFallbackModel}`
-          : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
-        attemptYear: fallbackYearQuery,
-        attemptModel: explicitFallbackModel,
-        attemptRows: 50,
-        maxApiCallsOverride: remainingMarketCheckCalls(),
+    // VIN evaluations use MarketCheck's own decoded taxonomy first. This avoids
+    // translating a decoder's model/trim naming into MarketCheck naming.
+    if (targetVin && orderedRegions.length > 0 && remainingMarketCheckCalls() > 0) {
+      const primaryRegion = orderedRegions[0];
+      const vinExact = await searchMarketCheck({
+        apiKey: marketCheckApiKey,
+        make,
+        similarVin: targetVin,
+        matchFields: "year,make,model,trim",
+        zip: primaryRegion.zip,
+        radius,
+        rows: 50,
+        attemptName: "vin-match-year-make-model-trim",
+        searchKey,
+        reason,
       });
 
-      const failedTaxonomyRetry = taxonomyRetrySearches.find(
-        (search) => !search.ok,
-      );
+      marketCheckCallsUsed += 1;
 
-      if (failedTaxonomyRetry) {
+      if (!vinExact.ok && (vinExact.status === 400 || vinExact.status === 422)) {
+        vinNativeFallbackReason =
+          `MarketCheck could not use the target VIN for similar-car matching (status ${vinExact.status}).`;
+      } else if (!vinExact.ok) {
         return buildFailedMarketCheckResponse({
-          failedSearch: failedTaxonomyRetry,
-          searches: [...searches, ...taxonomyRetrySearches],
+          failedSearch: vinExact,
+          searches: [vinExact],
+          orderedRegions,
+          apiControls,
+        });
+      } else {
+        usedVinNativeMatch = true;
+        exactSearches = [vinExact];
+        searches = [vinExact];
+
+        if (
+          generationCompRule &&
+          generationYears.length > 0 &&
+          buildCompSummary(searches).comps.length < MIN_USABLE_COMPS &&
+          remainingMarketCheckCalls() > 0
+        ) {
+          const generationYearQuery = generationYears.join(",");
+          const generationRegions = orderedRegions.slice(
+            0,
+            remainingMarketCheckCalls(),
+          );
+
+          for (const region of generationRegions) {
+            if (remainingMarketCheckCalls() <= 0) break;
+
+            const result = await searchMarketCheck({
+              apiKey: marketCheckApiKey,
+              year: generationYearQuery,
+              make,
+              similarVin: targetVin,
+              matchFields: "make,model,trim",
+              zip: region.zip,
+              radius,
+              rows: 50,
+              attemptName: `vin-match-same-generation-${generationCompRule.generation}`,
+              searchKey,
+              reason,
+            });
+
+            marketCheckCallsUsed += 1;
+            generationSearches.push(result);
+
+            if (!result.ok) {
+              if (result.status === 400 || result.status === 422) {
+                vinNativeFallbackReason =
+                  `MarketCheck VIN generation matching became unavailable (status ${result.status}).`;
+                break;
+              }
+
+              return buildFailedMarketCheckResponse({
+                failedSearch: result,
+                searches: [...searches, ...generationSearches],
+                orderedRegions,
+                apiControls,
+              });
+            }
+
+            const combinedSummary = buildCompSummary([
+              ...searches,
+              ...generationSearches,
+            ]);
+
+            if (combinedSummary.comps.length >= MIN_USABLE_COMPS) {
+              break;
+            }
+          }
+
+          searches = [...searches, ...generationSearches];
+        }
+      }
+    }
+
+    // Manual-entry evaluations, deliberately relaxed vehicle matches, or VINs
+    // MarketCheck cannot decode use the explicit model search/recovery path.
+    if (!usedVinNativeMatch) {
+      const exactReserve =
+        explicitFallbackModel || generationCompRule
+          ? 1
+          : marketCheckCallLimit >= 3
+            ? 2
+            : 1;
+
+      exactSearches = await runProgressiveRegionSearches({
+        attemptName: "exact-year-requested-model",
+        attemptYear: year,
+        attemptModel: model,
+        attemptRows: 50,
+        maxApiCallsOverride: Math.min(
+          Math.max(1, MIN_INITIAL_REGIONS),
+          remainingMarketCheckCalls(),
+        ),
+        reserveCallsWhenNoResults: exactReserve,
+      });
+
+      const failedExactSearch = exactSearches.find((search) => !search.ok);
+
+      if (failedExactSearch) {
+        return buildFailedMarketCheckResponse({
+          failedSearch: failedExactSearch,
+          searches: exactSearches,
           orderedRegions,
           apiControls,
         });
       }
 
-      searches = [...searches, ...taxonomyRetrySearches];
-      activeRetrievalModel = explicitFallbackModel;
-    }
-
-    // Unknown taxonomy mismatch: use active-inventory facet discovery only when
-    // there is enough budget left for BOTH discovery and a retry. Otherwise
-    // return the direct result and let a later user expansion spend a fresh
-    // budget rather than burning a call that cannot produce listings.
-    if (
-      buildCompSummary(searches).rawCount === 0 &&
-      !explicitFallbackModel &&
-      orderedRegions.length > 0 &&
-      remainingMarketCheckCalls() >= 2
-    ) {
-      const discoveryZip = orderedRegions[0].zip;
-      const discovery = await discoverMarketCheckModels({
-        apiKey: marketCheckApiKey,
-        year,
-        make,
-        zip: discoveryZip,
-        radius,
-        searchKey,
-        reason,
-      });
-      marketCheckCallsUsed += 1;
-
-      const resolvedModels = discovery.ok
-        ? resolveMarketCheckModelCandidates({
-            make,
-            requestedModel: model,
-            discoveredModels: discovery.models,
-          })
-        : [];
-
-      taxonomyDiscovery = {
-        attempted: true,
-        zip: discoveryZip,
-        discoveredModels: discovery.models.map(({ item }) => item),
-        resolvedModels,
-        apiCallsMade: 1,
-        status: discovery.status,
-      };
-
-      const requestedNormalized = normalize(model);
-      const materiallyDifferentModels = resolvedModels.filter(
-        (candidate) => normalize(candidate) !== requestedNormalized,
-      );
+      searches = [...exactSearches];
+      const exactSummary = buildCompSummary(exactSearches);
 
       if (
-        discovery.ok &&
-        materiallyDifferentModels.length > 0 &&
+        exactSummary.rawCount === 0 &&
+        explicitFallbackModel &&
         remainingMarketCheckCalls() > 0
       ) {
-        const canonicalModelQuery = materiallyDifferentModels.join(",");
+        const fallbackYearQuery =
+          generationCompRule && generationYears.length
+            ? [year, ...generationYears].join(",")
+            : year;
 
         taxonomyRetrySearches = await runProgressiveRegionSearches({
-          attemptName: `fallback-model-facet-${canonicalModelQuery}`,
-          attemptYear: year,
-          attemptModel: canonicalModelQuery,
+          attemptName: taxonomyRetrieval
+            ? `fallback-taxonomy-${model}-via-${explicitFallbackModel}`
+            : `fallback-model-alias-${model}-via-${explicitFallbackModel}`,
+          attemptYear: fallbackYearQuery,
+          attemptModel: explicitFallbackModel,
           attemptRows: 50,
           maxApiCallsOverride: remainingMarketCheckCalls(),
         });
@@ -2005,79 +2029,146 @@ export async function POST(request: Request) {
         }
 
         searches = [...searches, ...taxonomyRetrySearches];
-        activeRetrievalModel = canonicalModelQuery;
+        activeRetrievalModel = explicitFallbackModel;
       }
-    }
 
-    // If exact-year evidence is still thin, widen model years within the
-    // resolved generation before asking the user to expand geography or relax
-    // trim/configuration. MarketCheck accepts comma-separated year values, so
-    // one request can cover the nearby same-generation years efficiently.
-    const generationYears = generationYearsInPreferenceOrder();
-    let generationSearches: MarketCheckSearchResult[] = [];
-
-    if (
-      generationCompRule &&
-      generationYears.length > 0 &&
-      buildCompSummary(searches).comps.length < MIN_USABLE_COMPS
-    ) {
-      const generationYearQuery = generationYears.join(",");
-      const maxGenerationRegionCalls = Math.min(
-        remainingMarketCheckCalls(),
-        orderedRegions.length,
-      );
-
-      for (
-        let regionIndex = 0;
-        regionIndex < maxGenerationRegionCalls;
-        regionIndex += 1
+      if (
+        buildCompSummary(searches).rawCount === 0 &&
+        !explicitFallbackModel &&
+        orderedRegions.length > 0 &&
+        remainingMarketCheckCalls() >= 2
       ) {
-        if (remainingMarketCheckCalls() <= 0) break;
-
-        const region = orderedRegions[regionIndex];
-
-        const result = await searchMarketCheck({
+        const discoveryZip = orderedRegions[0].zip;
+        const discovery = await discoverMarketCheckModels({
           apiKey: marketCheckApiKey,
-          year: generationYearQuery,
+          year,
           make,
-          model: activeRetrievalModel,
-          zip: region.zip,
+          zip: discoveryZip,
           radius,
-          rows: 50,
-          attemptName: `same-generation-${generationCompRule.generation}-nearby-years`,
           searchKey,
           reason,
         });
-
         marketCheckCallsUsed += 1;
-        generationSearches.push(result);
 
-        if (!result.ok) break;
+        const resolvedModels = discovery.ok
+          ? resolveMarketCheckModelCandidates({
+              make,
+              requestedModel: model,
+              discoveredModels: discovery.models,
+            })
+          : [];
 
-        const combinedSummary = buildCompSummary([
-          ...searches,
-          ...generationSearches,
-        ]);
+        taxonomyDiscovery = {
+          attempted: true,
+          zip: discoveryZip,
+          discoveredModels: discovery.models.map(({ item }) => item),
+          resolvedModels,
+          apiCallsMade: 1,
+          status: discovery.status,
+        };
 
-        if (combinedSummary.comps.length >= MIN_USABLE_COMPS) {
-          break;
+        const requestedNormalized = normalize(model);
+        const materiallyDifferentModels = resolvedModels.filter(
+          (candidate) => normalize(candidate) !== requestedNormalized,
+        );
+
+        if (
+          discovery.ok &&
+          materiallyDifferentModels.length > 0 &&
+          remainingMarketCheckCalls() > 0
+        ) {
+          const canonicalModelQuery = materiallyDifferentModels.join(",");
+
+          taxonomyRetrySearches = await runProgressiveRegionSearches({
+            attemptName: `fallback-model-facet-${canonicalModelQuery}`,
+            attemptYear: year,
+            attemptModel: canonicalModelQuery,
+            attemptRows: 50,
+            maxApiCallsOverride: remainingMarketCheckCalls(),
+          });
+
+          const failedTaxonomyRetry = taxonomyRetrySearches.find(
+            (search) => !search.ok,
+          );
+
+          if (failedTaxonomyRetry) {
+            return buildFailedMarketCheckResponse({
+              failedSearch: failedTaxonomyRetry,
+              searches: [...searches, ...taxonomyRetrySearches],
+              orderedRegions,
+              apiControls,
+            });
+          }
+
+          searches = [...searches, ...taxonomyRetrySearches];
+          activeRetrievalModel = canonicalModelQuery;
         }
       }
 
-      const failedGenerationSearch = generationSearches.find(
-        (search) => !search.ok,
-      );
+      if (
+        generationCompRule &&
+        generationYears.length > 0 &&
+        buildCompSummary(searches).comps.length < MIN_USABLE_COMPS &&
+        remainingMarketCheckCalls() > 0
+      ) {
+        const generationYearQuery = generationYears.join(",");
+        const maxGenerationRegionCalls = Math.min(
+          remainingMarketCheckCalls(),
+          orderedRegions.length,
+        );
 
-      if (failedGenerationSearch) {
-        return buildFailedMarketCheckResponse({
-          failedSearch: failedGenerationSearch,
-          searches: [...searches, ...generationSearches],
-          orderedRegions,
-          apiControls,
-        });
+        for (
+          let regionIndex = 0;
+          regionIndex < maxGenerationRegionCalls;
+          regionIndex += 1
+        ) {
+          if (remainingMarketCheckCalls() <= 0) break;
+
+          const region = orderedRegions[regionIndex];
+
+          const result = await searchMarketCheck({
+            apiKey: marketCheckApiKey,
+            year: generationYearQuery,
+            make,
+            model: activeRetrievalModel,
+            zip: region.zip,
+            radius,
+            rows: 50,
+            attemptName: `same-generation-${generationCompRule.generation}-nearby-years`,
+            searchKey,
+            reason,
+          });
+
+          marketCheckCallsUsed += 1;
+          generationSearches.push(result);
+
+          if (!result.ok) break;
+
+          const combinedSummary = buildCompSummary([
+            ...searches,
+            ...generationSearches,
+          ]);
+
+          if (combinedSummary.comps.length >= MIN_USABLE_COMPS) {
+            break;
+          }
+        }
+
+        const failedGenerationSearch = generationSearches.find(
+          (search) => !search.ok,
+        );
+
+        if (failedGenerationSearch) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: failedGenerationSearch,
+            searches: [...searches, ...generationSearches],
+            orderedRegions,
+            apiControls,
+          });
+        }
+
+        searches = [...searches, ...generationSearches];
       }
-
-      searches = [...searches, ...generationSearches];
     }
 
     const {
