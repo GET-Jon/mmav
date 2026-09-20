@@ -1323,7 +1323,7 @@ export function EvaluationWorkspace({
     model: vehicleModel,
   });
   const compRetrievalLabel = compTaxonomyFallback
-    ? [vehicleMake, compTaxonomyFallback.fallbackModel, compTaxonomyFallback.fallbackTrim]
+    ? [vehicleMake, compTaxonomyFallback.fallbackModel, "broad model bucket"]
         .filter(Boolean)
         .join(" / ")
     : [vehicleMake, vehicleModel].filter(Boolean).join(" ");
@@ -1928,6 +1928,7 @@ export function EvaluationWorkspace({
       maxApiCallsPerSearch?: number;
       useVinMatch?: boolean;
       preferTaxonomyFallback?: boolean;
+      useTaxonomyFallbackTrim?: boolean;
     },
   ) {
     if (marketCheckInFlightRef.current || marketCheckLoading) {
@@ -2025,6 +2026,7 @@ export function EvaluationWorkspace({
               : marketCheckApiControls.minInitialRegions,
           includeMarketLiquidity: !options?.mergeResults,
           preferTaxonomyFallback: options?.preferTaxonomyFallback === true,
+          useTaxonomyFallbackTrim: options?.useTaxonomyFallbackTrim !== false,
         }),
       });
 
@@ -2288,7 +2290,7 @@ export function EvaluationWorkspace({
     setCompTrimRelaxed(true);
     setMarketCheckStatus(
       compTaxonomyFallback
-        ? `Searching MarketCheck as ${vehicleMake} ${compTaxonomyFallback.fallbackModel}${compTaxonomyFallback.fallbackTrim ? ` / ${compTaxonomyFallback.fallbackTrim}` : ""} while retaining ${vehicleMake} ${vehicleModel} as the final qualification target.`
+        ? `Searching the broader MarketCheck ${vehicleMake} ${compTaxonomyFallback.fallbackModel} bucket while retaining ${vehicleMake} ${vehicleModel} as the final qualification target.`
         : `Broadening retrieval for ${vehicleMake} ${vehicleModel} while retaining strict final vehicle qualification.`,
     );
 
@@ -2303,10 +2305,11 @@ export function EvaluationWorkspace({
       {
         searchStage: "expanded",
         regions: regions.length ? regions : undefined,
-        mergeResults: false,
+        mergeResults: true,
         useVinMatch: false,
         preferTaxonomyFallback: true,
-        maxApiCallsPerSearch: Math.min(10, Math.max(3, regions.length)),
+        useTaxonomyFallbackTrim: false,
+        maxApiCallsPerSearch: Math.min(3, Math.max(1, regions.length)),
       },
     );
   }
@@ -4648,7 +4651,7 @@ export function EvaluationWorkspace({
                     </div>
                     <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
                       {compTaxonomyFallback
-                        ? `MarketCheck may classify this ${vehicleModel} under model ${compTaxonomyFallback.fallbackModel}${compTaxonomyFallback.fallbackTrim ? ` with trim ${compTaxonomyFallback.fallbackTrim}` : ""}. This changes retrieval only — Lot Logic still requires the returned listing to prove it is a true ${vehicleModel} before it can qualify as a comp.`
+                        ? `Search the broader MarketCheck ${compTaxonomyFallback.fallbackModel} model bucket without forcing a trim value. This changes retrieval only — Lot Logic still requires each returned listing to prove it is a true ${vehicleModel} before it can qualify as a comp.`
                         : "If you believe valid comps exist in the markets already searched, Lot Logic can broaden the retrieval query while keeping final vehicle-equivalence safeguards active."}
                     </p>
                     {compTrimRelaxed ? (
@@ -4665,7 +4668,7 @@ export function EvaluationWorkspace({
                           className="rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
                         >
                           {compTaxonomyFallback
-                            ? `Search as ${vehicleMake} ${compTaxonomyFallback.fallbackModel}${compTaxonomyFallback.fallbackTrim ? ` + ${compTaxonomyFallback.fallbackTrim} trim` : ""}`
+                            ? `Search broader ${vehicleMake} ${compTaxonomyFallback.fallbackModel} bucket`
                             : "Try Broader Retrieval"}
                         </button>
                         <button
