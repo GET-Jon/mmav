@@ -1913,6 +1913,7 @@ export function EvaluationWorkspace({
       mergeResults?: boolean;
       maxApiCallsPerSearch?: number;
       useVinMatch?: boolean;
+      preferTaxonomyFallback?: boolean;
     },
   ) {
     if (marketCheckInFlightRef.current || marketCheckLoading) {
@@ -2009,6 +2010,7 @@ export function EvaluationWorkspace({
               ? 3
               : marketCheckApiControls.minInitialRegions,
           includeMarketLiquidity: !options?.mergeResults,
+          preferTaxonomyFallback: options?.preferTaxonomyFallback === true,
         }),
       });
 
@@ -2285,6 +2287,7 @@ export function EvaluationWorkspace({
         regions: regions.length ? regions : undefined,
         mergeResults: false,
         useVinMatch: false,
+        preferTaxonomyFallback: true,
         maxApiCallsPerSearch: Math.min(10, Math.max(3, regions.length)),
       },
     );
