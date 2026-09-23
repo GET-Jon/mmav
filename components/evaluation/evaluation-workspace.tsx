@@ -635,6 +635,7 @@ export function EvaluationWorkspace({
   );
 
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
+  const [evaluationRunning, setEvaluationRunning] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
   const [autoDevDiscoveryLoading, setAutoDevDiscoveryLoading] = useState(false);
   const [autoDevDiscoveryStatus, setAutoDevDiscoveryStatus] = useState("");
@@ -3362,6 +3363,7 @@ export function EvaluationWorkspace({
   // Do not manufacture sale/profit conclusions until market evidence exists.
   const needsCompSearch =
     hasEvaluationData &&
+    !evaluationRunning &&
     !marketCheckLoading &&
     compSummary.includedCount === 0;
 
@@ -3476,7 +3478,7 @@ export function EvaluationWorkspace({
 
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
-    : marketCheckLoading
+    : evaluationRunning || marketCheckLoading
       ? "CHECKING MARKET"
       : needsCompSearch
         ? "COMP SEARCH NEEDED"
@@ -3493,7 +3495,7 @@ export function EvaluationWorkspace({
   const presentationDecision =
     !hasEvaluationData
       ? "awaiting"
-      : marketCheckLoading
+      : evaluationRunning || marketCheckLoading
         ? "searching"
         : needsCompSearch
           ? "comps"
@@ -5547,6 +5549,8 @@ export function EvaluationWorkspace({
               <button
                 type="button"
                 onClick={async () => {
+                  setEvaluationRunning(true);
+
                   if (quickEvalMode === "manual") {
                     const manualOverride = {
                       year: String(manualVehicle.year || "").trim(),
@@ -5564,6 +5568,7 @@ export function EvaluationWorkspace({
                       setMarketCheckStatus(
                         "Enter Year, Make, and Model before running the evaluation.",
                       );
+                      setEvaluationRunning(false);
                       return;
                     }
 
@@ -5592,6 +5597,7 @@ export function EvaluationWorkspace({
                     });
 
                     await pullMarketCheckComps(manualOverride);
+                    setEvaluationRunning(false);
                     return;
                   }
 
@@ -5600,6 +5606,7 @@ export function EvaluationWorkspace({
                   const newlyDecodedVehicle = await decodeVinFromBasics();
 
                   if (!newlyDecodedVehicle) {
+                    setEvaluationRunning(false);
                     return;
                   }
 
@@ -5612,8 +5619,10 @@ export function EvaluationWorkspace({
                   });
 
                   await pullMarketCheckComps(newlyDecodedVehicle);
+                  setEvaluationRunning(false);
                 }}
                 disabled={
+                  evaluationRunning ||
                   vinDecodeLoading ||
                   marketCheckLoading ||
                   (quickEvalMode === "vin"
@@ -5622,7 +5631,7 @@ export function EvaluationWorkspace({
                 }
                 className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
               >
-                {vinDecodeLoading || marketCheckLoading
+                {evaluationRunning || vinDecodeLoading || marketCheckLoading
                   ? "Evaluating..."
                   : "Run Evaluation"}
               </button>
