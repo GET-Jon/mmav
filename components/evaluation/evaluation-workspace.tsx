@@ -636,6 +636,52 @@ export function EvaluationWorkspace({
 
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const [autoDevDiscoveryLoading, setAutoDevDiscoveryLoading] = useState(false);
+  const [autoDevDiscoveryStatus, setAutoDevDiscoveryStatus] = useState("");
+  const [autoDevDiscovery, setAutoDevDiscovery] = useState<{
+    source: "auto.dev";
+    role: "discovery-only";
+    query: {
+      year: number;
+      make: string;
+      model: string;
+      trim: string | null;
+      yearMin: number;
+      yearMax: number;
+      generation: string | null;
+      sampleLimit: number;
+    };
+    total: number;
+    returned: number;
+    sampleCapped: boolean;
+    byState: Record<string, number>;
+    recommendedMarkets: Array<{
+      market: string;
+      zip: string;
+      latitude: number;
+      longitude: number;
+      coverageCount: number;
+      states: string[];
+      vins: string[];
+    }>;
+    listings: Array<{
+      vin: string | null;
+      year: number | null;
+      make: string | null;
+      model: string | null;
+      trim: string | null;
+      drivetrain: string | null;
+      price: number | null;
+      miles: number | null;
+      dealer: string | null;
+      city: string | null;
+      state: string | null;
+      zip: string | null;
+      url: string | null;
+      longitude: number | null;
+      latitude: number | null;
+    }>;
+  } | null>(null);
   const [marketCheckSearchMeta, setMarketCheckSearchMeta] = useState<{
     loadedCount: number;
     regionsChecked: string[];
@@ -1361,6 +1407,8 @@ export function EvaluationWorkspace({
 
   useEffect(() => {
     setCompTrimRelaxed(false);
+    setAutoDevDiscovery(null);
+    setAutoDevDiscoveryStatus("");
   }, [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]);
 
   function normalizeMatchText(value: string | number | null | undefined) {
@@ -2317,6 +2365,93 @@ export function EvaluationWorkspace({
         useTaxonomyFallbackTrim: false,
         maxApiCallsPerSearch: Math.min(3, Math.max(1, regions.length)),
       },
+    );
+  }
+
+  async function runAutoDevDiscovery() {
+    if (!vehicleYear || !vehicleMake || !vehicleModel || autoDevDiscoveryLoading) {
+      return;
+    }
+
+    setAutoDevDiscoveryLoading(true);
+    setAutoDevDiscoveryStatus("Scanning national inventory with Auto.dev...");
+
+    try {
+      const response = await fetch("/api/autodev/discovery", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          year: Number(vehicleYear),
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          bodyClass: vehicleBodyClass,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Auto.dev national discovery failed.");
+      }
+
+      setAutoDevDiscovery(data);
+      setAutoDevDiscoveryStatus(
+        `Auto.dev found ${data.total || 0} matching active listings nationwide.`,
+      );
+    } catch (error) {
+      setAutoDevDiscovery(null);
+      setAutoDevDiscoveryStatus(
+        error instanceof Error ? error.message : "Auto.dev national discovery failed.",
+      );
+    } finally {
+      setAutoDevDiscoveryLoading(false);
+    }
+  }
+
+  async function searchAutoDevRecommendedMarkets() {
+    if (!autoDevDiscovery?.recommendedMarkets?.length) {
+      setAutoDevDiscoveryStatus("No Auto.dev market clusters are available to search.");
+      return;
+    }
+
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const regions = autoDevDiscovery.recommendedMarkets
+      .filter((market) => !searched.has(market.zip))
+      .slice(0, 3)
+      .map((market, index) => ({
+        market: `${market.market} · Auto.dev discovery`,
+        zip: market.zip,
+        order: index + 1,
+        enabled: true,
+      }));
+
+    if (!regions.length) {
+      setAutoDevDiscoveryStatus(
+        "The recommended Auto.dev market centers have already been searched in MarketCheck.",
+      );
+      return;
+    }
+
+    setAutoDevDiscoveryStatus(
+      `Searching MarketCheck in ${regions.length} Auto.dev-identified market${regions.length === 1 ? "" : "s"}...`,
+    );
+
+    await pullMarketCheckComps(null, {
+      searchStage: "expanded",
+      regions,
+      mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
+      maxApiCallsPerSearch: regions.length,
+    });
+
+    setAutoDevDiscoveryStatus(
+      `MarketCheck search completed in ${regions.map((region) => region.market.replace(" · Auto.dev discovery", "")).join(", ")}.`,
     );
   }
 
@@ -6044,6 +6179,81 @@ export function EvaluationWorkspace({
                   </div>
                 </div>
               )}
+
+              {marketCheckSearchMeta && compSummary.includedCount < 5 ? (
+                <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">
+                        National Discovery
+                      </div>
+                      <div className="mt-1 text-sm font-black text-slate-950">
+                        {autoDevDiscovery
+                          ? `${autoDevDiscovery.total} matching listings found nationwide`
+                          : "Comp evidence is thin — locate inventory before spending more MarketCheck calls"}
+                      </div>
+                      <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-600">
+                        Auto.dev is used only to locate promising markets. Its listings do not enter the valuation. MarketCheck remains the comp evidence source.
+                      </p>
+                    </div>
+
+                    {!autoDevDiscovery ? (
+                      <button
+                        type="button"
+                        onClick={() => void runAutoDevDiscovery()}
+                        disabled={autoDevDiscoveryLoading}
+                        className="rounded-lg bg-violet-700 px-4 py-2 text-xs font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
+                      >
+                        {autoDevDiscoveryLoading ? "Scanning..." : "Scan National Inventory"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void runAutoDevDiscovery()}
+                        disabled={autoDevDiscoveryLoading}
+                        className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700 hover:bg-violet-50 disabled:text-slate-300"
+                      >
+                        Refresh Discovery
+                      </button>
+                    )}
+                  </div>
+
+                  {autoDevDiscovery ? (
+                    <div className="mt-4">
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {autoDevDiscovery.recommendedMarkets.map((market, index) => (
+                          <div key={`${market.zip}-${index}`} className="rounded-xl border border-violet-100 bg-white px-3 py-3">
+                            <div className="text-xs font-black text-slate-900">{market.market}</div>
+                            <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                              ZIP {market.zip} · covers {market.coverageCount} discovered listing{market.coverageCount === 1 ? "" : "s"} within 100 mi
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold text-slate-500">
+                          Search years {autoDevDiscovery.query.yearMin}–{autoDevDiscovery.query.yearMax}
+                          {autoDevDiscovery.query.generation ? ` · ${autoDevDiscovery.query.generation} generation` : ""}
+                          {autoDevDiscovery.sampleCapped ? ` · clustering first ${autoDevDiscovery.returned} of ${autoDevDiscovery.total}` : ""}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void searchAutoDevRecommendedMarkets()}
+                          disabled={marketCheckLoading || !autoDevDiscovery.recommendedMarkets.length}
+                          className="rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:bg-slate-300"
+                        >
+                          Search Best Markets with MarketCheck
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {autoDevDiscoveryStatus ? (
+                    <div className="mt-3 text-xs font-bold text-violet-800">{autoDevDiscoveryStatus}</div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 text-center sm:grid-cols-5">
                 {[
