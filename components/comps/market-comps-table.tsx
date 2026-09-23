@@ -334,7 +334,7 @@ export function MarketCompsTable({
       },
       {
         id: "adjustedPrice",
-        header: "Adjusted",
+        header: "Adjusted to Subject",
         accessorFn: (row) =>
           calculateAdjustedCompPrice({ comp: row, targetMileage, assumptions }),
         cell: ({ row }) => {
@@ -354,6 +354,9 @@ export function MarketCompsTable({
                   }),
                 )}
               </span>
+              <div className="mt-1 text-[9px] font-semibold text-slate-400">
+                to {formatNumber(targetMileage)} mi
+              </div>
               {mileage.capped || mileage.reliability !== "normal" ? (
                 <div className="mt-1 text-[9px] font-bold text-amber-700">
                   {mileage.capped ? "Mileage cap applied" : "Large mileage gap"}
