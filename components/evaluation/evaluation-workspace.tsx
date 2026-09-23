@@ -6372,6 +6372,7 @@ export function EvaluationWorkspace({
                         </button>
                       </div>
                     </div>
+                    </div>
                   ) : null}
                 </div>
               )}
