@@ -1927,8 +1927,8 @@ export async function POST(request: Request) {
         ) {
           const generationYearQuery = generationYears.join(",");
           const generationRegions = orderedRegions.slice(
-            0,
-            remainingMarketCheckCalls(),
+            1,
+            1 + remainingMarketCheckCalls(),
           );
 
           for (const region of generationRegions) {
