@@ -1885,99 +1885,124 @@ export async function POST(request: Request) {
 
     const generationYears = generationYearsInPreferenceOrder();
 
-    // VIN evaluations use MarketCheck's own decoded taxonomy first. This avoids
-    // translating a decoder's model/trim naming into MarketCheck naming.
+    // VIN evaluations use MarketCheck's own decoded taxonomy first.
+    // Give the exact vehicle a fair geographic shot before widening model years:
+    // search up to three configured regions, stopping early only when enough
+    // strong comps have already been found. This avoids spending two calls in
+    // the same ZIP (exact year, then generation) before trying nearby markets.
     if (targetVin && orderedRegions.length > 0 && remainingMarketCheckCalls() > 0) {
-      const primaryRegion = orderedRegions[0];
-      const vinExact = await searchMarketCheck({
-        apiKey: marketCheckApiKey,
-        make,
-        similarVin: targetVin,
-        matchFields: "year,make,model,trim",
-        zip: primaryRegion.zip,
-        radius,
-        rows: 50,
-        attemptName: "vin-match-year-make-model-trim",
-        searchKey,
-        reason,
-      });
+      const exactRegionLimit = Math.min(
+        3,
+        orderedRegions.length,
+        remainingMarketCheckCalls(),
+      );
 
-      marketCheckCallsUsed += 1;
+      for (const region of orderedRegions.slice(0, exactRegionLimit)) {
+        if (remainingMarketCheckCalls() <= 0) break;
 
-      if (!vinExact.ok && (vinExact.status === 400 || vinExact.status === 422)) {
-        vinNativeFallbackReason =
-          `MarketCheck could not use the target VIN for similar-car matching (status ${vinExact.status}).`;
-      } else if (!vinExact.ok) {
-        return buildFailedMarketCheckResponse({
-          failedSearch: vinExact,
-          searches: [vinExact],
-          orderedRegions,
-          apiControls,
+        const vinExact = await searchMarketCheck({
+          apiKey: marketCheckApiKey,
+          make,
+          similarVin: targetVin,
+          matchFields: "year,make,model,trim",
+          zip: region.zip,
+          radius,
+          rows: 50,
+          attemptName: "vin-match-year-make-model-trim",
+          searchKey,
+          reason,
         });
-      } else {
+
+        marketCheckCallsUsed += 1;
+
+        if (!vinExact.ok && (vinExact.status === 400 || vinExact.status === 422)) {
+          vinNativeFallbackReason =
+            `MarketCheck could not use the target VIN for similar-car matching (status ${vinExact.status}).`;
+          exactSearches = [];
+          searches = [];
+          break;
+        }
+
+        if (!vinExact.ok) {
+          return buildFailedMarketCheckResponse({
+            failedSearch: vinExact,
+            searches: [...exactSearches, vinExact],
+            orderedRegions,
+            apiControls,
+          });
+        }
+
         usedVinNativeMatch = true;
-        exactSearches = [vinExact];
-        searches = [vinExact];
+        exactSearches.push(vinExact);
+        searches = [...exactSearches];
 
-        if (
-          generationCompRule &&
-          generationYears.length > 0 &&
-          buildCompSummary(searches).comps.length < MIN_USABLE_COMPS &&
-          remainingMarketCheckCalls() > 0
-        ) {
-          const generationYearQuery = generationYears.join(",");
-          const generationRegions = orderedRegions.slice(
-            0,
-            remainingMarketCheckCalls(),
-          );
+        const exactSummary = buildCompSummary(searches);
+        if (exactSummary.comps.length >= MIN_USABLE_COMPS) {
+          break;
+        }
+      }
 
-          for (const region of generationRegions) {
-            if (remainingMarketCheckCalls() <= 0) break;
+      // Only widen model years after the exact-vehicle geographic pass, and only
+      // when the request still has API budget left.
+      if (
+        usedVinNativeMatch &&
+        generationCompRule &&
+        generationYears.length > 0 &&
+        buildCompSummary(searches).comps.length < MIN_USABLE_COMPS &&
+        remainingMarketCheckCalls() > 0
+      ) {
+        const generationYearQuery = generationYears.join(",");
+        const searchedExactZips = new Set(exactSearches.map((search) => search.zip));
+        const generationRegions = orderedRegions
+          .filter((region) => !searchedExactZips.has(region.zip))
+          .slice(0, remainingMarketCheckCalls());
 
-            const result = await searchMarketCheck({
-              apiKey: marketCheckApiKey,
-              year: generationYearQuery,
-              make,
-              similarVin: targetVin,
-              matchFields: "make,model,trim",
-              zip: region.zip,
-              radius,
-              rows: 50,
-              attemptName: `vin-match-same-generation-${generationCompRule.generation}`,
-              searchKey,
-              reason,
-            });
+        for (const region of generationRegions) {
+          if (remainingMarketCheckCalls() <= 0) break;
 
-            marketCheckCallsUsed += 1;
-            generationSearches.push(result);
+          const result = await searchMarketCheck({
+            apiKey: marketCheckApiKey,
+            year: generationYearQuery,
+            make,
+            similarVin: targetVin,
+            matchFields: "make,model,trim",
+            zip: region.zip,
+            radius,
+            rows: 50,
+            attemptName: `vin-match-same-generation-${generationCompRule.generation}`,
+            searchKey,
+            reason,
+          });
 
-            if (!result.ok) {
-              if (result.status === 400 || result.status === 422) {
-                vinNativeFallbackReason =
-                  `MarketCheck VIN generation matching became unavailable (status ${result.status}).`;
-                break;
-              }
+          marketCheckCallsUsed += 1;
+          generationSearches.push(result);
 
-              return buildFailedMarketCheckResponse({
-                failedSearch: result,
-                searches: [...searches, ...generationSearches],
-                orderedRegions,
-                apiControls,
-              });
-            }
-
-            const combinedSummary = buildCompSummary([
-              ...searches,
-              ...generationSearches,
-            ]);
-
-            if (combinedSummary.comps.length >= MIN_USABLE_COMPS) {
+          if (!result.ok) {
+            if (result.status === 400 || result.status === 422) {
+              vinNativeFallbackReason =
+                `MarketCheck VIN generation matching became unavailable (status ${result.status}).`;
               break;
             }
+
+            return buildFailedMarketCheckResponse({
+              failedSearch: result,
+              searches: [...searches, ...generationSearches],
+              orderedRegions,
+              apiControls,
+            });
           }
 
-          searches = [...searches, ...generationSearches];
+          const combinedSummary = buildCompSummary([
+            ...searches,
+            ...generationSearches,
+          ]);
+
+          if (combinedSummary.comps.length >= MIN_USABLE_COMPS) {
+            break;
+          }
         }
+
+        searches = [...searches, ...generationSearches];
       }
     }
 
