@@ -1685,6 +1685,8 @@ export async function POST(request: Request) {
               counts.qualityBelowThreshold += 1;
             } else if (reason === "generation mismatch") {
               counts.generationMismatch += 1;
+            } else if (reason === "model mismatch") {
+              counts.modelMismatch += 1;
             } else {
               counts.other += 1;
             }
@@ -1697,6 +1699,7 @@ export async function POST(request: Request) {
           missingPriceOrMileage: 0,
           qualityBelowThreshold: 0,
           generationMismatch: 0,
+          modelMismatch: 0,
           other: 0,
         },
       );
