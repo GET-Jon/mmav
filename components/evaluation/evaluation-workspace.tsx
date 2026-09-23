@@ -824,13 +824,22 @@ export function EvaluationWorkspace({
       mappedListings?: number;
       usableListings?: number;
       rejectedListings?: number;
-      rejectedByReason?: {
+      rejectionCounts?: {
         fuelMismatch?: number;
         missingPriceOrMileage?: number;
         qualityBelowThreshold?: number;
         generationMismatch?: number;
+        modelMismatch?: number;
         other?: number;
       };
+      sampleRejectedListings?: Array<{
+        title?: string;
+        year?: number | string;
+        make?: string;
+        model?: string;
+        trim?: string;
+        rejectedReasons?: string[];
+      }>;
     };
   } | null>(null);
 
@@ -3355,6 +3364,82 @@ export function EvaluationWorkspace({
     hasEvaluationData &&
     !marketCheckLoading &&
     compSummary.includedCount === 0;
+
+  const compSearchRegions = marketCheckSearchMeta?.regionsChecked.length || 0;
+  const compReturnedListings =
+    marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0;
+  const compUsableListings =
+    marketCheckApiUsage?.filterDiagnostics?.usableListings || 0;
+  const compModelMismatchCount =
+    marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.modelMismatch || 0;
+
+  const compNextStep = (() => {
+    if (!marketCheckSearchMeta || marketCheckLoading) {
+      return {
+        path: "none" as const,
+        title: "",
+        reason: "",
+      };
+    }
+
+    if (autoDevDiscovery?.recommendedMarkets?.length) {
+      return {
+        path: "discovered-markets" as const,
+        title: "Search the markets Auto.dev found",
+        reason:
+          "National discovery has already located matching inventory, so the highest-value next MarketCheck calls are the identified 100-mile clusters.",
+      };
+    }
+
+    if (compReturnedListings === 0 && compSearchRegions >= 3) {
+      return {
+        path: "national-discovery" as const,
+        title: "Use National Discovery",
+        reason:
+          `MarketCheck found no candidate inventory across ${compSearchRegions} searched regions. Locate where matching cars actually exist before spending more MarketCheck calls.`,
+      };
+    }
+
+    if (
+      compReturnedListings > 0 &&
+      compUsableListings === 0 &&
+      (compModelMismatchCount > 0 || Boolean(compTaxonomyFallback))
+    ) {
+      return {
+        path: "vehicle-match" as const,
+        title: "Review Vehicle Match",
+        reason:
+          compModelMismatchCount > 0
+            ? `MarketCheck returned inventory, but ${compModelMismatchCount} listing${compModelMismatchCount === 1 ? "" : "s"} failed model identity checks. Review how this vehicle is classified before widening farther.`
+            : "MarketCheck is finding inventory, but this vehicle has a known taxonomy fallback. Review the vehicle match before spending calls on more geography.",
+      };
+    }
+
+    if (compSummary.includedCount > 0 && compSummary.includedCount < 3) {
+      return {
+        path: "national-discovery" as const,
+        title: "Use National Discovery",
+        reason:
+          "You have some usable evidence, but the comp set is still thin. National discovery can identify the best markets for the next MarketCheck calls.",
+      };
+    }
+
+    if (compReturnedListings === 0 && compSearchRegions < 3) {
+      return {
+        path: "geography" as const,
+        title: "Expand Geography",
+        reason:
+          "The local search is still shallow. Give MarketCheck a wider regional look before escalating to national discovery.",
+      };
+    }
+
+    return {
+      path: "geography" as const,
+      title: "Refine the MarketCheck Search",
+      reason:
+        "MarketCheck is seeing some inventory, so refine geography or vehicle matching before using national discovery.",
+    };
+  })();
 
   const hasLowCompConfidence =
     comps.length > 0 &&
@@ -6166,10 +6251,36 @@ export function EvaluationWorkspace({
                   </div>
 
                   {marketCheckSearchMeta ? (
-                    <div className="mx-auto mt-6 grid max-w-4xl gap-4 md:grid-cols-2">
-                      <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5 text-left">
-                        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">
-                          National Discovery
+                    <div className="mx-auto mt-6 max-w-4xl">
+                      {compNextStep.path !== "none" ? (
+                        <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left">
+                          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                            Lot Logic recommendation
+                          </div>
+                          <div className="mt-1 text-sm font-black text-slate-950">
+                            {compNextStep.title}
+                          </div>
+                          <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                            {compNextStep.reason}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                      <div className={`rounded-2xl border p-5 text-left ${
+                        compNextStep.path === "national-discovery" || compNextStep.path === "discovered-markets"
+                          ? "border-violet-400 bg-violet-50 shadow-sm"
+                          : "border-violet-200 bg-violet-50/70"
+                      }`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">
+                            National Discovery
+                          </div>
+                          {compNextStep.path === "national-discovery" || compNextStep.path === "discovered-markets" ? (
+                            <span className="rounded-full bg-violet-700 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white">
+                              Recommended
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-base font-black text-slate-950">
                           Find where matching inventory actually exists
@@ -6225,15 +6336,30 @@ export function EvaluationWorkspace({
                         ) : null}
                       </div>
 
-                      <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 text-left">
-                        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">
-                          Refine MarketCheck Search
+                      <div className={`rounded-2xl border p-5 text-left ${
+                        compNextStep.path === "vehicle-match" || compNextStep.path === "geography"
+                          ? "border-blue-400 bg-blue-50 shadow-sm"
+                          : "border-blue-200 bg-blue-50/60"
+                      }`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">
+                            Refine MarketCheck Search
+                          </div>
+                          {compNextStep.path === "vehicle-match" || compNextStep.path === "geography" ? (
+                            <span className="rounded-full bg-blue-700 px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white">
+                              Recommended
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-base font-black text-slate-950">
-                          Expand geography or adjust the vehicle match
+                          {compNextStep.path === "vehicle-match"
+                            ? "Review how MarketCheck is classifying this vehicle"
+                            : "Expand geography or adjust the vehicle match"}
                         </div>
                         <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
-                          Use Edit Comps when you want direct control over the next 100-mile MarketCheck circles or need to investigate how MarketCheck classifies this vehicle.
+                          {compNextStep.path === "vehicle-match"
+                            ? "MarketCheck is returning inventory, but the vehicle-equivalence checks suggest the classification itself needs attention."
+                            : "Use Edit Comps when you want direct control over the next 100-mile MarketCheck circles or need to investigate how MarketCheck classifies this vehicle."}
                         </p>
                         <button
                           type="button"
