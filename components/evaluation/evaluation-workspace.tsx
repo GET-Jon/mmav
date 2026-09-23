@@ -3390,32 +3390,38 @@ export function EvaluationWorkspace({
 
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
-    : needsCompSearch
-      ? "COMP SEARCH NEEDED"
-      : hasHardPass
-        ? "PASS"
-      : isAboveRecommendedBuy
-        ? "ABOVE TARGET PRICE"
-        : valuation.decision === "Watch / Stretch Only"
-          ? "WATCH CLOSELY"
-          : requiresReview
-            ? "REVIEW REQUIRED"
-            : "WORTH PURSUING";
+    : marketCheckLoading
+      ? "CHECKING MARKET"
+      : needsCompSearch
+        ? "COMP SEARCH NEEDED"
+        : hasHardPass
+          ? "PASS"
+        : isAboveRecommendedBuy
+          ? "ABOVE TARGET PRICE"
+          : valuation.decision === "Watch / Stretch Only"
+            ? "WATCH CLOSELY"
+            : requiresReview
+              ? "REVIEW REQUIRED"
+              : "WORTH PURSUING";
 
   const presentationDecision =
     !hasEvaluationData
       ? "awaiting"
-      : needsCompSearch
-        ? "comps"
-        : hasHardPass
-          ? "pass"
-          : requiresReview
-            ? "review"
-            : "pursue";
+      : marketCheckLoading
+        ? "searching"
+        : needsCompSearch
+          ? "comps"
+          : hasHardPass
+            ? "pass"
+            : requiresReview
+              ? "review"
+              : "pursue";
 
   const decisionBadgeTone =
-    presentationDecision === "pass"
-      ? "bg-red-100 text-red-700"
+    presentationDecision === "searching"
+      ? "bg-blue-100 text-blue-700"
+      : presentationDecision === "pass"
+        ? "bg-red-100 text-red-700"
       : presentationDecision === "comps"
         ? "bg-amber-100 text-amber-800"
         : presentationDecision === "review"
@@ -3425,8 +3431,10 @@ export function EvaluationWorkspace({
           : "bg-slate-100 text-slate-600";
 
   const decisionBannerTone =
-    presentationDecision === "pass"
-      ? "border-red-200/80 bg-red-50/60 text-red-950"
+    presentationDecision === "searching"
+      ? "border-blue-200/80 bg-blue-50/40 text-blue-950"
+      : presentationDecision === "pass"
+        ? "border-red-200/80 bg-red-50/60 text-red-950"
       : presentationDecision === "comps"
         ? "border-amber-200/80 bg-amber-50/35 text-amber-950"
         : presentationDecision === "review"
@@ -3436,8 +3444,10 @@ export function EvaluationWorkspace({
           : "border-slate-200 bg-white text-slate-950";
 
   const decisionTextTone =
-    presentationDecision === "pass"
-      ? "text-red-700"
+    presentationDecision === "searching"
+      ? "text-blue-700"
+      : presentationDecision === "pass"
+        ? "text-red-700"
       : presentationDecision === "comps"
         ? "text-amber-700"
         : presentationDecision === "review"
