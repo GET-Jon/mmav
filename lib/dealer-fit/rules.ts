@@ -58,7 +58,6 @@ export const mindfulDealerFitRules: DealerFitRule[] = [
     type: "risk_penalty",
     points: 4,
     reason: "Land Rover/Range Rover can be specialty retail, but only with enough spread and a strong story.",
-    caution: "Treat deferred maintenance, air suspension, cooling, electrical, and drivetrain unknowns as thesis-breakers.",
     match: {
       makes: ["land rover", "range rover"],
     },
@@ -120,17 +119,6 @@ export const mindfulDealerFitRules: DealerFitRule[] = [
     caution: "Do not let enthusiast appeal override mechanical and resale discipline.",
     match: {
       minMileage: 175000,
-    },
-  },
-  {
-    id: "modern-luxury-complexity",
-    type: "risk_penalty",
-    points: -7,
-    reason: "Modern luxury complexity can compress margin if electronics, suspension, or drivetrain issues appear.",
-    caution: "Verify scan results, options, suspension behavior, infotainment, and service history before bidding.",
-    match: {
-      makes: ["bmw", "mercedes-benz", "mercedes", "audi", "porsche", "land rover", "range rover", "alfa romeo"],
-      minYear: 2016,
     },
   },
 ];

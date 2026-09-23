@@ -134,7 +134,7 @@ function CompFitExplanation({
               {comp.qualityScore}
             </span>
             <span className="text-sm font-black text-slate-500">
-              / 100 Comp Fit
+              / 100 Match Score
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -304,21 +304,6 @@ export function MarketCompsTable({
         ),
       },
       {
-        id: "equivalenceTier",
-        header: "Tier",
-        accessorFn: (row) => row.equivalenceTier || "supporting",
-        cell: ({ row }) => (
-          <div className="min-w-[90px]">
-            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ${tierTone(row.original)}`}>
-              {tierLabel(row.original)}
-            </span>
-            {row.original.needsClassificationReview ? (
-              <div className="mt-1 text-[9px] font-bold text-amber-700">Review data</div>
-            ) : null}
-          </div>
-        ),
-      },
-      {
         id: "source",
         header: "Source",
         accessorFn: (row) => row.source,
@@ -349,7 +334,7 @@ export function MarketCompsTable({
       },
       {
         id: "adjustedPrice",
-        header: "Adjusted",
+        header: "Adjusted to Subject",
         accessorFn: (row) =>
           calculateAdjustedCompPrice({ comp: row, targetMileage, assumptions }),
         cell: ({ row }) => {
@@ -369,6 +354,9 @@ export function MarketCompsTable({
                   }),
                 )}
               </span>
+              <div className="mt-1 text-[9px] font-semibold text-slate-400">
+                to {formatNumber(targetMileage)} mi
+              </div>
               {mileage.capped || mileage.reliability !== "normal" ? (
                 <div className="mt-1 text-[9px] font-bold text-amber-700">
                   {mileage.capped ? "Mileage cap applied" : "Large mileage gap"}
@@ -380,7 +368,7 @@ export function MarketCompsTable({
       },
       {
         accessorKey: "qualityScore",
-        header: "Comp Fit",
+        header: "Match Score",
         cell: ({ row }) => {
           const score = row.original.qualityScore;
           const tone =
@@ -603,7 +591,7 @@ export function MarketCompsTable({
               <section className="mt-6">
                 <h3 className="text-sm font-black text-slate-950">Market and Lot Logic</h3>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <DetailItem label="Equivalence Tier" value={tierLabel(selectedComp)} />
+                  <DetailItem label="Vehicle Relationship" value={tierLabel(selectedComp)} />
                   <DetailItem label="Equivalence Reasons" value={selectedComp.equivalenceReasons} />
                   <DetailItem label="Target Classification" value={selectedComp.targetClassification} />
                   <DetailItem label="Candidate Classification" value={selectedComp.candidateClassification} />
@@ -611,7 +599,7 @@ export function MarketCompsTable({
                   <DetailItem label="Market Days" value={selectedComp.marketDays} />
                   <DetailItem label="Listing Date" value={selectedComp.marketCheckDetails?.listingDate} />
                   <DetailItem label="Last Seen" value={selectedComp.marketCheckDetails?.lastSeenDate} />
-                  <DetailItem label="Comp Fit" value={selectedComp.qualityScore} />
+                  <DetailItem label="Match Score" value={selectedComp.qualityScore} />
                   <DetailItem label="Listing Confidence" value={inferredListingConfidence(selectedComp)} />
                   <DetailItem label="Included" value={selectedComp.included} />
                   <DetailItem

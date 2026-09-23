@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/partner-invite", "/auth/partner-claim"];
+const PUBLIC_PATHS = ["/", "/login", "/auth/callback", "/auth/partner-invite", "/auth/partner-claim"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
+    (path) => pathname === path || (path !== "/" && pathname.startsWith(`${path}/`))
   );
 }
 
@@ -101,10 +101,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
-    const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = "/";
-    homeUrl.search = "";
-    return NextResponse.redirect(homeUrl);
+    const evaluatorUrl = request.nextUrl.clone();
+    evaluatorUrl.pathname = "/evaluate";
+    evaluatorUrl.search = "";
+    return NextResponse.redirect(evaluatorUrl);
   }
 
   return response;

@@ -352,8 +352,8 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
     reasons.unshift(
       "Exceptional projected economics outweigh the vehicle's weaker design/curation fit for this acquisition."
     );
-    cautions.unshift(
-      "Treat this as a profit-led inventory buy rather than a design-led Mindful showcase vehicle."
+    reasons.unshift(
+      "This is a profit-led acquisition; dealer-fit is secondary to the supported economics."
     );
     matchedRules.push("exceptional-economic-override");
   }
@@ -363,17 +363,6 @@ export function calculateDealerFit(input: DealerFitInput): DealerFitResult {
     reasons.push("Vehicle details are still limited, so fit is only a neutral placeholder.");
     cautions.push("Decode VIN or enter make/model/trim before relying on dealer fit.");
     matchedRules.push("limited-vehicle-data");
-  } else {
-    const dueDiligenceChecks = [
-      "Confirm the VIN, exact trim, drivetrain, mileage, and material options match the vehicles supporting the resale target.",
-      "Verify title brand, accident or structural disclosures, mileage history, and all auction announcements before bidding.",
-      "Review the condition report and photos for warning lights, leaks, tire or brake wear, body, glass, wheel, and interior damage not already covered by the recon reserve.",
-    ];
-
-    for (const check of dueDiligenceChecks) {
-      if (cautions.length >= 5) break;
-      cautions.push(check);
-    }
   }
 
   const finalScore = clampScore(score);

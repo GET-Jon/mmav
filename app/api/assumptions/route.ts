@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { defaultAssumptions } from "@/lib/assumptions";
+import { defaultAssumptions, normalizeAssumptions } from "@/lib/assumptions";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 const SETTINGS_KEY = "underwriting_assumptions";
 
 export async function GET() {
   try {
-    const supabase = createSupabaseAdminClient();
+        const supabase = createSupabaseAdminClient();
 
     const { data, error } = await supabase
       .from("app_settings")
@@ -19,7 +19,9 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      assumptions: data?.payload || defaultAssumptions,
+      assumptions: data?.payload
+        ? normalizeAssumptions(data.payload)
+        : defaultAssumptions,
       source: data?.payload ? "saved" : "default",
     });
   } catch (error) {
@@ -48,6 +50,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const normalizedAssumptions = normalizeAssumptions(assumptions);
+
     const supabase = createSupabaseAdminClient();
 
     const { data, error } = await supabase
@@ -55,7 +59,7 @@ export async function POST(request: Request) {
       .upsert(
         {
           key: SETTINGS_KEY,
-          payload: assumptions,
+          payload: normalizedAssumptions,
         },
         {
           onConflict: "key",

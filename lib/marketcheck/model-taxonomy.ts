@@ -3,6 +3,7 @@ export type ModelTaxonomyFallback = {
   make: string;
   requestedModels: string[];
   fallbackModel: string;
+  fallbackTrim?: string;
   fallbackLabel: string;
   mustInclude: string[];
   rejectIfIncludes: string[];
@@ -75,6 +76,18 @@ export const modelTaxonomyFallbacks: ModelTaxonomyFallback[] = [
     rejectIfIncludes: ["amg line", "e350", "e 350", "e450", "e 450", "e53", "e 53"],
     notes:
       "Used only when a direct E63 search returns zero. Rejects AMG Line and lower AMG/non-AMG variants.",
+  },
+  {
+    id: "audi-tts",
+    make: "Audi",
+    requestedModels: ["TTS"],
+    fallbackModel: "TT",
+    fallbackTrim: "TTS",
+    fallbackLabel: "Audi TT candidate pool, filtered to true TTS listings",
+    mustInclude: ["tts"],
+    rejectIfIncludes: ["tt rs", "ttrs"],
+    notes:
+      "MarketCheck may group TTS inventory under the broader TT model. TT is retrieval-only; ordinary TT and TT RS listings must not qualify as TTS comps.",
   },
   {
     id: "audi-s4",

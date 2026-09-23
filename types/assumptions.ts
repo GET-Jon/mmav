@@ -33,11 +33,6 @@ export type AuctionFeeRule = {
   fee: number;
 };
 
-export type SourceDiscount = {
-  source: string;
-  askDiscount: number;
-};
-
 export type RegionalMarket = {
   market: string;
   zip: string;
@@ -71,7 +66,6 @@ export type CompSettings = {
   minimumCompsForMediumConfidence: number;
   minimumCompsForHighConfidence: number;
   maxSpreadForHighConfidence: number;
-  sourceDiscounts: SourceDiscount[];
 };
 
 export type Assumptions = {

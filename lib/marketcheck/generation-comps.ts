@@ -11,29 +11,13 @@ function normalize(value: unknown) {
     .trim();
 }
 
-export function findGenerationCompRule(vehicle: VehicleGenerationInput): GenerationCompRule | null {
-  const make = normalize(vehicle.make);
-  const model = normalize(vehicle.model);
-
-  const isMercedes =
-    make === "mercedes" ||
-    make === "mercedes benz" ||
-    make === "mercedesbenz";
-
-  const isStandardCClass =
-    model === "c class" ||
-    model === "cclass" ||
-    ["c250", "c300", "c350", "c400", "c450"].includes(model.replace(/\s+/g, ""));
-
-  // Standard Mercedes C-Class inventory is abundant enough that the initial
-  // MarketCheck retrieval should stay exact-year. Returning a generation rule
-  // here causes the search route to omit `year`, which lets older C-Class rows
-  // fill MarketCheck's first page and then get rejected as generation mismatches.
-  // Performance variants (C43/C63) still use the normal generation-aware path.
-  if (isMercedes && isStandardCClass) {
-    return null;
-  }
-
+export function findGenerationCompRule(
+  vehicle: VehicleGenerationInput,
+): GenerationCompRule | null {
+  // Retrieval now always starts with the exact model year, so generation data
+  // is safe to retain for a deliberate second-stage widening. We no longer
+  // suppress generation rules for abundant models merely to protect the first
+  // MarketCheck page from older model years.
   return resolveVehicleGeneration(vehicle);
 }
 

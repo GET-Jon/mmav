@@ -10,9 +10,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 export type AppTopNavPage =
   | "evaluator"
   | "pipeline"
+  | "insights"
   | "inventory"
   | "schedule"
-  | "rules"
   | "settings"
   | "admin";
 
@@ -97,24 +97,24 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="relative mx-auto flex max-w-[1480px] items-center px-5 py-3 lg:px-7">
-        <Link href="/" aria-label="Lot Logic evaluator" className="shrink-0 text-slate-950 transition-opacity hover:opacity-75">
+        <Link href="/" aria-label="Lot Logic home" className="shrink-0 text-slate-950 transition-opacity hover:opacity-75">
           <div className="sm:hidden"><LotLogicLogo compact /></div>
           <div className="hidden sm:block"><LotLogicLogo /></div>
         </Link>
 
         <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
-          <Link href="/" className={navClass(active === "evaluator")}>Evaluator</Link>
+          <Link href="/evaluate" className={navClass(active === "evaluator")}>Evaluator</Link>
           <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
+          <Link href="/insights" className={navClass(active === "insights")}>Insights</Link>
           {isAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
           {isAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
-          <Link href="/assumptions" className={navClass(active === "rules")}>Rules</Link>
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {onNewEvaluation ? (
             <button type="button" onClick={onNewEvaluation} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</button>
           ) : (
-            <Link href="/" className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
+            <Link href="/evaluate" className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
           )}
 
           <div ref={menuRef} className="relative">
@@ -134,7 +134,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
                   <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{isAdmin ? "Administrator" : "User"}</div>
                 </div>
                 <div className="p-1.5">
-                  <Link role="menuitem" href="/settings" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">User Settings</Link>
+                  <Link role="menuitem" href="/settings" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Settings</Link>
                   {isAdmin ? <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Admin</Link> : null}
                 </div>
                 {userEmail ? (
