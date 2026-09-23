@@ -3365,6 +3365,7 @@ export function EvaluationWorkspace({
     !marketCheckLoading &&
     compSummary.includedCount === 0;
 
+  // Recommendation routing is derived from the current comp-search evidence.
   const compSearchRegions = marketCheckSearchMeta?.regionsChecked.length || 0;
   const compReturnedListings =
     marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0;
