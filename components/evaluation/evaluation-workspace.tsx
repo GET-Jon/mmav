@@ -2065,7 +2065,7 @@ export function EvaluationWorkspace({
             (options?.searchStage === "expanded" ||
             options?.searchStage === "metro"
               ? 3
-              : marketCheckApiControls.maxApiCallsPerSearch),
+              : 3),
           minUsableCompsToStop: marketCheckApiControls.minUsableCompsToStop,
           minInitialRegions:
             options?.searchStage === "expanded" ||
@@ -6135,8 +6135,8 @@ export function EvaluationWorkspace({
                   onToggleIncluded={toggleCompIncluded}
                 />
               ) : (
-                <div className="flex min-h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center">
-                  <div className="max-w-2xl">
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 py-7">
+                  <div className="mx-auto max-w-4xl text-center">
                     <div className="text-sm font-extrabold text-slate-800">
                       {marketCheckSearchMeta
                         ? compTrimRelaxed
@@ -6148,39 +6148,98 @@ export function EvaluationWorkspace({
                     </div>
                     <div className="mt-2 text-sm font-medium leading-6 text-slate-500">
                       {marketCheckSearchMeta
-                        ? compTrimRelaxed
-                          ? `Lot Logic reran ${vehicleMake} ${vehicleModel} with trim ignored across ${marketCheckSearchMeta.regionsChecked.join(", ") || "the previously searched markets"}. It reviewed ${marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0} returned listings, but none met the strong-comp criteria. Use Edit Comps to expand geography further or review the match strategy.`
-                          : marketCheckApiUsage?.filterDiagnostics?.returnedListings
-                            ? "Lot Logic found listings, but the current vehicle-match rules did not produce usable evidence. Keep the exact configuration and expand geography first; broaden Vehicle Match only when exact-trim evidence remains thin."
-                            : `Lot Logic searched ${marketCheckSearchMeta.regionsChecked.join(", ") || "the selected markets"} without finding usable comps. Keep the exact configuration and use Edit Comps to expand into additional non-overlapping markets.`
+                        ? marketCheckApiUsage?.filterDiagnostics?.returnedListings
+                          ? "Lot Logic found inventory, but the current vehicle-match rules did not produce usable evidence."
+                          : `Lot Logic searched ${marketCheckSearchMeta.regionsChecked.join(", ") || "the selected markets"} without finding usable comps.`
                         : "Run the evaluation to search the local market for a usable comp set."}
                     </div>
+                  </div>
 
-                    {marketCheckSearchMeta && vehicleTrim && marketCheckSearchMeta.regionsChecked.length >= 5 && !compTrimRelaxed ? (
-                      <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-left">
-                        <div className="text-xs font-black uppercase tracking-[0.08em] text-amber-800">Vehicle match may be too specific</div>
-                        <p className="mt-1 text-xs font-semibold leading-5 text-amber-900/80">
-                          We are searching for {vehicleMake} {vehicleModel} {vehicleTrim}. The trim may be narrowing the evidence more than it helps. Lot Logic can keep the model, year, mileage, and other relevance checks while relaxing trim specificity.
+                  {marketCheckSearchMeta ? (
+                    <div className="mx-auto mt-6 grid max-w-4xl gap-4 md:grid-cols-2">
+                      <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5 text-left">
+                        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">
+                          National Discovery
+                        </div>
+                        <div className="mt-1 text-base font-black text-slate-950">
+                          Find where matching inventory actually exists
+                        </div>
+                        <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+                          Auto.dev scans national inventory so Lot Logic can point scarce MarketCheck calls at promising markets. Discovery listings do not enter the valuation.
+                        </p>
+
+                        {autoDevDiscovery ? (
+                          <div className="mt-4 rounded-xl border border-violet-100 bg-white p-3">
+                            <div className="text-sm font-black text-slate-900">
+                              {autoDevDiscovery.total} matching listings found nationwide
+                            </div>
+                            {autoDevDiscovery.recommendedMarkets.length ? (
+                              <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                                Best clusters: {autoDevDiscovery.recommendedMarkets
+                                  .map((market) => `${market.market} (${market.coverageCount})`)
+                                  .join(" · ")}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void runAutoDevDiscovery()}
+                            disabled={autoDevDiscoveryLoading}
+                            className="rounded-lg bg-violet-700 px-4 py-2.5 text-xs font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
+                          >
+                            {autoDevDiscoveryLoading
+                              ? "Scanning..."
+                              : autoDevDiscovery
+                                ? "Refresh Discovery"
+                                : "Scan National Inventory"}
+                          </button>
+                          {autoDevDiscovery?.recommendedMarkets?.length ? (
+                            <button
+                              type="button"
+                              onClick={() => void searchAutoDevRecommendedMarkets()}
+                              disabled={marketCheckLoading}
+                              className="rounded-lg bg-slate-950 px-4 py-2.5 text-xs font-black text-white hover:bg-slate-800 disabled:bg-slate-300"
+                            >
+                              Search Best Markets with MarketCheck
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {autoDevDiscoveryStatus ? (
+                          <div className="mt-3 text-xs font-bold text-violet-800">
+                            {autoDevDiscoveryStatus}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 text-left">
+                        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">
+                          Refine MarketCheck Search
+                        </div>
+                        <div className="mt-1 text-base font-black text-slate-950">
+                          Expand geography or adjust the vehicle match
+                        </div>
+                        <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+                          Use Edit Comps when you want direct control over the next 100-mile MarketCheck circles or need to investigate how MarketCheck classifies this vehicle.
                         </p>
                         <button
                           type="button"
-                          onClick={() => void broadenCompVehicleMatch()}
+                          onClick={openCompMarketEditor}
                           disabled={marketCheckLoading}
-                          className="mt-3 rounded-lg bg-amber-700 px-4 py-2 text-xs font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
+                          className="mt-4 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white hover:bg-blue-800 disabled:bg-slate-300"
                         >
-                          Search as {vehicleMake} {vehicleModel}
+                          Edit Comps
                         </button>
                       </div>
-                    ) : compTrimRelaxed ? (
-                      <div className="mt-4 text-xs font-bold text-blue-700">
-                        ✓ Alternate retrieval completed: {compRetrievalLabel}. Final qualification still requires a true {vehicleMake} {vehicleModel}.
-                      </div>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
-              {marketCheckSearchMeta && compSummary.includedCount < 5 ? (
+              {marketCheckSearchMeta && comps.length > 0 && compSummary.includedCount < 5 ? (
                 <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
