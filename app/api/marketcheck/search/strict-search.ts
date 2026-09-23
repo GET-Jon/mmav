@@ -1926,9 +1926,10 @@ export async function POST(request: Request) {
           remainingMarketCheckCalls() > 0
         ) {
           const generationYearQuery = generationYears.join(",");
-          const generationRegions = orderedRegions
-            .filter((region) => region.zip !== primaryRegion.zip)
-            .slice(0, remainingMarketCheckCalls());
+          const generationRegions = orderedRegions.slice(
+            0,
+            remainingMarketCheckCalls(),
+          );
 
           for (const region of generationRegions) {
             if (remainingMarketCheckCalls() <= 0) break;
