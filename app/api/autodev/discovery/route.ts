@@ -147,8 +147,15 @@ export async function POST(request: Request) {
     bodyClass: String(body.bodyClass || "").trim(),
   });
 
-  const yearMin = generation?.startYear ?? Math.max(1900, year - 1);
-  const yearMax = generation?.endYear ?? Math.min(2100, year + 1);
+  // Discovery starts with the target year +/- 1, bounded by the known
+  // generation when one exists. This mirrors the successful TTS test and avoids
+  // letting a long model generation swamp the free-plan 20-listing sample.
+  const yearMin = generation
+    ? Math.max(generation.startYear, year - 1)
+    : Math.max(1900, year - 1);
+  const yearMax = generation
+    ? Math.min(generation.endYear, year + 1)
+    : Math.min(2100, year + 1);
 
   const params = new URLSearchParams({
     "vehicle.make": make,
