@@ -64,7 +64,7 @@ export async function getSystemHealthSnapshot(limit = 40): Promise<SystemHealthS
     envCheck(
       "ai",
       "Google AI",
-      Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
+      Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY),
     ),
   ];
 
