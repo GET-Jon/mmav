@@ -1,4 +1,5 @@
 import { POST as runStrictMarketCheckSearch } from "./strict-search";
+import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
 import {
   evaluateVehicleEquivalence,
   type VehicleIdentity,
@@ -370,6 +371,8 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
 }
 
 export async function POST(request: Request) {
+  const traceId = request.headers.get("x-lot-logic-trace-id") || createTraceId("comps");
+  const startedAt = Date.now();
   const body = (await request.json()) as Record<string, unknown>;
   const normalizedBody = canonicalizeMercedesSearch(body);
   const decodedVehicle = asRecord(normalizedBody.decodedVehicle);
@@ -382,7 +385,22 @@ export async function POST(request: Request) {
   });
 
   const response = await runStrictMarketCheckSearch(forwardedRequest);
-  if (!response.ok) return response;
+  if (!response.ok) {
+    await recordSystemEvent({
+      traceId,
+      subsystem: "marketcheck",
+      eventName: "comp_search",
+      status: "error",
+      durationMs: Date.now() - startedAt,
+      message: `Strict comp search returned HTTP ${response.status}.`,
+      metadata: {
+        year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year || null,
+        make: normalizedBody.make || decodedVehicle.make || nestedVehicle.make || null,
+        model: normalizedBody.model || decodedVehicle.model || nestedVehicle.model || null,
+      },
+    });
+    return response;
+  }
 
   const payload = (await response.json()) as Record<string, unknown>;
   const rankedPayload = rerankByCompFit(payload, {
@@ -438,5 +456,37 @@ export async function POST(request: Request) {
     ) || null,
   });
 
-  return Response.json(rankedPayload, { status: response.status });
+  const rankedRecord = asRecord(rankedPayload);
+  const usage = asRecord(rankedRecord.apiUsage);
+  const equivalence = asRecord(rankedRecord.equivalenceSummary);
+
+  await recordSystemEvent({
+    traceId,
+    subsystem: "marketcheck",
+    eventName: "comp_search",
+    status: Number(rankedRecord.usableCompCount || 0) > 0 ? "ok" : "warning",
+    durationMs: Date.now() - startedAt,
+    message:
+      typeof rankedRecord.stopReason === "string"
+        ? rankedRecord.stopReason
+        : null,
+    metadata: {
+      year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year || null,
+      make: normalizedBody.make || decodedVehicle.make || nestedVehicle.make || null,
+      model: normalizedBody.model || decodedVehicle.model || nestedVehicle.model || null,
+      targetMileage: normalizedBody.targetMileage || normalizedBody.mileage || decodedVehicle.mileage || nestedVehicle.mileage || null,
+      candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
+      usableCompCount: rankedRecord.usableCompCount ?? null,
+      autoIncludedCount: equivalence.autoIncludedCount ?? null,
+      directCount: equivalence.directCount ?? null,
+      nearCount: equivalence.nearCount ?? null,
+      supportingCount: equivalence.supportingCount ?? null,
+      rejectedCount: equivalence.rejectedCount ?? null,
+    },
+  });
+
+  return Response.json(rankedPayload, {
+    status: response.status,
+    headers: { "x-lot-logic-trace-id": traceId },
+  });
 }
