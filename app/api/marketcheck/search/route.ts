@@ -408,6 +408,7 @@ export async function POST(request: Request) {
         traceId,
         durationMs: Date.now() - startedAt,
         failed: true,
+        searchStage: String(normalizedBody.searchStage || "initial"),
         searchLog: failureUsage.searchLog || null,
       },
     });
@@ -500,6 +501,7 @@ export async function POST(request: Request) {
       durationMs: Date.now() - startedAt,
       candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
       usableCompCount: rankedRecord.usableCompCount ?? null,
+      searchStage: String(normalizedBody.searchStage || "initial"),
       searchLog: usage.searchLog || null,
     },
   });

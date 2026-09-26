@@ -2,6 +2,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export type HealthState = "healthy" | "warning" | "unavailable" | "not_configured";
 
+export const DATABASE_WARNING_MS = 1200;
+
 export type HealthCheck = {
   key: string;
   label: string;
@@ -59,8 +61,10 @@ export type SystemHealthSnapshot = {
   generatedAt: string;
   checks: HealthCheck[];
   metrics: {
-    evaluations24h: number | null;
-    evaluations7d: number | null;
+    evaluatorRuns24h: number | null;
+    evaluatorRuns7d: number | null;
+    savedEvaluations24h: number | null;
+    savedEvaluations7d: number | null;
     errors24h: number | null;
     warnings24h: number | null;
     telemetryReady: boolean;
@@ -226,8 +230,10 @@ export async function getSystemHealthSnapshot(limit = 40): Promise<SystemHealthS
       generatedAt: new Date().toISOString(),
       checks,
       metrics: {
-        evaluations24h: null,
-        evaluations7d: null,
+        evaluatorRuns24h: null,
+        evaluatorRuns7d: null,
+        savedEvaluations24h: null,
+        savedEvaluations7d: null,
         errors24h: null,
         warnings24h: null,
         telemetryReady: false,
@@ -247,7 +253,11 @@ export async function getSystemHealthSnapshot(limit = 40): Promise<SystemHealthS
   checks.push({
     key: "database",
     label: "Database",
-    state: dbError ? "unavailable" : dbLatencyMs > 1200 ? "warning" : "healthy",
+    state: dbError
+      ? "unavailable"
+      : dbLatencyMs > DATABASE_WARNING_MS
+        ? "warning"
+        : "healthy",
     detail: dbError ? dbError.message : `Responding in ${dbLatencyMs} ms`,
     latencyMs: dbLatencyMs,
   });
@@ -325,12 +335,27 @@ export async function getSystemHealthSnapshot(limit = 40): Promise<SystemHealthS
   const weekRows = usageRows.filter((row) => row.created_at >= since7d);
   const aiDayRows = dayRows.filter((row) => row.provider === "google_ai");
 
+  // An evaluator run is an initial MarketCheck comp-search request, whether or
+  // not the user later saves the evaluation. Expansion/metro follow-up searches
+  // are intentionally excluded so one evaluation is not counted multiple times.
+  const countEvaluatorRuns = (rows: ApiUsageRow[]) =>
+    rows.filter(
+      (row) =>
+        row.provider === "marketcheck" &&
+        String(row.metadata?.searchStage || "initial") === "initial",
+    ).length;
+
+  const evaluatorRuns24h = usageReady ? countEvaluatorRuns(dayRows) : null;
+  const evaluatorRuns7d = usageReady ? countEvaluatorRuns(weekRows) : null;
+
   return {
     generatedAt: new Date().toISOString(),
     checks,
     metrics: {
-      evaluations24h: eval24.error ? null : eval24.count ?? 0,
-      evaluations7d: eval7.error ? null : eval7.count ?? 0,
+      evaluatorRuns24h,
+      evaluatorRuns7d,
+      savedEvaluations24h: eval24.error ? null : eval24.count ?? 0,
+      savedEvaluations7d: eval7.error ? null : eval7.count ?? 0,
       errors24h: error24.error ? null : error24.count ?? 0,
       warnings24h: warning24.error ? null : warning24.count ?? 0,
       telemetryReady,

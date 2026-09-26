@@ -2051,6 +2051,7 @@ export function EvaluationWorkspace({
           vin: marketCheckVin,
           fuelType,
           targetMileage,
+          searchStage: options?.searchStage || "initial",
           regions:
             options?.regions ||
             activeAssumptions.regionalMarkets
