@@ -8,6 +8,7 @@ export type GenerateTextInput = {
   temperature?: number;
   maxOutputTokens?: number;
   responseMimeType?: "text/plain" | "application/json";
+  usageFeature?: string;
 };
 
 export type GenerateTextResult = {
