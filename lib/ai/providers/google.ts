@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import {
   AiTemporarilyUnavailableError,
   getAiProviderErrorStatus,
@@ -26,8 +27,11 @@ export class GoogleAiTextClient implements AiTextClient {
 
     const retryDelaysMs = [650, 1500];
     let lastError: unknown = null;
+    const startedAt = Date.now();
+    let attempts = 0;
 
     for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+      attempts = attempt + 1;
       try {
         const response = await ai.models.generateContent({
           model: this.model,
@@ -44,10 +48,39 @@ export class GoogleAiTextClient implements AiTextClient {
         });
 
         const text = response.text?.trim();
+        const usageMetadata = response.usageMetadata as
+          | {
+              promptTokenCount?: number;
+              candidatesTokenCount?: number;
+              totalTokenCount?: number;
+              cachedContentTokenCount?: number;
+              thoughtsTokenCount?: number;
+            }
+          | undefined;
 
         if (!text) {
           throw new Error("AI provider returned an empty summary.");
         }
+
+        await recordApiUsageEvent({
+          provider: "google_ai",
+          endpoint: "generateContent",
+          apiCallsMade: attempts,
+          cacheHit: false,
+          status: 200,
+          stopReason: "AI generation completed.",
+          metadata: {
+            feature: input.usageFeature || "generate_text",
+            model: this.model,
+            durationMs: Date.now() - startedAt,
+            attempts,
+            inputTokens: Number(usageMetadata?.promptTokenCount || 0),
+            outputTokens: Number(usageMetadata?.candidatesTokenCount || 0),
+            totalTokens: Number(usageMetadata?.totalTokenCount || 0),
+            cachedTokens: Number(usageMetadata?.cachedContentTokenCount || 0),
+            thoughtsTokens: Number(usageMetadata?.thoughtsTokenCount || 0),
+          },
+        });
 
         return {
           text,
@@ -58,6 +91,21 @@ export class GoogleAiTextClient implements AiTextClient {
         lastError = error;
 
         if (!isTransientAiProviderError(error)) {
+          await recordApiUsageEvent({
+            provider: "google_ai",
+            endpoint: "generateContent",
+            apiCallsMade: attempts,
+            cacheHit: false,
+            status: getAiProviderErrorStatus(error) || 500,
+            stopReason: error instanceof Error ? error.message : "AI request failed.",
+            metadata: {
+              feature: input.usageFeature || "generate_text",
+              model: this.model,
+              durationMs: Date.now() - startedAt,
+              attempts,
+              failed: true,
+            },
+          });
           throw error;
         }
 
@@ -80,6 +128,23 @@ export class GoogleAiTextClient implements AiTextClient {
         );
       }
     }
+
+    await recordApiUsageEvent({
+      provider: "google_ai",
+      endpoint: "generateContent",
+      apiCallsMade: attempts,
+      cacheHit: false,
+      status: getAiProviderErrorStatus(lastError) || 503,
+      stopReason: "AI service remained temporarily unavailable after retries.",
+      metadata: {
+        feature: input.usageFeature || "generate_text",
+        model: this.model,
+        durationMs: Date.now() - startedAt,
+        attempts,
+        failed: true,
+        retried: attempts > 1,
+      },
+    });
 
     throw new AiTemporarilyUnavailableError(
       "The AI service is temporarily busy.",
