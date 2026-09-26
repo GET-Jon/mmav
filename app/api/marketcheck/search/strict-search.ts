@@ -1659,12 +1659,11 @@ export async function POST(request: Request) {
       const lowConfidenceFallback =
         scoredComps.length > 0 && !hasAutoIncludedComps;
 
-      const comps = lowConfidenceFallback
-        ? scoredComps.map((comp, index) => ({
-            ...comp,
-            included: index < 3,
-          }))
-        : scoredComps;
+      // Keep weak fallback rows visible for review, but never mark them
+      // included. An included comp is valuation evidence, so it must clear the
+      // quality threshold (and the outer equivalence checks) rather than being
+      // promoted simply because it is one of the first returned listings.
+      const comps = scoredComps;
 
       const usableListings = comps.filter(
         (comp) => comp.qualityScore >= minimumQualityScore,

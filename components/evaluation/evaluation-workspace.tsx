@@ -2145,16 +2145,15 @@ export function EvaluationWorkspace({
       }
 
       const pulledComps = Array.isArray(data.comps) ? data.comps : [];
-      const hasIncludedComps = pulledComps.some(
-        (comp: MarketComp) => comp.included === true,
-      );
 
-      const normalizedComps = pulledComps.map(
-        (comp: MarketComp, index: number) => ({
-          ...comp,
-          included: hasIncludedComps ? comp.included === true : index < 3,
-        }),
-      );
+      // The server is authoritative on comp qualification. Never auto-include
+      // fallback rows client-side just because MarketCheck returned inventory:
+      // that can temporarily manufacture a sale value/profit verdict before
+      // vehicle-equivalence checks have established usable comps.
+      const normalizedComps = pulledComps.map((comp: MarketComp) => ({
+        ...comp,
+        included: comp.included === true,
+      }));
 
       const mergedComps = options?.mergeResults
         ? [
@@ -5842,15 +5841,7 @@ export function EvaluationWorkspace({
                   <p className="mt-1 text-[10px] font-semibold leading-4 text-amber-800">
                     Expand the search to establish a market-supported sale value before Lot Logic makes a deal verdict.
                   </p>
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={openCompMarketEditor}
-                      disabled={marketCheckLoading}
-                      className="rounded-lg bg-blue-700 px-3.5 py-2 text-[11px] font-black text-white hover:bg-blue-800 disabled:bg-slate-300"
-                    >
-                      Expand Comp Search
-                    </button>
+                  <div className="mt-3 flex items-center justify-center">
                     <button
                       type="button"
                       onClick={() =>
@@ -5859,7 +5850,7 @@ export function EvaluationWorkspace({
                           block: "start",
                         })
                       }
-                      className="rounded-lg border border-amber-300 bg-white px-3.5 py-2 text-[11px] font-black text-amber-800 hover:bg-amber-50"
+                      className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-[11px] font-black text-amber-800 hover:bg-amber-50"
                     >
                       View Comp Details ↓
                     </button>
