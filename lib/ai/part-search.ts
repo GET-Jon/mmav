@@ -102,6 +102,7 @@ Return this exact shape:
     temperature: 0.15,
     maxOutputTokens: 3200,
     responseMimeType: "application/json",
+    usageFeature: "part_search_normalization",
   });
 
   const parsed = JSON.parse(stripFence(result.text)) as { items?: unknown };

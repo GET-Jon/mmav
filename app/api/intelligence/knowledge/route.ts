@@ -61,7 +61,54 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data, { status: 201 });
+    const assertionType =
+      sourceType === "policy"
+        ? "policy"
+        : sourceType === "capabilities_document"
+          ? "capability"
+          : "preference";
+
+    const { error: assertionError } = await access.supabase
+      .from("lot_logic_intelligence_assertions")
+      .insert({
+        company_id: access.company.companyId,
+        knowledge_source_id: data.id,
+        assertion_type: assertionType,
+        subject_type: "company",
+        subject_key: "company",
+        predicate: title,
+        value: text,
+        provenance_type: "explicit",
+        status: "active",
+        confidence: 1,
+        sample_size: 0,
+        supporting_count: 0,
+        contradicting_count: 0,
+        first_observed_at: now,
+        last_observed_at: now,
+        requires_validation: false,
+        evidence: [{ source: title, text: text.slice(0, 1000) }],
+        created_at: now,
+        updated_at: now,
+      });
+
+    if (assertionError) {
+      await access.supabase
+        .from("lot_logic_intelligence_knowledge_sources")
+        .delete()
+        .eq("company_id", access.company.companyId)
+        .eq("id", data.id);
+
+      return NextResponse.json(
+        { error: assertionError.message },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json(
+      { ...data, assertionCount: 1 },
+      { status: 201 },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to add knowledge." },

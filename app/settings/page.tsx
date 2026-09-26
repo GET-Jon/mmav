@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
 import { LotLogicEvidenceCard } from "@/components/settings/lot-logic-evidence-card";
 import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
+import { defaultAssumptions, normalizeAssumptions } from "@/lib/assumptions";
 import { listIntelligenceSettingsData } from "@/lib/lot-logic-intelligence/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -13,7 +15,12 @@ import { getCurrentUser } from "@/lib/supabase/server-auth";
 
 export const dynamic = "force-dynamic";
 
-type SettingsTab = "account" | "api" | "organization" | "intelligence";
+type SettingsTab =
+  | "account"
+  | "evaluator"
+  | "api"
+  | "organization"
+  | "intelligence";
 
 type SettingsPageProps = {
   searchParams?: Promise<{
@@ -23,7 +30,15 @@ type SettingsPageProps = {
 
 function normalizeTab(value: string | string[] | undefined): SettingsTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === "account" || raw === "api" || raw === "organization" || raw === "intelligence") return raw;
+  if (
+    raw === "account" ||
+    raw === "evaluator" ||
+    raw === "api" ||
+    raw === "organization" ||
+    raw === "intelligence"
+  ) {
+    return raw;
+  }
   return "account";
 }
 
@@ -40,20 +55,29 @@ async function loadSettingsContext(userId: string) {
   const supabase = createSupabaseAdminClient();
   const company = await getCurrentCompanyForUser(supabase, userId);
 
-  const [{ count, error }, intelligence] = await Promise.all([
+  const [{ count, error }, intelligence, assumptionsResult] = await Promise.all([
     supabase
       .from("company_memberships")
       .select("id", { count: "exact", head: true })
       .eq("company_id", company.companyId),
     listIntelligenceSettingsData(supabase, company.companyId),
+    supabase
+      .from("app_settings")
+      .select("payload")
+      .eq("key", "underwriting_assumptions")
+      .maybeSingle(),
   ]);
 
   if (error) throw new Error(error.message);
+  if (assumptionsResult.error) throw new Error(assumptionsResult.error.message);
 
   return {
     company,
     memberCount: count || 0,
     intelligence,
+    assumptions: assumptionsResult.data?.payload
+      ? normalizeAssumptions(assumptionsResult.data.payload)
+      : defaultAssumptions,
   };
 }
 
@@ -82,7 +106,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       <div className="mx-auto w-full max-w-[1380px] px-4 py-5 sm:px-5 lg:px-7">
         <div className="mb-6">
           <h1 className="text-[28px] font-black tracking-[-0.035em] text-slate-950">Settings</h1>
-          <p className="mt-1 text-slate-600">Manage your account, organization, integrations, and Lot Logic Intelligence.</p>
+          <p className="mt-1 text-slate-600">
+            Manage your account, evaluator behavior, organization, integrations,
+            and Lot Logic Intelligence.
+          </p>
         </div>
 
         {loadError ? (
@@ -93,6 +120,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
         <div className="mb-5 flex flex-wrap gap-2">
           <Link href="/settings?tab=account" className={tabClass(activeTab === "account")}>Account</Link>
+          <Link href="/settings?tab=evaluator" className={tabClass(activeTab === "evaluator")}>Evaluator Settings</Link>
           <Link href="/settings?tab=api" className={tabClass(activeTab === "api")}>API Usage</Link>
           <Link href="/settings?tab=organization" className={tabClass(activeTab === "organization")}>Organization</Link>
           <Link href="/settings?tab=intelligence" className={tabClass(activeTab === "intelligence")}>Lot Logic Intelligence</Link>
@@ -111,6 +139,26 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             companyName={company?.companyName || ""}
             role={company?.role || ""}
           />
+        ) : null}
+
+        {activeTab === "evaluator" && companyContext ? (
+          <section>
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
+                Evaluator Settings
+              </div>
+              <h2 className="mt-1 text-xl font-black text-slate-950">
+                How Lot Logic underwrites a deal
+              </h2>
+              <p className="mt-2 max-w-4xl text-sm font-semibold leading-6 text-slate-600">
+                These are the small number of business and market assumptions
+                that still directly affect the evaluator. Dealership
+                preferences, customer sweet spots, and buying philosophy belong
+                in Insights → Teach Lot Logic.
+              </p>
+            </div>
+            <AssumptionsTabs assumptions={companyContext.assumptions} />
+          </section>
         ) : null}
 
         {activeTab === "api" ? <MarketCheckApiSettingsCard /> : null}

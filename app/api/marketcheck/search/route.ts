@@ -1,4 +1,6 @@
 import { POST as runStrictMarketCheckSearch } from "./strict-search";
+import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import {
   evaluateVehicleEquivalence,
   type VehicleIdentity,
@@ -331,9 +333,28 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
       Number(comp.qualityScore || 0) >= minimumQualityScore,
   ).length;
 
+  const apiUsage = asRecord(payload.apiUsage);
+  const retrievalCandidateCount = Number(apiUsage.usableCompCount || 0);
+  const retrievalStopReason = String(apiUsage.stopReason || "").trim();
+  const finalStopReason =
+    qualityPassingEquivalentCount > 0
+      ? `Retrieved ${retrievalCandidateCount} candidate comp${retrievalCandidateCount === 1 ? "" : "s"}; ${qualityPassingEquivalentCount} qualified after vehicle-equivalence checks.`
+      : retrievalCandidateCount > 0
+        ? `Retrieved ${retrievalCandidateCount} candidate comp${retrievalCandidateCount === 1 ? "" : "s"}, but none qualified after vehicle-equivalence checks.`
+        : retrievalStopReason;
+
   return {
     ...payload,
     lowConfidenceFallback: false,
+    usableCompCount: qualityPassingEquivalentCount,
+    stopReason: finalStopReason,
+    apiUsage: {
+      ...apiUsage,
+      retrievalStopReason,
+      candidateCompCount: retrievalCandidateCount,
+      usableCompCount: qualityPassingEquivalentCount,
+      stopReason: finalStopReason,
+    },
     comps: withInclusions,
     equivalenceSummary: {
       directCount,
@@ -351,6 +372,8 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
 }
 
 export async function POST(request: Request) {
+  const traceId = request.headers.get("x-lot-logic-trace-id") || createTraceId("comps");
+  const startedAt = Date.now();
   const body = (await request.json()) as Record<string, unknown>;
   const normalizedBody = canonicalizeMercedesSearch(body);
   const decodedVehicle = asRecord(normalizedBody.decodedVehicle);
@@ -363,7 +386,47 @@ export async function POST(request: Request) {
   });
 
   const response = await runStrictMarketCheckSearch(forwardedRequest);
-  if (!response.ok) return response;
+  if (!response.ok) {
+    let failurePayload: Record<string, unknown> = {};
+    try {
+      failurePayload = (await response.clone().json()) as Record<string, unknown>;
+    } catch {
+      failurePayload = {};
+    }
+    const failureUsage = asRecord(failurePayload.apiUsage);
+    await recordApiUsageEvent({
+      provider: "marketcheck",
+      endpoint: "/v2/search/car/active",
+      vehicleYear: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0) || null,
+      vehicleMake: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim() || null,
+      vehicleModel: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim() || null,
+      apiCallsMade: Number(failureUsage.apiCallsMade || 0),
+      cacheHit: failureUsage.cacheHit === true,
+      status: response.status,
+      stopReason: typeof failureUsage.stopReason === "string" ? failureUsage.stopReason : "MarketCheck request failed.",
+      metadata: {
+        traceId,
+        durationMs: Date.now() - startedAt,
+        failed: true,
+        searchStage: String(normalizedBody.searchStage || "initial"),
+        searchLog: failureUsage.searchLog || null,
+      },
+    });
+    await recordSystemEvent({
+      traceId,
+      subsystem: "marketcheck",
+      eventName: "comp_search",
+      status: "error",
+      durationMs: Date.now() - startedAt,
+      message: `Strict comp search returned HTTP ${response.status}.`,
+      metadata: {
+        year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year || null,
+        make: normalizedBody.make || decodedVehicle.make || nestedVehicle.make || null,
+        model: normalizedBody.model || decodedVehicle.model || nestedVehicle.model || null,
+      },
+    });
+    return response;
+  }
 
   const payload = (await response.json()) as Record<string, unknown>;
   const rankedPayload = rerankByCompFit(payload, {
@@ -419,5 +482,57 @@ export async function POST(request: Request) {
     ) || null,
   });
 
-  return Response.json(rankedPayload, { status: response.status });
+  const rankedRecord = asRecord(rankedPayload);
+  const usage = asRecord(rankedRecord.apiUsage);
+  const equivalence = asRecord(rankedRecord.equivalenceSummary);
+
+  await recordApiUsageEvent({
+    provider: "marketcheck",
+    endpoint: "/v2/search/car/active",
+    vehicleYear: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0) || null,
+    vehicleMake: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim() || null,
+    vehicleModel: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim() || null,
+    apiCallsMade: Number(usage.apiCallsMade || 0),
+    cacheHit: usage.cacheHit === true,
+    status: response.status,
+    stopReason: typeof usage.stopReason === "string" ? usage.stopReason : null,
+    metadata: {
+      traceId,
+      durationMs: Date.now() - startedAt,
+      candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
+      usableCompCount: rankedRecord.usableCompCount ?? null,
+      searchStage: String(normalizedBody.searchStage || "initial"),
+      searchLog: usage.searchLog || null,
+    },
+  });
+
+  await recordSystemEvent({
+    traceId,
+    subsystem: "marketcheck",
+    eventName: "comp_search",
+    status: Number(rankedRecord.usableCompCount || 0) > 0 ? "ok" : "warning",
+    durationMs: Date.now() - startedAt,
+    message:
+      typeof rankedRecord.stopReason === "string"
+        ? rankedRecord.stopReason
+        : null,
+    metadata: {
+      year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year || null,
+      make: normalizedBody.make || decodedVehicle.make || nestedVehicle.make || null,
+      model: normalizedBody.model || decodedVehicle.model || nestedVehicle.model || null,
+      targetMileage: normalizedBody.targetMileage || normalizedBody.mileage || decodedVehicle.mileage || nestedVehicle.mileage || null,
+      candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
+      usableCompCount: rankedRecord.usableCompCount ?? null,
+      autoIncludedCount: equivalence.autoIncludedCount ?? null,
+      directCount: equivalence.directCount ?? null,
+      nearCount: equivalence.nearCount ?? null,
+      supportingCount: equivalence.supportingCount ?? null,
+      rejectedCount: equivalence.rejectedCount ?? null,
+    },
+  });
+
+  return Response.json(rankedPayload, {
+    status: response.status,
+    headers: { "x-lot-logic-trace-id": traceId },
+  });
 }

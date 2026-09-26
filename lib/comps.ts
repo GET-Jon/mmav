@@ -35,13 +35,6 @@ function getMarketSpeedSignal(days: number) {
   return "Very Slow";
 }
 
-export function getSourceDiscount(source: string, assumptions: Assumptions) {
-  const match = assumptions.compSettings.sourceDiscounts.find(
-    (discount) => discount.source === source,
-  );
-  return match?.askDiscount ?? 0.05;
-}
-
 export type MileageAdjustmentResult = {
   rawAdjustment: number;
   appliedAdjustment: number;

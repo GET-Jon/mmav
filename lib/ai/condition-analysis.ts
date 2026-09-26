@@ -256,6 +256,7 @@ export async function generateConditionAnalysis(
     temperature: 0.1,
     maxOutputTokens: 4000,
     responseMimeType: "application/json",
+    usageFeature: "condition_analysis",
   });
 
   const parsed = parseJsonResponse(result.text);

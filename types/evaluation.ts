@@ -30,6 +30,7 @@ export type ValuationOutput = {
   totalCostAdders: number;
   allInCost: number;
   expectedGrossProfit: number;
+  desiredProfitTarget: number;
   maxSmartBid: number;
   safeBid: number;
   stretchBid: number;

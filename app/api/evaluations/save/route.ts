@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
 import { recordPrediction } from "@/lib/lot-logic-intelligence";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
@@ -141,10 +142,21 @@ async function recordEvaluationPredictions(args: {
 }
 
 export async function POST(request: Request) {
+  const traceId = request.headers.get("x-lot-logic-trace-id") || createTraceId("evaluation");
+  const startedAt = Date.now();
+
   try {
     const user = await getCurrentUser();
 
     if (!user) {
+      await recordSystemEvent({
+        traceId,
+        subsystem: "evaluator",
+        eventName: "evaluation_save",
+        status: "error",
+        durationMs: Date.now() - startedAt,
+        message: "Unauthorized save attempt.",
+      });
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
@@ -219,10 +231,23 @@ export async function POST(request: Request) {
         console.warn("Evaluation saved but intelligence snapshot failed:", error);
       }
 
+      await recordSystemEvent({
+        companyId: company.companyId,
+        userId: user.id,
+        traceId,
+        subsystem: "evaluator",
+        eventName: "evaluation_saved",
+        status: "ok",
+        durationMs: Date.now() - startedAt,
+        evaluationId: data.id,
+        metadata: { mode: "updated" },
+      });
+
       return NextResponse.json({
         id: data.id,
         savedAt: data.updated_at,
         mode: "updated",
+        traceId,
       });
     }
 
@@ -252,12 +277,33 @@ export async function POST(request: Request) {
       console.warn("Evaluation saved but intelligence snapshot failed:", error);
     }
 
+    await recordSystemEvent({
+      companyId: company.companyId,
+      userId: user.id,
+      traceId,
+      subsystem: "evaluator",
+      eventName: "evaluation_saved",
+      status: "ok",
+      durationMs: Date.now() - startedAt,
+      evaluationId: data.id,
+      metadata: { mode: "created" },
+    });
+
     return NextResponse.json({
       id: data.id,
       savedAt: data.created_at,
       mode: "created",
+      traceId,
     });
   } catch (error) {
+    await recordSystemEvent({
+      traceId,
+      subsystem: "evaluator",
+      eventName: "evaluation_save",
+      status: "error",
+      durationMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : "Failed to save evaluation.",
+    });
     return NextResponse.json(
       {
         error:

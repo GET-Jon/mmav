@@ -4,6 +4,48 @@ import type { VehicleGenerationRule } from "./types";
 // Do not hand-edit large row sets here. Update the workbook/source data and regenerate.
 export const vehicleGenerationRules: VehicleGenerationRule[] = [
   {
+    "id": "override-audi-tt-8j",
+    "make": "Audi",
+    "model": "TT / TTS / TT RS",
+    "segment": "Performance",
+    "bodyStyle": "Coupe/Convertible",
+    "generation": "8J",
+    "startYear": 2008,
+    "endYear": 2015,
+    "refreshYears": [
+      2011
+    ],
+    "recommendedCompGroup": "2008-2015",
+    "hardBreakBefore": 2008,
+    "hardBreakAfter": 2015,
+    "refreshTreatment": "Same generation; TT, TTS, and TT RS must remain variant-matched",
+    "notes": "Second-generation Audi TT family. Retrieval may use the broader TT family, but TTS and TT RS remain materially distinct variants.",
+    "confidence": "High",
+    "sourceUrl": "MMAV specialty override",
+    "source": "override"
+  },
+  {
+    "id": "override-audi-tt-8s",
+    "make": "Audi",
+    "model": "TT / TTS / TT RS",
+    "segment": "Performance",
+    "bodyStyle": "Coupe/Convertible",
+    "generation": "8S",
+    "startYear": 2016,
+    "endYear": 2023,
+    "refreshYears": [
+      2019
+    ],
+    "recommendedCompGroup": "2016-2023",
+    "hardBreakBefore": 2016,
+    "hardBreakAfter": 2023,
+    "refreshTreatment": "Same generation; TT, TTS, and TT RS must remain variant-matched",
+    "notes": "Third-generation Audi TT family. Retrieval may use the broader TT family, but TTS and TT RS remain materially distinct variants.",
+    "confidence": "High",
+    "sourceUrl": "MMAV specialty override",
+    "source": "override"
+  },
+  {
     "id": "override-bmw-e46-m3",
     "make": "BMW",
     "model": "M3",
