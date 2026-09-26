@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
-import { getSystemHealthSnapshot, type HealthState } from "@/lib/observability/health";
+import { DATABASE_WARNING_MS, getSystemHealthSnapshot, type HealthState } from "@/lib/observability/health";
 
 export const dynamic = "force-dynamic";
 
@@ -80,32 +80,92 @@ export default async function SystemHealthPage() {
         </section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {snapshot.checks.map((check) => (
-            <div key={check.key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm font-black">
-                  <span className={`h-2.5 w-2.5 rounded-full ${dot(check.state)}`} />
-                  {check.label}
+          {snapshot.checks.map((check) =>
+            check.key === "database" ? (
+              <details
+                key={check.key}
+                className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-black">
+                      <span className={`h-2.5 w-2.5 rounded-full ${dot(check.state)}`} />
+                      {check.label}
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ring-1 ${badge(check.state)}`}>
+                      {check.state.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="mt-4 text-sm leading-5 text-slate-600">{check.detail}</div>
+                  <div className="mt-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                    Click for details
+                  </div>
+                </summary>
+                <div className="mt-4 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-600">
+                  <div className="font-black text-slate-800">
+                    {check.state === "unavailable"
+                      ? "Database query failed."
+                      : check.state === "warning"
+                        ? "Database is operational, but this response was slower than our warning threshold."
+                        : "Database is operational and within the current latency threshold."}
+                  </div>
+                  <div className="mt-2">Current response: {formatLatency(check.latencyMs)}</div>
+                  <div>Warning threshold: over {formatNumber(DATABASE_WARNING_MS)} ms</div>
+                  <div className="mt-2 text-slate-400">
+                    This is a lightweight live query, not a full Supabase performance diagnosis. A single slow response can also reflect a cold serverless connection.
+                  </div>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ring-1 ${badge(check.state)}`}>
-                  {check.state.replace("_", " ")}
-                </span>
+              </details>
+            ) : (
+              <div key={check.key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-black">
+                    <span className={`h-2.5 w-2.5 rounded-full ${dot(check.state)}`} />
+                    {check.label}
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ring-1 ${badge(check.state)}`}>
+                    {check.state.replace("_", " ")}
+                  </span>
+                </div>
+                <div className="mt-4 text-sm leading-5 text-slate-600">{check.detail}</div>
               </div>
-              <div className="mt-4 text-sm leading-5 text-slate-600">{check.detail}</div>
-            </div>
-          ))}
+            ),
+          )}
         </section>
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            ["Evaluations · 24h", snapshot.metrics.evaluations24h],
-            ["Evaluations · 7d", snapshot.metrics.evaluations7d],
-            ["Errors · 24h", snapshot.metrics.errors24h],
-            ["Warnings · 24h", snapshot.metrics.warnings24h],
-          ].map(([label, value]) => (
-            <div key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">{label}</div>
-              <div className="mt-2 text-3xl font-black">{value === null ? "—" : value}</div>
+            {
+              label: "Evaluator runs · 24h",
+              value: snapshot.metrics.evaluatorRuns24h,
+              subtext:
+                snapshot.metrics.savedEvaluations24h === null
+                  ? null
+                  : `${snapshot.metrics.savedEvaluations24h} saved evaluation${snapshot.metrics.savedEvaluations24h === 1 ? "" : "s"}`,
+            },
+            {
+              label: "Evaluator runs · 7d",
+              value: snapshot.metrics.evaluatorRuns7d,
+              subtext:
+                snapshot.metrics.savedEvaluations7d === null
+                  ? null
+                  : `${snapshot.metrics.savedEvaluations7d} saved evaluation${snapshot.metrics.savedEvaluations7d === 1 ? "" : "s"}`,
+            },
+            {
+              label: "Errors · 24h",
+              value: snapshot.metrics.errors24h,
+              subtext: "Application/system events",
+            },
+            {
+              label: "Warnings · 24h",
+              value: snapshot.metrics.warnings24h,
+              subtext: "Application/system events",
+            },
+          ].map((metric) => (
+            <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">{metric.label}</div>
+              <div className="mt-2 text-3xl font-black">{metric.value === null ? "—" : metric.value}</div>
+              {metric.subtext ? <div className="mt-2 text-xs font-semibold text-slate-400">{metric.subtext}</div> : null}
             </div>
           ))}
         </section>
