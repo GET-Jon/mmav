@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ function clampInteger(value: string | null, fallback: number, min: number, max: 
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
   const apiKey = process.env.AUTODEV_API_KEY;
 
   if (!apiKey) {
@@ -55,6 +57,17 @@ export async function GET(request: Request) {
   }
 
   if (!upstream.ok) {
+    await recordApiUsageEvent({
+      provider: "auto_dev",
+      endpoint: "/listings",
+      vehicleYear: yearMin === yearMax ? yearMin : null,
+      vehicleMake: make,
+      vehicleModel: model,
+      apiCallsMade: 1,
+      status: upstream.status,
+      stopReason: "Auto.dev discovery test failed.",
+      metadata: { durationMs: Date.now() - startedAt, feature: "discovery_test", failed: true, yearMin, yearMax },
+    });
     return NextResponse.json(
       {
         error: "Auto.dev request failed.",
@@ -99,6 +112,25 @@ export async function GET(request: Request) {
     acc[state] = (acc[state] || 0) + 1;
     return acc;
   }, {});
+
+  await recordApiUsageEvent({
+    provider: "auto_dev",
+    endpoint: "/listings",
+    vehicleYear: yearMin === yearMax ? yearMin : null,
+    vehicleMake: make,
+    vehicleModel: model,
+    apiCallsMade: 1,
+    status: upstream.status,
+    stopReason: "Auto.dev discovery test completed.",
+    metadata: {
+      durationMs: Date.now() - startedAt,
+      feature: "discovery_test",
+      yearMin,
+      yearMax,
+      returned: listings.length,
+      total: typeof payload?.total === "number" ? payload.total : null,
+    },
+  });
 
   return NextResponse.json({
     source: "auto.dev",

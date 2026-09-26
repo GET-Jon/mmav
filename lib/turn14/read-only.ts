@@ -1,3 +1,5 @@
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
+
 export type Turn14Environment = "test" | "production";
 
 const TURN14_API_BASES: Record<Turn14Environment, string> = {
@@ -62,6 +64,7 @@ export function isTurn14Configured() {
 }
 
 async function getTurn14AccessToken() {
+  const startedAt = Date.now();
   const { clientId, clientSecret } = credentials();
   if (!clientId || !clientSecret) {
     throw new Error("TURN14_CLIENT_ID and TURN14_CLIENT_SECRET are not available to this deployment.");
@@ -92,8 +95,25 @@ async function getTurn14AccessToken() {
 
   if (!response.ok || !payload.access_token) {
     const detail = payload.error_description || payload.error || `HTTP ${response.status}`;
+    await recordApiUsageEvent({
+      provider: "turn14",
+      endpoint: "/token",
+      apiCallsMade: 1,
+      status: response.status,
+      stopReason: `Turn 14 authentication failed: ${detail}`,
+      metadata: { durationMs: Date.now() - startedAt, feature: "oauth_token", failed: true },
+    });
     throw new Error(`Turn 14 authentication failed: ${detail}`);
   }
+
+  await recordApiUsageEvent({
+    provider: "turn14",
+    endpoint: "/token",
+    apiCallsMade: 1,
+    status: response.status,
+    stopReason: "Turn 14 authentication completed.",
+    metadata: { durationMs: Date.now() - startedAt, feature: "oauth_token" },
+  });
 
   return {
     accessToken: payload.access_token,
@@ -177,6 +197,7 @@ function inferredCount(payload: unknown) {
 }
 
 export async function probeTurn14Catalog(query: string): Promise<Turn14CatalogProbe> {
+  const startedAt = Date.now();
   const cleaned = query.trim().slice(0, 160);
   if (!cleaned) throw new Error("Enter a catalog search phrase.");
 
@@ -202,6 +223,21 @@ export async function probeTurn14Catalog(query: string): Promise<Turn14CatalogPr
     payload = { note: "Turn 14 returned a non-JSON response." };
   }
 
+  await recordApiUsageEvent({
+    provider: "turn14",
+    endpoint: "/items",
+    apiCallsMade: 1,
+    status: response.status,
+    stopReason: response.ok ? "Turn 14 catalog lookup completed." : "Turn 14 catalog lookup failed.",
+    metadata: {
+      durationMs: Date.now() - startedAt,
+      feature: "catalog_search",
+      environment,
+      resultCount: inferredCount(payload),
+      failed: !response.ok,
+    },
+  });
+
   return {
     ok: response.ok,
     environment,
@@ -219,6 +255,7 @@ export async function probeTurn14Catalog(query: string): Promise<Turn14CatalogPr
 }
 
 export async function probeTurn14Inventory(itemId: string): Promise<Turn14CatalogProbe> {
+  const startedAt = Date.now();
   const cleaned = itemId.trim().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
   if (!cleaned) throw new Error("Enter a Turn 14 item ID.");
 
@@ -241,6 +278,21 @@ export async function probeTurn14Inventory(itemId: string): Promise<Turn14Catalo
   } catch {
     payload = { note: "Turn 14 returned a non-JSON response." };
   }
+
+  await recordApiUsageEvent({
+    provider: "turn14",
+    endpoint,
+    apiCallsMade: 1,
+    status: response.status,
+    stopReason: response.ok ? "Turn 14 inventory lookup completed." : "Turn 14 inventory lookup failed.",
+    metadata: {
+      durationMs: Date.now() - startedAt,
+      feature: "inventory_lookup",
+      environment,
+      resultCount: inferredCount(payload),
+      failed: !response.ok,
+    },
+  });
 
   return {
     ok: response.ok,

@@ -1,5 +1,6 @@
 import { POST as runStrictMarketCheckSearch } from "./strict-search";
 import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import {
   evaluateVehicleEquivalence,
   type VehicleIdentity,
@@ -386,6 +387,30 @@ export async function POST(request: Request) {
 
   const response = await runStrictMarketCheckSearch(forwardedRequest);
   if (!response.ok) {
+    let failurePayload: Record<string, unknown> = {};
+    try {
+      failurePayload = (await response.clone().json()) as Record<string, unknown>;
+    } catch {
+      failurePayload = {};
+    }
+    const failureUsage = asRecord(failurePayload.apiUsage);
+    await recordApiUsageEvent({
+      provider: "marketcheck",
+      endpoint: "/v2/search/car/active",
+      vehicleYear: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0) || null,
+      vehicleMake: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim() || null,
+      vehicleModel: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim() || null,
+      apiCallsMade: Number(failureUsage.apiCallsMade || 0),
+      cacheHit: failureUsage.cacheHit === true,
+      status: response.status,
+      stopReason: typeof failureUsage.stopReason === "string" ? failureUsage.stopReason : "MarketCheck request failed.",
+      metadata: {
+        traceId,
+        durationMs: Date.now() - startedAt,
+        failed: true,
+        searchLog: failureUsage.searchLog || null,
+      },
+    });
     await recordSystemEvent({
       traceId,
       subsystem: "marketcheck",
@@ -459,6 +484,25 @@ export async function POST(request: Request) {
   const rankedRecord = asRecord(rankedPayload);
   const usage = asRecord(rankedRecord.apiUsage);
   const equivalence = asRecord(rankedRecord.equivalenceSummary);
+
+  await recordApiUsageEvent({
+    provider: "marketcheck",
+    endpoint: "/v2/search/car/active",
+    vehicleYear: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0) || null,
+    vehicleMake: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim() || null,
+    vehicleModel: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim() || null,
+    apiCallsMade: Number(usage.apiCallsMade || 0),
+    cacheHit: usage.cacheHit === true,
+    status: response.status,
+    stopReason: typeof usage.stopReason === "string" ? usage.stopReason : null,
+    metadata: {
+      traceId,
+      durationMs: Date.now() - startedAt,
+      candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
+      usableCompCount: rankedRecord.usableCompCount ?? null,
+      searchLog: usage.searchLog || null,
+    },
+  });
 
   await recordSystemEvent({
     traceId,

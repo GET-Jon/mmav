@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import { findGenerationCompRule } from "@/lib/marketcheck/generation-comps";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,7 @@ function buildRecommendedMarkets(listings: AutoDevListing[], maxMarkets = 3) {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const apiKey = process.env.AUTODEV_API_KEY;
 
   if (!apiKey) {
@@ -186,6 +188,17 @@ export async function POST(request: Request) {
   }
 
   if (!upstream.ok) {
+    await recordApiUsageEvent({
+      provider: "auto_dev",
+      endpoint: "/listings",
+      vehicleYear: year,
+      vehicleMake: make,
+      vehicleModel: model,
+      apiCallsMade: 1,
+      status: upstream.status,
+      stopReason: "Auto.dev national discovery failed.",
+      metadata: { durationMs: Date.now() - startedAt, failed: true, yearMin, yearMax },
+    });
     return NextResponse.json(
       {
         error: "Auto.dev national discovery failed.",
@@ -232,6 +245,24 @@ export async function POST(request: Request) {
     acc[state] = (acc[state] || 0) + 1;
     return acc;
   }, {});
+
+  await recordApiUsageEvent({
+    provider: "auto_dev",
+    endpoint: "/listings",
+    vehicleYear: year,
+    vehicleMake: make,
+    vehicleModel: model,
+    apiCallsMade: 1,
+    status: upstream.status,
+    stopReason: "Auto.dev national discovery completed.",
+    metadata: {
+      durationMs: Date.now() - startedAt,
+      yearMin,
+      yearMax,
+      returned: listings.length,
+      total: typeof payload?.total === "number" ? payload.total : listings.length,
+    },
+  });
 
   return NextResponse.json({
     source: "auto.dev",

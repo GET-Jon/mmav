@@ -161,6 +161,7 @@ export async function generatePreliminaryWorkPlan(input: PreliminaryWorkPlanInpu
     temperature: 0.1,
     maxOutputTokens: 5000,
     responseMimeType: "application/json",
+    usageFeature: "work_plan_generation",
   });
 
   const parsed = parseJsonResponse(result.text);
