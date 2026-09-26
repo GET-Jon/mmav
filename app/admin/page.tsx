@@ -11,6 +11,7 @@ const sections = [
   { href: "/admin/locations", title: "Locations & Resources", description: "Mindful facilities, partner shops, storage, transport locations, bays, lifts, detail spaces, and other schedulable capacity.", ready: true },
   { href: "/admin/team", title: "Team & Access", description: "Manage internal users, company roles, account status, and administrative access.", ready: true },
   { href: "/admin/turn14", title: "Turn 14 Distribution", description: "Test the read-only dealer API connection before enabling catalog, fitment, pricing, and inventory lookups.", ready: true },
+  { href: "/admin/system-health", title: "System Health", description: "Monitor application dependencies, recent errors and warnings, evaluation volume, and technical event traces.", ready: true },
 ];
 
 export default async function AdminPage() {
