@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import type { VinDecodeResult } from "@/types/vin";
 
 type NhtsaDecodeResponse = {
@@ -106,6 +107,18 @@ export async function POST(request: Request) {
       fuelType: result.FuelTypePrimary || "",
       plantCountry: result.PlantCountry || "",
     };
+
+    await recordApiUsageEvent({
+      provider: "nhtsa_vpic",
+      endpoint: "/api/vehicles/DecodeVinValues",
+      vehicleYear: Number(decoded.year) || null,
+      vehicleMake: decoded.make || null,
+      vehicleModel: decoded.model || null,
+      apiCallsMade: 1,
+      status: 200,
+      stopReason: decoded.status,
+      metadata: { durationMs: Date.now() - startedAt, vinSuffix: vin.slice(-6) },
+    });
 
     await recordApiUsageEvent({
       provider: "nhtsa_vpic",
