@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import type { VinDecodeResult } from "@/types/vin";
 
 type NhtsaDecodeResponse = {
@@ -33,6 +34,7 @@ function getStatus(result: Record<string, string>) {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const body = await request.json();
     const vin = String(body.vin || "").trim().toUpperCase();
@@ -58,6 +60,14 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
+      await recordApiUsageEvent({
+        provider: "nhtsa_vpic",
+        endpoint: "/api/vehicles/DecodeVinValues",
+        apiCallsMade: 1,
+        status: response.status,
+        stopReason: `NHTSA request failed with status ${response.status}.`,
+        metadata: { durationMs: Date.now() - startedAt, vinSuffix: vin.slice(-6) },
+      });
       return NextResponse.json(
         {
           error: `NHTSA request failed with status ${response.status}.`,
@@ -97,8 +107,28 @@ export async function POST(request: Request) {
       plantCountry: result.PlantCountry || "",
     };
 
+    await recordApiUsageEvent({
+      provider: "nhtsa_vpic",
+      endpoint: "/api/vehicles/DecodeVinValues",
+      vehicleYear: Number(decoded.year) || null,
+      vehicleMake: decoded.make || null,
+      vehicleModel: decoded.model || null,
+      apiCallsMade: 1,
+      status: 200,
+      stopReason: decoded.status,
+      metadata: { durationMs: Date.now() - startedAt, vinSuffix: vin.slice(-6) },
+    });
+
     return NextResponse.json(decoded);
   } catch (error) {
+    await recordApiUsageEvent({
+      provider: "nhtsa_vpic",
+      endpoint: "/api/vehicles/DecodeVinValues",
+      apiCallsMade: 1,
+      status: 500,
+      stopReason: error instanceof Error ? error.message : "VIN decode failed.",
+      metadata: { durationMs: Date.now() - startedAt, failed: true },
+    });
     return NextResponse.json(
       {
         error: "VIN decode failed.",
