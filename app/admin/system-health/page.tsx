@@ -31,6 +31,15 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatNumber(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatLatency(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : `${formatNumber(value)} ms`;
+}
+
 export default async function SystemHealthPage() {
   const access = await getMindfulInventoryAccess();
   if (!access || access.company.role !== "company_admin") notFound();
@@ -99,6 +108,150 @@ export default async function SystemHealthPage() {
               <div className="mt-2 text-3xl font-black">{value === null ? "—" : value}</div>
             </div>
           ))}
+        </section>
+
+        <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Resource consumption</div>
+                <h2 className="mt-1 text-xl font-black">API & AI Usage</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  External calls, cache hits, failures, latency, and Gemini token consumption.
+                </p>
+              </div>
+              <span className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ${
+                snapshot.usage.ready
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                  : "bg-red-50 text-red-700 ring-red-200"
+              }`}>
+                {snapshot.usage.ready ? "Accounting active" : "Accounting unavailable"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-4 border-b border-slate-200 p-6 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["External calls · 24h", snapshot.usage.day.apiCalls],
+              ["External calls · 7d", snapshot.usage.week.apiCalls],
+              ["External calls · 30d", snapshot.usage.month.apiCalls],
+              ["Failures · 24h", snapshot.usage.day.failures],
+              ["AI tokens · 24h", snapshot.usage.day.totalTokens],
+              ["AI input tokens · 24h", snapshot.usage.day.inputTokens],
+              ["AI output tokens · 24h", snapshot.usage.day.outputTokens],
+              ["Cache hits · 24h", snapshot.usage.day.cacheHits],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{label}</div>
+                <div className="mt-2 text-2xl font-black">{formatNumber(Number(value))}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-0 xl:grid-cols-2">
+            <div className="border-b border-slate-200 p-6 xl:border-b-0 xl:border-r">
+              <h3 className="text-sm font-black uppercase tracking-[0.12em] text-slate-500">Providers · last 24 hours</h3>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[520px] text-left text-sm">
+                  <thead className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    <tr>
+                      <th className="pb-3">Provider</th>
+                      <th className="pb-3 text-right">Calls</th>
+                      <th className="pb-3 text-right">Failures</th>
+                      <th className="pb-3 text-right">Cache</th>
+                      <th className="pb-3 text-right">Avg latency</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {snapshot.usage.providers24h.length ? snapshot.usage.providers24h.map((provider) => (
+                      <tr key={provider.key}>
+                        <td className="py-3 font-black">{provider.label}</td>
+                        <td className="py-3 text-right">{formatNumber(provider.apiCalls)}</td>
+                        <td className="py-3 text-right">{formatNumber(provider.failures)}</td>
+                        <td className="py-3 text-right">{formatNumber(provider.cacheHits)}</td>
+                        <td className="py-3 text-right text-slate-600">{formatLatency(provider.avgLatencyMs)}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={5} className="py-8 text-center text-slate-400">No usage recorded in the last 24 hours.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <h3 className="text-sm font-black uppercase tracking-[0.12em] text-slate-500">Google AI by feature · last 24 hours</h3>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[520px] text-left text-sm">
+                  <thead className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    <tr>
+                      <th className="pb-3">Feature</th>
+                      <th className="pb-3 text-right">Requests</th>
+                      <th className="pb-3 text-right">Input</th>
+                      <th className="pb-3 text-right">Output</th>
+                      <th className="pb-3 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {snapshot.usage.aiFeatures24h.length ? snapshot.usage.aiFeatures24h.map((feature) => (
+                      <tr key={feature.key}>
+                        <td className="py-3 font-black">{feature.label}</td>
+                        <td className="py-3 text-right">{formatNumber(feature.events)}</td>
+                        <td className="py-3 text-right">{formatNumber(feature.inputTokens)}</td>
+                        <td className="py-3 text-right">{formatNumber(feature.outputTokens)}</td>
+                        <td className="py-3 text-right">{formatNumber(feature.totalTokens)}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={5} className="py-8 text-center text-slate-400">No AI usage recorded in the last 24 hours.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200">
+            <details>
+              <summary className="cursor-pointer px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-50">
+                Recent usage events ({snapshot.usage.recent.length})
+              </summary>
+              <div className="overflow-x-auto border-t border-slate-100">
+                <table className="w-full min-w-[1050px] text-left text-sm">
+                  <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Time</th>
+                      <th className="px-5 py-3">Provider</th>
+                      <th className="px-5 py-3">Endpoint / feature</th>
+                      <th className="px-5 py-3">Calls</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Tokens</th>
+                      <th className="px-5 py-3">Latency</th>
+                      <th className="px-5 py-3">Vehicle</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {snapshot.usage.recent.map((event) => (
+                      <tr key={event.id}>
+                        <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDate(event.created_at)}</td>
+                        <td className="px-5 py-3 font-black">{event.provider}</td>
+                        <td className="px-5 py-3">
+                          <div className="font-semibold">{event.endpoint || "—"}</div>
+                          {event.metadata?.feature ? <div className="text-xs text-slate-400">{String(event.metadata.feature)}</div> : null}
+                        </td>
+                        <td className="px-5 py-3">{formatNumber(event.api_calls_made)}</td>
+                        <td className="px-5 py-3">{event.status ?? "—"}</td>
+                        <td className="px-5 py-3">{formatNumber(Number(event.metadata?.totalTokens || 0))}</td>
+                        <td className="px-5 py-3">{formatLatency(Number(event.metadata?.durationMs || 0) || null)}</td>
+                        <td className="px-5 py-3 text-xs text-slate-500">
+                          {[event.vehicle_year, event.vehicle_make, event.vehicle_model].filter(Boolean).join(" ") || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
         </section>
 
         <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
