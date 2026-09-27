@@ -5923,6 +5923,29 @@ export function EvaluationWorkspace({
                 </div>
               ) : null}
 
+              {conditionReviewPending ? (
+                <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-3 text-center">
+                  <div className="text-xs font-black text-violet-900">
+                    Condition review required before Lot Logic makes a final verdict.
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold leading-4 text-violet-800">
+                    Confirm what is known, identify known issues, or mark condition as unknown. Market and deal economics remain preliminary until this step is complete.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      conditionSectionRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      })
+                    }
+                    className="mt-3 rounded-lg border border-violet-300 bg-white px-4 py-2 text-[11px] font-black text-violet-800 hover:bg-violet-50"
+                  >
+                    Review Condition ↓
+                  </button>
+                </div>
+              ) : null}
+
               {presentationDecision === "review" && reviewReasons.length ? (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-2.5 text-center text-xs font-bold leading-5 text-amber-800">
                   Review required: {reviewReasons.join(", ")}.
@@ -5953,6 +5976,8 @@ export function EvaluationWorkspace({
                       ? "bg-red-700 hover:bg-red-800"
                       : presentationDecision === "comps"
                         ? "bg-blue-700 hover:bg-blue-800"
+                        : presentationDecision === "condition"
+                          ? "bg-violet-700 hover:bg-violet-800"
                         : presentationDecision === "review"
                           ? "bg-amber-600 hover:bg-amber-700"
                           : "bg-emerald-700 hover:bg-emerald-800"
@@ -6037,9 +6062,51 @@ export function EvaluationWorkspace({
             </article>
           </section>
 
-          <section className="mt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Decision readiness</span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+              Vehicle ✓
+            </span>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+              needsCompSearch
+                ? "bg-amber-50 text-amber-700"
+                : marketCheckLoading || evaluationRunning
+                  ? "bg-blue-50 text-blue-700"
+                  : "bg-emerald-50 text-emerald-700"
+            }`}>
+              {marketCheckLoading || evaluationRunning
+                ? "Market checking"
+                : needsCompSearch
+                  ? "Market incomplete"
+                  : "Market ✓"}
+            </span>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+              conditionReviewComplete
+                ? conditionUnknown
+                  ? "bg-amber-50 text-amber-700"
+                  : "bg-emerald-50 text-emerald-700"
+                : "bg-violet-50 text-violet-700"
+            }`}>
+              {conditionReviewStatus === "no_material_issues"
+                ? "Condition ✓"
+                : conditionReviewStatus === "unknown"
+                  ? "Condition unknown"
+                  : conditionReviewStatus === "issues" && conditionReviewComplete
+                    ? "Condition ✓"
+                    : "Condition review needed"}
+            </span>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+              !needsCompSearch && conditionReviewComplete
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-slate-100 text-slate-500"
+            }`}>
+              {!needsCompSearch && conditionReviewComplete ? "Final verdict ready" : "Final verdict pending"}
+            </span>
+          </div>
+
+          <section ref={conditionSectionRef} className="mt-4 scroll-mt-4">
             <SectionCard
-              title="Tell Lot Logic What You Know About This Vehicle"
+              title="Vehicle Condition & Risk"
               action={
                 <div className="flex items-center gap-2">
                   {conditionAnalysis ? (
