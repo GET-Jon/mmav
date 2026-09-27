@@ -1782,6 +1782,16 @@ export function EvaluationWorkspace({
     setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
+    setConditionReviewStatus("unreviewed");
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+    setConditionSourceText("");
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
     setNotes("");
   }
 
@@ -1809,6 +1819,16 @@ export function EvaluationWorkspace({
     setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
+    setConditionReviewStatus("unreviewed");
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+    setConditionSourceText("");
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
     setNotes("");
   }
 
@@ -4157,11 +4177,10 @@ export function EvaluationWorkspace({
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
-                  Condition &amp; Reconditioning
+                  Vehicle Condition &amp; Risk
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500">
-                  Analyze auction or seller disclosures, then review the
-                  proposed reserve before applying it to the valuation.
+                  Review what is known, analyze auction or seller disclosures, and confirm any reserve before Lot Logic treats condition as complete.
                 </p>
               </div>
 
