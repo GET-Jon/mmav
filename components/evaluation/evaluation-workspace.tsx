@@ -6698,14 +6698,6 @@ export function EvaluationWorkspace({
                 </div>
               )}
 
-
-
-                  {autoDevDiscoveryStatus ? (
-                    <div className="mt-3 text-xs font-bold text-violet-800">{autoDevDiscoveryStatus}</div>
-                  ) : null}
-                </div>
-              ) : null}
-
               <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 text-center sm:grid-cols-5">
                 {[
                   [
