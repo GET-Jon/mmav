@@ -566,6 +566,11 @@ function StaticField({ label, value }: { label: string; value: string }) {
 }
 
 type ThesisMode = "financial" | "enthusiast" | "balanced";
+type ConditionReviewStatus =
+  | "unreviewed"
+  | "no_material_issues"
+  | "issues"
+  | "unknown";
 
 type SavedEvaluationPayload = {
   vin?: string;
@@ -586,6 +591,7 @@ type SavedEvaluationPayload = {
   conditionReadyDaysLowOverride?: number | null;
   conditionReadyDaysHighOverride?: number | null;
   conditionAnalysisApplied?: boolean;
+  conditionReviewStatus?: ConditionReviewStatus;
   notes?: string;
 };
 
@@ -850,6 +856,7 @@ export function EvaluationWorkspace({
   const [vinDecodeError, setVinDecodeError] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
   const compSectionRef = useRef<HTMLElement | null>(null);
+  const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -913,6 +920,14 @@ export function EvaluationWorkspace({
   const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
     Boolean(initialSavedPayload?.conditionAnalysisApplied),
   );
+  const [conditionReviewStatus, setConditionReviewStatus] =
+    useState<ConditionReviewStatus>(
+      initialSavedPayload?.conditionReviewStatus ||
+        (initialSavedPayload?.conditionAnalysisApplied ||
+        initialSavedPayload?.conditionAssessmentsTouched
+          ? "issues"
+          : "unreviewed"),
+    );
   const [conditionAssessments, setConditionAssessments] =
     useState<ConditionAssessments>(
       initialSavedPayload?.conditionAssessments || initialConditionAssessments,
@@ -1135,6 +1150,20 @@ export function EvaluationWorkspace({
         setConditionAnalysisApplied(draft.conditionAnalysisApplied);
       }
 
+      if (
+        draft.conditionReviewStatus === "unreviewed" ||
+        draft.conditionReviewStatus === "no_material_issues" ||
+        draft.conditionReviewStatus === "issues" ||
+        draft.conditionReviewStatus === "unknown"
+      ) {
+        setConditionReviewStatus(draft.conditionReviewStatus);
+      } else if (
+        draft.conditionAnalysisApplied === true ||
+        draft.conditionAssessmentsTouched === true
+      ) {
+        setConditionReviewStatus("issues");
+      }
+
       if (typeof draft.notes === "string") {
         setNotes(draft.notes);
       }
@@ -1184,6 +1213,7 @@ export function EvaluationWorkspace({
           conditionReadyDaysLowOverride,
           conditionReadyDaysHighOverride,
           conditionAnalysisApplied,
+          conditionReviewStatus,
           notes,
           marketCheckStatus,
           marketCheckSearchMeta,
@@ -1212,6 +1242,7 @@ export function EvaluationWorkspace({
     conditionReadyDaysLowOverride,
     conditionReadyDaysHighOverride,
     conditionAnalysisApplied,
+    conditionReviewStatus,
     notes,
     marketCheckStatus,
     marketCheckSearchMeta,
@@ -2826,6 +2857,7 @@ export function EvaluationWorkspace({
 
     setConditionAssessmentsTouched(true);
     setConditionAnalysisApplied(true);
+    setConditionReviewStatus("issues");
   }
 
   function openConditionProfitability() {
@@ -2852,6 +2884,7 @@ export function EvaluationWorkspace({
     }));
 
     setConditionAssessmentsTouched(true);
+    setConditionReviewStatus("issues");
   }
 
   function updateConditionReserve(
@@ -2867,6 +2900,7 @@ export function EvaluationWorkspace({
     }));
 
     setConditionAssessmentsTouched(true);
+    setConditionReviewStatus("issues");
   }
 
   async function saveEvaluation() {
@@ -2906,6 +2940,7 @@ export function EvaluationWorkspace({
           conditionReadyDaysLowOverride,
           conditionReadyDaysHighOverride,
           conditionAnalysisApplied,
+          conditionReviewStatus,
           notes,
           auctionUrl: "",
           auctionEndsAt: null,
@@ -2956,6 +2991,7 @@ export function EvaluationWorkspace({
     setConditionAnalysisRetryable(false);
     setConditionAnalysisLoading(false);
     setConditionAnalysisApplied(false);
+    setConditionReviewStatus("unreviewed");
 
     setNotes("");
     setAiSummaryLoadingMode(null);
