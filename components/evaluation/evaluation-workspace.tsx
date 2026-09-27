@@ -3486,6 +3486,21 @@ export function EvaluationWorkspace({
 
   const hasLimitedDealerFit = dealerFitResult.score < 55;
 
+  const conditionReviewComplete =
+    conditionReviewStatus === "no_material_issues" ||
+    conditionReviewStatus === "unknown" ||
+    (conditionReviewStatus === "issues" &&
+      (conditionAnalysisApplied || conditionAssessmentsTouched));
+
+  const conditionReviewPending =
+    hasEvaluationData &&
+    !evaluationRunning &&
+    !marketCheckLoading &&
+    !needsCompSearch &&
+    !conditionReviewComplete;
+
+  const conditionUnknown = conditionReviewStatus === "unknown";
+
   const isAboveRecommendedBuy =
     hasEvaluationData &&
     valuationInput.currentBid > 0 &&
@@ -3495,21 +3510,25 @@ export function EvaluationWorkspace({
   const hasHardPass =
     hasEvaluationData &&
     !needsCompSearch &&
+    !conditionReviewPending &&
     (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
 
   const requiresReview =
     hasEvaluationData &&
     !needsCompSearch &&
+    !conditionReviewPending &&
     !hasHardPass &&
     (isAboveRecommendedBuy ||
       valuation.decision === "Watch / Stretch Only" ||
       hasLowCompConfidence ||
-      hasMaterialConditionRisk);
+      hasMaterialConditionRisk ||
+      conditionUnknown);
 
   const reviewReasons = [
     isAboveRecommendedBuy ? "the current bid is above the Recommended Max Buy" : null,
     hasLowCompConfidence ? "market evidence is still thin" : null,
     hasMaterialConditionRisk ? "a material vehicle-specific risk needs review" : null,
+    conditionUnknown ? "condition is unknown or has not been adequately reviewed" : null,
   ].filter((reason): reason is string => Boolean(reason));
 
   const lotLogicLabel = !hasEvaluationData
@@ -3518,6 +3537,8 @@ export function EvaluationWorkspace({
       ? "CHECKING MARKET"
       : needsCompSearch
         ? "COMP SEARCH NEEDED"
+        : conditionReviewPending
+          ? "CONDITION REVIEW NEEDED"
         : hasHardPass
           ? "PASS"
         : isAboveRecommendedBuy
@@ -3535,6 +3556,8 @@ export function EvaluationWorkspace({
         ? "searching"
         : needsCompSearch
           ? "comps"
+          : conditionReviewPending
+            ? "condition"
           : hasHardPass
             ? "pass"
             : requiresReview
@@ -3548,6 +3571,8 @@ export function EvaluationWorkspace({
         ? "bg-red-100 text-red-700"
       : presentationDecision === "comps"
         ? "bg-amber-100 text-amber-800"
+        : presentationDecision === "condition"
+          ? "bg-violet-100 text-violet-800"
         : presentationDecision === "review"
           ? "bg-amber-100 text-amber-700"
         : presentationDecision === "pursue"
@@ -3561,6 +3586,8 @@ export function EvaluationWorkspace({
         ? "border-red-200/80 bg-red-50/60 text-red-950"
       : presentationDecision === "comps"
         ? "border-amber-200/80 bg-amber-50/35 text-amber-950"
+        : presentationDecision === "condition"
+          ? "border-violet-200/80 bg-violet-50/40 text-violet-950"
         : presentationDecision === "review"
           ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
         : presentationDecision === "pursue"
@@ -3574,6 +3601,8 @@ export function EvaluationWorkspace({
         ? "text-red-700"
       : presentationDecision === "comps"
         ? "text-amber-700"
+        : presentationDecision === "condition"
+          ? "text-violet-700"
         : presentationDecision === "review"
           ? "text-amber-700"
         : presentationDecision === "pursue"
