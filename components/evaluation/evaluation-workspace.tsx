@@ -2632,11 +2632,34 @@ export function EvaluationWorkspace({
     }
   }
 
+  function chooseConditionReview(status: ConditionReviewStatus) {
+    setConditionReviewStatus(status);
+
+    if (status === "issues") {
+      setConditionAnalysisApplied(false);
+      return;
+    }
+
+    // Choosing "no material issues" or "unknown" must not leave an old recon
+    // reserve silently influencing the economics.
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionSourceText("");
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
+    setConditionAnalysisError("");
+  }
+
   function openConditionAnalysis() {
     if (!conditionAssessmentsTouched) {
       setConditionAssessments(initialConditionAssessments);
     }
 
+    setConditionReviewStatus("issues");
     setConditionModalTab("ai");
     setConditionAnalysisError("");
     setConditionProfitabilityOpen(true);
@@ -6109,22 +6132,96 @@ export function EvaluationWorkspace({
               title="Vehicle Condition & Risk"
               action={
                 <div className="flex items-center gap-2">
-                  {conditionAnalysis ? (
-                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ${conditionAnalysisApplied ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"}`}>
-                      {conditionAnalysisApplied ? "Applied to valuation" : "Review before applying"}
-                    </span>
+                  <span className={`rounded-full px-3 py-1 text-[10px] font-black ${
+                    conditionReviewStatus === "unreviewed"
+                      ? "bg-violet-50 text-violet-700"
+                      : conditionReviewStatus === "unknown"
+                        ? "bg-amber-50 text-amber-700"
+                        : conditionReviewComplete
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-violet-50 text-violet-700"
+                  }`}>
+                    {conditionReviewStatus === "unreviewed"
+                      ? "Review required"
+                      : conditionReviewStatus === "no_material_issues"
+                        ? "Reviewed · no material issues"
+                        : conditionReviewStatus === "unknown"
+                          ? "Reviewed · condition unknown"
+                          : conditionReviewComplete
+                            ? "Issues reviewed"
+                            : "Known issues · finish review"}
+                  </span>
+                  {conditionReviewStatus === "issues" ? (
+                    <button
+                      type="button"
+                      onClick={openConditionAnalysis}
+                      disabled={!hasEvaluationData}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    >
+                      Detailed editor
+                    </button>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={openConditionAnalysis}
-                    disabled={!hasEvaluationData}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
-                  >
-                    Detailed editor
-                  </button>
                 </div>
               }
             >
+              <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="text-sm font-black text-slate-950">
+                  What do we know about this vehicle's condition?
+                </div>
+                <p className="mt-1 max-w-4xl text-xs font-semibold leading-5 text-slate-500">
+                  Lot Logic needs an explicit condition state before it issues a final acquisition verdict. Choose the answer that best reflects the information currently available — you do not need to invent details you do not have.
+                </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <button
+                    type="button"
+                    disabled={!hasEvaluationData}
+                    onClick={() => chooseConditionReview("no_material_issues")}
+                    className={`rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      conditionReviewStatus === "no_material_issues"
+                        ? "border-emerald-300 bg-emerald-50"
+                        : "border-slate-200 bg-white hover:border-emerald-200"
+                    }`}
+                  >
+                    <div className="text-sm font-black text-slate-950">No material issues apparent</div>
+                    <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                      Based on the auction listing, inspection, disclosures, and other information currently available.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!hasEvaluationData}
+                    onClick={() => chooseConditionReview("issues")}
+                    className={`rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      conditionReviewStatus === "issues"
+                        ? "border-violet-300 bg-violet-50"
+                        : "border-slate-200 bg-white hover:border-violet-200"
+                    }`}
+                  >
+                    <div className="text-sm font-black text-slate-950">There are known issues</div>
+                    <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                      Add auction notes, disclosures, damage, warning lights, service needs, title/history concerns, or recon items.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!hasEvaluationData}
+                    onClick={() => chooseConditionReview("unknown")}
+                    className={`rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      conditionReviewStatus === "unknown"
+                        ? "border-amber-300 bg-amber-50"
+                        : "border-slate-200 bg-white hover:border-amber-200"
+                    }`}
+                  >
+                    <div className="text-sm font-black text-slate-950">Condition is unknown</div>
+                    <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                      Use this when the available information is not good enough to establish condition confidently.
+                    </div>
+                  </button>
+                </div>
+              </div>
+              {conditionReviewStatus === "issues" ? (
               <div className="grid gap-5 lg:grid-cols-2">
                 <div>
                   {!conditionAnalysis ? (
@@ -6325,6 +6422,30 @@ export function EvaluationWorkspace({
                   )}
                 </div>
               </div>
+              ) : (
+                <div className={`rounded-2xl border px-5 py-5 ${
+                  conditionReviewStatus === "unknown"
+                    ? "border-amber-200 bg-amber-50/60"
+                    : conditionReviewStatus === "no_material_issues"
+                      ? "border-emerald-200 bg-emerald-50/50"
+                      : "border-violet-200 bg-violet-50/40"
+                }`}>
+                  <div className="text-sm font-black text-slate-950">
+                    {conditionReviewStatus === "unknown"
+                      ? "Condition remains an explicit uncertainty."
+                      : conditionReviewStatus === "no_material_issues"
+                        ? "Condition review complete."
+                        : "Choose a condition state to continue."}
+                  </div>
+                  <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-600">
+                    {conditionReviewStatus === "unknown"
+                      ? "Lot Logic will allow the evaluation to continue, but the final result will remain Review Required because condition has not been adequately established."
+                      : conditionReviewStatus === "no_material_issues"
+                        ? "No material issue has been entered based on the information currently available. You can change this selection at any time if new information appears."
+                        : "A final Lot Logic verdict will remain gated until condition is reviewed."}
+                  </p>
+                </div>
+              )}
             </SectionCard>
           </section>
 
