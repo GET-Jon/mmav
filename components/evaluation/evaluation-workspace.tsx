@@ -6286,6 +6286,7 @@ export function EvaluationWorkspace({
           ) : null}
 
           {activeStage === "condition" ? (
+            <>
           <section ref={conditionSectionRef} className="mt-4 scroll-mt-4">
             {!conditionSectionExpanded ? (
               <button
@@ -6652,9 +6653,11 @@ export function EvaluationWorkspace({
                 Continue to Verdict →
               </button>
             </div>
+            </>
           ) : null}
 
           {activeStage === "market" ? (
+            <>
           <section ref={compSectionRef} className="mt-4 scroll-mt-4">
             {!compSectionExpanded ? (
               <button
@@ -6878,6 +6881,7 @@ export function EvaluationWorkspace({
                 Continue to Condition →
               </button>
             </div>
+            </>
           ) : null}
 
           <div className="mt-4 flex justify-end">
