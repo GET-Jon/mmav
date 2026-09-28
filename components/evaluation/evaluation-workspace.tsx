@@ -860,6 +860,8 @@ export function EvaluationWorkspace({
   const [compSectionExpanded, setCompSectionExpanded] = useState(true);
   const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
   const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
+  const [activeStage, setActiveStage] =
+    useState<"vehicle" | "market" | "condition" | "verdict">("vehicle");
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -3613,27 +3615,9 @@ export function EvaluationWorkspace({
               : "pursue";
 
   useEffect(() => {
-    if (!hasEvaluationData) {
-      setCompSectionExpanded(false);
-      setConditionSectionExpanded(false);
-      return;
-    }
-
-    if (needsCompSearch) {
-      setCompSectionExpanded(true);
-      setConditionSectionExpanded(false);
-      return;
-    }
-
-    if (conditionReviewPending) {
-      setCompSectionExpanded(false);
-      setConditionSectionExpanded(true);
-      return;
-    }
-
-    setCompSectionExpanded(false);
-    setConditionSectionExpanded(false);
-  }, [hasEvaluationData, needsCompSearch, conditionReviewPending]);
+    setCompSectionExpanded(activeStage === "market");
+    setConditionSectionExpanded(activeStage === "condition");
+  }, [activeStage]);
 
   const decisionBadgeTone =
     presentationDecision === "searching"
@@ -5505,6 +5489,7 @@ export function EvaluationWorkspace({
           active="evaluator"
           userEmail={userEmail}
           onNewEvaluation={() => {
+            setActiveStage("vehicle");
             clearLocalDraft();
             setQuickEvalMode("vin");
             setQuickEvalOpen(true);
@@ -5512,6 +5497,7 @@ export function EvaluationWorkspace({
         />
 
         <div className="mx-auto max-w-[1380px] px-4 py-4 sm:px-5 lg:px-7">
+          {activeStage === "vehicle" ? (
           <section className="mb-4 rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
             <div className="grid items-end gap-2.5 lg:grid-cols-[170px_minmax(330px,1fr)_125px_125px_135px_155px]">
               <div>
@@ -5719,6 +5705,7 @@ export function EvaluationWorkspace({
                       return;
                     }
 
+                    setActiveStage("market");
                     resetPreviousEvaluationResults({ preserveVehicleInfo: true });
 
                     setDecodedVehicle(null);
@@ -5756,6 +5743,8 @@ export function EvaluationWorkspace({
                     setEvaluationRunning(false);
                     return;
                   }
+
+                  setActiveStage("market");
 
                   void generateVehicleThumbnail({
                     year: newlyDecodedVehicle.year,
@@ -5856,11 +5845,7 @@ export function EvaluationWorkspace({
                 <button
                   type="button"
                   onClick={() => {
-                    setCompSectionExpanded(true);
-                    setConditionSectionExpanded(false);
-                    window.setTimeout(() => {
-                      compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }, 0);
+                    setActiveStage("market");
                   }}
                   className="text-xs font-black text-blue-700 hover:text-blue-900"
                 >
@@ -5870,11 +5855,7 @@ export function EvaluationWorkspace({
                 <button
                   type="button"
                   onClick={() => {
-                    setConditionSectionExpanded(true);
-                    setCompSectionExpanded(false);
-                    window.setTimeout(() => {
-                      conditionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }, 0);
+                    setActiveStage("condition");
                   }}
                   className="text-xs font-black text-violet-700 hover:text-violet-900"
                 >
@@ -5891,7 +5872,91 @@ export function EvaluationWorkspace({
               ) : null}
             </div>
           </section>
+          ) : (
+            <section className="mb-4 rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-black text-slate-950">
+                    {hasEvaluationData ? vehicleTitle : "Vehicle not evaluated"}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
+                    <span>{targetMileage ? `${formatNumberInput(targetMileage)} mi` : "Mileage —"}</span>
+                    <span>{valuationInput.currentBid > 0 ? `Bid ${money(valuationInput.currentBid)}` : "Bid —"}</span>
+                    <span>
+                      {evaluationRunning || marketCheckLoading
+                        ? "Checking market"
+                        : needsCompSearch
+                          ? `Market incomplete · ${compSummary.includedCount} strong comps`
+                          : conditionReviewPending
+                            ? "Condition required"
+                            : hasEvaluationData
+                              ? `Ready · ${lotLogicLabel}`
+                              : "Awaiting evaluation"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveStage("vehicle")}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+                >
+                  Edit Vehicle
+                </button>
+              </div>
+            </section>
+          )}
 
+          <section className="mb-4 rounded-[18px] border border-slate-200 bg-white px-3 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {[
+                { id: "vehicle" as const, label: "Vehicle", enabled: true, complete: hasEvaluationData },
+                { id: "market" as const, label: "Market", enabled: hasEvaluationData, complete: hasEvaluationData && !needsCompSearch && !evaluationRunning && !marketCheckLoading },
+                { id: "condition" as const, label: "Condition", enabled: hasEvaluationData && !needsCompSearch, complete: conditionReviewComplete },
+                { id: "verdict" as const, label: "Verdict", enabled: hasEvaluationData && !needsCompSearch && conditionReviewComplete, complete: hasEvaluationData && !needsCompSearch && conditionReviewComplete },
+              ].map((stage, index) => (
+                <div key={stage.id} className="flex items-center gap-2">
+                  {index > 0 ? <span className="h-px w-5 shrink-0 bg-slate-200 sm:w-8" /> : null}
+                  <button
+                    type="button"
+                    disabled={!stage.enabled}
+                    onClick={() => setActiveStage(stage.id)}
+                    className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-black transition ${
+                      activeStage === stage.id
+                        ? "bg-blue-700 text-white"
+                        : stage.complete
+                          ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : stage.enabled
+                            ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            : "bg-slate-50 text-slate-300"
+                    }`}
+                  >
+                    {stage.complete && activeStage !== stage.id ? "✓ " : ""}{stage.label}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {activeStage === "vehicle" ? (
+            <section className="rounded-[18px] border border-slate-200 bg-white px-5 py-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Step 1</div>
+                  <h2 className="mt-1 text-lg font-black text-slate-950">Vehicle</h2>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                    Enter the car, mileage, bid, and any known vehicle information above, then run the evaluation.
+                  </p>
+                </div>
+                {conditionSourceText.trim() ? (
+                  <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-black text-violet-700">
+                    Vehicle info added
+                  </span>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {activeStage === "verdict" ? (
           <section className="grid gap-4 lg:grid-cols-[1.05fr_1.1fr_1fr]">
             <article className="h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
               <div className="flex items-start justify-between gap-3">
@@ -6198,6 +6263,29 @@ export function EvaluationWorkspace({
             </article>
           </section>
 
+          ) : null}
+
+          {activeStage === "verdict" ? (
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveStage("condition")}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50"
+              >
+                ← Back to Condition
+              </button>
+              <button
+                type="button"
+                onClick={saveEvaluation}
+                disabled={saveLoading || !hasEvaluationData}
+                className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {saveLoading ? "Saving..." : savedEvaluationId ? "Update Pipeline" : "Save to Pipeline"}
+              </button>
+            </div>
+          ) : null}
+
+          {activeStage === "condition" ? (
           <section ref={conditionSectionRef} className="mt-4 scroll-mt-4">
             {!conditionSectionExpanded ? (
               <button
@@ -6546,6 +6634,27 @@ export function EvaluationWorkspace({
             )}
           </section>
 
+
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveStage("market")}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50"
+              >
+                ← Back to Market
+              </button>
+              <button
+                type="button"
+                disabled={!conditionReviewComplete}
+                onClick={() => setActiveStage("verdict")}
+                className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                Continue to Verdict →
+              </button>
+            </div>
+          ) : null}
+
+          {activeStage === "market" ? (
           <section ref={compSectionRef} className="mt-4 scroll-mt-4">
             {!compSectionExpanded ? (
               <button
@@ -6750,6 +6859,26 @@ export function EvaluationWorkspace({
             </SectionCard>
             )}
           </section>
+
+
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveStage("vehicle")}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50"
+              >
+                ← Back to Vehicle
+              </button>
+              <button
+                type="button"
+                disabled={needsCompSearch || marketCheckLoading || evaluationRunning || !hasEvaluationData}
+                onClick={() => setActiveStage("condition")}
+                className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                Continue to Condition →
+              </button>
+            </div>
+          ) : null}
 
           <div className="mt-4 flex justify-end">
             <button
