@@ -862,6 +862,8 @@ export function EvaluationWorkspace({
   const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
   const [activeStage, setActiveStage] =
     useState<"vehicle" | "market" | "condition" | "verdict">("vehicle");
+  const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
+  const [verdictConditionEditOpen, setVerdictConditionEditOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -4664,7 +4666,66 @@ export function EvaluationWorkspace({
                       {conditionAnalysis.recommendedInspections.length ||
                       conditionAnalysis.missingInformation.length ||
                       conditionAnalysis.warnings.length ? (
-                        <section className="grid gap-4 lg:grid-cols-3">
+                        {activeStage === "verdict" ? (
+            <section className="grid gap-4 lg:grid-cols-3">
+              <article className="relative min-h-[145px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickEvalMode(vin ? "vin" : "manual");
+                      setQuickEvalOpen(true);
+                    }}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+
+              <article className="relative min-h-[145px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
+                  <button
+                    type="button"
+                    onClick={() => setVerdictConditionEditOpen(true)}
+                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black text-slate-950">
+                  {conditionReviewStatus === "issues"
+                    ? "Known issues"
+                    : conditionReviewStatus === "unknown"
+                      ? "Condition unknown"
+                      : "No material issues"}
+                </div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+
+              <article className="relative min-h-[145px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
+                  <button
+                    type="button"
+                    onClick={openCompMarketEditor}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black text-slate-950">
+                  {compSummary.includedCount} strong comp{compSummary.includedCount === 1 ? "" : "s"}
+                </div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+            </section>
+          ) : (
+          <section className="grid gap-4 lg:grid-cols-3">
                           <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">
                               Recommended Inspections
@@ -5557,6 +5618,7 @@ export function EvaluationWorkspace({
           onNewEvaluation={() => {
             setActiveStage("vehicle");
             setCompSectionExpanded(false);
+            setVerdictCompsExpanded(false);
             clearLocalDraft();
             setQuickEvalMode("vin");
             setQuickEvalOpen(true);
@@ -5906,6 +5968,9 @@ export function EvaluationWorkspace({
             </article>
           </section>
 
+
+          )}
+
           {activeStage === "market" && (needsCompSearch || compSectionExpanded) ? (
             <section ref={compSectionRef} className="mt-4 scroll-mt-4">
               <SectionCard
@@ -5987,7 +6052,17 @@ export function EvaluationWorkspace({
                   {!needsCompSearch && currentBidPosition ? (
                     <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentBidPosition.tone === "over" ? "bg-red-100 text-red-700" : currentBidPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentBidPosition.text}</div>
                   ) : null}
-                  <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mx-auto mt-auto pt-5 text-xs font-extrabold text-blue-700 hover:text-blue-900">Why Lot Logic thinks this →</button>
+                  <div className="mt-auto pt-5">
+                    <button
+                      type="button"
+                      onClick={saveEvaluation}
+                      disabled={saveLoading || !hasEvaluationData}
+                      className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {saveLoading ? "Saving..." : savedEvaluationId ? "Update Pipeline" : "Save to Pipeline"}
+                    </button>
+                    <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mx-auto mt-3 block text-xs font-extrabold text-blue-700 hover:text-blue-900">Why Lot Logic thinks this →</button>
+                  </div>
                 </article>
 
                 <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
@@ -6005,23 +6080,128 @@ export function EvaluationWorkspace({
               <section className="mt-4">
                 <SectionCard
                   title="Comparable Vehicles"
-                  action={<button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>}
+                  action={
+                    <div className="flex items-center gap-3">
+                      {comps.length > 5 ? (
+                        <button
+                          type="button"
+                          onClick={() => setVerdictCompsExpanded((open) => !open)}
+                          className="text-xs font-black text-blue-700 hover:text-blue-900"
+                        >
+                          {verdictCompsExpanded ? "Show fewer" : `Show all ${comps.length}`}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                    </div>
+                  }
                 >
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                    <MarketCompsTable comps={verdictCompsExpanded ? comps : comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}
                 </SectionCard>
               </section>
 
-              <div className="mt-4 flex items-center justify-between">
+              <div className="mt-4">
                 <button type="button" onClick={() => setActiveStage("market")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">← Back to Market</button>
-                <button type="button" onClick={saveEvaluation} disabled={saveLoading} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:bg-slate-300">
-                  {saveLoading ? "Saving..." : savedEvaluationId ? "Update Pipeline" : "Save to Pipeline"}
-                </button>
               </div>
             </>
+          ) : null}
+
+          {verdictConditionEditOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+              <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-950">Edit Condition</h2>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Update the condition state without leaving the verdict.</p>
+                  </div>
+                  <button type="button" onClick={() => setVerdictConditionEditOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+                </div>
+
+                <div className="space-y-3 p-5">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => chooseConditionReview("no_material_issues")}
+                      className={`rounded-xl border p-3 text-left ${
+                        conditionReviewStatus === "no_material_issues" ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="text-xs font-black text-slate-900">No material issues</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => chooseConditionReview("issues")}
+                      className={`rounded-xl border p-3 text-left ${
+                        conditionReviewStatus === "issues" ? "border-violet-300 bg-violet-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="text-xs font-black text-slate-900">Known issues</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => chooseConditionReview("unknown")}
+                      className={`rounded-xl border p-3 text-left ${
+                        conditionReviewStatus === "unknown" ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="text-xs font-black text-slate-900">Condition unknown</div>
+                    </button>
+                  </div>
+
+                  {conditionReviewStatus === "issues" ? (
+                    <div>
+                      <textarea
+                        value={conditionSourceText}
+                        onChange={(event) => {
+                          setConditionSourceText(event.target.value);
+                          setConditionAnalysisApplied(false);
+                        }}
+                        placeholder="Paste or update auction notes, disclosures, warning lights, damage, service needs, title/history concerns..."
+                        className="min-h-[150px] w-full resize-y rounded-xl border border-violet-200 bg-violet-50/30 p-3 text-sm font-medium leading-5 text-slate-700 outline-none focus:bg-white"
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void analyzeConditionInformation()}
+                          disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
+                          className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
+                        >
+                          {conditionAnalysisLoading ? "Analyzing..." : "Analyze Issues"}
+                        </button>
+                        {conditionAnalysis ? (
+                          <>
+                            <button type="button" onClick={openConditionAnalysis} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Review Details</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                applyConditionAnalysis();
+                                setVerdictConditionEditOpen(false);
+                              }}
+                              className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white hover:bg-slate-800"
+                            >
+                              Apply Changes
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setVerdictConditionEditOpen(false)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           <div className="mt-4 flex justify-end">
