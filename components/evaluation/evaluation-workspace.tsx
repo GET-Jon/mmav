@@ -5917,7 +5917,7 @@ export function EvaluationWorkspace({
                 ) : null}
               </div>
 
-              {!conditionReviewComplete && activeStage !== "verdict" ? (
+              {!conditionReviewComplete ? (
                 <div className="mt-5 text-sm font-semibold text-slate-400">Complete Condition first. Market search is running in the background.</div>
               ) : (
                 <div className="mt-4">
