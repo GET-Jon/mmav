@@ -1451,7 +1451,7 @@ export function EvaluationWorkspace({
     [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
       .filter(Boolean)
       .join(" ")
-      .trim() || "New Auction Evaluation";
+      .trim() || "New Evaluation";
 
   useEffect(() => {
     setCompTrimRelaxed(false);
@@ -3123,6 +3123,14 @@ export function EvaluationWorkspace({
     (vehicleYear && vehicleMake && vehicleModel) ||
     valuationInput.currentBid > 0 ||
     comps.length > 0,
+  );
+
+  const vehicleStepComplete = Boolean(
+    vehicleYear &&
+      vehicleMake &&
+      vehicleModel &&
+      targetMileage > 0 &&
+      valuationInput.currentBid > 0,
   );
 
   const suggestedBid =
@@ -5765,9 +5773,9 @@ export function EvaluationWorkspace({
             <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
               activeStage === "condition"
                 ? "border-violet-300 bg-white ring-2 ring-violet-100"
-                : conditionReviewComplete
+                : conditionReviewComplete && vehicleStepComplete
                   ? "border-emerald-200 bg-white"
-                  : hasEvaluationData
+                  : vehicleStepComplete
                     ? "border-slate-200 bg-white/70"
                     : "border-slate-200 bg-white/45 opacity-50"
             }`}>
@@ -5784,13 +5792,13 @@ export function EvaluationWorkspace({
                           : "Known issues"}
                   </h2>
                 </div>
-                {hasEvaluationData && conditionReviewStatus !== "unreviewed" && activeStage !== "condition" ? (
+                {vehicleStepComplete && conditionReviewStatus !== "unreviewed" && activeStage !== "condition" ? (
                   <button type="button" onClick={() => setActiveStage("condition")} className="text-xs font-black text-violet-700 hover:text-violet-900">Edit</button>
                 ) : null}
               </div>
 
-              {!hasEvaluationData ? (
-                <div className="mt-5 text-sm font-semibold text-slate-400">Complete Vehicle first.</div>
+              {!vehicleStepComplete ? (
+                <div className="mt-5 text-sm font-semibold text-slate-400">Enter the vehicle, mileage, and bid / ask, then select Next.</div>
               ) : activeStage === "condition" ? (
                 <div className="mt-4">
                   {conditionReviewStatus === "unreviewed" ? (
@@ -5883,9 +5891,9 @@ export function EvaluationWorkspace({
                   </div>
                   <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Condition reviewed ✓</div>
                 </div>
-              ) : (
+              ) : vehicleStepComplete ? (
                 <button type="button" onClick={() => setActiveStage("condition")} className="mt-4 w-full rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white">Review Condition →</button>
-              )}
+              ) : null}
             </article>
 
             <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
