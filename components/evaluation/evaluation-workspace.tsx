@@ -863,7 +863,6 @@ export function EvaluationWorkspace({
   const [activeStage, setActiveStage] =
     useState<"vehicle" | "market" | "condition" | "verdict">("vehicle");
   const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
-  const [verdictConditionEditOpen, setVerdictConditionEditOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -5578,7 +5577,20 @@ export function EvaluationWorkspace({
           {activeStage === "verdict" ? (
             <section className="grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                <div className="flex items-start justify-between gap-3">
+                {activeStage === "vehicle" ? (
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 320 110"
+                  className="pointer-events-none absolute -bottom-2 -right-5 h-28 w-72 text-blue-900 opacity-[0.035]"
+                  fill="none"
+                >
+                  <path d="M42 72h18l17-28c5-8 12-12 22-13l91-7c15-1 28 3 40 13l33 28 24 5c8 2 14 9 14 17v4H20v-5c0-8 6-14 14-15l8-1Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round"/>
+                  <circle cx="82" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
+                  <circle cx="244" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
+                  <path d="M101 31l20 37M205 28l-10 40M75 68h173" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+                </svg>
+              ) : null}
+              <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
                   <button
                     type="button"
@@ -5600,7 +5612,7 @@ export function EvaluationWorkspace({
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
                   <button
                     type="button"
-                    onClick={() => setVerdictConditionEditOpen(true)}
+                    onClick={openConditionAnalysis}
                     className="text-xs font-black text-violet-700 hover:text-violet-900"
                   >
                     Edit
@@ -5634,9 +5646,36 @@ export function EvaluationWorkspace({
               </article>
             </section>
           ) : (
-            <>
-          <section className="grid gap-4 lg:grid-cols-3">
-            <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
+            <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-5 py-7 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:px-7 ${
+              activeStage === "vehicle" && !hasEvaluationData
+                ? "mt-[10vh] lg:mt-[13vh]"
+                : ""
+            }`}>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 opacity-[0.22]"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at 1px 1px, rgba(100,116,139,0.22) 1px, transparent 0)",
+                  backgroundSize: "24px 24px",
+                  maskImage: "linear-gradient(to bottom, black, transparent 72%)",
+                }}
+              />
+
+              <div className="relative">
+                <div className="mb-6">
+                  <div className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-700">New Evaluation</div>
+                  <h1 className="mt-1 text-2xl font-black tracking-[-0.025em] text-slate-950">
+                    Evaluate a vehicle in three quick steps
+                  </h1>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                    Identify the vehicle, review condition, and establish the market.
+                  </p>
+                </div>
+
+          <section className="relative grid gap-4 lg:grid-cols-3">
+            <div aria-hidden="true" className="pointer-events-none absolute left-[31.8%] right-[31.8%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-blue-200 via-slate-200 to-slate-200 lg:block" />
+            <article className={`relative overflow-hidden rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
               activeStage === "vehicle"
                 ? "border-blue-300 bg-white ring-2 ring-blue-100"
                 : hasEvaluationData
@@ -5798,7 +5837,17 @@ export function EvaluationWorkspace({
               </div>
 
               {!vehicleStepComplete ? (
-                <div className="mt-5 text-sm font-semibold text-slate-400">Enter the vehicle, mileage, and bid / ask, then select Next.</div>
+                <div className="mt-5">
+                  <div className="space-y-2 opacity-55">
+                    {["No material issues", "Known issues", "Condition unknown"].map((label) => (
+                      <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
+                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-[11px] font-bold text-slate-400">Available after Vehicle is complete.</div>
+                </div>
               ) : activeStage === "condition" ? (
                 <div className="mt-4">
                   {conditionReviewStatus === "unreviewed" ? (
@@ -5926,7 +5975,27 @@ export function EvaluationWorkspace({
               </div>
 
               {!conditionReviewComplete ? (
-                <div className="mt-5 text-sm font-semibold text-slate-400">Complete Condition first. Market search is running in the background.</div>
+                <div className="mt-5">
+                  <div className="grid grid-cols-2 gap-2 opacity-55">
+                    <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Comparable Vehicles</div>
+                      <div className="mt-1 text-lg font-black text-slate-300">—</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
+                      <div className="mt-1 text-lg font-black text-slate-300">—</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 opacity-55">
+                    <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-200">
+                      <div className="h-1.5 w-1/3 rounded-full bg-slate-300" />
+                    </div>
+                  </div>
+                  <div className="mt-3 text-[11px] font-bold text-slate-400">
+                    Market search begins after Vehicle and becomes actionable after Condition.
+                  </div>
+                </div>
               ) : (
                 <div className="mt-4">
                   {evaluationRunning || marketCheckLoading ? (
@@ -5976,9 +6045,8 @@ export function EvaluationWorkspace({
               )}
             </article>
           </section>
-
-
-            </>
+              </div>
+            </div>
           )}
 
           {activeStage === "market" && (needsCompSearch || compSectionExpanded) ? (
@@ -6117,97 +6185,6 @@ export function EvaluationWorkspace({
                 <button type="button" onClick={() => setActiveStage("market")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">← Back to Market</button>
               </div>
             </>
-          ) : null}
-
-          {verdictConditionEditOpen ? (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-              <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
-                <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-                  <div>
-                    <h2 className="text-lg font-black text-slate-950">Edit Condition</h2>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">Update condition without leaving the verdict screen.</p>
-                  </div>
-                  <button type="button" onClick={() => setVerdictConditionEditOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
-                </div>
-
-                <div className="space-y-4 p-5">
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {[
-                      ["no_material_issues", "No material issues"],
-                      ["issues", "Known issues"],
-                      ["unknown", "Condition unknown"],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => chooseConditionReview(value as ConditionReviewStatus)}
-                        className={`rounded-xl border p-3 text-left text-xs font-black ${
-                          conditionReviewStatus === value
-                            ? value === "issues"
-                              ? "border-violet-300 bg-violet-50 text-violet-800"
-                              : value === "unknown"
-                                ? "border-amber-300 bg-amber-50 text-amber-800"
-                                : "border-emerald-300 bg-emerald-50 text-emerald-800"
-                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {conditionReviewStatus === "issues" ? (
-                    <div>
-                      <textarea
-                        value={conditionSourceText}
-                        onChange={(event) => {
-                          setConditionSourceText(event.target.value);
-                          setConditionAnalysisApplied(false);
-                        }}
-                        placeholder="Paste or update auction notes, disclosures, warning lights, damage, service needs, title/history concerns..."
-                        className="min-h-[150px] w-full resize-y rounded-xl border border-violet-200 bg-violet-50/30 p-3 text-sm font-medium leading-5 text-slate-700 outline-none focus:bg-white"
-                      />
-                      {conditionAnalysisError ? <div className="mt-2 text-xs font-bold text-red-700">{conditionAnalysisError}</div> : null}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void analyzeConditionInformation()}
-                          disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
-                          className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
-                        >
-                          {conditionAnalysisLoading ? "Analyzing..." : "Analyze Issues"}
-                        </button>
-                        {conditionAnalysis ? (
-                          <>
-                            <button type="button" onClick={openConditionAnalysis} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Review Details</button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                applyConditionAnalysis();
-                                setVerdictConditionEditOpen(false);
-                              }}
-                              className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white hover:bg-slate-800"
-                            >
-                              Apply Changes
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
-                  <button
-                    type="button"
-                    onClick={() => setVerdictConditionEditOpen(false)}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
           ) : null}
 
           <div className="mt-4 flex justify-end">
