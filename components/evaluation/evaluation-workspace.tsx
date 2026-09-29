@@ -4666,66 +4666,7 @@ export function EvaluationWorkspace({
                       {conditionAnalysis.recommendedInspections.length ||
                       conditionAnalysis.missingInformation.length ||
                       conditionAnalysis.warnings.length ? (
-                        {activeStage === "verdict" ? (
-            <section className="grid gap-4 lg:grid-cols-3">
-              <article className="relative min-h-[145px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuickEvalMode(vin ? "vin" : "manual");
-                      setQuickEvalOpen(true);
-                    }}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
-              </article>
-
-              <article className="relative min-h-[145px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
-                  <button
-                    type="button"
-                    onClick={() => setVerdictConditionEditOpen(true)}
-                    className="text-xs font-black text-violet-700 hover:text-violet-900"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
-                  {conditionReviewStatus === "issues"
-                    ? "Known issues"
-                    : conditionReviewStatus === "unknown"
-                      ? "Condition unknown"
-                      : "No material issues"}
-                </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
-              </article>
-
-              <article className="relative min-h-[145px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
-                  <button
-                    type="button"
-                    onClick={openCompMarketEditor}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} strong comp{compSummary.includedCount === 1 ? "" : "s"}
-                </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
-              </article>
-            </section>
-          ) : (
-          <section className="grid gap-4 lg:grid-cols-3">
+                        <section className="grid gap-4 lg:grid-cols-3">
                           <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">
                               Recommended Inspections
@@ -5626,6 +5567,66 @@ export function EvaluationWorkspace({
         />
 
         <div className="mx-auto max-w-[1380px] px-4 py-4 sm:px-5 lg:px-7">
+          {activeStage === "verdict" ? (
+            <section className="grid gap-4 lg:grid-cols-3">
+              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickEvalMode(vin ? "vin" : "manual");
+                      setQuickEvalOpen(true);
+                    }}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+
+              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
+                  <button
+                    type="button"
+                    onClick={() => setVerdictConditionEditOpen(true)}
+                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black text-slate-950">
+                  {conditionReviewStatus === "issues"
+                    ? "Known issues"
+                    : conditionReviewStatus === "unknown"
+                      ? "Condition unknown"
+                      : "No material issues"}
+                </div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+
+              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
+                  <button
+                    type="button"
+                    onClick={openCompMarketEditor}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black text-slate-950">
+                  {compSummary.includedCount} strong comp{compSummary.includedCount === 1 ? "" : "s"}
+                </div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+            </section>
+          ) : (
+            <>
           <section className="grid gap-4 lg:grid-cols-3">
             <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
               activeStage === "vehicle"
@@ -5969,6 +5970,7 @@ export function EvaluationWorkspace({
           </section>
 
 
+            </>
           )}
 
           {activeStage === "market" && (needsCompSearch || compSectionExpanded) ? (
@@ -6110,45 +6112,40 @@ export function EvaluationWorkspace({
           ) : null}
 
           {verdictConditionEditOpen ? (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
               <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
                 <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
                   <div>
                     <h2 className="text-lg font-black text-slate-950">Edit Condition</h2>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">Update the condition state without leaving the verdict.</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Update condition without leaving the verdict screen.</p>
                   </div>
                   <button type="button" onClick={() => setVerdictConditionEditOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
                 </div>
 
-                <div className="space-y-3 p-5">
+                <div className="space-y-4 p-5">
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <button
-                      type="button"
-                      onClick={() => chooseConditionReview("no_material_issues")}
-                      className={`rounded-xl border p-3 text-left ${
-                        conditionReviewStatus === "no_material_issues" ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="text-xs font-black text-slate-900">No material issues</div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => chooseConditionReview("issues")}
-                      className={`rounded-xl border p-3 text-left ${
-                        conditionReviewStatus === "issues" ? "border-violet-300 bg-violet-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="text-xs font-black text-slate-900">Known issues</div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => chooseConditionReview("unknown")}
-                      className={`rounded-xl border p-3 text-left ${
-                        conditionReviewStatus === "unknown" ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="text-xs font-black text-slate-900">Condition unknown</div>
-                    </button>
+                    {[
+                      ["no_material_issues", "No material issues"],
+                      ["issues", "Known issues"],
+                      ["unknown", "Condition unknown"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => chooseConditionReview(value as ConditionReviewStatus)}
+                        className={`rounded-xl border p-3 text-left text-xs font-black ${
+                          conditionReviewStatus === value
+                            ? value === "issues"
+                              ? "border-violet-300 bg-violet-50 text-violet-800"
+                              : value === "unknown"
+                                ? "border-amber-300 bg-amber-50 text-amber-800"
+                                : "border-emerald-300 bg-emerald-50 text-emerald-800"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
 
                   {conditionReviewStatus === "issues" ? (
@@ -6162,6 +6159,7 @@ export function EvaluationWorkspace({
                         placeholder="Paste or update auction notes, disclosures, warning lights, damage, service needs, title/history concerns..."
                         className="min-h-[150px] w-full resize-y rounded-xl border border-violet-200 bg-violet-50/30 p-3 text-sm font-medium leading-5 text-slate-700 outline-none focus:bg-white"
                       />
+                      {conditionAnalysisError ? <div className="mt-2 text-xs font-bold text-red-700">{conditionAnalysisError}</div> : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
