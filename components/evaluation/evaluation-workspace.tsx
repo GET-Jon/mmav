@@ -20,6 +20,7 @@ import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
 import { calculateDealEconomicsScore, calculateValuation } from "@/lib/valuation";
+import { trackEvent } from "@/lib/analytics/client";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
@@ -2895,6 +2896,15 @@ export function EvaluationWorkspace({
       return;
     }
 
+    trackEvent("condition_analysis_started", {
+      source: auctionSite,
+      note_length_bucket:
+        rawIssueText.length < 250
+          ? "short"
+          : rawIssueText.length < 1000
+            ? "medium"
+            : "long",
+    });
     setConditionAnalysisLoading(true);
     setConditionAnalysisError("");
     setConditionAnalysisRetryable(false);
@@ -2941,6 +2951,13 @@ export function EvaluationWorkspace({
       setConditionPlanningEstimateOverride(null);
       setConditionReadyDaysLowOverride(null);
       setConditionReadyDaysHighOverride(null);
+      trackEvent("condition_analysis_completed", {
+        issue_count: data.analysis.issues.length,
+        included_issue_count: data.analysis.issues.filter(
+          (issue) => issue.includeInValuation,
+        ).length,
+        planning_estimate: data.analysis.planningEstimate,
+      });
     } catch (error) {
       setConditionAnalysisError(
         error instanceof Error ? error.message : "Condition analysis failed.",
@@ -3016,6 +3033,10 @@ export function EvaluationWorkspace({
     setConditionAssessmentsTouched(true);
     setConditionAnalysisApplied(true);
     setConditionReviewStatus("issues");
+    trackEvent("condition_review_applied", {
+      included_issue_count: includedIssues.length,
+      planning_estimate: effectivePlanningEstimate,
+    });
   }
 
   function openConditionProfitability() {
@@ -3116,6 +3137,12 @@ export function EvaluationWorkspace({
       setSaveStatus(
         data.mode === "updated" ? "Updated in Supabase" : "Saved to Supabase",
       );
+      trackEvent("evaluation_saved_to_pipeline", {
+        save_mode: data.mode === "updated" ? "updated" : "created",
+        valuation_comp_count: compSummary.includedCount,
+        comp_confidence: compSummary.confidence,
+        condition_review_status: conditionReviewStatus,
+      });
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : "Save failed.");
     } finally {
@@ -3580,6 +3607,12 @@ export function EvaluationWorkspace({
   }
 
   async function runPrimaryEvaluation() {
+    trackEvent("evaluation_vehicle_submitted", {
+      input_mode: quickEvalMode,
+      source: auctionSite,
+      has_mileage: targetMileage > 0,
+      has_bid_or_ask: valuationInput.currentBid > 0,
+    });
     setEvaluationRunning(true);
 
     if (quickEvalMode === "manual") {
@@ -6343,6 +6376,12 @@ export function EvaluationWorkspace({
                             type="button"
                             onClick={() => {
                               if (verdictTransitioning) return;
+                              trackEvent("evaluation_verdict_viewed", {
+                                valuation_comp_count: compSummary.includedCount,
+                                comp_confidence: compSummary.confidence,
+                                condition_review_status: conditionReviewStatus,
+                                presentation_decision: presentationDecision,
+                              });
                               setVerdictTransitioning(true);
                               window.setTimeout(() => {
                                 setActiveStage("verdict");
