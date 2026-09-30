@@ -389,13 +389,7 @@ export function LotLogicMarketingSite() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-200 bg-[#f6f8fb]">
-        <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-8 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-          <LotLogicLogo className="h-8" />
-          <div className="text-xs font-bold text-slate-500">AI-powered vehicle acquisition intelligence for automotive professionals.</div>
-          <div className="text-xs font-bold text-slate-400">By Mindful Motor Co.</div>
-        </div>
-      </footer>
+
     </main>
   );
 }
