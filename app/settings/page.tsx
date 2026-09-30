@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
+import { BillingSettingsCard } from "@/components/settings/billing-settings-card";
 import { LotLogicEvidenceCard } from "@/components/settings/lot-logic-evidence-card";
 import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
@@ -20,6 +21,7 @@ type SettingsTab =
   | "evaluator"
   | "api"
   | "organization"
+  | "billing"
   | "intelligence";
 
 type SettingsPageProps = {
@@ -35,6 +37,7 @@ function normalizeTab(value: string | string[] | undefined): SettingsTab {
     raw === "evaluator" ||
     raw === "api" ||
     raw === "organization" ||
+    raw === "billing" ||
     raw === "intelligence"
   ) {
     return raw;
@@ -123,6 +126,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <Link href="/settings?tab=evaluator" className={tabClass(activeTab === "evaluator")}>Evaluator Settings</Link>
           <Link href="/settings?tab=api" className={tabClass(activeTab === "api")}>API Usage</Link>
           <Link href="/settings?tab=organization" className={tabClass(activeTab === "organization")}>Organization</Link>
+          <Link href="/settings?tab=billing" className={tabClass(activeTab === "billing")}>Billing</Link>
           <Link href="/settings?tab=intelligence" className={tabClass(activeTab === "intelligence")}>Lot Logic Intelligence</Link>
         </div>
 
@@ -182,6 +186,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             ) : null}
           </section>
         ) : null}
+
+        {activeTab === "billing" ? <BillingSettingsCard /> : null}
 
         {activeTab === "intelligence" && companyContext ? (
           <>
