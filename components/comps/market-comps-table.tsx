@@ -50,7 +50,7 @@ function DetailItem({ label, value }: { label: string; value: unknown }) {
 
 function fitLabel(score: number) {
   if (score >= 85) return "Excellent match";
-  if (score >= 70) return "Strong match";
+  if (score >= 70) return "Good match";
   if (score >= 60) return "Usable match";
   return "Weak match";
 }
