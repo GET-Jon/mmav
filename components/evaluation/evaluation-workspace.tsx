@@ -933,6 +933,7 @@ export function EvaluationWorkspace({
   const [conditionModalTab, setConditionModalTab] = useState<"ai" | "manual">(
     "ai",
   );
+  const [conditionSourceEditorOpen, setConditionSourceEditorOpen] = useState(false);
   const [conditionSourceText, setConditionSourceText] = useState(
     initialSavedPayload?.conditionSourceText || "",
   );
@@ -3080,6 +3081,7 @@ export function EvaluationWorkspace({
 
     setConditionProfitabilityOpen(false);
     setConditionModalTab("ai");
+    setConditionSourceEditorOpen(false);
     if (!options?.preserveVehicleInfo) {
       setConditionSourceText("");
     }
@@ -4380,6 +4382,7 @@ export function EvaluationWorkspace({
             <div className="flex-1 overflow-y-auto">
               {conditionModalTab === "ai" ? (
                 <div className="space-y-5 p-6">
+                  {!conditionAnalysis ? (
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -4448,6 +4451,9 @@ export function EvaluationWorkspace({
                       </div>
                     ) : null}
                   </section>
+
+
+                  ) : null}
 
                   {conditionAnalysis ? (
                     <>
@@ -4776,6 +4782,49 @@ export function EvaluationWorkspace({
                             </ul>
                           </div>
                         </section>
+                      <section className="rounded-2xl border border-slate-200 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setConditionSourceEditorOpen((open) => !open)}
+                          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                        >
+                          <div>
+                            <div className="font-black text-slate-950">Edit or update condition information</div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                              Review or change the original auction / seller notes, then analyze again.
+                            </div>
+                          </div>
+                          <span className="text-sm font-black text-violet-700">{conditionSourceEditorOpen ? "Hide" : "Edit"}</span>
+                        </button>
+
+                        {conditionSourceEditorOpen ? (
+                          <div className="border-t border-slate-200 p-5">
+                            <textarea
+                              value={conditionSourceText}
+                              onChange={(event) => {
+                                setConditionSourceText(event.target.value);
+                                setConditionAnalysisApplied(false);
+                              }}
+                              placeholder="Paste or update auction / seller condition information..."
+                              className="min-h-[170px] w-full resize-y rounded-2xl border border-slate-200 bg-white p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-violet-300"
+                            />
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                              <span className="text-[10px] font-semibold text-slate-400">
+                                {conditionSourceText.trim().length.toLocaleString()} characters
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void analyzeConditionInformation()}
+                                disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
+                                className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {conditionAnalysisLoading ? "Analyzing..." : "Analyze Again"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </section>
+
                       ) : null}
                     </>
                   ) : null}
@@ -5619,7 +5668,7 @@ export function EvaluationWorkspace({
             setVerdictCompsExpanded(false);
             clearLocalDraft();
             setQuickEvalMode("vin");
-            setQuickEvalOpen(true);
+            setQuickEvalOpen(false);
           }}
         />
 
@@ -5722,12 +5771,12 @@ export function EvaluationWorkspace({
             }}
           >
             <div aria-hidden="true" className="pointer-events-none absolute left-[31.8%] right-[31.8%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-blue-200 via-slate-200 to-slate-200 lg:block" />
-            <article className={`relative min-h-[360px] overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+            <article className={`relative overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "vehicle"
-                ? "z-10 border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/90 shadow-[0_22px_50px_rgba(37,99,235,0.18)] -translate-y-1 scale-[1.025]"
+                ? "z-10 min-h-[420px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/90 shadow-[0_22px_50px_rgba(37,99,235,0.18)] -translate-y-1 scale-[1.025]"
                 : hasEvaluationData
-                  ? "border-emerald-200 bg-white"
-                  : "border-slate-200 bg-white/85 opacity-80"
+                  ? "min-h-[360px] border-emerald-200 bg-white"
+                  : "min-h-[360px] border-slate-200 bg-white/85 opacity-80"
             }`}>
               {activeStage === "vehicle" ? (
                 <svg
@@ -5844,6 +5893,23 @@ export function EvaluationWorkspace({
                     </label>
                   </div>
 
+                  <label>
+                    <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Source</span>
+                    <select
+                      value={auctionSite}
+                      onChange={(event) => setAuctionSite(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-300"
+                    >
+                      <option>ACV Auctions</option>
+                      <option>Manheim</option>
+                      <option>Cars & Bids</option>
+                      <option>Bring a Trailer</option>
+                      <option>Facebook</option>
+                      <option>Private Party</option>
+                      <option>Other</option>
+                    </select>
+                  </label>
+
                   {vinDecodeError ? (
                     <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{vinDecodeError}</div>
                   ) : null}
@@ -5874,14 +5940,14 @@ export function EvaluationWorkspace({
               ) : null}
             </article>
 
-            <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+            <article className={`rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "condition"
-                ? "z-10 border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/90 shadow-[0_22px_50px_rgba(124,58,237,0.17)] -translate-y-1 scale-[1.025]"
+                ? "z-10 min-h-[420px] border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/90 shadow-[0_22px_50px_rgba(124,58,237,0.17)] -translate-y-1 scale-[1.025]"
                 : conditionReviewComplete && vehicleStepComplete
-                  ? "border-emerald-200 bg-white"
+                  ? "min-h-[360px] border-emerald-200 bg-white"
                   : vehicleStepComplete
-                    ? "border-slate-200 bg-white/70"
-                    : "border-slate-200 bg-white/80 opacity-75"
+                    ? "min-h-[360px] border-slate-200 bg-white/70"
+                    : "min-h-[360px] border-slate-200 bg-white/80 opacity-75"
             }`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -6019,9 +6085,9 @@ export function EvaluationWorkspace({
               activeStage === "market"
                 ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : !needsCompSearch && hasEvaluationData
-                  ? "border-emerald-200 bg-white"
+                  ? "min-h-[360px] border-emerald-200 bg-white"
                   : conditionReviewComplete
-                    ? "border-slate-200 bg-white/70"
+                    ? "min-h-[360px] border-slate-200 bg-white/70"
                     : "border-slate-200 bg-white/45 opacity-50"
             }`}>
               <div className="flex items-start justify-between gap-3">
