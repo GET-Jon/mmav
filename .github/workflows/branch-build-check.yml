@@ -21,4 +21,4 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build
-        run: npm run build
+        run: npx next build
