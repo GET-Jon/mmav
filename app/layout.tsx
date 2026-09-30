@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { GlobalFifteenMinuteTimeInputs } from "@/components/global-fifteen-minute-time-inputs";
+import { LegalFooter } from "@/components/legal/legal-footer";
+import { PrivacyConsent } from "@/components/privacy/privacy-consent";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,6 +38,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <GlobalFifteenMinuteTimeInputs />
         {children}
+        <LegalFooter />
+        <PrivacyConsent />
       </body>
     </html>
   );
