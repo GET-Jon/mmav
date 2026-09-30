@@ -5577,20 +5577,7 @@ export function EvaluationWorkspace({
           {activeStage === "verdict" ? (
             <section className="grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                {activeStage === "vehicle" ? (
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 320 110"
-                  className="pointer-events-none absolute -bottom-2 -right-5 h-28 w-72 text-blue-900 opacity-[0.035]"
-                  fill="none"
-                >
-                  <path d="M42 72h18l17-28c5-8 12-12 22-13l91-7c15-1 28 3 40 13l33 28 24 5c8 2 14 9 14 17v4H20v-5c0-8 6-14 14-15l8-1Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round"/>
-                  <circle cx="82" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
-                  <circle cx="244" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
-                  <path d="M101 31l20 37M205 28l-10 40M75 68h173" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
-                </svg>
-              ) : null}
-              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
                   <button
                     type="button"
@@ -5682,6 +5669,19 @@ export function EvaluationWorkspace({
                   ? "border-emerald-200 bg-white"
                   : "border-slate-200 bg-white/55 opacity-60"
             }`}>
+              {activeStage === "vehicle" ? (
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 320 110"
+                  className="pointer-events-none absolute -bottom-2 -right-5 h-28 w-72 text-blue-900 opacity-[0.035]"
+                  fill="none"
+                >
+                  <path d="M42 72h18l17-28c5-8 12-12 22-13l91-7c15-1 28 3 40 13l33 28 24 5c8 2 14 9 14 17v4H20v-5c0-8 6-14 14-15l8-1Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round"/>
+                  <circle cx="82" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
+                  <circle cx="244" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
+                  <path d="M101 31l20 37M205 28l-10 40M75 68h173" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+                </svg>
+              ) : null}
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">1 · Vehicle</div>
