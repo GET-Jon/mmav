@@ -54,6 +54,15 @@ const initialEvaluation: ValuationInput = {
 
 const initialSelectedConditions: string[] = [];
 
+const conditionAnalysisProgressSteps = [
+  "Reviewing condition notes",
+  "Identifying material issues",
+  "Estimating likely repairs",
+  "Pricing likely repairs",
+  "Building condition reserve",
+] as const;
+
+
 type MarketCheckVehicleOverride = {
   year?: string;
   make?: string;
@@ -919,6 +928,12 @@ export function EvaluationWorkspace({
     const stage = deriveEvaluationStage(initialSavedPayload);
     return stage === "market" || stage === "verdict";
   });
+  const [verdictTransitioning, setVerdictTransitioning] = useState(false);
+  const [verdictEntered, setVerdictEntered] = useState(
+    () => deriveEvaluationStage(initialSavedPayload) === "verdict",
+  );
+  const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
+    useState(0);
   const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
@@ -1106,6 +1121,35 @@ export function EvaluationWorkspace({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!conditionAnalysisLoading) {
+      setConditionAnalysisProgressIndex(0);
+      return;
+    }
+
+    setConditionAnalysisProgressIndex(0);
+    const timer = window.setInterval(() => {
+      setConditionAnalysisProgressIndex((current) =>
+        Math.min(current + 1, conditionAnalysisProgressSteps.length - 1),
+      );
+    }, 850);
+
+    return () => window.clearInterval(timer);
+  }, [conditionAnalysisLoading]);
+
+  useEffect(() => {
+    if (activeStage !== "verdict") {
+      setVerdictEntered(false);
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setVerdictEntered(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeStage]);
 
   useEffect(() => {
     if (initialSavedEvaluationId || initialSavedPayload) {
@@ -3166,6 +3210,8 @@ export function EvaluationWorkspace({
     setQuickEvalMode("vin");
     setVehicleStepConfirmed(false);
     setConditionStepConfirmed(false);
+    setVerdictTransitioning(false);
+    setVerdictEntered(false);
   }
 
   const representativeCompImage = useMemo(() => {
@@ -4759,7 +4805,11 @@ export function EvaluationWorkspace({
                       {conditionAnalysis.recommendedInspections.length ||
                       conditionAnalysis.missingInformation.length ||
                       conditionAnalysis.warnings.length ? (
-                        <section className="grid gap-4 lg:grid-cols-3">
+                        <section className={`grid gap-4 transition-all duration-300 ease-out lg:grid-cols-3 ${
+              verdictEntered
+                ? "translate-y-0 scale-100 opacity-100"
+                : "translate-y-3 scale-[1.015] opacity-0"
+            }`}>
                           <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">
                               Recommended Inspections
@@ -5699,6 +5749,8 @@ export function EvaluationWorkspace({
             clearLocalDraft();
             setVehicleStepConfirmed(false);
             setConditionStepConfirmed(false);
+            setVerdictTransitioning(false);
+            setVerdictEntered(false);
             setQuickEvalMode("vin");
             setQuickEvalOpen(false);
           }}
@@ -5764,7 +5816,11 @@ export function EvaluationWorkspace({
               </article>
             </section>
           ) : (
-            <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 min-h-[500px] bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-6 py-8 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:px-7 ${
+            <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 min-h-[500px] bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-6 py-8 shadow-[0_18px_50px_rgba(15,23,42,0.05)] transition-all duration-300 ease-out sm:px-7 ${
+              verdictTransitioning
+                ? "-translate-y-1 scale-[0.965] opacity-70"
+                : "translate-y-0 scale-100 opacity-100"
+            } ${
               activeStage === "vehicle" && !hasEvaluationData
                 ? "mt-[10vh] lg:mt-[13vh]"
                 : ""
@@ -5972,7 +6028,7 @@ export function EvaluationWorkspace({
               ) : null}
             </article>
 
-            <article className={`rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+            <article className={`relative overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "condition"
                 ? "z-10 min-h-[420px] border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/90 shadow-[0_22px_50px_rgba(124,58,237,0.17)] -translate-y-1 scale-[1.025]"
                 : conditionReviewComplete && vehicleStepConfirmed
@@ -5981,6 +6037,45 @@ export function EvaluationWorkspace({
                     ? "min-h-[360px] border-slate-200 bg-white/70"
                     : "min-h-[360px] border-slate-200 bg-white/80 opacity-75"
             }`}>
+              {conditionAnalysisLoading ? (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/95 p-6 backdrop-blur-[2px]">
+                  <div className="w-full max-w-sm text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-50 ring-1 ring-violet-100">
+                      <div className="relative h-9 w-9">
+                        <div className="absolute inset-0 rounded-full border-4 border-violet-100" />
+                        <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-violet-600 border-r-violet-400" />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 text-[10px] font-black uppercase tracking-[0.14em] text-violet-600">
+                      Condition Analysis
+                    </div>
+                    <div className="mt-2 min-h-[32px] text-xl font-black tracking-[-0.02em] text-slate-950">
+                      {conditionAnalysisProgressSteps[conditionAnalysisProgressIndex]}…
+                    </div>
+                    <div className="mt-2 text-xs font-semibold text-slate-500">
+                      Lot Logic is turning the notes into an actionable condition reserve.
+                    </div>
+
+                    <div className="mt-6 flex gap-1.5">
+                      {conditionAnalysisProgressSteps.map((step, index) => (
+                        <div
+                          key={step}
+                          className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                            index <= conditionAnalysisProgressIndex
+                              ? "bg-violet-600"
+                              : "bg-slate-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[10px] font-bold text-slate-400">
+                      Step {conditionAnalysisProgressIndex + 1} of {conditionAnalysisProgressSteps.length}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -6067,32 +6162,8 @@ export function EvaluationWorkspace({
                               disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
                               className="flex-1 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
                             >
-                              {conditionAnalysisLoading ? (
-                                <span className="inline-flex items-center justify-center gap-2">
-                                  <svg
-                                    className="h-4 w-4 animate-spin"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    aria-hidden="true"
-                                  >
-                                    <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" />
-                                    <path className="opacity-90" d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                                  </svg>
-                                  Analyzing issues…
-                                </span>
-                              ) : (
-                                "Analyze Issues"
-                              )}
+                              {conditionAnalysisLoading ? "Analyzing…" : "Analyze Issues"}
                             </button>
-                            {conditionAnalysisLoading ? (
-                              <div className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-bold text-violet-700">
-                                <span className="relative flex h-2 w-2">
-                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-60" />
-                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
-                                </span>
-                                Lot Logic is structuring the condition notes and estimating risk.
-                              </div>
-                            ) : null}
                           </div>
                         </>
                       ) : (
@@ -6250,7 +6321,21 @@ export function EvaluationWorkspace({
                           <button type="button" onClick={() => setCompSectionExpanded((open) => !open)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
                             {compSectionExpanded ? "Hide comps" : "Review comps"}
                           </button>
-                          <button type="button" onClick={() => setActiveStage("verdict")} className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800">Continue to Verdict →</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (verdictTransitioning) return;
+                              setVerdictTransitioning(true);
+                              window.setTimeout(() => {
+                                setActiveStage("verdict");
+                                setVerdictTransitioning(false);
+                              }, 220);
+                            }}
+                            disabled={verdictTransitioning}
+                            className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70"
+                          >
+                            {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
+                          </button>
                         </div>
                       ) : null}
                     </>
@@ -6307,7 +6392,11 @@ export function EvaluationWorkspace({
 
           {activeStage === "verdict" ? (
             <>
-              <section className="mt-4 grid gap-4 lg:grid-cols-[1.05fr_1.1fr_1fr]">
+              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[1.05fr_1.1fr_1fr] ${
+                verdictEntered
+                  ? "translate-y-0 opacity-100"
+                  : "translate-y-4 opacity-0"
+              }`}>
                 <article className="h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="text-base font-black text-slate-950">Vehicle Snapshot</h2>
@@ -6388,7 +6477,9 @@ export function EvaluationWorkspace({
                 </article>
               </section>
 
-              <section className="mt-4">
+              <section className={`mt-4 transition-all delay-100 duration-300 ease-out ${
+                verdictEntered ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+              }`}>
                 <SectionCard
                   title="Comparable Vehicles"
                   action={
@@ -6415,7 +6506,17 @@ export function EvaluationWorkspace({
               </section>
 
               <div className="mt-4">
-                <button type="button" onClick={() => setActiveStage("market")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">← Back to Market</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerdictTransitioning(false);
+                    setVerdictEntered(false);
+                    setActiveStage("market");
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50"
+                >
+                  ← Back to Market
+                </button>
               </div>
             </>
           ) : null}
