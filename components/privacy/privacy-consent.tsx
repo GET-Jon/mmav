@@ -81,6 +81,7 @@ function loadGoogleAnalytics(consent: ConsentState) {
   window.gtag("config", measurementId, {
     anonymize_ip: true,
     allow_google_signals: consent.advertising,
+    send_page_view: false,
   });
 
   const script = document.createElement("script");
