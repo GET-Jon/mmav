@@ -5822,7 +5822,7 @@ export function EvaluationWorkspace({
                 : "translate-y-0 scale-100 opacity-100"
             } ${
               activeStage === "vehicle" && !hasEvaluationData
-                ? "mt-[10vh] lg:mt-[13vh]"
+                ? "mt-[clamp(2rem,5vh,3.5rem)]"
                 : ""
             }`}>
               <div
