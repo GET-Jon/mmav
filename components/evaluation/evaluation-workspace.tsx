@@ -935,6 +935,7 @@ export function EvaluationWorkspace({
   const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
     useState(0);
   const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
+  const [allInCostOpen, setAllInCostOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -3459,7 +3460,7 @@ export function EvaluationWorkspace({
       ? `Strong economics: ${money(valuation.expectedGrossProfit)} expected gross at the current assumptions.`
       : null,
     compSummary.includedCount >= 6 && finalTargetUsed > 0
-      ? `${compSummary.includedCount} strong comps support an expected sale value near ${money(finalTargetUsed)}.`
+      ? `${compSummary.includedCount} valuation comps support an expected sale value near ${money(finalTargetUsed)}.`
       : null,
     conditionAnalysisApplied && getEffectiveConditionPlanningEstimate() > 0
       ? `${money(getEffectiveConditionPlanningEstimate())} of selected recon is already reflected in the deal economics.`
@@ -3485,7 +3486,16 @@ export function EvaluationWorkspace({
     valuationInput.costs.recon +
     valuationInput.costs.conditionRiskAdd +
     valuationInput.costs.titleHistoryRiskAdd;
-  const displayedCurrentCost = Math.max(0, valuationInput.currentBid) + displayedReconReserve;
+  const displayedCurrentCost = valuation.allInCost;
+  const allInCostBreakdown = [
+    { label: "Current bid / purchase price", amount: Math.max(0, valuationInput.currentBid) },
+    { label: "Auction fee", amount: valuationInput.costs.auctionFee },
+    { label: "Transport", amount: valuationInput.costs.transport },
+    { label: "Condition & reconditioning reserve", amount: displayedReconReserve },
+    { label: "Detail / admin", amount: valuationInput.costs.detailAdmin },
+    { label: "Contingency reserve", amount: valuationInput.costs.generalRiskReserve },
+    { label: "Brand risk adjustment", amount: valuationInput.costs.brandRiskAdd },
+  ];
   const dealerFitPillTone =
     dealerFitResult.score >= 70
       ? "bg-emerald-100 text-emerald-700"
@@ -3653,7 +3663,7 @@ export function EvaluationWorkspace({
 
   const hasMaterialConditionRisk = materialConditionIssues.length > 0;
 
-  // Zero strong comps is an evidence state, not a negative verdict.
+  // Zero valuation comps is an evidence state, not a negative verdict.
   // Do not manufacture sale/profit conclusions until market evidence exists.
   const needsCompSearch =
     hasEvaluationData &&
@@ -4308,7 +4318,7 @@ export function EvaluationWorkspace({
                       String(marketCheckApiUsage?.apiCallsMade ?? 0),
                     ],
                     [
-                      "Strong Comps",
+                      "Valuation Comps",
                       String(
                         marketCheckApiUsage?.usableCompCount ??
                           compSummary.includedCount,
@@ -5363,7 +5373,7 @@ export function EvaluationWorkspace({
                       <dd className="text-right font-black text-slate-900">{compConfidenceDisplay}</dd>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <dt className="font-semibold text-slate-500">Strong comps used</dt>
+                      <dt className="font-semibold text-slate-500">Valuation comps used</dt>
                       <dd className="text-right font-black text-slate-900">{compSummary.includedCount || "—"}</dd>
                     </div>
                     <div className="flex justify-between gap-4">
@@ -5411,7 +5421,15 @@ export function EvaluationWorkspace({
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">All-in cost</dt>
-                      <dd className="mt-1 font-black text-slate-950">{money(displayedCurrentCost)}</dd>
+                      <dd className="mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setAllInCostOpen(true)}
+                          className="font-black text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 hover:text-blue-700"
+                        >
+                          {money(displayedCurrentCost)}
+                        </button>
+                      </dd>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Expected profit</dt>
@@ -6435,7 +6453,23 @@ export function EvaluationWorkspace({
                   <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
                     <div>
                       <div className="text-[9px] font-black uppercase text-slate-500">All-In Cost</div>
-                      <div className="mt-2 text-[25px] font-black text-slate-950">{valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}</div>
+                      <button
+                        type="button"
+                        onClick={() => setAllInCostOpen(true)}
+                        disabled={valuationInput.currentBid <= 0}
+                        className="mt-2 text-[25px] font-black text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline"
+                      >
+                        {valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}
+                      </button>
+                      {valuationInput.currentBid > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setAllInCostOpen(true)}
+                          className="mx-auto mt-1 block text-[10px] font-black text-blue-700 hover:text-blue-900"
+                        >
+                          View costs
+                        </button>
+                      ) : null}
                     </div>
                     <div>
                       <div className="text-[9px] font-black uppercase text-slate-500">Sale Estimate</div>
@@ -6519,6 +6553,60 @@ export function EvaluationWorkspace({
                 </button>
               </div>
             </>
+          ) : null}
+
+          {allInCostOpen ? (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+              <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-950">All-In Cost</h2>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      Every modeled acquisition and preparation cost included in the deal economics.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAllInCostOpen(false)}
+                    className="text-slate-400 hover:text-slate-700"
+                    aria-label="Close all-in cost breakdown"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-5">
+                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                    {allInCostBreakdown.map((item) => (
+                      <div key={item.label} className="flex items-center justify-between gap-4 px-4 py-3">
+                        <span className="text-sm font-semibold text-slate-600">{item.label}</span>
+                        <span className="text-sm font-black text-slate-950">{money(item.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between gap-4 bg-slate-50 px-4 py-3">
+                      <span className="text-sm font-black text-slate-950">Total all-in cost</span>
+                      <span className="text-lg font-black text-slate-950">{money(valuation.allInCost)}</span>
+                    </div>
+                  </div>
+
+                  {displayedReconReserve > 0 ? (
+                    <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                      Condition and reconditioning is shown as one reserve here. Internally, Lot Logic still preserves the mechanical, cosmetic, and history allocation from the condition review so the planning estimate can remain traceable.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setAllInCostOpen(false)}
+                    className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white hover:bg-slate-800"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           <div className="mt-4 flex justify-end">
