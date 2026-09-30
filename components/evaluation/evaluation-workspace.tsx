@@ -4782,6 +4782,8 @@ export function EvaluationWorkspace({
                             </ul>
                           </div>
                         </section>
+                      ) : null}
+
                       <section className="rounded-2xl border border-slate-200 bg-white">
                         <button
                           type="button"
@@ -4824,8 +4826,6 @@ export function EvaluationWorkspace({
                           </div>
                         ) : null}
                       </section>
-
-                      ) : null}
                     </>
                   ) : null}
                 </div>
