@@ -5664,10 +5664,10 @@ export function EvaluationWorkspace({
             <div aria-hidden="true" className="pointer-events-none absolute left-[31.8%] right-[31.8%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-blue-200 via-slate-200 to-slate-200 lg:block" />
             <article className={`relative overflow-hidden rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
               activeStage === "vehicle"
-                ? "border-blue-300 bg-white ring-2 ring-blue-100"
+                ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : hasEvaluationData
                   ? "border-emerald-200 bg-white"
-                  : "border-slate-200 bg-white/55 opacity-60"
+                  : "border-slate-200 bg-white/85 opacity-80"
             }`}>
               {activeStage === "vehicle" ? (
                 <svg
@@ -5684,8 +5684,13 @@ export function EvaluationWorkspace({
               ) : null}
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">1 · Vehicle</div>
-                  <h2 className="mt-1 text-lg font-black text-slate-950">
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">1 · Vehicle</div>
+                    {activeStage === "vehicle" ? (
+                      <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-1 text-lg font-black tracking-[-0.015em] text-slate-950">
                     {hasEvaluationData ? vehicleTitle : "Identify the car"}
                   </h2>
                 </div>
@@ -5811,16 +5816,21 @@ export function EvaluationWorkspace({
 
             <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
               activeStage === "condition"
-                ? "border-violet-300 bg-white ring-2 ring-violet-100"
+                ? "border-2 border-violet-500 bg-white ring-4 ring-violet-100/80 shadow-[0_18px_40px_rgba(124,58,237,0.14)] -translate-y-0.5 scale-[1.01]"
                 : conditionReviewComplete && vehicleStepComplete
                   ? "border-emerald-200 bg-white"
                   : vehicleStepComplete
                     ? "border-slate-200 bg-white/70"
-                    : "border-slate-200 bg-white/45 opacity-50"
+                    : "border-slate-200 bg-white/80 opacity-75"
             }`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">2 · Condition</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">2 · Condition</div>
+                    {activeStage === "condition" ? (
+                      <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
+                    ) : null}
+                  </div>
                   <h2 className="mt-1 text-lg font-black text-slate-950">
                     {conditionReviewStatus === "unreviewed"
                       ? "What do we know?"
@@ -5947,7 +5957,7 @@ export function EvaluationWorkspace({
 
             <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
               activeStage === "market"
-                ? "border-blue-300 bg-white ring-2 ring-blue-100"
+                ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : !needsCompSearch && hasEvaluationData
                   ? "border-emerald-200 bg-white"
                   : conditionReviewComplete
@@ -5956,7 +5966,12 @@ export function EvaluationWorkspace({
             }`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">3 · Market</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">3 · Market</div>
+                    {activeStage === "market" ? (
+                      <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
+                    ) : null}
+                  </div>
                   <h2 className="mt-1 text-lg font-black text-slate-950">
                     {evaluationRunning || marketCheckLoading
                       ? "Finding comps..."
