@@ -911,6 +911,14 @@ export function EvaluationWorkspace({
   const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
   const [activeStage, setActiveStage] =
     useState<EvaluationStage>(() => deriveEvaluationStage(initialSavedPayload));
+  const [vehicleStepConfirmed, setVehicleStepConfirmed] = useState(() => {
+    const stage = deriveEvaluationStage(initialSavedPayload);
+    return stage !== "vehicle";
+  });
+  const [conditionStepConfirmed, setConditionStepConfirmed] = useState(() => {
+    const stage = deriveEvaluationStage(initialSavedPayload);
+    return stage === "market" || stage === "verdict";
+  });
   const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
@@ -1235,7 +1243,12 @@ export function EvaluationWorkspace({
           : null,
       );
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
-      setActiveStage(deriveEvaluationStage(draft as SavedEvaluationPayload));
+      const restoredStage = deriveEvaluationStage(draft as SavedEvaluationPayload);
+      setActiveStage(restoredStage);
+      setVehicleStepConfirmed(restoredStage !== "vehicle");
+      setConditionStepConfirmed(
+        restoredStage === "market" || restoredStage === "verdict",
+      );
     } catch (error) {
       console.error("Failed to load local evaluator draft:", error);
     } finally {
@@ -3151,6 +3164,8 @@ export function EvaluationWorkspace({
     setTargetMileage(initialTargetMileage);
     setEvaluation(initialEvaluation);
     setQuickEvalMode("vin");
+    setVehicleStepConfirmed(false);
+    setConditionStepConfirmed(false);
   }
 
   const representativeCompImage = useMemo(() => {
@@ -3182,6 +3197,15 @@ export function EvaluationWorkspace({
       vehicleModel &&
       targetMileage > 0 &&
       valuationInput.currentBid > 0,
+  );
+
+  const vehicleInputReady = Boolean(
+    targetMileage > 0 &&
+      valuationInput.currentBid > 0 &&
+      auctionSite.trim() &&
+      (quickEvalMode === "vin"
+        ? vin.trim().length === 17
+        : hasManualQuickEvalBasics),
   );
 
   const suggestedBid =
@@ -3530,6 +3554,8 @@ export function EvaluationWorkspace({
       setSavedEvaluationId(null);
       setSaveStatus("");
       setFinalTargetOverride(null);
+      setVehicleStepConfirmed(true);
+      setConditionStepConfirmed(false);
       setActiveStage("condition");
 
       void generateVehicleThumbnail({
@@ -3554,6 +3580,8 @@ export function EvaluationWorkspace({
       return;
     }
 
+    setVehicleStepConfirmed(true);
+    setConditionStepConfirmed(false);
     setActiveStage("condition");
 
     void generateVehicleThumbnail({
@@ -5667,6 +5695,8 @@ export function EvaluationWorkspace({
             setCompSectionExpanded(false);
             setVerdictCompsExpanded(false);
             clearLocalDraft();
+            setVehicleStepConfirmed(false);
+            setConditionStepConfirmed(false);
             setQuickEvalMode("vin");
             setQuickEvalOpen(false);
           }}
@@ -5921,9 +5951,9 @@ export function EvaluationWorkspace({
                       evaluationRunning ||
                       vinDecodeLoading ||
                       marketCheckLoading ||
-                      (quickEvalMode === "vin" ? vin.trim().length < 17 : !hasManualQuickEvalBasics)
+                      !vehicleInputReady
                     }
-                    className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="mt-3 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
                     {evaluationRunning || vinDecodeLoading ? "Loading Vehicle..." : "Next →"}
                   </button>
@@ -5943,9 +5973,9 @@ export function EvaluationWorkspace({
             <article className={`rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "condition"
                 ? "z-10 min-h-[420px] border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/90 shadow-[0_22px_50px_rgba(124,58,237,0.17)] -translate-y-1 scale-[1.025]"
-                : conditionReviewComplete && vehicleStepComplete
+                : conditionReviewComplete && vehicleStepConfirmed
                   ? "min-h-[360px] border-emerald-200 bg-white"
-                  : vehicleStepComplete
+                  : vehicleStepConfirmed
                     ? "min-h-[360px] border-slate-200 bg-white/70"
                     : "min-h-[360px] border-slate-200 bg-white/80 opacity-75"
             }`}>
@@ -5967,12 +5997,21 @@ export function EvaluationWorkspace({
                           : "Known issues"}
                   </h2>
                 </div>
-                {vehicleStepComplete && conditionReviewStatus !== "unreviewed" && activeStage !== "condition" ? (
-                  <button type="button" onClick={() => setActiveStage("condition")} className="text-xs font-black text-violet-700 hover:text-violet-900">Edit</button>
+                {vehicleStepConfirmed && conditionReviewStatus !== "unreviewed" && activeStage !== "condition" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConditionStepConfirmed(false);
+                      setActiveStage("condition");
+                    }}
+                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                  >
+                    Edit
+                  </button>
                 ) : null}
               </div>
 
-              {!vehicleStepComplete ? (
+              {!vehicleStepConfirmed ? (
                 <div className="mt-5">
                   <div className="space-y-2 opacity-55">
                     {["No material issues", "Known issues", "Condition unknown"].map((label) => (
@@ -6016,15 +6055,42 @@ export function EvaluationWorkspace({
                           />
                           {conditionAnalysisError ? <div className="mt-2 text-xs font-bold text-red-700">{conditionAnalysisError}</div> : null}
                           <div className="mt-3 flex gap-2">
-                            <button type="button" onClick={() => chooseConditionReview("unreviewed")} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600">Back</button>
+                            <button type="button" onClick={() => {
+                          setConditionStepConfirmed(false);
+                          chooseConditionReview("unreviewed");
+                        }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600">Back</button>
                             <button
                               type="button"
                               onClick={() => void analyzeConditionInformation()}
                               disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
                               className="flex-1 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
                             >
-                              {conditionAnalysisLoading ? "Analyzing..." : "Analyze Issues"}
+                              {conditionAnalysisLoading ? (
+                                <span className="inline-flex items-center justify-center gap-2">
+                                  <svg
+                                    className="h-4 w-4 animate-spin"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    aria-hidden="true"
+                                  >
+                                    <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" />
+                                    <path className="opacity-90" d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                                  </svg>
+                                  Analyzing issues…
+                                </span>
+                              ) : (
+                                "Analyze Issues"
+                              )}
                             </button>
+                            {conditionAnalysisLoading ? (
+                              <div className="flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-bold text-violet-700">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-60" />
+                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
+                                </span>
+                                Lot Logic is structuring the condition notes and estimating risk.
+                              </div>
+                            ) : null}
                           </div>
                         </>
                       ) : (
@@ -6037,6 +6103,7 @@ export function EvaluationWorkspace({
                               type="button"
                               onClick={() => {
                                 applyConditionAnalysis();
+                                setConditionStepConfirmed(true);
                                 setActiveStage("market");
                               }}
                               className="rounded-lg bg-violet-700 px-4 py-2 text-xs font-black text-white hover:bg-violet-800"
@@ -6059,8 +6126,20 @@ export function EvaluationWorkspace({
                         </div>
                       </div>
                       <div className="mt-3 flex gap-2">
-                        <button type="button" onClick={() => chooseConditionReview("unreviewed")} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600">Change</button>
-                        <button type="button" onClick={() => setActiveStage("market")} className="flex-1 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800">Next →</button>
+                        <button type="button" onClick={() => {
+                          setConditionStepConfirmed(false);
+                          chooseConditionReview("unreviewed");
+                        }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600">Change</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConditionStepConfirmed(true);
+                            setActiveStage("market");
+                          }}
+                          className="flex-1 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800"
+                        >
+                          Next →
+                        </button>
                       </div>
                     </div>
                   )}
@@ -6076,17 +6155,26 @@ export function EvaluationWorkspace({
                   </div>
                   <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Condition reviewed ✓</div>
                 </div>
-              ) : vehicleStepComplete ? (
-                <button type="button" onClick={() => setActiveStage("condition")} className="mt-4 w-full rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white">Review Condition →</button>
+              ) : vehicleStepConfirmed ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConditionStepConfirmed(false);
+                    setActiveStage("condition");
+                  }}
+                  className="mt-4 w-full rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white"
+                >
+                  Review Condition →
+                </button>
               ) : null}
             </article>
 
             <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "market"
                 ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
-                : !needsCompSearch && hasEvaluationData
+                : conditionStepConfirmed && !needsCompSearch && hasEvaluationData
                   ? "min-h-[360px] border-emerald-200 bg-white"
-                  : conditionReviewComplete
+                  : conditionStepConfirmed
                     ? "min-h-[360px] border-slate-200 bg-white/70"
                     : "border-slate-200 bg-white/45 opacity-50"
             }`}>
@@ -6099,14 +6187,16 @@ export function EvaluationWorkspace({
                     ) : null}
                   </div>
                   <h2 className="mt-1 text-lg font-black text-slate-950">
-                    {evaluationRunning || marketCheckLoading
-                      ? "Finding comps..."
-                      : compSummary.includedCount > 0
-                        ? `${compSummary.includedCount} strong comp${compSummary.includedCount === 1 ? "" : "s"}`
-                        : "Market evidence"}
+                    {!conditionStepConfirmed
+                      ? "Market evidence"
+                      : evaluationRunning || marketCheckLoading
+                        ? "Finding comps..."
+                        : compSummary.includedCount > 0
+                          ? `${compSummary.includedCount} strong comp${compSummary.includedCount === 1 ? "" : "s"}`
+                          : "Market evidence"}
                   </h2>
                 </div>
-                {hasEvaluationData && activeStage !== "vehicle" ? (
+                {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" ? (
                   <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
                     needsCompSearch ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
                   }`}>
@@ -6115,7 +6205,7 @@ export function EvaluationWorkspace({
                 ) : null}
               </div>
 
-              {!conditionReviewComplete ? (
+              {!conditionStepConfirmed ? (
                 <div className="mt-5">
                   <div className="grid grid-cols-2 gap-2 opacity-55">
                     <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
