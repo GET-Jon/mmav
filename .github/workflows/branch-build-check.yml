@@ -1,0 +1,24 @@
+name: Branch build check
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply repository prebuild checks
+        run: npm run prebuild
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npx next build

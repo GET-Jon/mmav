@@ -9,9 +9,11 @@ import { getInventorySchedule } from "@/lib/mindful-inventory/schedule";
 
 export const dynamic = "force-dynamic";
 
-export default async function InventorySchedulePage() {
+export default async function InventorySchedulePage({ searchParams }: { searchParams: Promise<{ embed?: string }> }) {
   const access = await getMindfulInventoryAccess();
   if (!access) notFound();
+  const params = await searchParams;
+  const embedded = params.embed === "1";
 
   const [work, performerOptions, schedulingOptions] = await Promise.all([
     getInventorySchedule(access.supabase, access.company.companyId),
@@ -20,9 +22,9 @@ export default async function InventorySchedulePage() {
   ]);
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <AppTopNav active="schedule" userEmail={access.userEmail} userRole={access.company.role} />
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-5 lg:px-7">
+    <main className={`${embedded ? "min-h-full" : "min-h-screen"} bg-[#f5f7fb] text-slate-950`}>
+      {!embedded ? <AppTopNav active="schedule" userEmail={access.userEmail} userRole={access.company.role} /> : null}
+      <div className={`mx-auto w-full max-w-[1600px] ${embedded ? "px-3 py-3" : "px-4 py-5 sm:px-5 lg:px-7"}`}>
         <InventoryScheduleBoard
           work={work}
           performerOptions={performerOptions}

@@ -13,11 +13,13 @@ import {
   type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
+import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
+import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
-import { calculateValuation } from "@/lib/valuation";
+import { calculateDealEconomicsScore, calculateValuation } from "@/lib/valuation";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
@@ -51,6 +53,15 @@ const initialEvaluation: ValuationInput = {
 };
 
 const initialSelectedConditions: string[] = [];
+
+const conditionAnalysisProgressSteps = [
+  "Reviewing condition notes",
+  "Identifying material issues",
+  "Estimating likely repairs",
+  "Pricing likely repairs",
+  "Building condition reserve",
+] as const;
+
 
 type MarketCheckVehicleOverride = {
   year?: string;
@@ -292,10 +303,10 @@ function ScoreRing({
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="mb-2 text-xs font-extrabold text-slate-600">{label}</div>
+      <div className="mb-1.5 text-xs font-extrabold text-slate-600">{label}</div>
 
       <div
-        className="relative grid h-[86px] w-[86px] place-items-center rounded-full"
+        className="relative grid h-[78px] w-[78px] place-items-center rounded-full"
         style={{
           background: isEmpty
             ? "#e2e8f0"
@@ -304,9 +315,9 @@ function ScoreRing({
               }deg, #e2e8f0 0deg)`,
         }}
       >
-        <div className="grid h-[70px] w-[70px] place-items-center rounded-full bg-white shadow-inner">
+        <div className="grid h-[64px] w-[64px] place-items-center rounded-full bg-white shadow-inner">
           <div>
-            <div className={`text-[25px] font-black leading-none tracking-[-0.04em] ${
+            <div className={`text-[23px] font-black leading-none tracking-[-0.04em] ${
               isEmpty ? "text-slate-400" : "text-slate-950"
             }`}>
               {isEmpty ? "—" : normalizedScore}
@@ -326,6 +337,152 @@ function ScoreRing({
           Not calculated
         </div>
       ) : null}
+    </div>
+  );
+}
+
+
+function MarketLiquidityVisual({
+  soldLow,
+  soldHigh,
+  soldMedian,
+  activeDays,
+  label,
+  confidence,
+  sampleSize,
+}: {
+  soldLow: number;
+  soldHigh: number;
+  soldMedian: number;
+  activeDays: number;
+  label: string;
+  confidence: "low" | "medium" | "high" | "unknown";
+  sampleSize: number;
+}) {
+  const hasSoldRange = soldLow > 0 && soldHigh > 0;
+  const hasActive = activeDays > 0;
+  const scaleMax = Math.max(
+    60,
+    soldHigh > 0 ? soldHigh * 1.35 : 0,
+    activeDays > 0 ? activeDays * 1.25 : 0,
+  );
+  const pct = (days: number) =>
+    Math.max(0, Math.min(100, (days / scaleMax) * 100));
+  const rangeLeft = pct(soldLow);
+  const rangeWidth = Math.max(6, pct(soldHigh) - rangeLeft);
+  const medianLeft = pct(soldMedian);
+  const activeLeft = pct(activeDays);
+
+  const labelTone =
+    label === "Fast" || label === "Good"
+      ? "text-emerald-700"
+      : label === "Normal"
+        ? "text-amber-700"
+        : label === "Slow" || label === "Very Slow"
+          ? "text-orange-700"
+          : "text-slate-700";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-baseline gap-2">
+            <div className="text-xs font-extrabold text-slate-600">
+              Time to Sell
+            </div>
+            <div className={`text-base font-black ${labelTone}`}>{label}</div>
+          </div>
+        </div>
+
+        {hasSoldRange ? (
+          <div className="text-right">
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+              Typical retail window
+            </div>
+            <div className="mt-0.5 text-sm font-black text-slate-800">
+              {Math.round(soldLow)}–{Math.round(soldHigh)} days
+            </div>
+          </div>
+        ) : hasActive ? (
+          <div className="text-right text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+            Current market age
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-2.5">
+        <div className="mb-1 flex justify-between text-[8px] font-black uppercase tracking-[0.06em] text-slate-400">
+          <span>Quick turn</span>
+          <span>Typical</span>
+          <span>Slow turn</span>
+        </div>
+
+        <div className="relative pt-6 pb-1">
+          <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-400 via-amber-300 to-orange-400 shadow-inner">
+            {hasSoldRange ? (
+              <div
+                className="absolute top-1/2 h-6 -translate-y-1/2 rounded-full border border-white/80 bg-white/45 shadow-sm backdrop-blur-[1px]"
+                style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
+                title="Typical recent sold range"
+              />
+            ) : null}
+
+            {hasSoldRange && soldMedian > 0 ? (
+              <div
+                className="absolute top-1/2 h-7 w-[2px] -translate-y-1/2 bg-emerald-950/65"
+                style={{ left: `calc(${medianLeft}% - 1px)` }}
+                title={`Recent sold median: ${Math.round(soldMedian)} days`}
+              />
+            ) : null}
+
+            {hasActive ? (
+              <>
+                <div
+                  className="absolute top-1/2 h-7 w-7 -translate-y-1/2 rounded-full border-2 border-white bg-blue-700 shadow-[0_4px_14px_rgba(37,99,235,0.35)]"
+                  style={{ left: `calc(${activeLeft}% - 14px)` }}
+                  title={`Current active market age: ${Math.round(activeDays)} days`}
+                />
+                <div
+                  className="absolute -top-1 -translate-x-1/2 -translate-y-full rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black text-white shadow-md"
+                  style={{ left: `${activeLeft}%` }}
+                >
+                  {Math.round(activeDays)}d
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          <div className="mt-1.5 flex justify-between text-[8px] font-bold text-slate-400">
+            <span>0 days</span>
+            <span>{Math.round(scaleMax)}+ days</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] font-bold text-slate-500">
+        {hasSoldRange ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-5 rounded-full border border-slate-300 bg-white/70" />
+            Typical sold range
+          </span>
+        ) : null}
+
+        {hasSoldRange && soldMedian > 0 ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-[2px] bg-emerald-950/65" />
+            Sold median
+          </span>
+        ) : null}
+
+      </div>
+
+      <div className="mt-2 text-[10px] font-semibold leading-4 text-slate-400">
+        {sampleSize > 0
+          ? `${sampleSize} recent sold observations · ${confidence} confidence`
+          : hasActive
+            ? "Active-market timing only · recent sold history unavailable."
+            : "Sell-through history is not available for this market yet."}
+      </div>
     </div>
   );
 }
@@ -418,6 +575,11 @@ function StaticField({ label, value }: { label: string; value: string }) {
 }
 
 type ThesisMode = "financial" | "enthusiast" | "balanced";
+type ConditionReviewStatus =
+  | "unreviewed"
+  | "no_material_issues"
+  | "issues"
+  | "unknown";
 
 type SavedEvaluationPayload = {
   vin?: string;
@@ -438,8 +600,58 @@ type SavedEvaluationPayload = {
   conditionReadyDaysLowOverride?: number | null;
   conditionReadyDaysHighOverride?: number | null;
   conditionAnalysisApplied?: boolean;
+  conditionReviewStatus?: ConditionReviewStatus;
   notes?: string;
 };
+
+type EvaluationStage = "vehicle" | "condition" | "market" | "verdict";
+
+function deriveEvaluationStage(payload?: SavedEvaluationPayload | null): EvaluationStage {
+  if (!payload) {
+    return "vehicle";
+  }
+
+  const decoded = payload.decodedVehicle;
+  const manual = payload.manualVehicle;
+  const hasVehicleBasics = Boolean(
+    (decoded?.year && decoded?.make && decoded?.model) ||
+      (manual?.year && manual?.make && manual?.model),
+  );
+  const vehicleComplete = Boolean(
+    hasVehicleBasics &&
+      (payload.targetMileage || 0) > 0 &&
+      (payload.evaluation?.currentBid || 0) > 0,
+  );
+
+  if (!vehicleComplete) {
+    return "vehicle";
+  }
+
+  const reviewStatus =
+    payload.conditionReviewStatus ||
+    (payload.conditionAnalysisApplied || payload.conditionAssessmentsTouched
+      ? "issues"
+      : "unreviewed");
+
+  const conditionComplete =
+    reviewStatus === "no_material_issues" ||
+    reviewStatus === "unknown" ||
+    (reviewStatus === "issues" &&
+      Boolean(
+        payload.conditionAnalysis
+          ? payload.conditionAnalysisApplied
+          : payload.conditionAssessmentsTouched,
+      ));
+
+  if (!conditionComplete) {
+    return "condition";
+  }
+
+  const hasIncludedComps = Boolean(payload.comps?.some((comp) => comp.included));
+
+  return hasIncludedComps ? "verdict" : "market";
+}
+
 
 export function EvaluationWorkspace({
   initialSavedEvaluationId = null,
@@ -487,7 +699,54 @@ export function EvaluationWorkspace({
   );
 
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
+  const [evaluationRunning, setEvaluationRunning] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const [autoDevDiscoveryLoading, setAutoDevDiscoveryLoading] = useState(false);
+  const [autoDevDiscoveryStatus, setAutoDevDiscoveryStatus] = useState("");
+  const [autoDevDiscovery, setAutoDevDiscovery] = useState<{
+    source: "auto.dev";
+    role: "discovery-only";
+    query: {
+      year: number;
+      make: string;
+      model: string;
+      trim: string | null;
+      yearMin: number;
+      yearMax: number;
+      generation: string | null;
+      sampleLimit: number;
+    };
+    total: number;
+    returned: number;
+    sampleCapped: boolean;
+    byState: Record<string, number>;
+    recommendedMarkets: Array<{
+      market: string;
+      zip: string;
+      latitude: number;
+      longitude: number;
+      coverageCount: number;
+      states: string[];
+      vins: string[];
+    }>;
+    listings: Array<{
+      vin: string | null;
+      year: number | null;
+      make: string | null;
+      model: string | null;
+      trim: string | null;
+      drivetrain: string | null;
+      price: number | null;
+      miles: number | null;
+      dealer: string | null;
+      city: string | null;
+      state: string | null;
+      zip: string | null;
+      url: string | null;
+      longitude: number | null;
+      latitude: number | null;
+    }>;
+  } | null>(null);
   const [marketCheckSearchMeta, setMarketCheckSearchMeta] = useState<{
     loadedCount: number;
     regionsChecked: string[];
@@ -604,6 +863,22 @@ export function EvaluationWorkspace({
       averageDealerDays?: number;
       averageMarketDays?: number;
     };
+    marketLiquidity?: {
+      historicalSoldCount?: number;
+      soldMedianDays?: number;
+      soldP25Days?: number;
+      soldP75Days?: number;
+      soldAverageDays?: number;
+      currentActiveAverageDays?: number;
+      currentDealerAverageDays?: number;
+      region?: string;
+      zip?: string;
+      radius?: number;
+      generation?: string | null;
+      yearQuery?: string;
+      source?: string;
+      confidence?: "low" | "medium" | "high";
+    } | null;
     marketTimingDebug?: {
       statsKeys?: string[];
       statsSample?: unknown;
@@ -614,13 +889,22 @@ export function EvaluationWorkspace({
       mappedListings?: number;
       usableListings?: number;
       rejectedListings?: number;
-      rejectedByReason?: {
+      rejectionCounts?: {
         fuelMismatch?: number;
         missingPriceOrMileage?: number;
         qualityBelowThreshold?: number;
         generationMismatch?: number;
+        modelMismatch?: number;
         other?: number;
       };
+      sampleRejectedListings?: Array<{
+        title?: string;
+        year?: number | string;
+        make?: string;
+        model?: string;
+        trim?: string;
+        rejectedReasons?: string[];
+      }>;
     };
   } | null>(null);
 
@@ -629,6 +913,29 @@ export function EvaluationWorkspace({
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
+  const compSectionRef = useRef<HTMLElement | null>(null);
+  const conditionSectionRef = useRef<HTMLElement | null>(null);
+  const [compSectionExpanded, setCompSectionExpanded] = useState(true);
+  const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
+  const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
+  const [activeStage, setActiveStage] =
+    useState<EvaluationStage>(() => deriveEvaluationStage(initialSavedPayload));
+  const [vehicleStepConfirmed, setVehicleStepConfirmed] = useState(() => {
+    const stage = deriveEvaluationStage(initialSavedPayload);
+    return stage !== "vehicle";
+  });
+  const [conditionStepConfirmed, setConditionStepConfirmed] = useState(() => {
+    const stage = deriveEvaluationStage(initialSavedPayload);
+    return stage === "market" || stage === "verdict";
+  });
+  const [verdictTransitioning, setVerdictTransitioning] = useState(false);
+  const [verdictEntered, setVerdictEntered] = useState(
+    () => deriveEvaluationStage(initialSavedPayload) === "verdict",
+  );
+  const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
+    useState(0);
+  const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
+  const [allInCostOpen, setAllInCostOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -636,11 +943,21 @@ export function EvaluationWorkspace({
   const [vehicleThumbnailLoading, setVehicleThumbnailLoading] = useState(false);
   const [vehicleThumbnailError, setVehicleThumbnailError] = useState("");
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
+  const [compMarketEditorOpen, setCompMarketEditorOpen] = useState(false);
+  const [compEditorTab, setCompEditorTab] = useState<"geography" | "vehicle">("geography");
+  const [selectedCompMarketZips, setSelectedCompMarketZips] = useState<string[]>([]);
+  const [compSuggestionCount, setCompSuggestionCount] = useState(3);
+  const [customCompZip, setCustomCompZip] = useState("");
+  const [customCompMarkets, setCustomCompMarkets] = useState<Array<{ market: string; zip: string }>>([]);
+  const [compTrimRelaxed, setCompTrimRelaxed] = useState(false);
+  const [dealerProfileOpen, setDealerProfileOpen] = useState(false);
+  const [whyLotLogicOpen, setWhyLotLogicOpen] = useState(false);
   const [conditionProfitabilityOpen, setConditionProfitabilityOpen] =
     useState(false);
   const [conditionModalTab, setConditionModalTab] = useState<"ai" | "manual">(
     "ai",
   );
+  const [conditionSourceEditorOpen, setConditionSourceEditorOpen] = useState(false);
   const [conditionSourceText, setConditionSourceText] = useState(
     initialSavedPayload?.conditionSourceText || "",
   );
@@ -674,12 +991,23 @@ export function EvaluationWorkspace({
         ? initialSavedPayload.conditionReadyDaysHighOverride
         : null,
     );
+  const [conditionReconOverrideEditing, setConditionReconOverrideEditing] = useState(false);
   const [conditionAnalysisLoading, setConditionAnalysisLoading] =
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
+  const [conditionAnalysisRetryable, setConditionAnalysisRetryable] =
+    useState(false);
   const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
     Boolean(initialSavedPayload?.conditionAnalysisApplied),
   );
+  const [conditionReviewStatus, setConditionReviewStatus] =
+    useState<ConditionReviewStatus>(
+      initialSavedPayload?.conditionReviewStatus ||
+        (initialSavedPayload?.conditionAnalysisApplied ||
+        initialSavedPayload?.conditionAssessmentsTouched
+          ? "issues"
+          : "unreviewed"),
+    );
   const [conditionAssessments, setConditionAssessments] =
     useState<ConditionAssessments>(
       initialSavedPayload?.conditionAssessments || initialConditionAssessments,
@@ -796,6 +1124,35 @@ export function EvaluationWorkspace({
   }, []);
 
   useEffect(() => {
+    if (!conditionAnalysisLoading) {
+      setConditionAnalysisProgressIndex(0);
+      return;
+    }
+
+    setConditionAnalysisProgressIndex(0);
+    const timer = window.setInterval(() => {
+      setConditionAnalysisProgressIndex((current) =>
+        Math.min(current + 1, conditionAnalysisProgressSteps.length - 1),
+      );
+    }, 850);
+
+    return () => window.clearInterval(timer);
+  }, [conditionAnalysisLoading]);
+
+  useEffect(() => {
+    if (activeStage !== "verdict") {
+      setVerdictEntered(false);
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setVerdictEntered(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeStage]);
+
+  useEffect(() => {
     if (initialSavedEvaluationId || initialSavedPayload) {
       setDraftReady(true);
       return;
@@ -902,6 +1259,20 @@ export function EvaluationWorkspace({
         setConditionAnalysisApplied(draft.conditionAnalysisApplied);
       }
 
+      if (
+        draft.conditionReviewStatus === "unreviewed" ||
+        draft.conditionReviewStatus === "no_material_issues" ||
+        draft.conditionReviewStatus === "issues" ||
+        draft.conditionReviewStatus === "unknown"
+      ) {
+        setConditionReviewStatus(draft.conditionReviewStatus);
+      } else if (
+        draft.conditionAnalysisApplied === true ||
+        draft.conditionAssessmentsTouched === true
+      ) {
+        setConditionReviewStatus("issues");
+      }
+
       if (typeof draft.notes === "string") {
         setNotes(draft.notes);
       }
@@ -917,6 +1288,12 @@ export function EvaluationWorkspace({
           : null,
       );
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
+      const restoredStage = deriveEvaluationStage(draft as SavedEvaluationPayload);
+      setActiveStage(restoredStage);
+      setVehicleStepConfirmed(restoredStage !== "vehicle");
+      setConditionStepConfirmed(
+        restoredStage === "market" || restoredStage === "verdict",
+      );
     } catch (error) {
       console.error("Failed to load local evaluator draft:", error);
     } finally {
@@ -951,6 +1328,7 @@ export function EvaluationWorkspace({
           conditionReadyDaysLowOverride,
           conditionReadyDaysHighOverride,
           conditionAnalysisApplied,
+          conditionReviewStatus,
           notes,
           marketCheckStatus,
           marketCheckSearchMeta,
@@ -979,6 +1357,7 @@ export function EvaluationWorkspace({
     conditionReadyDaysLowOverride,
     conditionReadyDaysHighOverride,
     conditionAnalysisApplied,
+    conditionReviewStatus,
     notes,
     marketCheckStatus,
     marketCheckSearchMeta,
@@ -1068,6 +1447,42 @@ export function EvaluationWorkspace({
       : targetResaleUsed;
 
   const valuationInput = useMemo<ValuationInput>(() => {
+    const baseMechanicalReserve = conditionAssessmentsTouched
+      ? conditionAssessments.mechanical.reserve
+      : 0;
+    const baseCosmeticReserve = conditionAssessmentsTouched
+      ? conditionAssessments.cosmetic.reserve
+      : 0;
+    const baseHistoryReserve = conditionAssessmentsTouched
+      ? conditionAssessments.history.reserve
+      : 0;
+    const baseConditionReserveTotal =
+      baseMechanicalReserve + baseCosmeticReserve + baseHistoryReserve;
+
+    const hasUserReconOverride =
+      typeof conditionPlanningEstimateOverride === "number" &&
+      Number.isFinite(conditionPlanningEstimateOverride);
+    const effectiveConditionReserveTotal = hasUserReconOverride
+      ? Math.max(0, conditionPlanningEstimateOverride)
+      : baseConditionReserveTotal;
+    const reserveScale =
+      baseConditionReserveTotal > 0
+        ? effectiveConditionReserveTotal / baseConditionReserveTotal
+        : 0;
+
+    const mechanicalReserve =
+      baseConditionReserveTotal > 0
+        ? Math.round(baseMechanicalReserve * reserveScale)
+        : effectiveConditionReserveTotal;
+    const historyReserve =
+      baseConditionReserveTotal > 0
+        ? Math.round(baseHistoryReserve * reserveScale)
+        : 0;
+    const cosmeticReserve = Math.max(
+      0,
+      effectiveConditionReserveTotal - mechanicalReserve - historyReserve,
+    );
+
     return {
       ...evaluation,
       targetResaleUsed: finalTargetUsed,
@@ -1079,16 +1494,12 @@ export function EvaluationWorkspace({
         // Fixed detailing and ordinary sale preparation remain separate.
         detailAdmin: evaluation.costs.detailAdmin,
 
-        // Only actual identified condition issues populate these buckets.
-        recon: conditionAssessmentsTouched
-          ? conditionAssessments.mechanical.reserve
-          : 0,
-        conditionRiskAdd: conditionAssessmentsTouched
-          ? conditionAssessments.cosmetic.reserve
-          : 0,
-        titleHistoryRiskAdd: conditionAssessmentsTouched
-          ? conditionAssessments.history.reserve
-          : 0,
+        // A user-entered total recon override is authoritative immediately.
+        // Preserve the AI category mix proportionally so downstream risk context
+        // remains intact while the total economics use the user's reserve.
+        recon: mechanicalReserve,
+        conditionRiskAdd: cosmeticReserve,
+        titleHistoryRiskAdd: historyReserve,
       },
     };
   }, [
@@ -1097,6 +1508,7 @@ export function EvaluationWorkspace({
     conditionTotals,
     conditionAssessments,
     conditionAssessmentsTouched,
+    conditionPlanningEstimateOverride,
   ]);
 
   const valuation = useMemo(
@@ -1108,6 +1520,15 @@ export function EvaluationWorkspace({
   const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
   const vehicleModel = decodedVehicle?.model || manualVehicle.model || "";
   const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
+  const compTaxonomyFallback = findModelTaxonomyFallback({
+    make: vehicleMake,
+    model: vehicleModel,
+  });
+  const compRetrievalLabel = compTaxonomyFallback
+    ? [vehicleMake, compTaxonomyFallback.fallbackModel, "broad model bucket"]
+        .filter(Boolean)
+        .join(" / ")
+    : [vehicleMake, vehicleModel].filter(Boolean).join(" ");
   const vehicleBodyClass =
     decodedVehicle?.bodyClass || manualVehicle.bodyClass || "";
 
@@ -1138,7 +1559,13 @@ export function EvaluationWorkspace({
     [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]
       .filter(Boolean)
       .join(" ")
-      .trim() || "New Auction Evaluation";
+      .trim() || "New Evaluation";
+
+  useEffect(() => {
+    setCompTrimRelaxed(false);
+    setAutoDevDiscovery(null);
+    setAutoDevDiscoveryStatus("");
+  }, [vehicleYear, vehicleMake, vehicleModel, vehicleTrim]);
 
   function normalizeMatchText(value: string | number | null | undefined) {
     return String(value || "").toLowerCase();
@@ -1444,7 +1871,7 @@ export function EvaluationWorkspace({
       ...initialEvaluation,
       currentBid: valuationInput.currentBid,
       targetResaleUsed: valuationInput.targetResaleUsed,
-      targetProfit: valuationInput.targetProfit,
+      targetProfit: valuation.desiredProfitTarget,
       hasAvoidFlag: false,
       costs: {
         ...initialEvaluation.costs,
@@ -1470,6 +1897,16 @@ export function EvaluationWorkspace({
     setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
+    setConditionReviewStatus("unreviewed");
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+    setConditionSourceText("");
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
     setNotes("");
   }
 
@@ -1497,6 +1934,16 @@ export function EvaluationWorkspace({
     setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
     setSaveStatus("");
+    setConditionReviewStatus("unreviewed");
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+    setConditionSourceText("");
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
     setNotes("");
   }
 
@@ -1702,6 +2149,10 @@ export function EvaluationWorkspace({
         enabled: boolean;
       }>;
       mergeResults?: boolean;
+      maxApiCallsPerSearch?: number;
+      useVinMatch?: boolean;
+      preferTaxonomyFallback?: boolean;
+      useTaxonomyFallbackTrim?: boolean;
     },
   ) {
     if (marketCheckInFlightRef.current || marketCheckLoading) {
@@ -1712,9 +2163,20 @@ export function EvaluationWorkspace({
     const year = vehicleOverride?.year || vehicleYear;
     const make = vehicleOverride?.make || vehicleMake;
     const model = vehicleOverride?.model || vehicleModel;
-    const trim = vehicleOverride?.trim || vehicleTrim;
+    const trim =
+      vehicleOverride && Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
+        ? String(vehicleOverride.trim || "")
+        : vehicleTrim;
     const fuelType =
       vehicleOverride?.fuelType || decodedVehicle?.fuelType || null;
+    const candidateVin = String(decodedVehicle?.vin || vin || "")
+      .trim()
+      .toUpperCase();
+    const marketCheckVin =
+      options?.useVinMatch === false ||
+      !/^[A-HJ-NPR-Z0-9]{17}$/.test(candidateVin)
+        ? null
+        : candidateVin;
 
     if (!year || !make || !model) {
       setMarketCheckStatus(
@@ -1752,8 +2214,10 @@ export function EvaluationWorkspace({
           make,
           model,
           trim,
+          vin: marketCheckVin,
           fuelType,
           targetMileage,
+          searchStage: options?.searchStage || "initial",
           regions:
             options?.regions ||
             activeAssumptions.regionalMarkets
@@ -1769,19 +2233,25 @@ export function EvaluationWorkspace({
                 enabled: market.enabled,
               })),
           radius: 100,
-          rows: 10,
+          // Pull the full standard MarketCheck candidate pool per region before
+      // spending another API call. Lot Logic still qualifies/ranks strictly.
+      rows: 50,
           liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
           maxApiCallsPerSearch:
-            options?.searchStage === "expanded" ||
+            options?.maxApiCallsPerSearch ??
+            (options?.searchStage === "expanded" ||
             options?.searchStage === "metro"
               ? 3
-              : marketCheckApiControls.maxApiCallsPerSearch,
+              : 3),
           minUsableCompsToStop: marketCheckApiControls.minUsableCompsToStop,
           minInitialRegions:
             options?.searchStage === "expanded" ||
             options?.searchStage === "metro"
               ? 3
               : marketCheckApiControls.minInitialRegions,
+          includeMarketLiquidity: !options?.mergeResults,
+          preferTaxonomyFallback: options?.preferTaxonomyFallback === true,
+          useTaxonomyFallbackTrim: options?.useTaxonomyFallbackTrim !== false,
         }),
       });
 
@@ -1841,16 +2311,15 @@ export function EvaluationWorkspace({
       }
 
       const pulledComps = Array.isArray(data.comps) ? data.comps : [];
-      const hasIncludedComps = pulledComps.some(
-        (comp: MarketComp) => comp.included === true,
-      );
 
-      const normalizedComps = pulledComps.map(
-        (comp: MarketComp, index: number) => ({
-          ...comp,
-          included: hasIncludedComps ? comp.included === true : index < 3,
-        }),
-      );
+      // The server is authoritative on comp qualification. Never auto-include
+      // fallback rows client-side just because MarketCheck returned inventory:
+      // that can temporarily manufacture a sale value/profit verdict before
+      // vehicle-equivalence checks have established usable comps.
+      const normalizedComps = pulledComps.map((comp: MarketComp) => ({
+        ...comp,
+        included: comp.included === true,
+      }));
 
       const mergedComps = options?.mergeResults
         ? [
@@ -1921,6 +2390,247 @@ export function EvaluationWorkspace({
     }
   }
 
+  function getCompExpansionMarkets() {
+    return buildExpansionMarkets(
+      activeAssumptions.regionalMarkets,
+      marketCheckSearchMeta?.searchedZips || [],
+      marketCheckSearchMeta?.regionsChecked || [],
+    );
+  }
+
+  function openCompMarketEditor() {
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const suggested = getCompExpansionMarkets()
+      .filter((market) => !searched.has(market.zip))
+      .slice(0, 3)
+      .map((market) => market.zip);
+
+    setCompSuggestionCount(3);
+    setCompEditorTab("geography");
+    setSelectedCompMarketZips(suggested);
+    setCustomCompZip("");
+    setCompMarketEditorOpen(true);
+  }
+
+  function suggestMoreCompMarkets() {
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const available = getCompExpansionMarkets()
+      .filter((market) => !searched.has(market.zip));
+    const nextCount = Math.min(available.length, compSuggestionCount + 3);
+    const nextSuggested = available.slice(0, nextCount).map((market) => market.zip);
+    setCompSuggestionCount(nextCount);
+    setSelectedCompMarketZips((current) => Array.from(new Set([...current, ...nextSuggested])));
+  }
+
+  function addCustomCompZip() {
+    const zip = customCompZip.trim();
+    if (!/^\d{5}$/.test(zip)) {
+      setMarketCheckStatus("Enter a valid 5-digit ZIP code.");
+      return;
+    }
+    if ((marketCheckSearchMeta?.searchedZips || []).includes(zip)) {
+      setMarketCheckStatus(`${zip} has already been searched.`);
+      return;
+    }
+    setCustomCompMarkets((current) =>
+      current.some((market) => market.zip === zip)
+        ? current
+        : [...current, { market: `Custom market ${zip}`, zip }],
+    );
+    setSelectedCompMarketZips((current) => Array.from(new Set([...current, zip])));
+    setCustomCompZip("");
+  }
+
+  // Geography expansion must preserve the user's current retrieval strategy.
+  // If the user switched to a taxonomy fallback (for example TTS -> TT bucket),
+  // every later region search must keep that strategy instead of reverting to VIN/exact matching.
+  async function searchSelectedCompMarkets() {
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const configuredRegions = getCompExpansionMarkets()
+      .filter(
+        (market) =>
+          selectedCompMarketZips.includes(market.zip) &&
+          !searched.has(market.zip),
+      )
+      .sort((a, b) => a.order - b.order)
+      .map((market) => ({
+        market: market.market,
+        zip: market.zip,
+        order: market.order,
+        enabled: true,
+      }));
+
+    const customRegions = customCompMarkets
+      .filter(
+        (market) =>
+          selectedCompMarketZips.includes(market.zip) &&
+          !searched.has(market.zip),
+      )
+      .map((market, index) => ({
+        ...market,
+        order: configuredRegions.length + index + 1,
+        enabled: true,
+      }));
+
+    const regions = [...configuredRegions, ...customRegions];
+
+    if (!regions.length) {
+      setMarketCheckStatus('Choose at least one new market to search.');
+      return;
+    }
+
+    setCompMarketEditorOpen(false);
+    await pullMarketCheckComps(null, {
+      searchStage: 'expanded',
+      regions,
+      mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
+    });
+  }
+
+  function getPreviouslySearchedCompRegions() {
+    const labels = marketCheckSearchMeta?.regionsChecked || [];
+    const searchedZips = marketCheckSearchMeta?.searchedZips || [];
+
+    return searchedZips.map((zip, index) => {
+      const label = labels[index] || "";
+      const match = label.match(/^(.*)\s+\((\d{5})\)$/);
+      return {
+        market: match?.[1]?.trim() || `Previously searched market ${index + 1}`,
+        zip,
+        order: index + 1,
+        enabled: true,
+      };
+    });
+  }
+
+  async function broadenCompVehicleMatch() {
+    if (!vehicleMake || !vehicleModel || !vehicleTrim) {
+      setMarketCheckStatus("There is no trim-level specificity to relax for this vehicle.");
+      return;
+    }
+
+    // When the user deliberately relaxes trim, rerun the geography they actually
+    // searched — including generated and custom markets — rather than falling
+    // back to the original configured-region list.
+    const regions = getPreviouslySearchedCompRegions();
+
+    setCompTrimRelaxed(true);
+    setMarketCheckStatus(
+      compTaxonomyFallback
+        ? `Searching the broader MarketCheck ${vehicleMake} ${compTaxonomyFallback.fallbackModel} bucket while retaining ${vehicleMake} ${vehicleModel} as the final qualification target.`
+        : `Broadening retrieval for ${vehicleMake} ${vehicleModel} while retaining strict final vehicle qualification.`,
+    );
+
+    await pullMarketCheckComps(
+      {
+        year: String(vehicleYear || ""),
+        make: vehicleMake,
+        model: vehicleModel,
+        trim: "",
+        fuelType: decodedVehicle?.fuelType || null,
+      },
+      {
+        searchStage: "expanded",
+        regions: regions.length ? regions : undefined,
+        mergeResults: true,
+        useVinMatch: false,
+        preferTaxonomyFallback: true,
+        useTaxonomyFallbackTrim: false,
+        maxApiCallsPerSearch: Math.min(3, Math.max(1, regions.length)),
+      },
+    );
+  }
+
+  async function runAutoDevDiscovery() {
+    if (!vehicleYear || !vehicleMake || !vehicleModel || autoDevDiscoveryLoading) {
+      return;
+    }
+
+    setAutoDevDiscoveryLoading(true);
+    setAutoDevDiscoveryStatus("Scanning national inventory with Auto.dev...");
+
+    try {
+      const response = await fetch("/api/autodev/discovery", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          year: Number(vehicleYear),
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          bodyClass: vehicleBodyClass,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Auto.dev national discovery failed.");
+      }
+
+      setAutoDevDiscovery(data);
+      setAutoDevDiscoveryStatus(
+        `Auto.dev found ${data.total || 0} matching active listings nationwide.`,
+      );
+    } catch (error) {
+      setAutoDevDiscovery(null);
+      setAutoDevDiscoveryStatus(
+        error instanceof Error ? error.message : "Auto.dev national discovery failed.",
+      );
+    } finally {
+      setAutoDevDiscoveryLoading(false);
+    }
+  }
+
+  async function searchAutoDevRecommendedMarkets() {
+    if (!autoDevDiscovery?.recommendedMarkets?.length) {
+      setAutoDevDiscoveryStatus("No Auto.dev market clusters are available to search.");
+      return;
+    }
+
+    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const regions = autoDevDiscovery.recommendedMarkets
+      .filter((market) => !searched.has(market.zip))
+      .slice(0, 3)
+      .map((market, index) => ({
+        market: `${market.market} · Auto.dev discovery`,
+        zip: market.zip,
+        order: index + 1,
+        enabled: true,
+      }));
+
+    if (!regions.length) {
+      setAutoDevDiscoveryStatus(
+        "The recommended Auto.dev market centers have already been searched in MarketCheck.",
+      );
+      return;
+    }
+
+    setAutoDevDiscoveryStatus(
+      `Searching MarketCheck in ${regions.length} Auto.dev-identified market${regions.length === 1 ? "" : "s"}...`,
+    );
+
+    await pullMarketCheckComps(null, {
+      searchStage: "expanded",
+      regions,
+      mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
+      maxApiCallsPerSearch: regions.length,
+    });
+
+    setAutoDevDiscoveryStatus(
+      `MarketCheck search completed in ${regions.map((region) => region.market.replace(" · Auto.dev discovery", "")).join(", ")}.`,
+    );
+  }
+
   async function expandMarketCheckSearch() {
     const searchedZips = new Set(marketCheckSearchMeta?.searchedZips || []);
 
@@ -1941,7 +2651,7 @@ export function EvaluationWorkspace({
 
     if (nextRegions.length === 0) {
       setMarketCheckStatus(
-        "All configured regions have already been searched. Major metropolitan search is available next.",
+        "Nearby configured markets have been searched. Major reference markets are available as the final expansion step.",
       );
       return;
     }
@@ -1950,6 +2660,9 @@ export function EvaluationWorkspace({
       searchStage: "expanded",
       regions: nextRegions,
       mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
     });
   }
 
@@ -1979,7 +2692,7 @@ export function EvaluationWorkspace({
 
     if (metroRegions.length === 0) {
       setMarketCheckStatus(
-        "Major metropolitan areas have already been searched for this vehicle.",
+        "Major reference markets have already been searched for this vehicle.",
       );
       return;
     }
@@ -1988,13 +2701,16 @@ export function EvaluationWorkspace({
       searchStage: "metro",
       regions: metroRegions,
       mergeResults: true,
+      useVinMatch: !compTrimRelaxed,
+      preferTaxonomyFallback: compTrimRelaxed,
+      useTaxonomyFallbackTrim: !compTrimRelaxed,
     });
   }
 
   function openMethodology() {
-    setMethodologyControls(marketCheckApiControls);
-    setMethodologyStatus("");
-    setMethodologyOpen(true);
+    // Skip the intermediate methodology modal. The settings page contains the
+    // actual search controls, API usage audit trail, and filtering diagnostics.
+    window.location.assign("/settings?tab=api");
   }
 
   function updateMethodologyControl(next: Partial<MarketCheckApiControls>) {
@@ -2051,11 +2767,34 @@ export function EvaluationWorkspace({
     }
   }
 
+  function chooseConditionReview(status: ConditionReviewStatus) {
+    setConditionReviewStatus(status);
+
+    if (status === "issues") {
+      setConditionAnalysisApplied(false);
+      return;
+    }
+
+    // Choosing "no material issues" or "unknown" must not leave an old recon
+    // reserve silently influencing the economics.
+    setConditionAssessments(initialConditionAssessments);
+    setConditionAssessmentsTouched(false);
+    setConditionAnalysis(null);
+    setOriginalConditionAnalysis(null);
+    setConditionSourceText("");
+    setConditionPlanningEstimateOverride(null);
+    setConditionReadyDaysLowOverride(null);
+    setConditionReadyDaysHighOverride(null);
+    setConditionAnalysisApplied(false);
+    setConditionAnalysisError("");
+  }
+
   function openConditionAnalysis() {
     if (!conditionAssessmentsTouched) {
       setConditionAssessments(initialConditionAssessments);
     }
 
+    setConditionReviewStatus("issues");
     setConditionModalTab("ai");
     setConditionAnalysisError("");
     setConditionProfitabilityOpen(true);
@@ -2158,6 +2897,7 @@ export function EvaluationWorkspace({
 
     setConditionAnalysisLoading(true);
     setConditionAnalysisError("");
+    setConditionAnalysisRetryable(false);
     setConditionAnalysisApplied(false);
 
     try {
@@ -2185,9 +2925,12 @@ export function EvaluationWorkspace({
       const data = (await response.json()) as {
         analysis?: ConditionAnalysis;
         error?: string;
+        code?: string;
+        retryable?: boolean;
       };
 
       if (!response.ok || !data.analysis) {
+        setConditionAnalysisRetryable(data.retryable === true);
         throw new Error(data.error || "Condition analysis failed.");
       }
 
@@ -2272,6 +3015,7 @@ export function EvaluationWorkspace({
 
     setConditionAssessmentsTouched(true);
     setConditionAnalysisApplied(true);
+    setConditionReviewStatus("issues");
   }
 
   function openConditionProfitability() {
@@ -2298,6 +3042,7 @@ export function EvaluationWorkspace({
     }));
 
     setConditionAssessmentsTouched(true);
+    setConditionReviewStatus("issues");
   }
 
   function updateConditionReserve(
@@ -2313,6 +3058,7 @@ export function EvaluationWorkspace({
     }));
 
     setConditionAssessmentsTouched(true);
+    setConditionReviewStatus("issues");
   }
 
   async function saveEvaluation() {
@@ -2352,6 +3098,7 @@ export function EvaluationWorkspace({
           conditionReadyDaysLowOverride,
           conditionReadyDaysHighOverride,
           conditionAnalysisApplied,
+          conditionReviewStatus,
           notes,
           auctionUrl: "",
           auctionEndsAt: null,
@@ -2376,7 +3123,7 @@ export function EvaluationWorkspace({
     }
   }
 
-  function resetPreviousEvaluationResults() {
+  function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
     // Prevent stale search state from carrying into another vehicle.
     marketCheckInFlightRef.current = false;
 
@@ -2392,15 +3139,20 @@ export function EvaluationWorkspace({
 
     setConditionProfitabilityOpen(false);
     setConditionModalTab("ai");
-    setConditionSourceText("");
+    setConditionSourceEditorOpen(false);
+    if (!options?.preserveVehicleInfo) {
+      setConditionSourceText("");
+    }
     setConditionAnalysis(null);
     setOriginalConditionAnalysis(null);
     setConditionPlanningEstimateOverride(null);
     setConditionReadyDaysLowOverride(null);
     setConditionReadyDaysHighOverride(null);
     setConditionAnalysisError("");
+    setConditionAnalysisRetryable(false);
     setConditionAnalysisLoading(false);
     setConditionAnalysisApplied(false);
+    setConditionReviewStatus("unreviewed");
 
     setNotes("");
     setAiSummaryLoadingMode(null);
@@ -2415,6 +3167,7 @@ export function EvaluationWorkspace({
     setVinDecodeLoading(false);
 
     setVehicleDetailsOpen(false);
+    setWhyLotLogicOpen(false);
     setBidLogicOpen(false);
     setMethodologyOpen(false);
     setMethodologySaving(false);
@@ -2456,6 +3209,10 @@ export function EvaluationWorkspace({
     setTargetMileage(initialTargetMileage);
     setEvaluation(initialEvaluation);
     setQuickEvalMode("vin");
+    setVehicleStepConfirmed(false);
+    setConditionStepConfirmed(false);
+    setVerdictTransitioning(false);
+    setVerdictEntered(false);
   }
 
   const representativeCompImage = useMemo(() => {
@@ -2481,28 +3238,34 @@ export function EvaluationWorkspace({
     comps.length > 0,
   );
 
+  const vehicleStepComplete = Boolean(
+    vehicleYear &&
+      vehicleMake &&
+      vehicleModel &&
+      targetMileage > 0 &&
+      valuationInput.currentBid > 0,
+  );
+
+  const vehicleInputReady = Boolean(
+    targetMileage > 0 &&
+      valuationInput.currentBid > 0 &&
+      auctionSite.trim() &&
+      (quickEvalMode === "vin"
+        ? vin.trim().length === 17
+        : String(manualVehicle.year || "").trim().length > 0 &&
+          manualVehicle.make.trim().length > 0 &&
+          manualVehicle.model.trim().length > 0),
+  );
+
   const suggestedBid =
     "safeBid" in valuation && typeof valuation.safeBid === "number"
       ? valuation.safeBid
       : valuation.maxSmartBid;
 
-  const targetProfitForScore = Math.max(valuationInput.targetProfit || 0, 1);
-  const profitRatio = valuation.expectedGrossProfit / targetProfitForScore;
-
-  const profitabilityScore =
-    valuation.expectedGrossProfit <= 0
-      ? 30
-      : profitRatio >= 1.5
-        ? 95
-        : profitRatio >= 1.25
-          ? 90
-          : profitRatio >= 1
-            ? 82
-            : profitRatio >= 0.75
-              ? 68
-              : profitRatio >= 0.5
-                ? 55
-                : 42;
+  const profitabilityScore = calculateDealEconomicsScore(
+    valuation.expectedGrossProfit,
+    valuation.allInCost,
+  );
 
   const profitabilityLabel =
     profitabilityScore >= 90
@@ -2536,7 +3299,7 @@ export function EvaluationWorkspace({
         },
         financial: {
           expectedGrossProfit: valuation.expectedGrossProfit,
-          targetProfit: valuationInput.targetProfit,
+          targetProfit: valuation.desiredProfitTarget,
           finalRetailTarget: finalTargetUsed,
           currentBid: valuationInput.currentBid,
           compConfidence: compSummary.confidence,
@@ -2688,6 +3451,58 @@ export function EvaluationWorkspace({
     )
     .slice(0, 6);
 
+  const conditionIssueBullets = (conditionAnalysis?.issues || [])
+    .filter((issue) => issue.includeInValuation)
+    .sort((a, b) => b.planningEstimate - a.planningEstimate);
+
+  const dealStrengthBullets = [
+    profitabilityScore >= 82 && valuation.expectedGrossProfit > 0
+      ? `Strong economics: ${money(valuation.expectedGrossProfit)} expected gross at the current assumptions.`
+      : null,
+    compSummary.includedCount >= 6 && finalTargetUsed > 0
+      ? `${compSummary.includedCount} valuation comps support an expected sale value near ${money(finalTargetUsed)}.`
+      : null,
+    conditionAnalysisApplied && getEffectiveConditionPlanningEstimate() > 0
+      ? `${money(getEffectiveConditionPlanningEstimate())} of selected recon is already reflected in the deal economics.`
+      : null,
+    ...dealerFitResult.reasons.slice(0, 2),
+  ].filter((item): item is string => Boolean(item));
+
+  const dealConcernBullets = [
+    ...conditionIssueBullets
+      .filter((issue) => issue.severity !== "minor")
+      .slice(0, 4)
+      .map((issue) => `${issue.description} · ${money(issue.planningEstimate)} planning estimate.`),
+    comps.length > 0 && String(compSummary.confidence || "").toLowerCase() === "low"
+      ? "The current comp set is still thin; expand the market before relying heavily on the resale target."
+      : null,
+  ].filter((item): item is string => Boolean(item));
+
+  const dealerFitContext = hasEvaluationData
+    ? `${dealerFitResult.label} · ${dealerFitResult.score}/100`
+    : "Not calculated";
+
+  const displayedReconReserve =
+    valuationInput.costs.recon +
+    valuationInput.costs.conditionRiskAdd +
+    valuationInput.costs.titleHistoryRiskAdd;
+  const displayedCurrentCost = valuation.allInCost;
+  const allInCostBreakdown = [
+    { label: "Current bid / purchase price", amount: Math.max(0, valuationInput.currentBid) },
+    { label: "Auction fee", amount: valuationInput.costs.auctionFee },
+    { label: "Transport", amount: valuationInput.costs.transport },
+    { label: "Condition & reconditioning reserve", amount: displayedReconReserve },
+    { label: "Detail / admin", amount: valuationInput.costs.detailAdmin },
+    { label: "Contingency reserve", amount: valuationInput.costs.generalRiskReserve },
+    { label: "Brand risk adjustment", amount: valuationInput.costs.brandRiskAdd },
+  ];
+  const dealerFitPillTone =
+    dealerFitResult.score >= 70
+      ? "bg-emerald-100 text-emerald-700"
+      : dealerFitResult.score >= 40
+        ? "bg-amber-100 text-amber-700"
+        : "bg-red-100 text-red-700";
+
   const suggestedBidDisplay = !hasEvaluationData
     ? "—"
     : valuationInput.currentBid <= 0
@@ -2709,18 +3524,18 @@ export function EvaluationWorkspace({
             tone: "over" as const,
             text: `Current bid is ${money(
               currentBidDifference,
-            )} above the Max Smart Bid.`,
+            )} above the Recommended Max Buy.`,
           }
         : currentBidDifference < 0
           ? {
               tone: "under" as const,
               text: `${money(
                 Math.abs(currentBidDifference),
-              )} remains before reaching the Max Smart Bid.`,
+              )} remains before reaching the Recommended Max Buy.`,
             }
           : {
               tone: "at" as const,
-              text: "Current bid is at the Max Smart Bid.",
+              text: "Current bid is at the Recommended Max Buy.",
             };
 
   const hasManualQuickEvalBasics =
@@ -2764,12 +3579,174 @@ export function EvaluationWorkspace({
     }
   }
 
-  const hasSevereCondition = Object.values(conditionAssessments).some(
-    (assessment) => assessment.severity === "severe",
+  async function runPrimaryEvaluation() {
+    setEvaluationRunning(true);
+
+    if (quickEvalMode === "manual") {
+      const manualOverride = {
+        year: String(manualVehicle.year || "").trim(),
+        make: manualVehicle.make.trim().toUpperCase(),
+        model: manualVehicle.model.trim(),
+        trim: manualVehicle.trim.trim(),
+        fuelType: null,
+      };
+
+      if (!manualOverride.year || !manualOverride.make || !manualOverride.model) {
+        setMarketCheckStatus(
+          "Enter Year, Make, and Model before running the evaluation.",
+        );
+        setEvaluationRunning(false);
+        return;
+      }
+
+      resetPreviousEvaluationResults({ preserveVehicleInfo: true });
+      setDecodedVehicle(null);
+      setVin("");
+      setManualVehicle((previous) => ({
+        ...previous,
+        year: manualOverride.year,
+        make: manualOverride.make,
+        model: manualOverride.model,
+        trim: manualOverride.trim,
+      }));
+      setSavedEvaluationId(null);
+      setSaveStatus("");
+      setFinalTargetOverride(null);
+      setVehicleStepConfirmed(true);
+      setConditionStepConfirmed(false);
+      setActiveStage("condition");
+
+      void generateVehicleThumbnail({
+        year: manualOverride.year,
+        make: manualOverride.make,
+        model: manualOverride.model,
+        trim: manualOverride.trim,
+        bodyClass: manualVehicle.bodyClass,
+      });
+
+      await pullMarketCheckComps(manualOverride);
+      setEvaluationRunning(false);
+      return;
+    }
+
+    resetPreviousEvaluationResults({ preserveVehicleInfo: true });
+
+    const newlyDecodedVehicle = await decodeVinFromBasics();
+
+    if (!newlyDecodedVehicle) {
+      setEvaluationRunning(false);
+      return;
+    }
+
+    setVehicleStepConfirmed(true);
+    setConditionStepConfirmed(false);
+    setActiveStage("condition");
+
+    void generateVehicleThumbnail({
+      year: newlyDecodedVehicle.year,
+      make: newlyDecodedVehicle.make,
+      model: newlyDecodedVehicle.model,
+      trim: newlyDecodedVehicle.trim,
+      bodyClass: newlyDecodedVehicle.bodyClass,
+    });
+
+    await pullMarketCheckComps(newlyDecodedVehicle);
+    setEvaluationRunning(false);
+  }
+
+  const materialConditionIssues = (conditionAnalysis?.issues || []).filter(
+    (issue) =>
+      issue.includeInValuation &&
+      issue.severity === "severe" &&
+      ["mechanical", "history", "structural", "title"].includes(issue.category),
   );
 
-  const hasHighConditionRisk =
-    String(conditionAnalysis?.overallRisk || "").toLowerCase() === "high";
+  const hasMaterialConditionRisk = materialConditionIssues.length > 0;
+
+  // Zero valuation comps is an evidence state, not a negative verdict.
+  // Do not manufacture sale/profit conclusions until market evidence exists.
+  const needsCompSearch =
+    hasEvaluationData &&
+    !evaluationRunning &&
+    !marketCheckLoading &&
+    compSummary.includedCount === 0;
+
+  // Recommendation routing is derived from the current comp-search evidence.
+  const compSearchRegions = marketCheckSearchMeta?.regionsChecked.length || 0;
+  const compReturnedListings =
+    marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0;
+  const compUsableListings =
+    marketCheckApiUsage?.filterDiagnostics?.usableListings || 0;
+  const compModelMismatchCount =
+    marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.modelMismatch || 0;
+
+  const compNextStep = (() => {
+    if (!marketCheckSearchMeta || marketCheckLoading) {
+      return {
+        path: "none" as const,
+        title: "",
+        reason: "",
+      };
+    }
+
+    if (autoDevDiscovery?.recommendedMarkets?.length) {
+      return {
+        path: "discovered-markets" as const,
+        title: "Search the markets Auto.dev found",
+        reason:
+          "National discovery has already located matching inventory, so the highest-value next MarketCheck calls are the identified 100-mile clusters.",
+      };
+    }
+
+    if (compReturnedListings === 0 && compSearchRegions >= 3) {
+      return {
+        path: "national-discovery" as const,
+        title: "Use National Discovery",
+        reason:
+          `MarketCheck found no candidate inventory across ${compSearchRegions} searched regions. Locate where matching cars actually exist before spending more MarketCheck calls.`,
+      };
+    }
+
+    if (
+      compReturnedListings > 0 &&
+      compUsableListings === 0 &&
+      (compModelMismatchCount > 0 || Boolean(compTaxonomyFallback))
+    ) {
+      return {
+        path: "vehicle-match" as const,
+        title: "Review Vehicle Match",
+        reason:
+          compModelMismatchCount > 0
+            ? `MarketCheck returned inventory, but ${compModelMismatchCount} listing${compModelMismatchCount === 1 ? "" : "s"} failed model identity checks. Review how this vehicle is classified before widening farther.`
+            : "MarketCheck is finding inventory, but this vehicle has a known taxonomy fallback. Review the vehicle match before spending calls on more geography.",
+      };
+    }
+
+    if (compSummary.includedCount > 0 && compSummary.includedCount < 3) {
+      return {
+        path: "national-discovery" as const,
+        title: "Use National Discovery",
+        reason:
+          "You have some usable evidence, but the comp set is still thin. National discovery can identify the best markets for the next MarketCheck calls.",
+      };
+    }
+
+    if (compReturnedListings === 0 && compSearchRegions < 3) {
+      return {
+        path: "geography" as const,
+        title: "Expand Geography",
+        reason:
+          "The local search is still shallow. Give MarketCheck a wider regional look before escalating to national discovery.",
+      };
+    }
+
+    return {
+      path: "geography" as const,
+      title: "Refine the MarketCheck Search",
+      reason:
+        "MarketCheck is seeing some inventory, so refine geography or vehicle matching before using national discovery.",
+    };
+  })();
 
   const hasLowCompConfidence =
     comps.length > 0 &&
@@ -2777,68 +3754,125 @@ export function EvaluationWorkspace({
 
   const hasLimitedDealerFit = dealerFitResult.score < 55;
 
+  const conditionReviewComplete =
+    conditionReviewStatus === "no_material_issues" ||
+    conditionReviewStatus === "unknown" ||
+    (conditionReviewStatus === "issues" &&
+      (conditionAnalysisApplied || conditionAssessmentsTouched));
+
+  const conditionReviewPending =
+    hasEvaluationData &&
+    !evaluationRunning &&
+    !marketCheckLoading &&
+    !needsCompSearch &&
+    !conditionReviewComplete;
+
+  const conditionUnknown = conditionReviewStatus === "unknown";
+
+  const isAboveRecommendedBuy =
+    hasEvaluationData &&
+    valuationInput.currentBid > 0 &&
+    suggestedBid > 0 &&
+    valuationInput.currentBid > suggestedBid;
+
+  const hasHardPass =
+    hasEvaluationData &&
+    !needsCompSearch &&
+    !conditionReviewPending &&
+    (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
+
   const requiresReview =
     hasEvaluationData &&
-    valuation.decision !== "Pass" &&
-    valuation.decision !== "Watch / Stretch Only" &&
-    (hasLowCompConfidence ||
-      hasLimitedDealerFit ||
-      hasSevereCondition ||
-      hasHighConditionRisk);
+    !needsCompSearch &&
+    !conditionReviewPending &&
+    !hasHardPass &&
+    (isAboveRecommendedBuy ||
+      valuation.decision === "Watch / Stretch Only" ||
+      hasLowCompConfidence ||
+      hasMaterialConditionRisk ||
+      conditionUnknown);
 
   const reviewReasons = [
-    hasLowCompConfidence ? "low comp confidence" : null,
-    hasLimitedDealerFit ? "limited dealer fit" : null,
-    hasSevereCondition || hasHighConditionRisk
-      ? "significant condition concerns"
-      : null,
+    isAboveRecommendedBuy ? "the current bid is above the Recommended Max Buy" : null,
+    hasLowCompConfidence ? "market evidence is still thin" : null,
+    hasMaterialConditionRisk ? "a material vehicle-specific risk needs review" : null,
+    conditionUnknown ? "condition is unknown or has not been adequately reviewed" : null,
   ].filter((reason): reason is string => Boolean(reason));
 
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
-    : valuation.decision === "Pass"
-      ? "PASS"
-      : valuation.decision === "Watch / Stretch Only"
-        ? "WATCH CLOSELY"
-        : requiresReview
-          ? "REVIEW REQUIRED"
-          : "WORTH PURSUING";
+    : evaluationRunning || marketCheckLoading
+      ? "CHECKING MARKET"
+      : needsCompSearch
+        ? "COMP SEARCH NEEDED"
+        : conditionReviewPending
+          ? "CONDITION REVIEW NEEDED"
+        : hasHardPass
+          ? "PASS"
+        : isAboveRecommendedBuy
+          ? "ABOVE TARGET PRICE"
+          : valuation.decision === "Watch / Stretch Only"
+            ? "WATCH CLOSELY"
+            : requiresReview
+              ? "REVIEW REQUIRED"
+              : "WORTH PURSUING";
 
   const presentationDecision =
     !hasEvaluationData
       ? "awaiting"
-      : valuation.decision === "Pass"
-        ? "pass"
-        : valuation.decision === "Watch / Stretch Only"
-          ? "watch"
-          : requiresReview
-            ? "review"
-            : "pursue";
+      : evaluationRunning || marketCheckLoading
+        ? "searching"
+        : needsCompSearch
+          ? "comps"
+          : conditionReviewPending
+            ? "condition"
+          : hasHardPass
+            ? "pass"
+            : requiresReview
+              ? "review"
+              : "pursue";
 
   const decisionBadgeTone =
-    presentationDecision === "pass"
-      ? "bg-red-100 text-red-700"
-      : presentationDecision === "watch" ||
-          presentationDecision === "review"
-        ? "bg-amber-100 text-amber-700"
+    presentationDecision === "searching"
+      ? "bg-blue-100 text-blue-700"
+      : presentationDecision === "pass"
+        ? "bg-red-100 text-red-700"
+      : presentationDecision === "comps"
+        ? "bg-amber-100 text-amber-800"
+        : presentationDecision === "condition"
+          ? "bg-violet-100 text-violet-800"
+        : presentationDecision === "review"
+          ? "bg-amber-100 text-amber-700"
         : presentationDecision === "pursue"
           ? "bg-emerald-100 text-emerald-700"
           : "bg-slate-100 text-slate-600";
 
   const decisionBannerTone =
-    presentationDecision === "pass"
-      ? "border-red-200/80 bg-red-50/60 text-red-950"
-      : presentationDecision === "watch" ||
-          presentationDecision === "review"
-        ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
-        : "border-slate-200 bg-white text-slate-950";
+    presentationDecision === "searching"
+      ? "border-blue-200/80 bg-blue-50/40 text-blue-950"
+      : presentationDecision === "pass"
+        ? "border-red-200/80 bg-red-50/60 text-red-950"
+      : presentationDecision === "comps"
+        ? "border-amber-200/80 bg-amber-50/35 text-amber-950"
+        : presentationDecision === "condition"
+          ? "border-violet-200/80 bg-violet-50/40 text-violet-950"
+        : presentationDecision === "review"
+          ? "border-amber-200/80 bg-amber-50/45 text-amber-950"
+        : presentationDecision === "pursue"
+          ? "border-emerald-200/80 bg-emerald-50/40 text-emerald-950"
+          : "border-slate-200 bg-white text-slate-950";
 
   const decisionTextTone =
-    presentationDecision === "pass"
-      ? "text-red-700"
-      : presentationDecision === "watch" ||
-          presentationDecision === "review"
+    presentationDecision === "searching"
+      ? "text-blue-700"
+      : presentationDecision === "pass"
+        ? "text-red-700"
+      : presentationDecision === "comps"
         ? "text-amber-700"
+        : presentationDecision === "condition"
+          ? "text-violet-700"
+        : presentationDecision === "review"
+          ? "text-amber-700"
         : presentationDecision === "pursue"
           ? "text-emerald-700"
           : "text-slate-400";
@@ -2848,6 +3882,52 @@ export function EvaluationWorkspace({
 
   const compConfidenceDisplay =
     comps.length > 0 ? compSummary.confidence : "—";
+
+  const liquidity = marketCheckApiUsage?.marketLiquidity || null;
+  const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
+  const liquiditySoldHigh = Math.max(0, liquidity?.soldP75Days || 0);
+  const liquiditySoldMedian = Math.max(0, liquidity?.soldMedianDays || 0);
+  const liquidityActiveDays = Math.max(
+    0,
+    liquidity?.currentActiveAverageDays ||
+      marketTimingAverageMarketDays ||
+      marketTimingAverageDealerDays ||
+      0,
+  );
+  const liquiditySampleSize = Math.max(0, liquidity?.historicalSoldCount || 0);
+  const liquidityConfidence =
+    liquidity?.confidence || (liquiditySampleSize ? "low" : "unknown");
+
+  const liquidityLabel = (() => {
+    if (!liquiditySoldMedian && !liquidityActiveDays) return "Not enough data";
+    const reference = liquiditySoldMedian || liquidityActiveDays;
+    if (reference <= 30) return "Fast";
+    if (reference <= 50) return "Good";
+    if (reference <= 75) return "Normal";
+    if (reference <= 110) return "Slow";
+    return "Very Slow";
+  })();
+
+  const liquidityInterpretation = (() => {
+    if (!liquiditySoldMedian) {
+      return liquidityActiveDays
+        ? `Current comparable inventory is averaging about ${Math.round(liquidityActiveDays)} days on market, but recent sold-history is too thin for a reliable retail window.`
+        : "Lot Logic does not yet have enough timing evidence for this vehicle and market.";
+    }
+
+    if (!liquidityActiveDays) {
+      return `Recent similar vehicles sold in a typical ${Math.round(liquiditySoldLow || liquiditySoldMedian)}–${Math.round(liquiditySoldHigh || liquiditySoldMedian)} day window.`;
+    }
+
+    const delta = liquidityActiveDays - liquiditySoldMedian;
+    if (delta >= 15) {
+      return `Current inventory is aging about ${Math.round(delta)} days longer than the recent sold median, suggesting the market may be slowing.`;
+    }
+    if (delta <= -15) {
+      return "Current inventory is materially younger than the recent sold median, suggesting healthy near-term demand.";
+    }
+    return "Current inventory age is broadly in line with recent regional sell-through.";
+  })();
 
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
@@ -3238,13 +4318,13 @@ export function EvaluationWorkspace({
                       String(marketCheckApiUsage?.apiCallsMade ?? 0),
                     ],
                     [
-                      "Usable Comps",
+                      "Valuation Comps",
                       String(
                         marketCheckApiUsage?.usableCompCount ??
                           compSummary.includedCount,
                       ),
                     ],
-                    ["Comp Confidence", compSummary.confidence || "—"],
+                    ["Market Evidence", compSummary.confidence || "—"],
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -3282,12 +4362,14 @@ export function EvaluationWorkspace({
 
                   <div className="rounded-xl bg-slate-50 px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                      Fallback Status
+                      Retrieval Strategy
                     </div>
                     <div className="mt-1 text-sm font-bold text-slate-900">
-                      {marketCheckSearchMeta?.lowConfidenceFallback
-                        ? "Low-confidence fallback applied"
-                        : "None"}
+                      {compTrimRelaxed
+                        ? compRetrievalLabel
+                        : marketCheckSearchMeta?.lowConfidenceFallback
+                          ? "Low-confidence comp fallback applied"
+                          : "Exact vehicle"}
                     </div>
                   </div>
                 </div>
@@ -3320,11 +4402,10 @@ export function EvaluationWorkspace({
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
-                  Condition &amp; Reconditioning
+                  Vehicle Condition &amp; Risk
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500">
-                  Analyze auction or seller disclosures, then review the
-                  proposed reserve before applying it to the valuation.
+                  Review what is known, analyze auction or seller disclosures, and confirm any reserve before Lot Logic treats condition as complete.
                 </p>
               </div>
 
@@ -3387,6 +4468,7 @@ export function EvaluationWorkspace({
             <div className="flex-1 overflow-y-auto">
               {conditionModalTab === "ai" ? (
                 <div className="space-y-5 p-6">
+                  {!conditionAnalysis ? (
                   <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -3439,11 +4521,25 @@ export function EvaluationWorkspace({
                     </div>
 
                     {conditionAnalysisError ? (
-                      <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      <div
+                        className={`mt-4 rounded-xl border px-4 py-3 text-sm font-bold ${
+                          conditionAnalysisRetryable
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-red-200 bg-red-50 text-red-700"
+                        }`}
+                      >
                         {conditionAnalysisError}
+                        {conditionAnalysisRetryable ? (
+                          <div className="mt-1 text-xs font-semibold text-amber-700">
+                            Your pasted condition notes are still here. Try Analyze Condition again in a moment.
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </section>
+
+
+                  ) : null}
 
                   {conditionAnalysis ? (
                     <>
@@ -3719,7 +4815,11 @@ export function EvaluationWorkspace({
                       {conditionAnalysis.recommendedInspections.length ||
                       conditionAnalysis.missingInformation.length ||
                       conditionAnalysis.warnings.length ? (
-                        <section className="grid gap-4 lg:grid-cols-3">
+                        <section className={`grid gap-4 transition-all duration-300 ease-out lg:grid-cols-3 ${
+              verdictEntered
+                ? "translate-y-0 scale-100 opacity-100"
+                : "translate-y-3 scale-[1.015] opacity-0"
+            }`}>
                           <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.08em] text-blue-700">
                               Recommended Inspections
@@ -3773,6 +4873,49 @@ export function EvaluationWorkspace({
                           </div>
                         </section>
                       ) : null}
+
+                      <section className="rounded-2xl border border-slate-200 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setConditionSourceEditorOpen((open) => !open)}
+                          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                        >
+                          <div>
+                            <div className="font-black text-slate-950">Edit or update condition information</div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                              Review or change the original auction / seller notes, then analyze again.
+                            </div>
+                          </div>
+                          <span className="text-sm font-black text-violet-700">{conditionSourceEditorOpen ? "Hide" : "Edit"}</span>
+                        </button>
+
+                        {conditionSourceEditorOpen ? (
+                          <div className="border-t border-slate-200 p-5">
+                            <textarea
+                              value={conditionSourceText}
+                              onChange={(event) => {
+                                setConditionSourceText(event.target.value);
+                                setConditionAnalysisApplied(false);
+                              }}
+                              placeholder="Paste or update auction / seller condition information..."
+                              className="min-h-[170px] w-full resize-y rounded-2xl border border-slate-200 bg-white p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-violet-300"
+                            />
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                              <span className="text-[10px] font-semibold text-slate-400">
+                                {conditionSourceText.trim().length.toLocaleString()} characters
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void analyzeConditionInformation()}
+                                disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
+                                className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {conditionAnalysisLoading ? "Analyzing..." : "Analyze Again"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </section>
                     </>
                   ) : null}
                 </div>
@@ -3967,6 +5110,491 @@ export function EvaluationWorkspace({
         </div>
       ) : null}
 
+      {compMarketEditorOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+              <div>
+                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Edit Comps</h2>
+                <p className="mt-1 max-w-lg text-sm font-semibold leading-5 text-slate-500">
+                  Expand where Lot Logic looks, or broaden how specifically it matches this vehicle. Geography suggestions keep widening outward from your starting market.
+                </p>
+              </div>
+              <button type="button" onClick={() => setCompMarketEditorOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-50">Close</button>
+            </div>
+
+            <div className="border-b border-slate-200 px-6">
+              <div className="flex gap-6" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={compEditorTab === "geography"}
+                  onClick={() => setCompEditorTab("geography")}
+                  className={`relative py-3 text-sm font-black ${compEditorTab === "geography" ? "text-blue-700" : "text-slate-400 hover:text-slate-700"}`}
+                >
+                  Geography
+                  <span className={`absolute inset-x-0 bottom-0 h-0.5 ${compEditorTab === "geography" ? "bg-blue-700" : "bg-transparent"}`} />
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={compEditorTab === "vehicle"}
+                  onClick={() => setCompEditorTab("vehicle")}
+                  className={`relative py-3 text-sm font-black ${compEditorTab === "vehicle" ? "text-blue-700" : "text-slate-400 hover:text-slate-700"}`}
+                >
+                  Vehicle Match
+                  <span className={`absolute inset-x-0 bottom-0 h-0.5 ${compEditorTab === "vehicle" ? "bg-blue-700" : "bg-transparent"}`} />
+                </button>
+              </div>
+            </div>
+
+            {compEditorTab === "geography" ? (
+              <>
+                <div className="border-b border-slate-100 px-6 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={suggestMoreCompMarkets}
+                      disabled={getCompExpansionMarkets().filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip)).length <= compSuggestionCount}
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+                    >
+                      {getCompExpansionMarkets().filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip)).length <= compSuggestionCount
+                        ? "All Metro Suggestions Loaded"
+                        : "Suggest 3 More Markets"}
+                    </button>
+                    <div className="flex min-w-[220px] flex-1 items-center gap-2">
+                      <input
+                        value={customCompZip}
+                        onChange={(event) => setCustomCompZip(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                        placeholder="Advanced: add ZIP"
+                        inputMode="numeric"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomCompZip}
+                        disabled={customCompZip.length !== 5}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      >
+                        Add ZIP
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-2 overflow-y-auto px-6 py-5">
+                  {[
+                    ...getCompExpansionMarkets().filter((market) => {
+                      const searchedZips = marketCheckSearchMeta?.searchedZips || [];
+                      if (searchedZips.includes(market.zip)) return true;
+
+                      return getCompExpansionMarkets()
+                        .filter((candidate) => !searchedZips.includes(candidate.zip))
+                        .slice(0, compSuggestionCount)
+                        .some((candidate) => candidate.zip === market.zip);
+                    }),
+                    ...customCompMarkets.map((market, index) => ({ ...market, order: 10000 + index, enabled: true })),
+                  ]
+                    .sort((a, b) => a.order - b.order)
+                    .map((market) => {
+                      const searched = marketCheckSearchMeta?.searchedZips.includes(market.zip) || false;
+                      const selected = searched || selectedCompMarketZips.includes(market.zip);
+                      const nextRecommended = !searched && getCompExpansionMarkets()
+                        .filter((candidate) => !(marketCheckSearchMeta?.searchedZips || []).includes(candidate.zip))
+                        .slice(0, compSuggestionCount)
+                        .some((candidate) => candidate.zip === market.zip);
+
+                      return (
+                        <label key={market.zip} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${selected ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-white"} ${searched ? "cursor-default" : "cursor-pointer"}`}>
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={searched}
+                            onChange={(event) => {
+                              setSelectedCompMarketZips((current) =>
+                                event.target.checked
+                                  ? Array.from(new Set([...current, market.zip]))
+                                  : current.filter((zip) => zip !== market.zip),
+                              );
+                            }}
+                            className="h-4 w-4 accent-blue-700"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-black text-slate-800">{market.market} <span className="text-slate-400">({market.zip})</span></span>
+                            <span className="mt-0.5 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+                              {searched
+                                ? "Already searched"
+                                : nextRecommended
+                                  ? "Recommended next market"
+                                  : customCompMarkets.some((item) => item.zip === market.zip)
+                                    ? "Custom ZIP"
+                                    : activeAssumptions.regionalMarkets.some((item) => item.zip === market.zip)
+                                      ? "Configured market"
+                                      : "Expanded metro market"}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={() => { setCompMarketEditorOpen(false); void searchMajorMetropolitanAreas(); }}
+                    disabled={marketCheckLoading}
+                    className="text-xs font-black text-slate-500 hover:text-blue-700 disabled:text-slate-300"
+                  >
+                    Search major reference markets instead
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void searchSelectedCompMarkets()}
+                    disabled={!selectedCompMarketZips.length || marketCheckLoading}
+                    className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    Search Selected Markets
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-[0.09em] text-slate-400">Current vehicle match</div>
+                  <div className="mt-1 text-base font-black text-slate-950">
+                    {[vehicleYear, vehicleMake, vehicleModel, vehicleTrim].filter(Boolean).join(" ") || "Vehicle details unavailable"}
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                    Lot Logic still uses year, mileage, body/configuration, drivetrain, geography, and relevance checks when ranking the evidence.
+                  </p>
+                </div>
+
+                {vehicleTrim ? (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+                    <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Alternate MarketCheck classification</div>
+                    <div className="mt-1 text-lg font-black text-slate-950">
+                      {compTaxonomyFallback
+                        ? `Search MarketCheck as ${vehicleMake} ${compTaxonomyFallback.fallbackModel}`
+                        : `Broaden ${vehicleMake} ${vehicleModel} retrieval`}
+                    </div>
+                    <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+                      {compTaxonomyFallback
+                        ? `Search the broader MarketCheck ${compTaxonomyFallback.fallbackModel} model bucket without forcing a trim value. This changes retrieval only — Lot Logic still requires each returned listing to prove it is a true ${vehicleModel} before it can qualify as a comp.`
+                        : "If you believe valid comps exist in the markets already searched, Lot Logic can broaden the retrieval query while keeping final vehicle-equivalence safeguards active."}
+                    </p>
+                    {compTrimRelaxed ? (
+                      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-bold leading-5 text-blue-900">
+                        <div className="font-black">MarketCheck retrieval: {compRetrievalLabel}</div>
+                        <div className="mt-1">Lot Logic target remains: {vehicleMake} {vehicleModel}{vehicleTrim ? ` ${vehicleTrim}` : ""}. Related base-model vehicles still cannot qualify unless they prove the requested variant.</div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setCompMarketEditorOpen(false); void broadenCompVehicleMatch(); }}
+                          disabled={marketCheckLoading}
+                          className="rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-black text-white hover:bg-amber-800 disabled:bg-slate-300"
+                        >
+                          {compTaxonomyFallback
+                            ? `Search broader ${vehicleMake} ${compTaxonomyFallback.fallbackModel} bucket`
+                            : "Try Broader Retrieval"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompEditorTab("geography")}
+                          className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-black text-blue-700 hover:bg-blue-50"
+                        >
+                          Expand Geography Instead
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-slate-200 p-5">
+                    <div className="text-sm font-black text-slate-900">Already using a model-level match</div>
+                    <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                      There is no trim-level specificity to remove for this vehicle. Use Geography to expand the market instead.
+                    </p>
+                  </div>
+                )}
+
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs font-semibold leading-5 text-blue-900/80">
+                  Broaden vehicle match changes what qualifies as a comparable; Geography changes where Lot Logic looks. Keeping those choices separate makes it clear which assumption you are changing.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {whyLotLogicOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setWhyLotLogicOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Why Lot Logic thinks this"
+            className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
+                  Decision details
+                </div>
+                <h2 className="mt-1 text-xl font-black text-slate-950">
+                  Why Lot Logic Thinks This
+                </h2>
+                <p className="mt-1 max-w-3xl text-sm font-semibold leading-5 text-slate-500">
+                  Market evidence and deal economics drive the verdict. Dealer fit and market liquidity add dealership-specific context.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhyLotLogicOpen(false)}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close decision details"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-[calc(92vh-92px)] overflow-y-auto px-6 py-6">
+              <div className="grid gap-5 lg:grid-cols-2">
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Market Evidence
+                  </div>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Confidence</dt>
+                      <dd className="text-right font-black text-slate-900">{compConfidenceDisplay}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Valuation comps used</dt>
+                      <dd className="text-right font-black text-slate-900">{compSummary.includedCount || "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Comp-supported value</dt>
+                      <dd className="text-right font-black text-slate-950">
+                        {compSummary.includedCount
+                          ? money(
+                              (compSummary as { medianAdjusted?: number }).medianAdjusted ||
+                                compSummary.averageAdjusted,
+                            )
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="font-semibold text-slate-500">Conservative sale value</dt>
+                      <dd className="text-right font-black text-slate-950">
+                        {compSummary.fastSaleTarget > 0 ? money(compSummary.fastSaleTarget) : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWhyLotLogicOpen(false);
+                      compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    className="mt-4 text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    View comp evidence ↓
+                  </button>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Deal Economics
+                  </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Current bid</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(valuationInput.currentBid)}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Recon reserve</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(displayedReconReserve)}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">All-in cost</dt>
+                      <dd className="mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setAllInCostOpen(true)}
+                          className="font-black text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 hover:text-blue-700"
+                        >
+                          {money(displayedCurrentCost)}
+                        </button>
+                      </dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Expected profit</dt>
+                      <dd className="mt-1 font-black text-emerald-700">
+                        {!needsCompSearch ? money(valuation.expectedGrossProfit) : "—"}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Recommended max buy</dt>
+                      <dd className="mt-1 font-black text-blue-700">{suggestedBid > 0 ? money(suggestedBid) : "—"}</dd>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
+                      <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Dealer Fit
+                  </div>
+                  <div className="mt-1 text-lg font-black text-slate-950">
+                    {dealerFitResult.label} · {dealerFitResult.score}/100
+                  </div>
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                    Dealer Fit measures how well this vehicle matches the kinds of vehicles your dealership prefers and is positioned to retail. It does not determine whether the deal is profitable.
+                  </p>
+                  <ul className="mt-4 space-y-2">
+                    {[...dealerFitResult.reasons, ...dealerFitResult.cautions]
+                      .slice(0, 5)
+                      .map((item) => (
+                        <li key={item} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700">
+                          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                          {item}
+                        </li>
+                      ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWhyLotLogicOpen(false);
+                      setDealerProfileOpen(true);
+                    }}
+                    className="mt-4 text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Dealer Profile & Preferences →
+                  </button>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                    Time to Sell
+                  </div>
+                  <div className="mt-3">
+                    <MarketLiquidityVisual
+                      soldLow={liquiditySoldLow}
+                      soldHigh={liquiditySoldHigh}
+                      soldMedian={liquiditySoldMedian}
+                      activeDays={liquidityActiveDays}
+                      label={liquidityLabel}
+                      confidence={liquidityConfidence}
+                      sampleSize={liquiditySampleSize}
+                    />
+                  </div>
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">
+                    {liquidityInterpretation}
+                  </p>
+                  {liquidity?.region ? (
+                    <p className="mt-2 text-[10px] font-semibold text-slate-400">
+                      Based on recent sold and active listings around {liquidity.region} ({liquidity.zip}) within {liquidity.radius || 100} miles
+                      {liquidity.generation ? ` · ${liquidity.generation} generation` : ""}.
+                    </p>
+                  ) : null}
+                </section>
+              </div>
+
+              {(reviewReasons.length || needsCompSearch) ? (
+                <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">
+                    What deserves another look
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {[
+                      needsCompSearch ? "Market evidence is incomplete; expand the comp search before relying on the sale estimate." : null,
+                      ...reviewReasons,
+                    ].filter(Boolean).map((item) => (
+                      <li key={String(item)} className="flex gap-2 text-xs font-semibold leading-5 text-amber-900">
+                        <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {dealerProfileOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-600">Dealer intelligence</div>
+                <h2 className="mt-1 text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Dealer Profile & Preferences</h2>
+                <p className="mt-1 max-w-2xl text-sm font-semibold leading-5 text-slate-500">
+                  This is the context Lot Logic uses to judge whether a vehicle fits your dealership. Deal economics still drive the overall verdict.
+                </p>
+              </div>
+              <button type="button" onClick={() => setDealerProfileOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-50">Close</button>
+            </div>
+
+            <div className="grid gap-5 px-6 py-5 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Current fit model</div>
+                    <div className="mt-1 text-lg font-black text-slate-950">{dealerFitResult.label}</div>
+                  </div>
+                  <div className="rounded-full bg-white px-3 py-1.5 text-sm font-black text-blue-700 shadow-sm">{dealerFitResult.score}/100</div>
+                </div>
+                <div className="mt-4 text-xs font-black uppercase tracking-[0.08em] text-emerald-700">Signals helping fit</div>
+                <ul className="mt-2 space-y-2">
+                  {(dealerFitResult.reasons.length ? dealerFitResult.reasons : ["No strong dealership-specific fit signal has been established yet."]).slice(0, 5).map((reason) => (
+                    <li key={reason} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />{reason}</li>
+                  ))}
+                </ul>
+                {dealerFitResult.cautions.length ? (
+                  <>
+                    <div className="mt-4 text-xs font-black uppercase tracking-[0.08em] text-amber-700">Fit cautions</div>
+                    <ul className="mt-2 space-y-2">
+                      {dealerFitResult.cautions.slice(0, 4).map((caution) => (
+                        <li key={caution} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />{caution}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-black text-slate-900">Dealership website intelligence</div>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">Next onboarding step</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Lot Logic will use the dealership URL to infer inventory mix, price bands, vehicle types, age/mileage patterns, and positioning, then let the dealer confirm or correct the profile.</p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm font-black text-slate-900">Your acquisition preferences</div>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">This will be where dealers add preferred makes, body styles, price bands, mileage/age targets, target gross, and categories they avoid.</p>
+                </div>
+
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
+                  <div className="text-sm font-black text-slate-900">Deal spec / buying guide</div>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Planned: upload a dealership buying guide or deal-spec document so Lot Logic can incorporate those rules into dealer fit.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {bidLogicOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -4039,7 +5667,7 @@ export function EvaluationWorkspace({
                 </select>
               </FormRow>
 
-              <FormRow label="Sale Value Used">
+              <FormRow label="Expected Sale Value">
                 <div>
                   <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                     <span className="pl-3 text-sm text-slate-400">$</span>
@@ -4058,13 +5686,13 @@ export function EvaluationWorkspace({
                   </div>
 
                   <p className="mt-1.5 text-right text-[10px] font-semibold leading-4 text-slate-400">
-                    Defaults to the Fast-Sale Value. Enter a different amount to
+                    Defaults to the Conservative Sale Value. Enter a different amount to
                     override it.
                   </p>
                 </div>
               </FormRow>
 
-              <FormRow label="Target Profit">
+              <FormRow label="Profit Target Override">
                 <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                   <span className="pl-3 text-sm text-slate-400">$</span>
                   <input
@@ -4081,6 +5709,9 @@ export function EvaluationWorkspace({
                     className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
                   />
                 </div>
+                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                  Leave at $0 to use the Lot Logic automatic target: at least $2,500, scaling to roughly 20% of the pre-recon acquisition basis. Current target: {money(valuation.desiredProfitTarget)}.
+                </p>
               </FormRow>
 
               <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
@@ -4130,1165 +5761,853 @@ export function EvaluationWorkspace({
           active="evaluator"
           userEmail={userEmail}
           onNewEvaluation={() => {
+            setActiveStage("vehicle");
+            setCompSectionExpanded(false);
+            setVerdictCompsExpanded(false);
             clearLocalDraft();
+            setVehicleStepConfirmed(false);
+            setConditionStepConfirmed(false);
+            setVerdictTransitioning(false);
+            setVerdictEntered(false);
             setQuickEvalMode("vin");
-            setQuickEvalOpen(true);
+            setQuickEvalOpen(false);
           }}
         />
 
-        <div className="mx-auto max-w-[1380px] px-4 py-4 sm:px-5 lg:px-7">
-          <section className="mb-4 rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <div className="grid items-end gap-2.5 lg:grid-cols-[170px_minmax(360px,1fr)_135px_135px_165px]">
-              <div>
-                <div className="text-sm font-black text-slate-950">
-                  New Evaluation
-                </div>
-
-                <div className="mt-2 flex flex-nowrap gap-4 text-xs font-extrabold">
+        <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
+          {activeStage === "verdict" ? (
+            <section className="grid gap-4 lg:grid-cols-3">
+              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
                   <button
                     type="button"
-                    onClick={() => setQuickEvalMode("vin")}
-                    className={
-                      quickEvalMode === "vin"
-                        ? "whitespace-nowrap border-b-2 border-blue-700 pb-1 text-blue-700"
-                        : "whitespace-nowrap pb-1 text-slate-400"
-                    }
+                    onClick={() => {
+                      setQuickEvalMode(vin ? "vin" : "manual");
+                      setQuickEvalOpen(true);
+                    }}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
                   >
-                    VIN Scan
-                  </button>
-
-                  <span className="pb-1 text-slate-300">/</span>
-
-                  <button
-                    type="button"
-                    onClick={() => setQuickEvalMode("manual")}
-                    className={
-                      quickEvalMode === "manual"
-                        ? "whitespace-nowrap border-b-2 border-blue-700 pb-1 text-blue-700"
-                        : "whitespace-nowrap pb-1 text-slate-400"
-                    }
-                  >
-                    Manual Entry
+                    Edit
                   </button>
                 </div>
+                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+
+              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
+                  <button
+                    type="button"
+                    onClick={openConditionAnalysis}
+                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black text-slate-950">
+                  {conditionReviewStatus === "issues"
+                    ? "Known issues"
+                    : conditionReviewStatus === "unknown"
+                      ? "Condition unknown"
+                      : "No material issues"}
+                </div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+
+              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
+                  <button
+                    type="button"
+                    onClick={openCompMarketEditor}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-3 text-lg font-black text-slate-950">
+                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"}
+                </div>
+                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+              </article>
+            </section>
+          ) : (
+            <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 min-h-[500px] bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-6 py-8 shadow-[0_18px_50px_rgba(15,23,42,0.05)] transition-all duration-300 ease-out sm:px-7 ${
+              verdictTransitioning
+                ? "-translate-y-1 scale-[0.965] opacity-70"
+                : "translate-y-0 scale-100 opacity-100"
+            } ${
+              activeStage === "vehicle" && !hasEvaluationData
+                ? "mt-[clamp(2rem,5vh,3.5rem)]"
+                : ""
+            }`}>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 opacity-[0.22]"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at 1px 1px, rgba(100,116,139,0.22) 1px, transparent 0)",
+                  backgroundSize: "24px 24px",
+                  maskImage: "linear-gradient(to bottom, black, transparent 72%)",
+                }}
+              />
+
+              <div className="relative">
+                <div className="mb-6">
+                  <div className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-700">New Evaluation</div>
+                  <h1 className="mt-1 text-2xl font-black tracking-[-0.025em] text-slate-950">
+                    Evaluate a vehicle in three quick steps
+                  </h1>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                    Identify the vehicle, review condition, and establish the market.
+                  </p>
+                </div>
+
+          <section
+            className={`relative grid gap-4 transition-[grid-template-columns] duration-300 lg:grid-cols-[var(--workflow-cols)]`}
+            style={{
+              ["--workflow-cols" as string]:
+                activeStage === "vehicle"
+                  ? "1.22fr 0.89fr 0.89fr"
+                  : activeStage === "condition"
+                    ? "0.89fr 1.22fr 0.89fr"
+                    : "0.89fr 0.89fr 1.22fr",
+            }}
+          >
+            <div aria-hidden="true" className="pointer-events-none absolute left-[31.8%] right-[31.8%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-blue-200 via-slate-200 to-slate-200 lg:block" />
+            <article className={`relative overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+              activeStage === "vehicle"
+                ? "z-10 min-h-[360px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
+                : hasEvaluationData
+                  ? "min-h-[360px] border-emerald-200 bg-white"
+                  : "min-h-[360px] border-slate-200 bg-white/85 opacity-80"
+            }`}>
+              {activeStage === "vehicle" ? (
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 320 110"
+                  className="pointer-events-none absolute -bottom-2 -right-5 h-28 w-72 text-blue-900 opacity-[0.035]"
+                  fill="none"
+                >
+                  <path d="M42 72h18l17-28c5-8 12-12 22-13l91-7c15-1 28 3 40 13l33 28 24 5c8 2 14 9 14 17v4H20v-5c0-8 6-14 14-15l8-1Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round"/>
+                  <circle cx="82" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
+                  <circle cx="244" cy="88" r="18" stroke="currentColor" strokeWidth="5"/>
+                  <path d="M101 31l20 37M205 28l-10 40M75 68h173" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+                </svg>
+              ) : null}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">1 · Vehicle</div>
+                    {activeStage === "vehicle" ? (
+                      <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-1 text-lg font-black tracking-[-0.015em] text-slate-950">
+                    {hasEvaluationData ? vehicleTitle : "Identify the car"}
+                  </h2>
+                </div>
+                {hasEvaluationData ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveStage("vehicle")}
+                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Edit
+                  </button>
+                ) : null}
               </div>
 
-              <div>
-                {quickEvalMode === "vin" ? (
-                  <label>
-                    <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
+              {activeStage === "vehicle" ? (
+                <div className="mt-4 space-y-3">
+                  <div className="flex gap-4 text-xs font-extrabold">
+                    <button
+                      type="button"
+                      onClick={() => setQuickEvalMode("vin")}
+                      className={quickEvalMode === "vin" ? "border-b-2 border-blue-700 pb-1 text-blue-700" : "pb-1 text-slate-400"}
+                    >
                       VIN
-                    </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickEvalMode("manual")}
+                      className={quickEvalMode === "manual" ? "border-b-2 border-blue-700 pb-1 text-blue-700" : "pb-1 text-slate-400"}
+                    >
+                      Manual
+                    </button>
+                  </div>
 
-                    <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <input
-                        value={vin}
-                        onChange={(event) =>
-                          setVin(event.target.value.toUpperCase())
-                        }
-                        placeholder="Enter 17-character VIN"
-                        className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2 text-sm font-semibold outline-none"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuickEvalMode("vin");
-                          setQuickEvalOpen(true);
-                        }}
-                        className="mr-2 grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-blue-700"
-                        aria-label="Open VIN entry options"
-                        title="More VIN options"
-                      >
-                        ⌗
-                      </button>
-                    </div>
-                  </label>
-                ) : (
-                  <div>
-                    <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                      Vehicle
-                    </span>
-
-                    <div className="grid grid-cols-[76px_112px_minmax(120px,1fr)_36px] gap-2">
+                  {quickEvalMode === "vin" ? (
+                    <input
+                      value={vin}
+                      onChange={(event) => setVin(event.target.value.toUpperCase())}
+                      placeholder="17-character VIN"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
+                    />
+                  ) : (
+                    <div className="grid grid-cols-[76px_1fr_1fr] gap-2">
                       <input
                         value={manualVehicle.year}
-                        onChange={(event) =>
-                          updateManualVehicleField("year", event.target.value)
-                        }
-                        inputMode="numeric"
-                        maxLength={4}
+                        onChange={(event) => updateManualVehicleField("year", event.target.value)}
                         placeholder="Year"
-                        aria-label="Vehicle year"
-                        className="min-w-0 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm font-semibold shadow-sm outline-none focus:border-blue-300"
+                        className="min-w-0 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-sm font-semibold outline-none"
                       />
-
                       <input
                         value={manualVehicle.make}
-                        onChange={(event) =>
-                          updateManualVehicleField("make", event.target.value)
-                        }
+                        onChange={(event) => updateManualVehicleField("make", event.target.value)}
                         placeholder="Make"
-                        aria-label="Vehicle make"
-                        className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold shadow-sm outline-none focus:border-blue-300"
+                        className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none"
                       />
-
                       <input
                         value={manualVehicle.model}
-                        onChange={(event) =>
-                          updateManualVehicleField("model", event.target.value)
-                        }
+                        onChange={(event) => updateManualVehicleField("model", event.target.value)}
                         placeholder="Model"
-                        aria-label="Vehicle model"
-                        className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold shadow-sm outline-none focus:border-blue-300"
+                        className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none"
                       />
+                    </div>
+                  )}
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuickEvalMode("manual");
-                          setQuickEvalOpen(true);
-                        }}
-                        className="grid h-[38px] w-9 place-items-center rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-500 shadow-sm hover:bg-slate-50 hover:text-blue-700"
-                        aria-label="Open full manual vehicle entry"
-                        title="More vehicle details"
-                      >
-                        ⋯
-                      </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label>
+                      <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Mileage</span>
+                      <div className="flex items-center rounded-xl border border-slate-200 bg-white">
+                        <input
+                          ref={mileageInputRef}
+                          type="text"
+                          inputMode="numeric"
+                          value={formatNumberInput(targetMileage)}
+                          onChange={(event) => setTargetMileage(toNumber(event.target.value))}
+                          className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm font-semibold outline-none"
+                        />
+                        <span className="pr-3 text-xs font-bold text-slate-400">mi</span>
+                      </div>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Bid / Ask</span>
+                      <div className="flex items-center rounded-xl border border-slate-200 bg-white">
+                        <span className="pl-3 text-sm text-slate-400">$</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={formatNumberInput(valuationInput.currentBid)}
+                          onChange={(event) => updateEvaluationField("currentBid", toNumber(event.target.value))}
+                          className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm font-semibold outline-none"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <label>
+                    <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Source</span>
+                    <select
+                      value={auctionSite}
+                      onChange={(event) => setAuctionSite(event.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-300"
+                    >
+                      <option>ACV Auctions</option>
+                      <option>Manheim</option>
+                      <option>Cars & Bids</option>
+                      <option>Bring a Trailer</option>
+                      <option>Facebook</option>
+                      <option>Private Party</option>
+                      <option>Other</option>
+                    </select>
+                  </label>
+
+                  {vinDecodeError ? (
+                    <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{vinDecodeError}</div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => void runPrimaryEvaluation()}
+                    disabled={
+                      evaluationRunning ||
+                      vinDecodeLoading ||
+                      marketCheckLoading ||
+                      !vehicleInputReady
+                    }
+                    className="mt-3 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {evaluationRunning || vinDecodeLoading ? "Loading Vehicle..." : "Next →"}
+                  </button>
+                </div>
+              ) : hasEvaluationData ? (
+                <div className="mt-4">
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Mileage</span><span className="font-black text-slate-900">{targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"}</span></div>
+                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Bid / Ask</span><span className="font-black text-slate-900">{valuationInput.currentBid > 0 ? money(valuationInput.currentBid) : "—"}</span></div>
+                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{vehicleTrim || "—"}</span></div>
+                  </div>
+                  <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Vehicle ready ✓</div>
+                </div>
+              ) : null}
+            </article>
+
+            <article className={`relative overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+              activeStage === "condition"
+                ? "z-10 min-h-[360px] border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/80 shadow-[0_18px_40px_rgba(124,58,237,0.16)] -translate-y-0.5 scale-[1.01]"
+                : conditionReviewComplete && vehicleStepConfirmed
+                  ? "min-h-[360px] border-emerald-200 bg-white"
+                  : vehicleStepConfirmed
+                    ? "min-h-[360px] border-slate-200 bg-white/70"
+                    : "min-h-[360px] border-slate-200 bg-white/80 opacity-75"
+            }`}>
+              {conditionAnalysisLoading ? (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/95 p-6 backdrop-blur-[2px]">
+                  <div className="w-full max-w-sm text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-50 ring-1 ring-violet-100">
+                      <div className="relative h-9 w-9">
+                        <div className="absolute inset-0 rounded-full border-4 border-violet-100" />
+                        <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-violet-600 border-r-violet-400" />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 text-[10px] font-black uppercase tracking-[0.14em] text-violet-600">
+                      Condition Analysis
+                    </div>
+                    <div className="mt-2 min-h-[32px] text-xl font-black tracking-[-0.02em] text-slate-950">
+                      {conditionAnalysisProgressSteps[conditionAnalysisProgressIndex]}…
+                    </div>
+                    <div className="mt-2 text-xs font-semibold text-slate-500">
+                      Lot Logic is turning the notes into an actionable condition reserve.
+                    </div>
+
+                    <div className="mt-6 flex gap-1.5">
+                      {conditionAnalysisProgressSteps.map((step, index) => (
+                        <div
+                          key={step}
+                          className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                            index <= conditionAnalysisProgressIndex
+                              ? "bg-violet-600"
+                              : "bg-slate-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[10px] font-bold text-slate-400">
+                      Step {conditionAnalysisProgressIndex + 1} of {conditionAnalysisProgressSteps.length}
                     </div>
                   </div>
-                )}
-              </div>
-
-              <label>
-                <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                  Mileage
-                </span>
-
-                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <input
-                    ref={mileageInputRef}
-                    type="text"
-                    inputMode="numeric"
-                    value={formatNumberInput(targetMileage)}
-                    onChange={(event) =>
-                      setTargetMileage(toNumber(event.target.value))
-                    }
-                    className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold outline-none"
-                  />
-
-                  <span className="pr-3 text-xs font-bold text-slate-400">
-                    mi
-                  </span>
                 </div>
-              </label>
+              ) : null}
 
-              <label>
-                <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                  Current Bid
-                </span>
-
-                <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <span className="pl-3 text-sm text-slate-400">$</span>
-
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={formatNumberInput(valuationInput.currentBid)}
-                    onChange={(event) =>
-                      updateEvaluationField(
-                        "currentBid",
-                        toNumber(event.target.value),
-                      )
-                    }
-                    className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold outline-none"
-                  />
-                </div>
-              </label>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (quickEvalMode === "manual") {
-                    const manualOverride = {
-                      year: String(manualVehicle.year || "").trim(),
-                      make: manualVehicle.make.trim().toUpperCase(),
-                      model: manualVehicle.model.trim(),
-                      trim: manualVehicle.trim.trim(),
-                      fuelType: null,
-                    };
-
-                    if (
-                      !manualOverride.year ||
-                      !manualOverride.make ||
-                      !manualOverride.model
-                    ) {
-                      setMarketCheckStatus(
-                        "Enter Year, Make, and Model before running the evaluation.",
-                      );
-                      return;
-                    }
-
-                    resetPreviousEvaluationResults();
-
-                    setDecodedVehicle(null);
-                    setVin("");
-                    setManualVehicle((previous) => ({
-                      ...previous,
-                      year: manualOverride.year,
-                      make: manualOverride.make,
-                      model: manualOverride.model,
-                      trim: manualOverride.trim,
-                    }));
-
-                    setSavedEvaluationId(null);
-                    setSaveStatus("");
-                    setFinalTargetOverride(null);
-
-                    void generateVehicleThumbnail({
-                      year: manualOverride.year,
-                      make: manualOverride.make,
-                      model: manualOverride.model,
-                      trim: manualOverride.trim,
-                      bodyClass: manualVehicle.bodyClass,
-                    });
-
-                    await pullMarketCheckComps(manualOverride);
-                    return;
-                  }
-
-                  resetPreviousEvaluationResults();
-
-                  const newlyDecodedVehicle = await decodeVinFromBasics();
-
-                  if (!newlyDecodedVehicle) {
-                    return;
-                  }
-
-                  void generateVehicleThumbnail({
-                    year: newlyDecodedVehicle.year,
-                    make: newlyDecodedVehicle.make,
-                    model: newlyDecodedVehicle.model,
-                    trim: newlyDecodedVehicle.trim,
-                    bodyClass: newlyDecodedVehicle.bodyClass,
-                  });
-
-                  await pullMarketCheckComps(newlyDecodedVehicle);
-                }}
-                disabled={
-                  vinDecodeLoading ||
-                  marketCheckLoading ||
-                  (quickEvalMode === "vin"
-                    ? vin.trim().length < 17
-                    : !hasManualQuickEvalBasics)
-                }
-                className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
-              >
-                {vinDecodeLoading || marketCheckLoading
-                  ? "Evaluating..."
-                  : "Run Evaluation"}
-              </button>
-            </div>
-
-            {vinDecodeError ? (
-              <div className="mt-3 text-xs font-semibold">
-                <span className="rounded-full bg-red-50 px-3 py-1 text-red-700">
-                  {vinDecodeError}
-                </span>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="grid gap-4 lg:grid-cols-[1.05fr_1.1fr_1fr]">
-            <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
               <div className="flex items-start justify-between gap-3">
-                <h2 className="text-base font-black text-slate-950">
-                  Vehicle Snapshot
-                </h2>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">2 · Condition</div>
+                    {activeStage === "condition" ? (
+                      <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-1 text-lg font-black text-slate-950">
+                    {conditionReviewStatus === "unreviewed"
+                      ? "What do we know?"
+                      : conditionReviewStatus === "no_material_issues"
+                        ? "No material issues"
+                        : conditionReviewStatus === "unknown"
+                          ? "Condition unknown"
+                          : "Known issues"}
+                  </h2>
+                </div>
+                {vehicleStepConfirmed && conditionReviewStatus !== "unreviewed" && activeStage !== "condition" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConditionStepConfirmed(false);
+                      setActiveStage("condition");
+                    }}
+                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                  >
+                    Edit
+                  </button>
+                ) : null}
+              </div>
 
+              {!vehicleStepConfirmed ? (
+                <div className="mt-5">
+                  <div className="space-y-2 opacity-55">
+                    {["No material issues", "Known issues", "Condition unknown"].map((label) => (
+                      <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
+                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-[11px] font-bold text-slate-400">Available after Vehicle is complete.</div>
+                </div>
+              ) : activeStage === "condition" ? (
+                <div className="mt-4">
+                  {conditionReviewStatus === "unreviewed" ? (
+                    <div className="space-y-2">
+                      <button type="button" onClick={() => chooseConditionReview("no_material_issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50">
+                        <div className="text-sm font-black text-slate-900">No material issues apparent</div>
+                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                      </button>
+                      <button type="button" onClick={() => chooseConditionReview("issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-violet-300 hover:bg-violet-50">
+                        <div className="text-sm font-black text-slate-900">There are known issues</div>
+                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                      </button>
+                      <button type="button" onClick={() => chooseConditionReview("unknown")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-amber-300 hover:bg-amber-50">
+                        <div className="text-sm font-black text-slate-900">Condition is unknown</div>
+                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                      </button>
+                    </div>
+                  ) : conditionReviewStatus === "issues" ? (
+                    <div>
+                      {!conditionAnalysis ? (
+                        <>
+                          <textarea
+                            value={conditionSourceText}
+                            onChange={(event) => {
+                              setConditionSourceText(event.target.value);
+                              setConditionAnalysisApplied(false);
+                            }}
+                            placeholder="Paste auction notes, disclosures, warning lights, damage, service needs, title/history concerns..."
+                            className="min-h-[150px] w-full resize-y rounded-xl border border-violet-200 bg-violet-50/30 p-3 text-sm font-medium leading-5 text-slate-700 outline-none focus:bg-white"
+                          />
+                          {conditionAnalysisError ? <div className="mt-2 text-xs font-bold text-red-700">{conditionAnalysisError}</div> : null}
+                          <div className="mt-3 flex gap-2">
+                            <button type="button" onClick={() => {
+                          setConditionStepConfirmed(false);
+                          chooseConditionReview("unreviewed");
+                        }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600">Back</button>
+                            <button
+                              type="button"
+                              onClick={() => void analyzeConditionInformation()}
+                              disabled={conditionAnalysisLoading || !conditionSourceText.trim()}
+                              className="flex-1 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-800 disabled:bg-slate-300"
+                            >
+                              {conditionAnalysisLoading ? "Analyzing…" : "Analyze Issues"}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                          <div className="text-sm font-black text-slate-950">{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} issue{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length === 1 ? "" : "s"} identified</div>
+                          <div className="mt-1 text-xs font-semibold text-slate-500">Planning reserve ≈ {money(getEffectiveConditionPlanningEstimate())}</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" onClick={openConditionAnalysis} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700">Review details</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                applyConditionAnalysis();
+                                setConditionStepConfirmed(true);
+                                setActiveStage("market");
+                              }}
+                              className="rounded-lg bg-violet-700 px-4 py-2 text-xs font-black text-white hover:bg-violet-800"
+                            >
+                              Apply & Next →
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <div className={`rounded-xl border p-4 ${
+                        conditionReviewStatus === "unknown"
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-emerald-200 bg-emerald-50"
+                      }`}>
+                        <div className="text-sm font-black text-slate-900">
+                          {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={() => {
+                          setConditionStepConfirmed(false);
+                          chooseConditionReview("unreviewed");
+                        }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600">Change</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConditionStepConfirmed(true);
+                            setActiveStage("market");
+                          }}
+                          className="flex-1 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : conditionReviewComplete ? (
+                <div className="mt-4">
+                  <div className="text-sm font-bold text-slate-700">
+                    {conditionReviewStatus === "issues"
+                      ? `${conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0} reviewed issue${(conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0) === 1 ? "" : "s"} · ≈ ${money(getEffectiveConditionPlanningEstimate())} reserve`
+                      : conditionReviewStatus === "unknown"
+                        ? "Condition unknown · final verdict will require review"
+                        : "No material issues apparent"}
+                  </div>
+                  <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Condition reviewed ✓</div>
+                </div>
+              ) : vehicleStepConfirmed ? (
                 <button
                   type="button"
-                  onClick={() => setVehicleDetailsOpen(true)}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50"
+                  onClick={() => {
+                    setConditionStepConfirmed(false);
+                    setActiveStage("condition");
+                  }}
+                  className="mt-4 w-full rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white"
                 >
-                  Details
+                  Review Condition →
                 </button>
+              ) : null}
+            </article>
+
+            <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+              activeStage === "market"
+                ? "z-10 min-h-[360px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
+                : conditionStepConfirmed && !needsCompSearch && hasEvaluationData
+                  ? "min-h-[360px] border-emerald-200 bg-white"
+                  : conditionStepConfirmed
+                    ? "min-h-[360px] border-slate-200 bg-white/70"
+                    : "border-slate-200 bg-white/45 opacity-50"
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">3 · Market</div>
+                    {activeStage === "market" ? (
+                      <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-1 text-lg font-black text-slate-950">
+                    {!conditionStepConfirmed
+                      ? "Market evidence"
+                      : evaluationRunning || marketCheckLoading
+                        ? "Finding comps..."
+                        : compSummary.includedCount > 0
+                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"}`
+                          : "Market evidence"}
+                  </h2>
+                </div>
+                {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" ? (
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                    needsCompSearch ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
+                  }`}>
+                    {needsCompSearch ? "Needs attention" : "Ready ✓"}
+                  </span>
+                ) : null}
               </div>
 
-              <div className="mt-4 flex items-center gap-4">
-                <div className="relative h-[76px] w-[116px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100">
-                  {representativeCompImage ? (
+              {!conditionStepConfirmed ? (
+                <div className="mt-5">
+                  <div className="grid grid-cols-2 gap-2 opacity-55">
+                    <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Comparable Vehicles</div>
+                      <div className="mt-1 text-lg font-black text-slate-300">—</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
+                      <div className="mt-1 text-lg font-black text-slate-300">—</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 opacity-55">
+                    <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-200">
+                      <div className="h-1.5 w-1/3 rounded-full bg-slate-300" />
+                    </div>
+                  </div>
+                  <div className="mt-3 text-[11px] font-bold text-slate-400">
+                    Market search begins after Vehicle and becomes actionable after Condition.
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  {evaluationRunning || marketCheckLoading ? (
+                    <div className="rounded-xl bg-blue-50 px-4 py-4 text-sm font-black text-blue-700">Checking the market…</div>
+                  ) : compSummary.includedCount > 0 ? (
                     <>
-                      <img
-                        src={representativeCompImage}
-                        alt={`Representative comp image of ${vehicleTitle}`}
-                        className="h-full w-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
-                      />
-
-                      <div className="absolute inset-x-0 bottom-0 bg-slate-950/65 px-1.5 py-0.5 text-center text-[8px] font-bold text-white">
-                        Representative comp
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{compSummary.confidence || "—"}</div>
+                        </div>
+                      </div>
+                      {activeStage === "market" ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => setCompSectionExpanded((open) => !open)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
+                            {compSectionExpanded ? "Hide comps" : "Review comps"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (verdictTransitioning) return;
+                              setVerdictTransitioning(true);
+                              window.setTimeout(() => {
+                                setActiveStage("verdict");
+                                setVerdictTransitioning(false);
+                              }, 220);
+                            }}
+                            disabled={verdictTransitioning}
+                            className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70"
+                          >
+                            {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : activeStage === "market" ? (
+                    <>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
+                        <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {compNextStep.path === "national-discovery" ? (
+                          <button type="button" onClick={() => void runAutoDevDiscovery()} disabled={autoDevDiscoveryLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">{autoDevDiscoveryLoading ? "Scanning..." : "Scan National Inventory"}</button>
+                        ) : compNextStep.path === "discovered-markets" ? (
+                          <button type="button" onClick={() => void searchAutoDevRecommendedMarkets()} disabled={marketCheckLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">Search Recommended Markets</button>
+                        ) : (
+                          <button type="button" onClick={openCompMarketEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Expand / Edit Search</button>
+                        )}
+                        <button type="button" onClick={() => setCompSectionExpanded(true)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">More comp details</button>
                       </div>
                     </>
                   ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <div className="relative h-8 w-20">
-                        <div className="absolute bottom-1 left-1 h-4 w-[72px] rounded-[45%_55%_20%_20%] border-2 border-slate-400 bg-slate-200" />
-                        <div className="absolute bottom-0 left-3 h-3 w-3 rounded-full border-2 border-slate-500 bg-white" />
-                        <div className="absolute bottom-0 right-3 h-3 w-3 rounded-full border-2 border-slate-500 bg-white" />
-                      </div>
-                    </div>
+                    <div className="text-sm font-semibold text-slate-500">Market evidence incomplete.</div>
                   )}
                 </div>
-
-                <div className="min-w-0">
-                  <div
-                    className={`text-lg font-black leading-tight tracking-[-0.025em] ${
-                      hasEvaluationData ? "text-blue-700" : "text-slate-700"
-                    }`}
-                  >
-                    {hasEvaluationData ? vehicleTitle : "Awaiting vehicle"}
-                  </div>
-
-                  <div className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                    {hasEvaluationData
-                      ? [simplifiedVehicleBodyClass, decodedVehicle?.fuelType]
-                          .filter(Boolean)
-                          .join(" • ") || "Vehicle details available"
-                      : "Enter a VIN or use Manual Entry to populate vehicle details."}
-                  </div>
-                </div>
-              </div>
-
-              {comps.length > 0 && !representativeCompImage ? (
-                <div className="mt-3 text-[10px] font-semibold text-slate-500">
-                  No comp photo available
-                </div>
-              ) : null}
-
-              {hasEvaluationData ? (
-                <dl className="mt-5 space-y-2.5 text-sm">
-                  {[
-                    ["VIN", vin || "—"],
-                    [
-                      "Mileage",
-                      targetMileage
-                        ? `${formatNumberInput(targetMileage)} mi`
-                        : "—",
-                    ],
-                    ["Drivetrain", decodedVehicle?.driveType || "—"],
-                    ["Body Style", simplifiedVehicleBodyClass || "—"],
-                    ["Trim", vehicleTrim || "—"],
-                    ["Source", auctionSite || "—"],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="grid grid-cols-[105px_1fr] gap-3"
-                    >
-                      <dt className="font-semibold text-slate-500">{label}</dt>
-                      <dd className="truncate text-right font-bold text-slate-900">
-                        {value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-xs font-semibold leading-5 text-slate-500">
-                  Vehicle specifications, mileage, trim, and source will appear
-                  here after the evaluation begins.
-                </div>
               )}
-            </article>
-
-            <article
-              className={`flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-black text-slate-950">
-                    Lot Logic Verdict
-                  </h2>
-
-                  <span className="grid h-4 w-4 place-items-center rounded-full bg-white/70 text-[10px] font-black text-slate-500">
-                    i
-                  </span>
-                </div>
-
-                <span
-                  className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-black ${decisionBadgeTone}`}
-                >
-                  {lotLogicIcon}{lotLogicLabel}
-                </span>
-              </div>
-
-              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Max Smart Bid
-                  </div>
-
-                  <div
-                    className={`mt-2 font-black tracking-[-0.04em] ${decisionTextTone} ${
-                      valuationInput.currentBid <= 0 && hasEvaluationData
-                        ? "text-sm"
-                        : "text-[25px]"
-                    }`}
-                  >
-                    {suggestedBidDisplay}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Sale Value Used
-                  </div>
-
-                  <div className="mt-2 text-[25px] font-black tracking-[-0.04em] text-slate-950">
-                    {hasEvaluationData && finalTargetUsed > 0
-                      ? money(finalTargetUsed)
-                      : "—"}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                    Projected Profit
-                  </div>
-
-                  <div
-                    className={`mt-2 text-[25px] font-black tracking-[-0.04em] ${
-                      valuation.expectedGrossProfit >= 0
-                        ? "text-slate-950"
-                        : "text-red-700"
-                    }`}
-                  >
-                    {hasEvaluationData
-                      ? money(valuation.expectedGrossProfit)
-                      : "—"}
-                  </div>
-                </div>
-              </div>
-
-              {presentationDecision === "review" && reviewReasons.length ? (
-                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-2.5 text-center text-xs font-bold leading-5 text-amber-800">
-                  Review required: {reviewReasons.join(", ")}.
-                </div>
-              ) : null}
-
-              {currentBidPosition ? (
-                <div
-                  className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${
-                    currentBidPosition.tone === "over"
-                      ? "bg-red-100 text-red-700"
-                      : currentBidPosition.tone === "under"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  {currentBidPosition.text}
-                </div>
-              ) : null}
-
-              <div className="mt-auto pt-8">
-                <button
-                  type="button"
-                  onClick={saveEvaluation}
-                  disabled={saveLoading || !hasEvaluationData}
-                  className={`w-full rounded-xl px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 ${
-                    presentationDecision === "pass"
-                      ? "bg-red-700 hover:bg-red-800"
-                      : presentationDecision === "watch" ||
-                          presentationDecision === "review"
-                        ? "bg-amber-600 hover:bg-amber-700"
-                        : "bg-emerald-700 hover:bg-emerald-800"
-                  }`}
-                >
-                  {saveLoading
-                    ? "Saving..."
-                    : savedEvaluationId
-                      ? "Update Evaluation"
-                      : "▣ Save Evaluation"}
-                </button>
-
-                <div className="mt-2 text-center text-[10px] font-semibold text-slate-500">
-                  {hasEvaluationData
-                    ? "Based on market data, visible costs, condition, and dealer fit."
-                    : "Enter vehicle details and run an evaluation to calculate the bid, sale value, and projected profit."}
-                </div>
-
-                {saveStatus ? (
-                  <div className="mt-2 text-center text-xs font-bold text-slate-600">
-                    {saveStatus}
-                  </div>
-                ) : null}
-              </div>
-            </article>
-
-            <article className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
-              <h2 className="text-base font-black text-slate-950">
-                Market &amp; Fit Summary
-              </h2>
-
-              <dl className="mt-4 space-y-3 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Comp Confidence
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      comps.length ? "text-slate-900" : "text-slate-400"
-                    }`}
-                  >
-                    {compConfidenceDisplay}
-                  </dd>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Included Comps
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      comps.length ? "text-slate-900" : "text-slate-400"
-                    }`}
-                  >
-                    {comps.length ? compSummary.includedCount : "—"}
-                  </dd>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Median Adjusted Value
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      comps.length ? "text-slate-950" : "text-slate-400"
-                    }`}
-                  >
-                    {comps.length
-                      ? money(
-                          (compSummary as { medianAdjusted?: number })
-                            .medianAdjusted || compSummary.averageAdjusted,
-                        )
-                      : "—"}
-                  </dd>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <dt className="font-semibold text-slate-500">
-                    Fast-Sale Value
-                  </dt>
-                  <dd
-                    className={`text-right font-black ${
-                      hasEvaluationData && compSummary.fastSaleTarget > 0
-                        ? "text-slate-950"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {hasEvaluationData && compSummary.fastSaleTarget > 0
-                      ? money(compSummary.fastSaleTarget)
-                      : "—"}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-5">
-                <ScoreRing
-                  label="Profitability Score"
-                  score={profitabilityScoreDisplay}
-                  tone="green"
-                  isEmpty={!hasEvaluationData}
-                />
-
-                <ScoreRing
-                  label="Dealer-Fit Score"
-                  score={dealerFitScoreDisplay}
-                  tone="blue"
-                  isEmpty={!hasEvaluationData}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setBidLogicOpen(true)}
-                disabled={!hasEvaluationData}
-                className="mx-auto mt-4 block text-xs font-extrabold text-blue-700 hover:text-blue-900 disabled:cursor-not-allowed disabled:text-slate-400"
-              >
-                View Scoring Details →
-              </button>
             </article>
           </section>
-
-          <section className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(350px,.85fr)]">
-            <div className="h-full overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-              <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-black tracking-[-0.02em] text-slate-950">
-                      Mindful Intelligence
-                    </h2>
-
-                    {hasEvaluationData ? (
-                      <div className="mt-1 text-xs font-semibold text-slate-500">
-                        {mindfulIntelligenceDisplay.title}
-                      </div>
-                    ) : (
-                      <div className="mt-1 text-xs font-semibold text-slate-500">
-                        Available after evaluation
-                      </div>
-                    )}
-                  </div>
-
-                  {hasEvaluationData ? (
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-[10px] font-black ${mindfulRecommendationTone}`}
-                      >
-                        Recommendation: {mindfulRecommendation}
-                      </span>
-
-                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-black text-violet-700">
-                        Vehicle Fit:{" "}
-                        {mindfulIntelligenceDisplay.verdict === "strong_fit"
-                          ? "Strong"
-                          : mindfulIntelligenceDisplay.verdict ===
-                              "conditional_fit"
-                            ? "Selective"
-                            : "Limited"}
-                      </span>
-
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold capitalize text-slate-600">
-                        {mindfulIntelligenceDisplay.confidence} confidence
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                      Awaiting evaluation
-                    </span>
-                  )}
-                </div>
               </div>
-
-              {hasEvaluationData ? (
-                <>
-              <div className="border-b border-violet-100 px-5">
-                <div
-                  className="flex gap-6"
-                  role="tablist"
-                  aria-label="Mindful Intelligence sections"
-                >
-                  {[
-                    {
-                      id: "verdict" as const,
-                      label: "Verdict",
-                    },
-                    {
-                      id: "thesis" as const,
-                      label: "Deal Thesis",
-                    },
-                    {
-                      id: "checks" as const,
-                      label: "Checks",
-                    },
-                  ].map((tab) => {
-                    const isActive = activeMindfulIntelligenceTab === tab.id;
-
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        onClick={() => setActiveMindfulIntelligenceTab(tab.id)}
-                        className={`relative py-3 text-xs font-black transition ${
-                          isActive
-                            ? "text-violet-700"
-                            : "text-slate-400 hover:text-slate-700"
-                        }`}
-                      >
-                        {tab.label}
-
-                        <span
-                          aria-hidden="true"
-                          className={`absolute inset-x-0 bottom-0 h-0.5 rounded-full transition ${
-                            isActive ? "bg-violet-600" : "bg-transparent"
-                          }`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {activeMindfulIntelligenceTab === "verdict" ? (
-                <div className="px-5 py-5">
-                  <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                    Mindful verdict
-                  </div>
-
-                  <div
-                    className={`mt-2 text-base font-black ${
-                      mindfulRecommendation === "PURSUE"
-                        ? "text-emerald-700"
-                        : mindfulRecommendation === "SELECTIVE"
-                          ? "text-amber-700"
-                          : "text-red-700"
-                    }`}
-                  >
-                    {mindfulRecommendationLead}
-                  </div>
-
-                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">
-                    {mindfulLeadExplanation}
-                  </p>
-
-                  {mindfulSupportingNegativeEvidence.length ? (
-                    <div className="mt-5">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600">
-                        {mindfulRecommendation === "AVOID"
-                          ? "Why we're passing"
-                          : "What concerns us"}
-                      </div>
-
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulSupportingNegativeEvidence.map((item) => (
-                          <li
-                            key={item}
-                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {mindfulPositiveEvidence.length ? (
-                    <div className="mt-5">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">
-                        What we like
-                      </div>
-
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulPositiveEvidence.map((item) => (
-                          <li
-                            key={item}
-                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {mindfulConditionalEvidence.length ? (
-                    <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-700">
-                        {mindfulRecommendation === "AVOID"
-                          ? "What could change the verdict"
-                          : "What to verify next"}
-                      </div>
-
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {mindfulConditionalEvidence.map((item) => (
-                          <li
-                            key={item}
-                            className="flex gap-2 text-xs font-semibold leading-5 text-slate-700"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {activeMindfulIntelligenceTab === "thesis" ? (
-                <div className="px-5 py-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
-                        AI Deal Thesis
-                      </div>
-
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        Uses evaluator data and Mindful Intelligence context.
-                      </p>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveThesisMode("financial");
-                          void generateAiSummary("financial");
-                        }}
-                        disabled={Boolean(aiSummaryLoadingMode)}
-                        className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                          activeThesisMode === "financial"
-                            ? "bg-blue-700 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        {aiSummaryLoadingMode === "financial"
-                          ? "Generating..."
-                          : "Financial"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveThesisMode("enthusiast");
-                          void generateAiSummary("enthusiast");
-                        }}
-                        disabled={Boolean(aiSummaryLoadingMode)}
-                        className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                          activeThesisMode === "enthusiast"
-                            ? "bg-slate-950 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        {aiSummaryLoadingMode === "enthusiast"
-                          ? "Generating..."
-                          : "Enthusiast"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {aiSummaryError ? (
-                    <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                      {aiSummaryError}
-                    </div>
-                  ) : null}
-
-                  <textarea
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    placeholder="Generate a financial or enthusiast thesis using the current evaluator data."
-                    className="mt-4 min-h-[220px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm font-medium leading-6 text-slate-700 outline-none focus:border-violet-300 focus:bg-white"
-                  />
-
-                  <div className="mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-400">
-                    <span>
-                      {activeThesisMode === "financial"
-                        ? "Financial thesis"
-                        : "Enthusiast thesis"}
-                    </span>
-
-                    <span>{notes.trim().length} characters</span>
-                  </div>
-                </div>
-              ) : null}
-
-              {activeMindfulIntelligenceTab === "checks" ? (
-                <div className="px-5 py-5">
-                  <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
-                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-600">
-                      Priority checks
-                    </div>
-
-                    {mindfulIntelligenceDisplay.verificationItems.length ? (
-                      <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                        {mindfulIntelligenceDisplay.verificationItems
-                          .slice(0, 8)
-                          .map((item) => (
-                            <li
-                              key={item}
-                              className="flex gap-2.5 text-xs font-semibold leading-5 text-slate-700"
-                            >
-                              <span
-                                aria-hidden="true"
-                                className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500"
-                              />
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs font-semibold text-slate-500">
-                        No vehicle-specific verification items are currently
-                        attached to this profile.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
-                      Source
-                    </div>
-
-                    <div className="mt-1 text-xs font-bold text-slate-700">
-                      {mindfulIntelligenceDisplay.source.sectionTitle}
-                    </div>
-
-                    <div className="mt-2 text-[10px] font-semibold leading-4 text-violet-700">
-                      {mindfulIntelligencePreview
-                        ? "Matched company knowledge informs the AI thesis but does not alter valuation, bid guidance, or the current dealer-fit score."
-                        : "No dedicated company profile was found. This general read uses current vehicle data and dealer-fit rules and does not alter valuation or bid guidance."}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-                </>
-              ) : (
-                <div className="px-5 py-8">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-7 text-center">
-                    <div className="text-sm font-bold text-slate-700">
-                      Mindful verdict, deal thesis, and priority checks will
-                      appear here after the vehicle and market data are evaluated.
-                    </div>
-
-                    <div className="mt-2 text-xs font-semibold text-slate-500">
-                      Run an evaluation to generate vehicle-specific guidance.
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
+          )}
 
-            <SectionCard
-              title="Condition & Reconditioning"
-              action={
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                    hasEvaluationData
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
+          {activeStage === "market" && (needsCompSearch || compSectionExpanded) ? (
+            <section ref={compSectionRef} className="mt-4 scroll-mt-4">
+              <SectionCard
+                title="Comparable Vehicles"
+                action={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                    <button type="button" onClick={openMethodology} className="text-xs font-black text-slate-400 hover:text-slate-700">Methodology</button>
+                  </div>
+                }
+              >
+                {comps.length ? (
+                  <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center">
+                    <div className="text-sm font-black text-slate-800">No usable comps yet</div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">{marketCheckStatus || "Adjust the search to establish market evidence."}</div>
+                  </div>
+                )}
+              </SectionCard>
+            </section>
+          ) : null}
+
+          {activeStage === "verdict" ? (
+            <>
+              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[1.05fr_1.1fr_1fr] ${
+                verdictEntered
+                  ? "translate-y-0 opacity-100"
+                  : "translate-y-4 opacity-0"
+              }`}>
+                <article className="h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-base font-black text-slate-950">Vehicle Snapshot</h2>
+                    <button type="button" onClick={() => setVehicleDetailsOpen(true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50">Details</button>
+                  </div>
+                  <div className="mt-4 flex items-center gap-4">
+                    <div className="relative h-[76px] w-[116px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                      {representativeCompImage ? <img src={representativeCompImage} alt={vehicleTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                    </div>
+                    <div>
+                      <div className="text-lg font-black leading-tight text-blue-700">{vehicleTitle}</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">{simplifiedVehicleBodyClass || "Vehicle"}{decodedVehicle?.fuelType ? ` · ${decodedVehicle.fuelType}` : ""}</div>
+                    </div>
+                  </div>
+                  <dl className="mt-5 space-y-2.5 text-sm">
+                    {[
+                      ["VIN", vin || "—"],
+                      ["Mileage", targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"],
+                      ["Drivetrain", decodedVehicle?.driveType || "—"],
+                      ["Trim", vehicleTrim || "—"],
+                      ["Source", auctionSite || "—"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="grid grid-cols-[100px_1fr] gap-3">
+                        <dt className="font-semibold text-slate-500">{label}</dt>
+                        <dd className="truncate text-right font-bold text-slate-900">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </article>
+
+                <article className={`flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
+                    <div>
+                      <div className="text-[9px] font-black uppercase text-slate-500">All-In Cost</div>
+                      <button
+                        type="button"
+                        onClick={() => setAllInCostOpen(true)}
+                        disabled={valuationInput.currentBid <= 0}
+                        className="mt-2 text-[25px] font-black text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline"
+                      >
+                        {valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}
+                      </button>
+                      {valuationInput.currentBid > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setAllInCostOpen(true)}
+                          className="mx-auto mt-1 block text-[10px] font-black text-blue-700 hover:text-blue-900"
+                        >
+                          View costs
+                        </button>
+                      ) : null}
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black uppercase text-slate-500">Sale Estimate</div>
+                      <div className="mt-2 text-[25px] font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black uppercase text-slate-500">Estimated Profit</div>
+                      <div className={`mt-2 text-[25px] font-black ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{money(valuation.expectedGrossProfit)}</div>
+                    </div>
+                  </div>
+                  {presentationDecision === "review" && reviewReasons.length ? (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
+                  ) : null}
+                  {!needsCompSearch && currentBidPosition ? (
+                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentBidPosition.tone === "over" ? "bg-red-100 text-red-700" : currentBidPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentBidPosition.text}</div>
+                  ) : null}
+                  <div className="mt-auto pt-5">
+                    <button
+                      type="button"
+                      onClick={saveEvaluation}
+                      disabled={saveLoading || !hasEvaluationData}
+                      className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {saveLoading ? "Saving..." : savedEvaluationId ? "Update Pipeline" : "Save to Pipeline"}
+                    </button>
+                    <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mx-auto mt-3 block text-xs font-extrabold text-blue-700 hover:text-blue-900">Why Lot Logic thinks this →</button>
+                  </div>
+                </article>
+
+                <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
+                  <h2 className="text-base font-black text-slate-950">Deal Snapshot</h2>
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} />
+                    <ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} />
+                  </div>
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <MarketLiquidityVisual soldLow={liquiditySoldLow} soldHigh={liquiditySoldHigh} soldMedian={liquiditySoldMedian} activeDays={liquidityActiveDays} label={liquidityLabel} confidence={liquidityConfidence} sampleSize={liquiditySampleSize} />
+                  </div>
+                </article>
+              </section>
+
+              <section className={`mt-4 transition-all delay-100 duration-300 ease-out ${
+                verdictEntered ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+              }`}>
+                <SectionCard
+                  title="Comparable Vehicles"
+                  action={
+                    <div className="flex items-center gap-3">
+                      {comps.length > 5 ? (
+                        <button
+                          type="button"
+                          onClick={() => setVerdictCompsExpanded((open) => !open)}
+                          className="text-xs font-black text-blue-700 hover:text-blue-900"
+                        >
+                          {verdictCompsExpanded ? "Show fewer" : `Show all ${comps.length}`}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                    </div>
+                  }
                 >
-                  {hasEvaluationData
-                    ? "Pre-purchase analysis"
-                    : "Awaiting vehicle"}
-                </span>
-              }
-            >
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-5">
-                <div className="text-sm font-black text-slate-900">
-                  Add known auction or seller issues
-                </div>
+                  {comps.length ? (
+                    <MarketCompsTable comps={verdictCompsExpanded ? comps : comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
+                  )}
+                </SectionCard>
+              </section>
 
-                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                  Paste condition-report notes, auction announcements, seller
-                  disclosures, mechanical concerns, cosmetic damage, or title
-                  and transportation issues.
-                </p>
-
+              <div className="mt-4">
                 <button
                   type="button"
-                  onClick={openConditionAnalysis}
-                  disabled={!hasEvaluationData}
-                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                  onClick={() => {
+                    setVerdictTransitioning(false);
+                    setVerdictEntered(false);
+                    setActiveStage("market");
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50"
                 >
-                  Add Condition Information
+                  ← Back to Market
                 </button>
               </div>
+            </>
+          ) : null}
 
-              {hasEvaluationData ? (
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  {conditionAssessmentDefinitions.map((definition) => {
-                    const assessment = conditionAssessments[definition.key];
-
-                    return (
-                      <div
-                        key={definition.key}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center"
-                      >
-                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                          {definition.key === "history"
-                            ? "History"
-                            : definition.key}
-                        </div>
-                        <div className="mt-1 text-xs font-black capitalize text-slate-700">
-                          {assessment.severity}
-                        </div>
-                        <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                          {money(assessment.reserve)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-center text-xs font-semibold leading-5 text-slate-500">
-                  Mechanical, cosmetic, and history-related costs will appear
-                  here after the vehicle is entered.
-                </div>
-              )}
-
-              {conditionAnalysis ? (
-                <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-violet-600">
-                        AI Planning Estimate
-                      </div>
-                      <div className="mt-1 text-xl font-black text-violet-800">
-                        {money(getEffectiveConditionPlanningEstimate())}
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">
-                        Range
-                      </div>
-                      <div className="mt-1 text-xs font-bold text-slate-700">
-                        {money(conditionAnalysis.estimatedCostLow)}–
-                        {money(conditionAnalysis.estimatedCostHigh)}
-                      </div>
-                    </div>
+          {allInCostOpen ? (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+              <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-950">All-In Cost</h2>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      Every modeled acquisition and preparation cost included in the deal economics.
+                    </p>
                   </div>
-
-                  <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>
-                      {conditionAnalysis.issues.length} issues ·{" "}
-                      {conditionAnalysis.overallRisk} risk
-                    </span>
-                    <span>
-                      {getEffectiveConditionReadyDaysLow()}–
-                      {getEffectiveConditionReadyDaysHigh()} days ·{" "}
-                      {conditionAnalysisApplied ? "Applied" : "Not applied"}
-                    </span>
-                  </div>
-                </div>
-              ) : hasEvaluationData ? (
-                <div className="mt-4 rounded-xl bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-800">
-                  No AI condition analysis has been generated for this vehicle.
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-xs font-semibold leading-5 text-slate-500">
-                  Add a vehicle to begin condition analysis.
-                </div>
-              )}
-            </SectionCard>
-          </section>
-
-          <section className="mt-4">
-            <SectionCard
-              title="Comparable Vehicles"
-              action={
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
-                    {compSummary.includedCount} Usable Comps
-                  </span>
-
-                  {marketCheckSearchMeta &&
-                  marketCheckSearchMeta.loadedCount === 0 &&
-                  marketCheckSearchMeta.searchStage !== "metro" &&
-                  !marketCheckLoading ? (
-                    marketCheckSearchMeta.searchStage === "expanded" ||
-                    !activeAssumptions.regionalMarkets
-                      .filter((market) => market.enabled)
-                      .some(
-                        (market) =>
-                          !marketCheckSearchMeta.searchedZips.includes(
-                            market.zip,
-                          ),
-                      ) ? (
-                      <button
-                        type="button"
-                        onClick={searchMajorMetropolitanAreas}
-                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
-                      >
-                        Major Metropolitan Areas
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={expandMarketCheckSearch}
-                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
-                      >
-                        Expand Search
-                      </button>
-                    )
-                  ) : null}
-
                   <button
                     type="button"
-                    onClick={openMethodology}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50"
+                    onClick={() => setAllInCostOpen(false)}
+                    className="text-slate-400 hover:text-slate-700"
+                    aria-label="Close all-in cost breakdown"
                   >
-                    View Methodology
+                    ✕
                   </button>
                 </div>
-              }
-            >
-              <MarketCompsTable
-                comps={comps}
-                targetMileage={targetMileage}
-                assumptions={activeAssumptions}
-                onToggleIncluded={toggleCompIncluded}
-              />
 
-              <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 text-center sm:grid-cols-5">
-                {[
-                  [
-                    "Regions Searched",
-                    marketCheckSearchMeta?.regionsChecked.length
-                      ? String(marketCheckSearchMeta.regionsChecked.length)
-                      : "—",
-                  ],
-                  [
-                    "Usable Comps",
-                    `${compSummary.includedCount} / ${comps.length}`,
-                  ],
-                  [
-                    "Fallback Status",
-                    marketCheckSearchMeta?.lowConfidenceFallback
-                      ? "Applied"
-                      : "None",
-                  ],
-                  [
-                    "Live Lookup",
-                    marketCheckApiControls.liveLookupEnabled
-                      ? "Active"
-                      : "Disabled",
-                  ],
-                  ["Market Timing", marketTimingSpeedSignal],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
-                      {label}
-                    </div>
-                    <div className="mt-1 text-xs font-extrabold text-slate-800">
-                      {value}
+                <div className="p-5">
+                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                    {allInCostBreakdown.map((item) => (
+                      <div key={item.label} className="flex items-center justify-between gap-4 px-4 py-3">
+                        <span className="text-sm font-semibold text-slate-600">{item.label}</span>
+                        <span className="text-sm font-black text-slate-950">{money(item.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between gap-4 bg-slate-50 px-4 py-3">
+                      <span className="text-sm font-black text-slate-950">Total all-in cost</span>
+                      <span className="text-lg font-black text-slate-950">{money(valuation.allInCost)}</span>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {marketCheckSearchMeta?.regionsChecked.length ? (
-                <div className="mt-3 text-xs font-medium text-slate-500">
-                  <span className="font-bold text-slate-700">
-                    Regions checked:
-                  </span>{" "}
-                  {marketCheckSearchMeta.regionsChecked.join(" → ")}
+                  {displayedReconReserve > 0 ? (
+                    <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                      Condition and reconditioning is shown as one reserve here. Internally, Lot Logic still preserves the mechanical, cosmetic, and history allocation from the condition review so the planning estimate can remain traceable.
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
 
-              <div className="mt-3 text-[10px] font-semibold leading-4 text-slate-400">
-                Values are adjusted using the active mileage, market, and
-                company-assumption rules. Toggle individual comps to include or
-                exclude them from the valuation.
+                <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setAllInCostOpen(false)}
+                    className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white hover:bg-slate-800"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
-            </SectionCard>
-          </section>
+            </div>
+          ) : null}
 
           <div className="mt-4 flex justify-end">
             <button

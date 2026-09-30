@@ -20,6 +20,12 @@ type UpgradeStatus = "feasible" | "feasible_with_changes" | "not_recommended" | 
 type PartDraft = { name: string; quantity: string; partNumber: string; notes: string };
 type RecommendationDraft = { recommendedAction: string; laborHours: string; proposedLaborPrice: string; canPerform: "" | "yes" | "no"; parts: PartDraft[] };
 type NewFindingDraft = RecommendationDraft & { title: string; description: string };
+type AiPartCandidate = {
+  name: string;
+  need: "likely_required" | "possible" | "consumable";
+  searchQuery: string;
+  sources: Array<{ key: "turn14" | "amazon" | "ebay"; label: string; url: string; note: string }>;
+};
 
 const findingChoices: Array<{ value: ValidationStatus; label: string }> = [
   { value: "confirmed", label: "Confirm" },
@@ -67,33 +73,124 @@ function dispositionTone(value: string) {
   if (value === "changed" || value === "feasible_with_changes") return "bg-blue-100 text-blue-800";
   return "bg-emerald-100 text-emerald-800";
 }
+function partNeedLabel(value: AiPartCandidate["need"]) {
+  if (value === "likely_required") return "Likely required";
+  if (value === "consumable") return "Consumable";
+  return "Possible";
+}
 
-function PartsEditor({ parts, onChange }: { parts: PartDraft[]; onChange: (parts: PartDraft[]) => void }) {
+function PartsEditor({ vehicleLabel, contextText, parts, onChange }: { vehicleLabel: string; contextText: string; parts: PartDraft[]; onChange: (parts: PartDraft[]) => void }) {
+  const [candidates, setCandidates] = useState<AiPartCandidate[]>([]);
+  const [thinking, setThinking] = useState(false);
+  const [partsMessage, setPartsMessage] = useState("");
+
   function patch(index: number, value: Partial<PartDraft>) {
     onChange(parts.map((part, partIndex) => partIndex === index ? { ...part, ...value } : part));
   }
+
+  async function suggestWithLotLogic() {
+    if (!contextText.trim()) {
+      setPartsMessage("Enter a recommended action first so Lot Logic knows what job it is sourcing for.");
+      return;
+    }
+    setThinking(true);
+    setPartsMessage("");
+    try {
+      const response = await fetch("/api/partner/part-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vehicleLabel, contextText }),
+      });
+      const payload = await response.json() as { items?: AiPartCandidate[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Lot Logic could not suggest parts.");
+      setCandidates(payload.items || []);
+      if (!payload.items?.length) setPartsMessage("Lot Logic did not identify a clear purchasable part or material for this job.");
+    } catch (error) {
+      setPartsMessage(error instanceof Error ? error.message : "Lot Logic could not suggest parts.");
+    } finally {
+      setThinking(false);
+    }
+  }
+
+  function addCandidate(candidate: AiPartCandidate) {
+    if (parts.some((part) => part.name.trim().toLowerCase() === candidate.name.toLowerCase())) {
+      setPartsMessage(`${candidate.name} is already in the proposed parts list.`);
+      return;
+    }
+    onChange([...parts, {
+      name: candidate.name,
+      quantity: "1",
+      partNumber: "",
+      notes: `Lot Logic search: ${candidate.searchQuery}`,
+    }]);
+  }
+
+  function openSource(source: AiPartCandidate["sources"][number], searchQuery: string) {
+    if (source.key === "turn14") {
+      void navigator.clipboard?.writeText(searchQuery);
+      setPartsMessage("Search phrase copied. Paste it into Turn 14.");
+    }
+    window.open(source.url, "_blank", "noopener,noreferrer");
+  }
+
   return <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:col-span-2">
-    <div className="flex items-center justify-between gap-3">
-      <div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">Suggested parts</div><div className="mt-0.5 text-xs text-slate-500">Suggest what the work needs. The Owner will decide what enters the Work Plan.</div></div>
-      <button type="button" onClick={() => onChange([...parts, blankPart()])} className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black">+ Add Part</button>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">Parts for this job</div>
+        <div className="mt-0.5 text-xs text-slate-500">Start with Lot Logic, accept what fits, then add sourcing or price guidance for the Owner.</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={thinking} onClick={() => void suggestWithLotLogic()} className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-black text-violet-800 disabled:opacity-40">{thinking ? "Thinking…" : "Suggest with Lot Logic"}</button>
+        <button type="button" onClick={() => onChange([...parts, blankPart()])} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black">+ Add part</button>
+      </div>
     </div>
-    {parts.length ? <div className="mt-3 space-y-2">{parts.map((part, index) => <div key={index} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 sm:grid-cols-[minmax(180px,1.4fr)_90px_minmax(130px,0.8fr)_minmax(160px,1fr)_auto]">
-      <input value={part.name} onChange={(e) => patch(index, { name: e.target.value })} placeholder="Part / description" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
-      <input inputMode="decimal" value={part.quantity} onChange={(e) => patch(index, { quantity: e.target.value })} placeholder="Qty" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
-      <input value={part.partNumber} onChange={(e) => patch(index, { partNumber: e.target.value })} placeholder="Part # / ref" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
-      <input value={part.notes} onChange={(e) => patch(index, { notes: e.target.value })} placeholder="Notes / preferred source" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
-      <button type="button" onClick={() => onChange(parts.filter((_, partIndex) => partIndex !== index))} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-black text-slate-500">Remove</button>
-    </div>)}</div> : null}
+
+    {partsMessage ? <div className="mt-2 text-xs font-semibold text-slate-600">{partsMessage}</div> : null}
+
+    {candidates.length ? <div className="mt-3 grid gap-2 lg:grid-cols-2">
+      {candidates.map((candidate) => <div key={candidate.name} className="rounded-xl border border-violet-200 bg-white p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-black text-slate-950">{candidate.name}</div>
+            <div className="mt-0.5 text-[10px] font-black uppercase text-violet-600">{partNeedLabel(candidate.need)}</div>
+            <div className="mt-1 truncate text-[11px] font-semibold text-slate-500" title={candidate.searchQuery}>{candidate.searchQuery}</div>
+          </div>
+          <button type="button" onClick={() => addCandidate(candidate)} className="shrink-0 rounded-lg bg-violet-700 px-3 py-2 text-[10px] font-black text-white">Add</button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {candidate.sources.map((source) => <button key={source.key} type="button" onClick={() => openSource(source, candidate.searchQuery)} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-black text-slate-700">{source.key === "turn14" ? "Turn 14" : source.label}</button>)}
+        </div>
+      </div>)}
+    </div> : null}
+
+    {parts.length ? <div className="mt-3 space-y-2">
+      {parts.map((part, index) => <div key={index} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 lg:grid-cols-[minmax(180px,1.3fr)_72px_minmax(130px,0.7fr)_minmax(240px,1.5fr)_auto]">
+        <input value={part.name} onChange={(e) => patch(index, { name: e.target.value })} placeholder="Part / material" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
+        <input inputMode="decimal" value={part.quantity} onChange={(e) => patch(index, { quantity: e.target.value })} placeholder="Qty" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
+        <input value={part.partNumber} onChange={(e) => patch(index, { partNumber: e.target.value })} placeholder="Part # / ref" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
+        <input value={part.notes} onChange={(e) => patch(index, { notes: e.target.value })} placeholder="Sourcing / price note — e.g. I can get for $20; owner may find $10–15" className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
+        <button type="button" onClick={() => onChange(parts.filter((_, partIndex) => partIndex !== index))} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-black text-slate-500">Remove</button>
+      </div>)}
+    </div> : null}
   </div>;
 }
 
-function ProposalEditor({ draft, onChange, submitLabel, onSubmit, disabled }: { draft: RecommendationDraft; onChange: (draft: RecommendationDraft) => void; submitLabel: string; onSubmit: () => void; disabled: boolean }) {
+function ProposalEditor({ vehicleLabel, contextText, draft, onChange, submitLabel, onSubmit, disabled, requiresDiagnosisHandoff = false, diagnosisNotesReady = true }: { vehicleLabel: string; contextText: string; draft: RecommendationDraft; onChange: (draft: RecommendationDraft) => void; submitLabel: string; onSubmit: () => void; disabled: boolean; requiresDiagnosisHandoff?: boolean; diagnosisNotesReady?: boolean }) {
+  const diagnosisActionReady = draft.recommendedAction.trim().length > 0;
+  const diagnosisReady = !requiresDiagnosisHandoff || (diagnosisNotesReady && diagnosisActionReady);
+  const partsContext = [contextText, draft.recommendedAction].filter(Boolean).join(" · ");
   return <div className="grid gap-2 sm:grid-cols-2">
-    <input value={draft.recommendedAction} onChange={(e) => onChange({ ...draft, recommendedAction: e.target.value })} placeholder="Recommended action" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+    <div>
+      <input value={draft.recommendedAction} onChange={(e) => onChange({ ...draft, recommendedAction: e.target.value })} placeholder={requiresDiagnosisHandoff ? "Required: next diagnostic action" : "Recommended action"} aria-required={requiresDiagnosisHandoff} className={`w-full rounded-xl border px-3 py-2 text-sm ${requiresDiagnosisHandoff && !diagnosisActionReady ? "border-amber-400 bg-amber-50/50" : "border-slate-200"}`} />
+      {requiresDiagnosisHandoff ? <div className="mt-1.5 text-[11px] font-semibold text-amber-800">Required for Needs Diagnosis: describe the next specialist check or diagnostic action.</div> : null}
+    </div>
     <div className="grid grid-cols-2 gap-2"><input inputMode="decimal" value={draft.laborHours} onChange={(e) => onChange({ ...draft, laborHours: e.target.value })} placeholder="Labor hours" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" /><input inputMode="decimal" value={draft.proposedLaborPrice} onChange={(e) => onChange({ ...draft, proposedLaborPrice: e.target.value })} placeholder="Labor price $" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" /></div>
-    <PartsEditor parts={draft.parts} onChange={(parts) => onChange({ ...draft, parts })} />
+    <PartsEditor vehicleLabel={vehicleLabel} contextText={partsContext} parts={draft.parts} onChange={(parts) => onChange({ ...draft, parts })} />
     <select value={draft.canPerform} onChange={(e) => onChange({ ...draft, canPerform: e.target.value as RecommendationDraft["canPerform"] })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="">Can you perform this work?</option><option value="yes">Yes — I can perform it</option><option value="no">No — another specialist is needed</option></select>
-    <button type="button" disabled={disabled} onClick={onSubmit} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{submitLabel}</button>
+    <div>
+      <button type="button" disabled={disabled || !diagnosisReady} onClick={onSubmit} className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white disabled:bg-slate-200 disabled:text-slate-400">{submitLabel}</button>
+      {requiresDiagnosisHandoff && !diagnosisNotesReady ? <div className="mt-1.5 text-[11px] font-semibold text-amber-800">Add diagnostic notes above explaining what remains unknown.</div> : null}
+    </div>
   </div>;
 }
 
@@ -135,7 +232,12 @@ export function PartnerInspectionList({ items, typicalDurationHours }: { items: 
     const status = selectedStatuses[finding.id] || (finding.validationStatus !== "pending" ? finding.validationStatus as ValidationStatus : null);
     if (!status) { setMessages((current) => ({ ...current, [item.id]: "Choose a finding outcome before submitting." })); return; }
     const draft = findingDraft(finding);
-    const saved = await act(item, { action: "validate_finding", findingId: finding.id, status, notes: findingNotes[finding.id] ?? finding.validationNotes ?? "", recommendedAction: draft.recommendedAction, laborHours: draft.laborHours, proposedLaborPrice: draft.proposedLaborPrice, partSuggestions: cleanParts(draft.parts), canPerform: draft.canPerform === "" ? null : draft.canPerform === "yes" });
+    const notes = findingNotes[finding.id] ?? finding.validationNotes ?? "";
+    if (status === "needs_diagnosis" && (!notes.trim() || !draft.recommendedAction.trim())) {
+      setMessages((current) => ({ ...current, [item.id]: "Needs Diagnosis requires notes explaining what remains unknown and a recommended next diagnostic action." }));
+      return;
+    }
+    const saved = await act(item, { action: "validate_finding", findingId: finding.id, status, notes, recommendedAction: draft.recommendedAction, laborHours: draft.laborHours, proposedLaborPrice: draft.proposedLaborPrice, partSuggestions: cleanParts(draft.parts), canPerform: draft.canPerform === "" ? null : draft.canPerform === "yes" });
     if (saved) setExpandedFindings((current) => ({ ...current, [item.id]: null }));
   }
   async function submitUpgrade(item: PartnerInspectionItem, upgrade: PartnerInspectionUpgrade) {
@@ -176,14 +278,14 @@ export function PartnerInspectionList({ items, typicalDurationHours }: { items: 
         {submitted && !clarificationFindings.length ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><div className="font-black text-blue-950">Submitted for Owner review</div><div className="mt-1 text-sm text-blue-800">The inspection is locked while the Owner reviews it. Work will only appear in My Work if it is later assigned to you.</div></div> : null}
         {complete ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="font-black text-emerald-950">Owner accepted this inspection</div><div className="mt-1 text-sm text-emerald-800">Any resulting work will appear separately in My Work only if it is assigned to you.</div></div> : null}
 
-        {submitted && clarificationFindings.length ? <div className="space-y-3"><div className="rounded-xl border border-amber-300 bg-amber-50 p-4"><div className="font-black text-amber-950">Owner needs clarification</div><div className="mt-1 text-sm text-amber-800">Only the finding(s) below are reopened. The rest of the submitted inspection remains locked.</div></div>{clarificationFindings.map((finding) => { const draft = findingDraft(finding); const selected = selectedStatuses[finding.id] || finding.validationStatus as ValidationStatus; return <div key={finding.id} className="rounded-xl border border-amber-300 bg-white p-4"><div className="flex flex-wrap justify-between gap-3"><div><div className="font-black">{finding.title}</div>{finding.description ? <div className="mt-1 text-sm text-slate-600">{finding.description}</div> : null}</div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">Clarification requested</span></div>{finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}<div className="mt-3 flex flex-wrap gap-2">{findingChoices.map((choice) => <button key={choice.value} type="button" onClick={() => setSelectedStatuses((current) => ({ ...current, [finding.id]: choice.value }))} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200"}`}>{choice.label}</button>)}</div><textarea value={findingNotes[finding.id] ?? finding.validationNotes ?? ""} onChange={(e) => setFindingNotes((current) => ({ ...current, [finding.id]: e.target.value }))} placeholder="Answer the Owner's question / update your notes" className="mt-3 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /><div className="mt-3"><ProposalEditor draft={draft} onChange={(value) => setRecommendations((current) => ({ ...current, [finding.id]: value }))} submitLabel="Resubmit Finding" onSubmit={() => void submitFinding(item, finding)} disabled={working === item.id} /></div></div>; })}</div> : null}
+        {submitted && clarificationFindings.length ? <div className="space-y-3"><div className="rounded-xl border border-amber-300 bg-amber-50 p-4"><div className="font-black text-amber-950">Owner needs clarification</div><div className="mt-1 text-sm text-amber-800">Only the finding(s) below are reopened. The rest of the submitted inspection remains locked.</div></div>{clarificationFindings.map((finding) => { const draft = findingDraft(finding); const selected = selectedStatuses[finding.id] || finding.validationStatus as ValidationStatus; const notesReady = Boolean((findingNotes[finding.id] ?? finding.validationNotes ?? "").trim()); return <div key={finding.id} className="rounded-xl border border-amber-300 bg-white p-4"><div className="flex flex-wrap justify-between gap-3"><div><div className="font-black">{finding.title}</div>{finding.description ? <div className="mt-1 text-sm text-slate-600">{finding.description}</div> : null}</div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">Clarification requested</span></div>{finding.ownerReviewNotes ? <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"><span className="font-black">Owner asks:</span> {finding.ownerReviewNotes}</div> : null}<div className="mt-3 flex flex-wrap gap-2">{findingChoices.map((choice) => <button key={choice.value} type="button" onClick={() => setSelectedStatuses((current) => ({ ...current, [finding.id]: choice.value }))} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200"}`}>{choice.label}</button>)}</div><textarea value={findingNotes[finding.id] ?? finding.validationNotes ?? ""} onChange={(e) => setFindingNotes((current) => ({ ...current, [finding.id]: e.target.value }))} placeholder={selected === "needs_diagnosis" ? "Required: explain what remains unknown and why further diagnosis is needed" : "Answer the Owner's question / update your notes"} aria-required={selected === "needs_diagnosis"} className={`mt-3 min-h-20 w-full rounded-xl border px-3 py-2 text-sm ${selected === "needs_diagnosis" && !notesReady ? "border-amber-400 bg-amber-50/50" : "border-slate-200"}`} /><div className="mt-3"><ProposalEditor vehicleLabel={item.vehicleLabel} contextText={`${finding.title} ${finding.description || ""}`} draft={draft} onChange={(value) => setRecommendations((current) => ({ ...current, [finding.id]: value }))} submitLabel="Resubmit Finding" onSubmit={() => void submitFinding(item, finding)} disabled={working === item.id} requiresDiagnosisHandoff={selected === "needs_diagnosis"} diagnosisNotesReady={notesReady} /></div></div>; })}</div> : null}
 
         {editable ? <>
-          <div className="mt-5"><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Findings to validate</div><div className="mt-3 space-y-3">{item.findings.map((finding) => { const draft = findingDraft(finding); const reviewed = finding.validationStatus !== "pending"; const expanded = activeFindingId === finding.id; const selected = selectedStatuses[finding.id] || (reviewed ? finding.validationStatus as ValidationStatus : undefined); return <div key={finding.id} className={`rounded-xl border ${reviewed ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200"}`}><div className="flex flex-wrap items-start justify-between gap-3 p-4"><div className="min-w-0 flex-1"><div className="font-black">{finding.title}</div>{finding.description ? <div className="mt-1 text-sm text-slate-600">{finding.description}</div> : null}<div className="mt-3 flex flex-wrap gap-2">{findingChoices.map((choice) => <button key={choice.value} type="button" disabled={working === item.id} onClick={() => { setSelectedStatuses((current) => ({ ...current, [finding.id]: choice.value })); setExpandedFindings((current) => ({ ...current, [item.id]: finding.id })); }} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{choice.label}</button>)}</div></div><div className="flex items-center gap-2">{reviewed ? <><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-800">Reviewed ✓</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${dispositionTone(finding.validationStatus)}`}>{statusLabel(finding.validationStatus)}</span></> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500">Pending</span>}<button type="button" onClick={() => setExpandedFindings((current) => ({ ...current, [item.id]: expanded ? null : finding.id }))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-slate-600">{expanded ? "Collapse" : "Open"}</button></div></div>{expanded ? <div className="border-t border-slate-100 p-4"><textarea value={findingNotes[finding.id] ?? finding.validationNotes ?? ""} onChange={(e) => setFindingNotes((current) => ({ ...current, [finding.id]: e.target.value }))} placeholder="Diagnostic notes" className="mb-3 min-h-16 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /><ProposalEditor draft={draft} onChange={(value) => setRecommendations((current) => ({ ...current, [finding.id]: value }))} submitLabel="Submit Finding" onSubmit={() => void submitFinding(item, finding)} disabled={working === item.id || !selected} /></div> : null}</div>; })}</div></div>
+          <div className="mt-5"><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Findings to validate</div><div className="mt-3 space-y-3">{item.findings.map((finding) => { const draft = findingDraft(finding); const reviewed = finding.validationStatus !== "pending"; const expanded = activeFindingId === finding.id; const selected = selectedStatuses[finding.id] || (reviewed ? finding.validationStatus as ValidationStatus : undefined); const notesReady = Boolean((findingNotes[finding.id] ?? finding.validationNotes ?? "").trim()); return <div key={finding.id} className={`rounded-xl border ${reviewed ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200"}`}><div className="flex flex-wrap items-start justify-between gap-3 p-4"><div className="min-w-0 flex-1"><div className="font-black">{finding.title}</div>{finding.description ? <div className="mt-1 text-sm text-slate-600">{finding.description}</div> : null}<div className="mt-3 flex flex-wrap gap-2">{findingChoices.map((choice) => <button key={choice.value} type="button" disabled={working === item.id} onClick={() => { setSelectedStatuses((current) => ({ ...current, [finding.id]: choice.value })); setExpandedFindings((current) => ({ ...current, [item.id]: finding.id })); }} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{choice.label}</button>)}</div></div><div className="flex items-center gap-2">{reviewed ? <><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-800">Reviewed ✓</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${dispositionTone(finding.validationStatus)}`}>{statusLabel(finding.validationStatus)}</span></> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500">Pending</span>}<button type="button" onClick={() => setExpandedFindings((current) => ({ ...current, [item.id]: expanded ? null : finding.id }))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-slate-600">{expanded ? "Collapse" : "Open"}</button></div></div>{expanded ? <div className="border-t border-slate-100 p-4"><textarea value={findingNotes[finding.id] ?? finding.validationNotes ?? ""} onChange={(e) => setFindingNotes((current) => ({ ...current, [finding.id]: e.target.value }))} placeholder={selected === "needs_diagnosis" ? "Required: explain what remains unknown and why further diagnosis is needed" : "Diagnostic notes"} aria-required={selected === "needs_diagnosis"} className={`mb-3 min-h-16 w-full rounded-xl border px-3 py-2 text-sm ${selected === "needs_diagnosis" && !notesReady ? "border-amber-400 bg-amber-50/50" : "border-slate-200"}`} /><ProposalEditor vehicleLabel={item.vehicleLabel} contextText={`${finding.title} ${finding.description || ""}`} draft={draft} onChange={(value) => setRecommendations((current) => ({ ...current, [finding.id]: value }))} submitLabel="Submit Finding" onSubmit={() => void submitFinding(item, finding)} disabled={working === item.id || !selected} requiresDiagnosisHandoff={selected === "needs_diagnosis"} diagnosisNotesReady={notesReady} /></div> : null}</div>; })}</div></div>
 
-          {item.upgrades.length ? <div className="mt-6"><div className="text-xs font-black uppercase tracking-[0.1em] text-violet-500">Owner-requested upgrades</div><div className="mt-1 text-sm text-slate-500">Review technical feasibility before the Owner finalizes the Work Plan. These remain upgrades, not mechanical defects.</div><div className="mt-3 space-y-3">{item.upgrades.map((upgrade) => { const draft = upgradeDraft(upgrade); const reviewed = upgrade.validationStatus !== "pending"; const expanded = activeUpgradeId === upgrade.id; const selected = selectedUpgradeStatuses[upgrade.id] || (reviewed ? upgrade.validationStatus as UpgradeStatus : undefined); return <div key={upgrade.id} className={`rounded-xl border ${reviewed ? "border-violet-200 bg-violet-50/20" : "border-slate-200 bg-white"}`}><div className="flex flex-wrap items-start justify-between gap-3 p-4"><div className="min-w-0 flex-1"><div className="font-black">{upgrade.title}</div>{upgrade.description ? <div className="mt-1 text-sm text-slate-600">{upgrade.description}</div> : null}{upgrade.desiredOutcome ? <div className="mt-1 text-xs font-semibold text-violet-700">Owner goal: {upgrade.desiredOutcome}</div> : null}<div className="mt-3 flex flex-wrap gap-2">{upgradeChoices.map((choice) => <button key={choice.value} type="button" onClick={() => { setSelectedUpgradeStatuses((current) => ({ ...current, [upgrade.id]: choice.value })); setExpandedUpgrades((current) => ({ ...current, [item.id]: upgrade.id })); }} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-violet-700 bg-violet-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{choice.label}</button>)}</div></div><div className="flex items-center gap-2">{reviewed ? <><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-800">Reviewed ✓</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${dispositionTone(upgrade.validationStatus)}`}>{statusLabel(upgrade.validationStatus)}</span></> : <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black uppercase text-violet-700">Pending review</span>}<button type="button" onClick={() => setExpandedUpgrades((current) => ({ ...current, [item.id]: expanded ? null : upgrade.id }))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-slate-600">{expanded ? "Collapse" : "Open"}</button></div></div>{expanded ? <div className="border-t border-slate-100 p-4"><textarea value={upgradeNotes[upgrade.id] ?? upgrade.validationNotes ?? ""} onChange={(e) => setUpgradeNotes((current) => ({ ...current, [upgrade.id]: e.target.value }))} placeholder="Technical notes, fitment concerns, or recommended changes" className="mb-3 min-h-16 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /><ProposalEditor draft={draft} onChange={(value) => setUpgradeRecommendations((current) => ({ ...current, [upgrade.id]: value }))} submitLabel="Submit Upgrade Review" onSubmit={() => void submitUpgrade(item, upgrade)} disabled={working === item.id || !selected} /></div> : null}</div>; })}</div></div> : null}
+          {item.upgrades.length ? <div className="mt-6"><div className="text-xs font-black uppercase tracking-[0.1em] text-violet-500">Owner-requested upgrades</div><div className="mt-1 text-sm text-slate-500">Review technical feasibility before the Owner finalizes the Work Plan. These remain upgrades, not mechanical defects.</div><div className="mt-3 space-y-3">{item.upgrades.map((upgrade) => { const draft = upgradeDraft(upgrade); const reviewed = upgrade.validationStatus !== "pending"; const expanded = activeUpgradeId === upgrade.id; const selected = selectedUpgradeStatuses[upgrade.id] || (reviewed ? upgrade.validationStatus as UpgradeStatus : undefined); return <div key={upgrade.id} className={`rounded-xl border ${reviewed ? "border-violet-200 bg-violet-50/20" : "border-slate-200 bg-white"}`}><div className="flex flex-wrap items-start justify-between gap-3 p-4"><div className="min-w-0 flex-1"><div className="font-black">{upgrade.title}</div>{upgrade.description ? <div className="mt-1 text-sm text-slate-600">{upgrade.description}</div> : null}{upgrade.desiredOutcome ? <div className="mt-1 text-xs font-semibold text-violet-700">Owner goal: {upgrade.desiredOutcome}</div> : null}<div className="mt-3 flex flex-wrap gap-2">{upgradeChoices.map((choice) => <button key={choice.value} type="button" onClick={() => { setSelectedUpgradeStatuses((current) => ({ ...current, [upgrade.id]: choice.value })); setExpandedUpgrades((current) => ({ ...current, [item.id]: upgrade.id })); }} className={`rounded-lg border px-3 py-2 text-xs font-black ${selected === choice.value ? "border-violet-700 bg-violet-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{choice.label}</button>)}</div></div><div className="flex items-center gap-2">{reviewed ? <><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-800">Reviewed ✓</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${dispositionTone(upgrade.validationStatus)}`}>{statusLabel(upgrade.validationStatus)}</span></> : <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black uppercase text-violet-700">Pending review</span>}<button type="button" onClick={() => setExpandedUpgrades((current) => ({ ...current, [item.id]: expanded ? null : upgrade.id }))} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-slate-600">{expanded ? "Collapse" : "Open"}</button></div></div>{expanded ? <div className="border-t border-slate-100 p-4"><textarea value={upgradeNotes[upgrade.id] ?? upgrade.validationNotes ?? ""} onChange={(e) => setUpgradeNotes((current) => ({ ...current, [upgrade.id]: e.target.value }))} placeholder="Technical notes, fitment concerns, or recommended changes" className="mb-3 min-h-16 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /><ProposalEditor vehicleLabel={item.vehicleLabel} contextText={`${upgrade.title} ${upgrade.description || ""} ${upgrade.desiredOutcome || ""}`} draft={draft} onChange={(value) => setUpgradeRecommendations((current) => ({ ...current, [upgrade.id]: value }))} submitLabel="Submit Upgrade Review" onSubmit={() => void submitUpgrade(item, upgrade)} disabled={working === item.id || !selected} /></div> : null}</div>; })}</div></div> : null}
 
-          <div className="mt-6 rounded-xl border border-dashed border-slate-300 p-4"><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">New mechanical finding</div><div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={fresh.title} onChange={(e) => setNewFinding((current) => ({ ...current, [item.id]: { ...fresh, title: e.target.value } }))} placeholder="Finding title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold" /><input value={fresh.description} onChange={(e) => setNewFinding((current) => ({ ...current, [item.id]: { ...fresh, description: e.target.value } }))} placeholder="What did you find?" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" /></div><div className="mt-3"><ProposalEditor draft={fresh} onChange={(value) => setNewFinding((current) => ({ ...current, [item.id]: { ...fresh, ...value } }))} submitLabel="Add Finding" onSubmit={() => void addFinding(item, fresh)} disabled={working === item.id || !fresh.title.trim()} /></div></div>
+          <div className="mt-6 rounded-xl border border-dashed border-slate-300 p-4"><div className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">New mechanical finding</div><div className="mt-2 grid gap-2 sm:grid-cols-2"><input value={fresh.title} onChange={(e) => setNewFinding((current) => ({ ...current, [item.id]: { ...fresh, title: e.target.value } }))} placeholder="Finding title" className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold" /><input value={fresh.description} onChange={(e) => setNewFinding((current) => ({ ...current, [item.id]: { ...fresh, description: e.target.value } }))} placeholder="What did you find?" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" /></div><div className="mt-3"><ProposalEditor vehicleLabel={item.vehicleLabel} contextText={`${fresh.title} ${fresh.description}`} draft={fresh} onChange={(value) => setNewFinding((current) => ({ ...current, [item.id]: { ...fresh, ...value } }))} submitLabel="Add Finding" onSubmit={() => void addFinding(item, fresh)} disabled={working === item.id || !fresh.title.trim()} /></div></div>
 
           <div className="mt-5"><label className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">Inspection summary<textarea value={summaries[item.id] || ""} onChange={(e) => setSummaries((current) => ({ ...current, [item.id]: e.target.value }))} placeholder="Overall mechanical condition, important risks, and recommendations" className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium normal-case tracking-normal" /></label><button disabled={working === item.id} onClick={() => void act(item, { action: item.status === "revision_requested" ? "start" : "submit", summary: summaries[item.id] || "" })} className="mt-3 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white">{item.status === "revision_requested" ? "Reopen Inspection" : "Submit to Owner"}</button></div>
         </> : null}

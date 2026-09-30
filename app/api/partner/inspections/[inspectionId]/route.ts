@@ -11,6 +11,10 @@ type PartSuggestion = {
   quantity: number;
   partNumber: string | null;
   notes: string | null;
+  aiEstimatedUnitPriceLow: number | null;
+  aiEstimatedUnitPriceHigh: number | null;
+  aiPriceBasis: string | null;
+  partnerOfferUnitPrice: number | null;
 };
 
 function optionalText(value: unknown) {
@@ -34,11 +38,20 @@ function partSuggestions(value: unknown): PartSuggestion[] {
       const name = String(row.name ?? row.description ?? "").trim();
       if (!name) return null;
       const quantityValue = Number(row.quantity ?? 1);
+      let aiEstimatedUnitPriceLow = optionalNonNegativeNumber(row.aiEstimatedUnitPriceLow ?? row.estimatedUnitPriceLow, "AI estimated part price low");
+      let aiEstimatedUnitPriceHigh = optionalNonNegativeNumber(row.aiEstimatedUnitPriceHigh ?? row.estimatedUnitPriceHigh, "AI estimated part price high");
+      if (aiEstimatedUnitPriceLow !== null && aiEstimatedUnitPriceHigh !== null && aiEstimatedUnitPriceHigh < aiEstimatedUnitPriceLow) {
+        [aiEstimatedUnitPriceLow, aiEstimatedUnitPriceHigh] = [aiEstimatedUnitPriceHigh, aiEstimatedUnitPriceLow];
+      }
       return {
         name,
         quantity: Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1,
         partNumber: optionalText(row.partNumber ?? row.part_number),
         notes: optionalText(row.notes),
+        aiEstimatedUnitPriceLow,
+        aiEstimatedUnitPriceHigh,
+        aiPriceBasis: optionalText(row.aiPriceBasis ?? row.priceBasis),
+        partnerOfferUnitPrice: optionalNonNegativeNumber(row.partnerOfferUnitPrice, "Partner part price"),
       } satisfies PartSuggestion;
     })
     .filter((row): row is PartSuggestion => Boolean(row));
@@ -91,6 +104,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const action = String(body.action || "").trim();
     const now = new Date().toISOString();
+    let historyEventType = `partner_inspection_${action}`;
+    let historySummary = `${access.partner.name} updated mechanical inspection: ${action}.`;
+    let historyMetadata: Record<string, unknown> = { action };
 
     if (action === "confirm") {
       const scheduledStartAt = optionalText(body.scheduledStartAt) || inspection.requested_start_at || now;
@@ -120,7 +136,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
       if (!findingId || !validationStatuses.has(status)) return NextResponse.json({ error: "Invalid finding validation." }, { status: 400 });
 
       const { data: finding, error: findingError } = await admin.from("mindful_inventory_findings")
-        .select("id,mechanical_owner_review_status")
+        .select("id,title,mechanical_owner_review_status")
         .eq("id", findingId)
         .eq("vehicle_id", inspection.vehicle_id)
         .in("source", ["ai", "partner"])
@@ -131,15 +147,28 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
       const clarificationEdit = inspection.status === "submitted" && finding.mechanical_owner_review_status === "clarification_requested";
       if (!normalEdit && !clarificationEdit) return NextResponse.json({ error: "This finding is not editable." }, { status: 409 });
 
+      const responseNote = optionalText(body.notes);
+      if (clarificationEdit && !responseNote) {
+        return NextResponse.json({ error: "Add a response to the Owner before resubmitting this finding." }, { status: 400 });
+      }
+
       const update = {
         mechanical_validation_status: status,
-        mechanical_validation_notes: optionalText(body.notes),
+        mechanical_validation_notes: responseNote,
         ...recommendationPatch(body),
         ...(clarificationEdit ? { mechanical_owner_review_status: null, mechanical_owner_reviewed_at: null, mechanical_owner_reviewed_by_user_id: null } : {}),
         updated_at: now,
       };
       const { error } = await admin.from("mindful_inventory_findings").update(update).eq("id", findingId);
       if (error) throw new Error(error.message);
+
+      if (clarificationEdit) {
+        historyEventType = "mechanical_finding_clarification_answered";
+        historySummary = `${access.partner.name} answered the Owner's clarification on mechanical finding: ${finding.title}.`;
+        historyMetadata = { action, findingId, notes: responseNote, status };
+      } else {
+        historyMetadata = { action, findingId, notes: responseNote, status };
+      }
     } else if (action === "validate_upgrade") {
       if (!["in_progress", "revision_requested"].includes(inspection.status)) return NextResponse.json({ error: "Requested upgrades can only be reviewed during an active inspection." }, { status: 409 });
       const upgradeId = String(body.upgradeId || "").trim();
@@ -177,7 +206,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ inspe
       return NextResponse.json({ error: "Unsupported inspection action." }, { status: 400 });
     }
 
-    await admin.from("mindful_inventory_history").insert({ company_id: access.partner.companyId, vehicle_id: inspection.vehicle_id, event_type: `partner_inspection_${action}`, entity_type: action === "validate_upgrade" ? "upgrade" : action === "validate_finding" ? "finding" : "inspection", entity_id: action === "validate_upgrade" ? String(body.upgradeId || inspection.id) : action === "validate_finding" ? String(body.findingId || inspection.id) : inspection.id, actor_user_id: access.userId, summary: `${access.partner.name} updated mechanical inspection: ${action}.`, metadata: { action } });
+    await admin.from("mindful_inventory_history").insert({
+      company_id: access.partner.companyId,
+      vehicle_id: inspection.vehicle_id,
+      event_type: historyEventType,
+      entity_type: action === "validate_upgrade" ? "upgrade" : action === "validate_finding" ? "finding" : "inspection",
+      entity_id: action === "validate_upgrade" ? String(body.upgradeId || inspection.id) : action === "validate_finding" ? String(body.findingId || inspection.id) : inspection.id,
+      actor_user_id: access.userId,
+      summary: historySummary,
+      metadata: historyMetadata,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update inspection." }, { status: 500 });

@@ -1,3 +1,4 @@
+import type { FindingConversationMessage } from "@/lib/mindful-inventory/finding-conversation";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { PartnerPortalAccess } from "@/lib/partner-portal/access";
 
@@ -6,6 +7,10 @@ export type MechanicalPartSuggestion = {
   quantity: number;
   partNumber: string | null;
   notes: string | null;
+  aiEstimatedUnitPriceLow: number | null;
+  aiEstimatedUnitPriceHigh: number | null;
+  aiPriceBasis: string | null;
+  partnerOfferUnitPrice: number | null;
 };
 
 export type PartnerInspectionUpgrade = {
@@ -56,6 +61,7 @@ export type PartnerInspectionItem = {
     proposedLaborPrice: number | null;
     ownerReviewStatus: string | null;
     ownerReviewNotes: string | null;
+    conversation: FindingConversationMessage[];
   }>;
   upgrades: PartnerInspectionUpgrade[];
 };
@@ -78,8 +84,65 @@ function partsOrEmpty(value: unknown): MechanicalPartSuggestion[] {
       quantity: numberOrNull(row.quantity) || 1,
       partNumber: String(row.partNumber ?? row.part_number ?? "").trim() || null,
       notes: String(row.notes || "").trim() || null,
+      aiEstimatedUnitPriceLow: numberOrNull(row.aiEstimatedUnitPriceLow ?? row.estimatedUnitPriceLow),
+      aiEstimatedUnitPriceHigh: numberOrNull(row.aiEstimatedUnitPriceHigh ?? row.estimatedUnitPriceHigh),
+      aiPriceBasis: String(row.aiPriceBasis ?? row.priceBasis ?? "").trim() || null,
+      partnerOfferUnitPrice: numberOrNull(row.partnerOfferUnitPrice),
     }];
   });
+}
+
+function conversationMessageFromHistory(row: {
+  id: string;
+  event_type: string;
+  metadata: unknown;
+  created_at: string;
+}): FindingConversationMessage | null {
+  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+    ? row.metadata as Record<string, unknown>
+    : {};
+  const message = String(metadata.notes ?? metadata.message ?? "").trim();
+  if (!message) return null;
+  return {
+    id: row.id,
+    role: row.event_type === "mechanical_finding_clarification_requested" ? "owner" : "partner",
+    message,
+    createdAt: row.created_at,
+  };
+}
+
+async function loadPartnerFindingConversation(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  findingId: string,
+): Promise<FindingConversationMessage[]> {
+  try {
+    const { data, error } = await admin
+      .from("mindful_inventory_history")
+      .select("id,event_type,metadata,created_at")
+      .eq("entity_type", "finding")
+      .eq("entity_id", findingId)
+      .in("event_type", [
+        "mechanical_finding_clarification_requested",
+        "mechanical_finding_clarification_answered",
+      ])
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(`Could not load clarification history for finding ${findingId}:`, error.message);
+      return [];
+    }
+
+    return (data || []).flatMap((row) => {
+      const message = conversationMessageFromHistory(row);
+      return message ? [message] : [];
+    });
+  } catch (error) {
+    console.error(
+      `Could not load clarification history for finding ${findingId}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
 }
 
 export async function getPartnerInspectionAssignments(access: PartnerPortalAccess): Promise<PartnerInspectionItem[]> {
@@ -99,14 +162,20 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
   const vehicleIds = [...new Set(inspections.map((row) => row.vehicle_id))];
   const [vehiclesResult, findingsResult, upgradesResult] = await Promise.all([
     admin.from("mindful_inventory_vehicles").select("id,year,make,model,trim,vin,mileage").in("id", vehicleIds),
-    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_owner_review_status,mechanical_owner_review_notes").in("vehicle_id", vehicleIds).eq("status", "open"),
+    admin.from("mindful_inventory_findings").select("id,vehicle_id,title,description,severity,status,source,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_parts_required,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price,mechanical_owner_review_status,mechanical_owner_review_notes,updated_at").in("vehicle_id", vehicleIds).eq("status", "open"),
     admin.from("mindful_inventory_upgrades").select("id,vehicle_id,title,description,desired_outcome,manufacturer,part_number,quantity,preferred_vendor,status,mechanical_validation_status,mechanical_validation_notes,mechanical_recommended_action,mechanical_part_suggestions,mechanical_can_perform,mechanical_labor_hours,mechanical_proposed_labor_price").in("vehicle_id", vehicleIds).eq("status", "proposed"),
   ]);
   if (vehiclesResult.error) throw new Error(vehiclesResult.error.message);
   if (findingsResult.error) throw new Error(findingsResult.error.message);
   if (upgradesResult.error) throw new Error(upgradesResult.error.message);
 
+  const findingRows = findingsResult.data || [];
+  const conversationPairs = await Promise.all(
+    findingRows.map(async (finding) => [finding.id, await loadPartnerFindingConversation(admin, finding.id)] as const),
+  );
+  const conversationByFinding = new Map<string, FindingConversationMessage[]>(conversationPairs);
   const vehicles = new Map((vehiclesResult.data || []).map((row) => [row.id, row]));
+
   return inspections.map((row) => {
     const vehicle = vehicles.get(row.vehicle_id);
     return {
@@ -124,7 +193,7 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
       summary: row.summary,
       revisionNotes: row.revision_notes,
       ownerReviewStatus: row.owner_review_status,
-      findings: (findingsResult.data || []).filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => ({
+      findings: findingRows.filter((finding) => finding.vehicle_id === row.vehicle_id && ["ai", "partner"].includes(finding.source)).map((finding) => ({
         id: finding.id,
         title: finding.title,
         description: finding.description,
@@ -139,6 +208,7 @@ export async function getPartnerInspectionAssignments(access: PartnerPortalAcces
         proposedLaborPrice: numberOrNull(finding.mechanical_proposed_labor_price),
         ownerReviewStatus: finding.mechanical_owner_review_status,
         ownerReviewNotes: finding.mechanical_owner_review_notes,
+        conversation: conversationByFinding.get(finding.id) || [],
       })),
       upgrades: (upgradesResult.data || []).filter((upgrade) => upgrade.vehicle_id === row.vehicle_id).map((upgrade) => ({
         id: upgrade.id,

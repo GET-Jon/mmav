@@ -291,7 +291,19 @@ export function DealsPipelineTable({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1040px] text-left text-sm">
+        <table className="w-full min-w-[1120px] table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-[9%]" />
+            <col className="w-[6%]" />
+            <col className="w-[12%]" />
+            <col className="w-[25%]" />
+            <col className="w-[8%]" />
+            <col className="w-[9%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[6%]" />
+            <col className="w-[9%]" />
+          </colgroup>
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th className="px-4 py-3">Saved</th>
@@ -299,11 +311,11 @@ export function DealsPipelineTable({
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Vehicle</th>
               <th className="px-4 py-3">Mileage</th>
-              <th className="px-4 py-3">Current Bid</th>
+              <th className="whitespace-nowrap px-3 py-3">Current Bid</th>
               <th className="px-4 py-3">Target</th>
               <th className="px-4 py-3">Profit</th>
               <th className="px-4 py-3">Risk</th>
-              <th className="px-4 py-3">Decision</th>
+              <th className="whitespace-nowrap px-3 py-3">Decision</th>
             </tr>
           </thead>
 
@@ -330,31 +342,38 @@ export function DealsPipelineTable({
                   />
                 </td>
 
-                <td className="min-w-[220px] px-4 py-3 font-semibold">
+                <td className="px-3 py-3 font-semibold">
                   <Link
                     href={`/deals/${evaluation.id}`}
-                    className="text-blue-700 hover:underline"
+                    title={evaluation.vehicle_title || "Untitled Vehicle"}
+                    className="block truncate text-blue-700 hover:underline"
                   >
                     {evaluation.vehicle_title || "Untitled Vehicle"}
                   </Link>
                 </td>
 
-                <td className="px-4 py-3">{number(evaluation.mileage)}</td>
-                <td className="px-4 py-3">{money(evaluation.current_bid)}</td>
+                <td className="whitespace-nowrap px-3 py-3">
+                  {number(evaluation.mileage)}
+                </td>
+                <td className="whitespace-nowrap px-3 py-3">
+                  {money(evaluation.current_bid)}
+                </td>
 
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-3 py-3">
                   {money(evaluation.target_resale_used)}
                 </td>
 
-                <td className="px-4 py-3 font-semibold">
+                <td className="whitespace-nowrap px-3 py-3 font-semibold">
                   {money(evaluation.expected_gross_profit)}
                 </td>
 
-                <td className="px-4 py-3">{evaluation.risk_grade || "—"}</td>
+                <td className="whitespace-nowrap px-3 py-3">
+                  {evaluation.risk_grade || "—"}
+                </td>
 
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-3 py-3">
                   <span
-                    className={`rounded-full px-2 py-1 text-xs font-bold ${decisionClass(
+                    className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${decisionClass(
                       evaluation.decision
                     )}`}
                   >

@@ -77,7 +77,7 @@ export async function POST(
 
     const { data: work, error: workError } = await admin
       .from("mindful_inventory_work_orders")
-      .select("id,vehicle_id,status,assigned_partner_id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at")
+      .select("id,vehicle_id,status,assigned_partner_id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status")
       .eq("id", workOrderId)
       .maybeSingle();
     if (workError) throw new Error(workError.message);
@@ -128,53 +128,71 @@ export async function POST(
     const requestedStartAt = work.proposed_start_at || work.scheduled_start_at;
     const requestedEndAt = work.proposed_end_at || work.scheduled_end_at;
     const scheduleChanged = !sameInstant(requestedStartAt, startAt) || !sameInstant(requestedEndAt, endAt);
+    const acceptingOwnerProposal = work.partner_confirmation_status === "awaiting_partner"
+      && Boolean(requestedStartAt && requestedEndAt)
+      && !scheduleChanged;
+
+    const update = acceptingOwnerProposal
+      ? {
+          proposed_start_at: null,
+          proposed_end_at: null,
+          scheduled_start_at: startAt,
+          scheduled_end_at: endAt,
+          partner_confirmation_status: "confirmed",
+          schedule_source: "manual",
+          status: "scheduled",
+          updated_at: now,
+          updated_by: user.id,
+        }
+      : {
+          proposed_start_at: startAt,
+          proposed_end_at: endAt,
+          scheduled_start_at: work.scheduled_start_at,
+          scheduled_end_at: work.scheduled_end_at,
+          partner_confirmation_status: "awaiting_owner",
+          schedule_source: "partner",
+          status: work.scheduled_start_at ? work.status : "ready_to_schedule",
+          updated_at: now,
+          updated_by: user.id,
+        };
 
     const { data: updated, error: updateError } = await admin
       .from("mindful_inventory_work_orders")
-      .update({
-        proposed_start_at: requestedStartAt,
-        proposed_end_at: requestedEndAt,
-        scheduled_start_at: startAt,
-        scheduled_end_at: endAt,
-        partner_confirmation_status: "confirmed",
-        schedule_source: scheduleChanged ? "partner" : "manual",
-        status: work.status === "ready_to_schedule" ? "scheduled" : work.status,
-        updated_at: now,
-        updated_by: user.id,
-      })
+      .update(update)
       .eq("id", workOrderId)
       .eq("assigned_partner_id", partner.id)
-      .select("id,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source")
+      .select("id,status,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,schedule_source")
       .single();
     if (updateError) throw new Error(updateError.message);
 
-    if (scheduleChanged) {
-      const partnerLabel = partner.company_name ? `${partner.name} · ${partner.company_name}` : partner.name;
-      const { error: historyError } = await admin.from("mindful_inventory_history").insert({
-        company_id: partner.company_id,
-        vehicle_id: work.vehicle_id,
-        event_type: "partner_schedule_changed",
-        entity_type: "work_order",
-        entity_id: workOrderId,
-        actor_user_id: user.id,
-        summary: `${partnerLabel} changed the proposed work schedule.`,
-        metadata: {
-          partnerId: partner.id,
-          partnerName: partnerLabel,
-          requestedStartAt,
-          requestedEndAt,
-          previousScheduledStartAt: work.scheduled_start_at,
-          previousScheduledEndAt: work.scheduled_end_at,
-          partnerScheduledStartAt: startAt,
-          partnerScheduledEndAt: endAt,
-          automaticallyAccepted: true,
-          timezone: timeZone,
-        },
-      });
-      if (historyError) throw new Error(historyError.message);
-    }
+    const partnerLabel = partner.company_name ? `${partner.name} · ${partner.company_name}` : partner.name;
+    const { error: historyError } = await admin.from("mindful_inventory_history").insert({
+      company_id: partner.company_id,
+      vehicle_id: work.vehicle_id,
+      event_type: acceptingOwnerProposal ? "partner_schedule_confirmed" : "partner_schedule_proposed",
+      entity_type: "work_order",
+      entity_id: workOrderId,
+      actor_user_id: user.id,
+      summary: acceptingOwnerProposal
+        ? `${partnerLabel} confirmed the Owner-proposed work time.`
+        : `${partnerLabel} proposed a different work time for Owner confirmation.`,
+      metadata: {
+        partnerId: partner.id,
+        partnerName: partnerLabel,
+        previousScheduledStartAt: work.scheduled_start_at,
+        previousScheduledEndAt: work.scheduled_end_at,
+        previousProposedStartAt: work.proposed_start_at,
+        previousProposedEndAt: work.proposed_end_at,
+        partnerProposedStartAt: acceptingOwnerProposal ? null : startAt,
+        partnerProposedEndAt: acceptingOwnerProposal ? null : endAt,
+        confirmedStartAt: acceptingOwnerProposal ? startAt : null,
+        confirmedEndAt: acceptingOwnerProposal ? endAt : null,
+        timezone: timeZone,
+      },
+    });
+    if (historyError) throw new Error(historyError.message);
 
-    return NextResponse.json({ ...updated, timezone: timeZone, scheduleChanged });
+    return NextResponse.json({ ...updated, timezone: timeZone, scheduleChanged, awaitingOwner: !acceptingOwnerProposal });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Schedule could not be updated." },

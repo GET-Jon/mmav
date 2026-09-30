@@ -3,6 +3,10 @@ export type WorkPlanPartSuggestionInput = {
   quantity: number;
   partNumber: string | null;
   notes: string | null;
+  aiEstimatedUnitPriceLow?: number | null;
+  aiEstimatedUnitPriceHigh?: number | null;
+  aiPriceBasis?: string | null;
+  partnerOfferUnitPrice?: number | null;
 };
 
 export type WorkPlanFindingInput = {
@@ -14,13 +18,14 @@ export type WorkPlanFindingInput = {
   severity: string | null;
   confidence: string | null;
   certainty: string | null;
-  mechanicalValidationStatus: "pending" | "confirmed" | "changed" | "needs_diagnosis";
+  mechanicalValidationStatus: "pending" | "confirmed" | "changed" | "needs_diagnosis" | "not_found";
   mechanicalValidationNotes: string | null;
   mechanicalRecommendedAction: string | null;
   mechanicalCanPerform: boolean | null;
   mechanicalLaborHours: number | null;
   mechanicalProposedLaborPrice: number | null;
   mechanicalSuggestedParts: WorkPlanPartSuggestionInput[];
+  mechanicalConversation: Array<{ role: "owner" | "partner"; message: string; createdAt: string }>;
   estimatedCostLow: number | null;
   estimatedCostHigh: number | null;
   estimatedDurationHours: number | null;

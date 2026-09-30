@@ -64,7 +64,7 @@ function LoginForm() {
         <div className="mb-6">
           <div className="text-2xl font-black">Lot Logic Login</div>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Sign in to access the auction evaluator and saved deal pipeline.
+            Sign in to your Lot Logic workspace.
           </p>
         </div>
 

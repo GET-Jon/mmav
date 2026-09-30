@@ -3,6 +3,7 @@ import {
   generateConditionAnalysis,
   type ConditionAnalysisInput,
 } from "@/lib/ai";
+import { AiTemporarilyUnavailableError } from "@/lib/ai/errors";
 import { buildEvaluatorIntelligenceContext } from "@/lib/lot-logic-intelligence/evaluator-context";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
@@ -99,14 +100,31 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ analysis, intelligence: intelligenceMeta });
   } catch (error) {
+    if (error instanceof AiTemporarilyUnavailableError) {
+      console.warn("Condition analysis temporarily unavailable", {
+        code: error.code,
+        providerStatus: error.causeStatus,
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            "AI recon is temporarily busy. Your evaluation is safe—please try again in a moment.",
+          code: error.code,
+          retryable: true,
+        },
+        { status: 503 },
+      );
+    }
+
     console.error("Condition analysis generation failed:", error);
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to analyze vehicle condition.",
+          "We couldn't complete the AI recon analysis. Please try again. If the problem continues, use Manual Assessment and continue your evaluation.",
+        code: "AI_RECON_FAILED",
+        retryable: false,
       },
       { status: 500 },
     );

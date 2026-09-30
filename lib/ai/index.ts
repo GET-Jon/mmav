@@ -44,6 +44,7 @@ export async function generateEvaluationSummary(input: EvaluationSummaryInput) {
     prompt: buildEvaluationSummaryPrompt(input),
     temperature: 0.2,
     maxOutputTokens: 500,
+    usageFeature: "evaluation_summary",
   });
 
   return result.text;

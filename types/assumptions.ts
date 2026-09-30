@@ -33,11 +33,6 @@ export type AuctionFeeRule = {
   fee: number;
 };
 
-export type SourceDiscount = {
-  source: string;
-  askDiscount: number;
-};
-
 export type RegionalMarket = {
   market: string;
   zip: string;
@@ -64,12 +59,13 @@ export type VehicleClassificationRule = {
 
 export type CompSettings = {
   mileageAdjustmentPerThousand: number;
+  maxMileageAdjustmentDollars: number;
+  maxMileageAdjustmentPercentOfAsk: number;
   fastSaleDiscount: number;
   minimumQualityScore: number;
   minimumCompsForMediumConfidence: number;
   minimumCompsForHighConfidence: number;
   maxSpreadForHighConfidence: number;
-  sourceDiscounts: SourceDiscount[];
 };
 
 export type Assumptions = {

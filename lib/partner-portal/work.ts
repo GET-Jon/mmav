@@ -37,6 +37,7 @@ export type PartnerWorkItem = {
   partnerLocationRequest: string | null;
   partnerPartsConfirmationStatus: string | null;
   partnerPartsNote: string | null;
+  partnerCompletionNotes: string | null;
   parts: Array<{
     id: string;
     description: string;
@@ -86,7 +87,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
   const admin = createSupabaseAdminClient();
   const { data: workOrders, error: workError } = await admin
     .from("mindful_inventory_work_orders")
-    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,location_id,partner_location_confirmation_status,partner_location_request,partner_parts_confirmation_status,partner_parts_note")
+    .select("id,vehicle_id,title,description,category,subcategory,status,blocker_reason,scheduled_start_at,scheduled_end_at,proposed_start_at,proposed_end_at,partner_confirmation_status,partner_estimate_status,location_id,partner_location_confirmation_status,partner_location_request,partner_parts_confirmation_status,partner_parts_note,partner_completion_notes")
     .eq("assigned_partner_id", access.partner.id)
     .not("status", "eq", "cancelled")
     .order("scheduled_start_at", { ascending: true, nullsFirst: false })
@@ -195,6 +196,7 @@ export async function getPartnerAssignedWork(access: PartnerPortalAccess): Promi
         partnerLocationRequest: row.partner_location_request,
         partnerPartsConfirmationStatus: row.partner_parts_confirmation_status,
         partnerPartsNote: row.partner_parts_note,
+        partnerCompletionNotes: row.partner_completion_notes,
         parts: partsByWorkOrder.get(row.id) ?? [],
         latestEstimate: estimate
           ? {

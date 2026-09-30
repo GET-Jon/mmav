@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { InventoryActiveWork } from "@/components/mindful-inventory/inventory-active-work";
+import { OwnerPartRequirementReview } from "@/components/mindful-inventory/owner-part-requirement-review";
 import { PartnerEstimateReviewPanel, type PartnerEstimateReviewItem } from "@/components/mindful-inventory/partner-estimate-review-panel";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
 import { getInventorySchedulingOptions, type InventoryWorkOrderView } from "@/lib/mindful-inventory/active-work";
+import { getInventoryPartRequirements } from "@/lib/mindful-inventory/part-requirements";
 import { buildPartSearchSuggestion } from "@/lib/mindful-inventory/part-suggestions";
 import { getInventoryPartsTransportData } from "@/lib/mindful-inventory/parts-transport";
 import { getInventoryPerformerOptions } from "@/lib/mindful-inventory/performers";
@@ -117,15 +119,17 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
   const vehicle = dashboard.vehicles.find((item) => item.id === id);
   if (!vehicle) notFound();
 
-  const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges] = await Promise.all([
+  const [partsData, performerOptions, schedulingOptions, partnerEstimateReviews, partnerScheduleChanges, partRequirements] = await Promise.all([
     getInventoryPartsTransportData(access.supabase, access.company.companyId, vehicle.id),
     getInventoryPerformerOptions(access.supabase, access.company.companyId),
     getInventorySchedulingOptions(access.supabase, access.company.companyId),
     getPartnerEstimateReviews(access.supabase, vehicle.id),
     getPartnerScheduleChanges(access.supabase, vehicle.id),
+    getInventoryPartRequirements(access.supabase, access.company.companyId, vehicle.id),
   ]);
   const workOrders = partsData.workOrders;
   const partSuggestions = workOrders.filter((work) => !["complete", "cancelled"].includes(work.status)).map((work) => buildPartSearchSuggestion(vehicle, work));
+  const pendingPartnerPartRequirements = partRequirements.filter((requirement) => requirement.requirementStatus === "suggested" && Boolean(requirement.suggestedByPartnerId));
 
   const nowMs = Date.now();
   const behindSchedule = workOrders.map((work) => ({ work, label: lateLabel(work, nowMs) })).filter((item): item is { work: InventoryWorkOrderView; label: string } => Boolean(item.label));
@@ -146,6 +150,18 @@ export default async function InventoryWorkPage({ params }: { params: Promise<{ 
     </section>
 
     {behindSchedule.length ? <section className="rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-700">Behind schedule</div><div className="mt-0.5 text-sm font-black">{behindSchedule.length} Work Order{behindSchedule.length === 1 ? " is" : "s are"} behind schedule.</div><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-red-800">{behindSchedule.map(({ work, label }) => <span key={work.id}><span className="font-black">{work.title}</span> · {label}</span>)}</div></div><Link href="/mindful/inventory/schedule" className="shrink-0 rounded-xl bg-red-700 px-4 py-2 text-xs font-black text-white">Open Schedule →</Link></div></section> : null}
+
+    {pendingPartnerPartRequirements.length ? <section data-owner-partner-proposals-panel="true" className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 shadow-sm">
+      <div className="mb-3">
+        <div className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-800">Owner decision required</div>
+        <div className="mt-1 text-base font-black text-slate-950">Partner parts awaiting your review</div>
+        <div className="mt-1 text-xs font-semibold text-slate-600">Respond to the Partner&apos;s actual part proposal here. The Execution Plan will update after your decision.</div>
+      </div>
+      <div className="space-y-3">{pendingPartnerPartRequirements.map((requirement) => <div key={requirement.id}>
+        <div className="mb-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">{requirement.workTitle}</div>
+        <OwnerPartRequirementReview vehicleId={vehicle.id} requirement={requirement} />
+      </div>)}</div>
+    </section> : null}
 
     <InventoryActiveWork
       vehicleId={vehicle.id}

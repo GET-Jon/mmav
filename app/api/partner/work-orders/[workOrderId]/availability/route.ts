@@ -4,13 +4,107 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { createSupabaseServerAuthClient } from "@/lib/supabase/server-auth";
 import { summarizePartsReadiness } from "@/lib/mindful-inventory/parts-readiness";
 
+const PARTS_ETA_BUFFER_MINUTES = 120;
+const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+type DayKey = (typeof DAY_KEYS)[number];
+type StandardHours = Partial<Record<DayKey, { enabled?: boolean; start?: string; end?: string }>>;
+type Segment = { startAt: string; endAt: string };
+
 function overlaps(startA: number, endA: number, startB: number, endB: number) {
   return startA < endB && endA > startB;
 }
 
-function roundUp(date: Date, minutes = 30) {
-  const step = minutes * 60_000;
-  return new Date(Math.ceil(date.getTime() / step) * step);
+function localParts(date: Date, offsetMinutes: number) {
+  const shifted = new Date(date.getTime() - offsetMinutes * 60_000);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth(), day: shifted.getUTCDate(), weekday: shifted.getUTCDay(), hour: shifted.getUTCHours(), minute: shifted.getUTCMinutes() };
+}
+
+function fromLocal(year: number, month: number, day: number, hour: number, minute: number, offsetMinutes: number) {
+  return new Date(Date.UTC(year, month, day, hour, minute) + offsetMinutes * 60_000);
+}
+
+function minutesFromClock(value: string | undefined, fallback: number) {
+  if (!value || !/^\d{1,2}:\d{2}$/.test(value)) return fallback;
+  const [hour, minute] = value.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+  return hour * 60 + minute;
+}
+
+function workWindow(standardHours: StandardHours | null | undefined, weekday: number) {
+  const key = DAY_KEYS[weekday];
+  const configured = standardHours?.[key];
+  if (configured) {
+    if (configured.enabled !== true) return null;
+    const startMinute = minutesFromClock(configured.start, 9 * 60);
+    const endMinute = minutesFromClock(configured.end, 17 * 60);
+    return endMinute > startMinute ? { startMinute, endMinute } : null;
+  }
+  if (weekday === 0 || weekday === 6) return null;
+  return { startMinute: 9 * 60, endMinute: 17 * 60 };
+}
+
+function nextWorkingStart(cursor: Date, offsetMinutes: number, standardHours: StandardHours | null | undefined) {
+  for (let add = 0; add < 8; add += 1) {
+    const base = localParts(new Date(cursor.getTime() + add * 24 * 60 * 60_000), offsetMinutes);
+    const window = workWindow(standardHours, base.weekday);
+    if (!window) continue;
+    return fromLocal(base.year, base.month, base.day, Math.floor(window.startMinute / 60), window.startMinute % 60, offsetMinutes);
+  }
+  return null;
+}
+
+function laborSegments(startValue: Date, laborMinutes: number, offsetMinutes: number, standardHours: StandardHours | null | undefined): Segment[] {
+  let remaining = Math.max(1, Math.round(laborMinutes));
+  let cursor = new Date(startValue);
+  const segments: Segment[] = [];
+  let guard = 0;
+
+  while (remaining > 0 && guard < 30) {
+    guard += 1;
+    let p = localParts(cursor, offsetMinutes);
+    let window = workWindow(standardHours, p.weekday);
+
+    if (!window) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+      continue;
+    }
+
+    const currentMinute = p.hour * 60 + p.minute;
+    if (currentMinute < window.startMinute) {
+      cursor = fromLocal(p.year, p.month, p.day, Math.floor(window.startMinute / 60), window.startMinute % 60, offsetMinutes);
+      p = localParts(cursor, offsetMinutes);
+    } else if (currentMinute >= window.endMinute) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+      continue;
+    }
+
+    window = workWindow(standardHours, p.weekday);
+    if (!window) continue;
+    const minuteNow = p.hour * 60 + p.minute;
+    const available = Math.max(0, window.endMinute - minuteNow);
+    if (!available) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+      continue;
+    }
+
+    const used = Math.min(remaining, available);
+    const end = new Date(cursor.getTime() + used * 60_000);
+    segments.push({ startAt: cursor.toISOString(), endAt: end.toISOString() });
+    remaining -= used;
+    if (remaining > 0) {
+      const next = nextWorkingStart(new Date(cursor.getTime() + 24 * 60 * 60_000), offsetMinutes, standardHours);
+      if (!next) break;
+      cursor = next;
+    }
+  }
+
+  return remaining > 0 ? [] : segments;
 }
 
 export async function GET(request: Request, context: { params: Promise<{ workOrderId: string }> }) {
@@ -20,11 +114,14 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
     if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
     const { workOrderId } = await context.params;
+    const url = new URL(request.url);
+    const offsetRaw = Number(url.searchParams.get("tzOffset") || "0");
+    const offsetMinutes = Number.isFinite(offsetRaw) ? Math.max(-840, Math.min(840, offsetRaw)) : 0;
     const admin = createSupabaseAdminClient();
 
     const { data: work, error: workError } = await admin
       .from("mindful_inventory_work_orders")
-      .select("id,assigned_partner_id,resource_id,location_id,estimated_elapsed_minutes,estimated_duration_minutes,partner_estimate_status,parts_review_status")
+      .select("id,vehicle_id,assigned_partner_id,resource_id,estimated_labor_minutes,estimated_elapsed_minutes,estimated_duration_minutes,partner_estimate_status,parts_review_status")
       .eq("id", workOrderId)
       .maybeSingle();
     if (workError) throw new Error(workError.message);
@@ -32,19 +129,12 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
 
     const { data: partner, error: partnerError } = await admin
       .from("mindful_inventory_partners")
-      .select("id,user_id,active")
+      .select("id,user_id,active,company_id,standard_hours")
       .eq("id", work.assigned_partner_id)
       .maybeSingle();
     if (partnerError) throw new Error(partnerError.message);
-    if (!partner || !partner.active || partner.user_id !== user.id) {
-      return NextResponse.json({ error: "You are not the assigned partner for this Work Order." }, { status: 403 });
-    }
-
-    if (work.parts_review_status !== "resolved") return NextResponse.json({ error: "Parts Review is not complete." }, { status: 409 });
-    if (!work.location_id) return NextResponse.json({ error: "The dealer has not set the work location yet." }, { status: 409 });
-    if (!["approved", "not_required"].includes(work.partner_estimate_status || "")) {
-      return NextResponse.json({ error: "Your labor estimate must be approved before scheduling." }, { status: 409 });
-    }
+    if (!partner || !partner.active || partner.user_id !== user.id) return NextResponse.json({ error: "You are not the assigned partner for this Work Order." }, { status: 403 });
+    const standardHours = (partner.standard_hours || null) as StandardHours | null;
 
     const { data: partRows, error: partsError } = await admin
       .from("mindful_inventory_work_order_parts")
@@ -52,66 +142,91 @@ export async function GET(request: Request, context: { params: Promise<{ workOrd
       .eq("work_order_id", workOrderId);
     if (partsError) throw new Error(partsError.message);
     const parts = summarizePartsReadiness(partRows || []);
-    if (!parts.readyForExecution) {
-      return NextResponse.json({ error: "All required parts must be ready before scheduling.", latestEtaAt: parts.latestEtaAt }, { status: 409 });
-    }
 
     const { data: latestEstimate } = await admin
       .from("lot_logic_partner_blind_estimates")
-      .select("estimated_elapsed_minutes")
+      .select("estimated_labor_minutes,estimated_elapsed_minutes")
       .eq("work_order_id", workOrderId)
       .eq("partner_id", partner.id)
       .order("revision_no", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    const rawDuration = Number(latestEstimate?.estimated_elapsed_minutes ?? work.estimated_elapsed_minutes ?? work.estimated_duration_minutes ?? 60);
-    const durationMinutes = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 60;
+    const laborRaw = Number(latestEstimate?.estimated_labor_minutes ?? work.estimated_labor_minutes ?? 60);
+    const laborMinutes = Number.isFinite(laborRaw) && laborRaw > 0 ? laborRaw : 60;
+    const elapsedRaw = Number(latestEstimate?.estimated_elapsed_minutes ?? work.estimated_elapsed_minutes ?? work.estimated_duration_minutes ?? laborMinutes);
+    const elapsedMinutes = Number.isFinite(elapsedRaw) && elapsedRaw > 0 ? elapsedRaw : laborMinutes;
 
-    const now = new Date();
-    const horizonEnd = new Date(now.getTime() + 10 * 24 * 60 * 60_000);
-    const { data: busyRows, error: busyError } = await admin
-      .from("mindful_inventory_work_orders")
-      .select("id,scheduled_start_at,scheduled_end_at,resource_id")
-      .eq("assigned_partner_id", partner.id)
-      .neq("id", workOrderId)
-      .not("status", "in", '("complete","cancelled")')
-      .not("scheduled_start_at", "is", null)
-      .lt("scheduled_start_at", horizonEnd.toISOString());
+    const { data: companyVehicles, error: vehicleError } = await admin.from("mindful_inventory_vehicles").select("id").eq("company_id", partner.company_id);
+    if (vehicleError) throw new Error(vehicleError.message);
+    const vehicleIds = (companyVehicles || []).map((row) => row.id);
+
+    const now = Date.now();
+    const horizonEnd = new Date(now + 14 * 24 * 60 * 60_000);
+    const { data: busyRows, error: busyError } = vehicleIds.length
+      ? await admin.from("mindful_inventory_work_orders")
+          .select("id,vehicle_id,assigned_partner_id,resource_id,estimated_labor_minutes,scheduled_start_at,proposed_start_at,status")
+          .in("vehicle_id", vehicleIds).neq("id", workOrderId).not("status", "in", '("complete","cancelled")')
+      : { data: [], error: null };
     if (busyError) throw new Error(busyError.message);
 
     const busy = (busyRows || []).flatMap((row) => {
-      if (!row.scheduled_start_at || !row.scheduled_end_at) return [];
-      const start = new Date(row.scheduled_start_at).getTime();
-      const end = new Date(row.scheduled_end_at).getTime();
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
-      return [{ start, end, resourceId: row.resource_id as string | null }];
+      const startValue = row.scheduled_start_at || row.proposed_start_at;
+      if (!startValue) return [];
+      const start = new Date(startValue);
+      if (!Number.isFinite(start.getTime()) || start.getTime() > horizonEnd.getTime()) return [];
+      const otherLaborRaw = Number(row.estimated_labor_minutes ?? 60);
+      const otherLabor = Number.isFinite(otherLaborRaw) && otherLaborRaw > 0 ? otherLaborRaw : 60;
+      return laborSegments(start, otherLabor, offsetMinutes, standardHours).map((segment) => ({
+        start: new Date(segment.startAt).getTime(), end: new Date(segment.endAt).getTime(),
+        vehicleId: row.vehicle_id as string, partnerId: row.assigned_partner_id as string | null, resourceId: row.resource_id as string | null,
+      }));
     });
 
-    const suggestions: Array<{ startAt: string; endAt: string }> = [];
-    const cursor = roundUp(new Date(now.getTime() + 30 * 60_000));
-    cursor.setMinutes(cursor.getMinutes() >= 30 ? 30 : 0, 0, 0);
+    const firstCandidate = new Date(Math.ceil((now + 30 * 60_000) / (30 * 60_000)) * 30 * 60_000);
+    const firstLocal = localParts(firstCandidate, offsetMinutes);
+    const etaRaw = parts.latestEtaAt ? new Date(parts.latestEtaAt).getTime() : null;
+    const etaFloor = etaRaw !== null && Number.isFinite(etaRaw) ? etaRaw + PARTS_ETA_BUFFER_MINUTES * 60_000 : null;
+    const suggestions: Array<{ startAt: string; endAt: string; segments: Segment[] }> = [];
+    const selectedByDay = new Map<string, number[]>();
 
-    for (let day = 0; day < 10 && suggestions.length < 6; day += 1) {
-      const date = new Date(cursor);
-      date.setDate(cursor.getDate() + day);
-      const weekday = date.getDay();
-      if (weekday === 0 || weekday === 6) continue;
-
-      for (let minute = 8 * 60; minute + durationMinutes <= 17 * 60 && suggestions.length < 6; minute += 30) {
-        const start = new Date(date);
-        start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-        if (start.getTime() < now.getTime() + 30 * 60_000) continue;
-        const end = new Date(start.getTime() + durationMinutes * 60_000);
-        const conflict = busy.some((item) => {
-          if (overlaps(start.getTime(), end.getTime(), item.start, item.end)) return true;
-          return Boolean(work.resource_id && item.resourceId === work.resource_id && overlaps(start.getTime(), end.getTime(), item.start, item.end));
-        });
-        if (!conflict) suggestions.push({ startAt: start.toISOString(), endAt: end.toISOString() });
+    for (let dayOffset = 0; dayOffset < 14 && suggestions.length < 6; dayOffset += 1) {
+      const baseNoon = fromLocal(firstLocal.year, firstLocal.month, firstLocal.day + dayOffset, 12, 0, offsetMinutes);
+      const p = localParts(baseNoon, offsetMinutes);
+      const window = workWindow(standardHours, p.weekday);
+      if (!window) continue;
+      const dayKey = `${p.year}-${p.month}-${p.day}`;
+      for (let minuteOfDay = window.startMinute; minuteOfDay < window.endMinute && suggestions.length < 6; minuteOfDay += 30) {
+        const start = fromLocal(p.year, p.month, p.day, Math.floor(minuteOfDay / 60), minuteOfDay % 60, offsetMinutes);
+        if (start.getTime() < firstCandidate.getTime()) continue;
+        if (etaFloor && !parts.readyForExecution && start.getTime() < etaFloor) continue;
+        const daySelections = selectedByDay.get(dayKey) || [];
+        if (daySelections.length >= 2 || daySelections.some((selected) => Math.abs(start.getTime() - selected) < 2 * 60 * 60_000)) continue;
+        const segments = laborSegments(start, laborMinutes, offsetMinutes, standardHours);
+        if (!segments.length) continue;
+        const conflict = segments.some((segment) => busy.some((item) => {
+          const segmentStart = new Date(segment.startAt).getTime();
+          const segmentEnd = new Date(segment.endAt).getTime();
+          if (!overlaps(segmentStart, segmentEnd, item.start, item.end)) return false;
+          if (item.vehicleId === work.vehicle_id) return true;
+          if (item.partnerId === partner.id) return true;
+          if (work.resource_id && item.resourceId === work.resource_id) return true;
+          return false;
+        }));
+        if (conflict) continue;
+        suggestions.push({ startAt: segments[0].startAt, endAt: segments[segments.length - 1].endAt, segments });
+        selectedByDay.set(dayKey, [...daySelections, start.getTime()]);
       }
     }
 
-    return NextResponse.json({ durationMinutes, suggestions });
+    const guidance: string[] = [];
+    if (work.parts_review_status !== "resolved") guidance.push("parts review pending");
+    else if (!parts.readyForExecution) guidance.push(parts.latestEtaAt ? "suggestions begin after the latest known parts ETA + 2 hr receiving buffer" : "parts ETA unknown · suggestions use known availability constraints only");
+    if (!["approved", "not_required"].includes(work.partner_estimate_status || "")) guidance.push("labor quote still pending");
+    if (laborMinutes > 8 * 60) guidance.push(`${Math.round((laborMinutes / 60) * 10) / 10} labor hr allocated across Partner workdays`);
+    if (elapsedMinutes > laborMinutes) guidance.push(`${Math.round((elapsedMinutes / 60) * 10) / 10} hr elapsed turnaround tracked separately`);
+
+    return NextResponse.json({ laborMinutes, elapsedMinutes, suggestions, guidance: guidance.join(" · ") || null, partsLatestEtaAt: parts.latestEtaAt, partsEtaBufferMinutes: PARTS_ETA_BUFFER_MINUTES });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not calculate schedule availability." }, { status: 500 });
   }

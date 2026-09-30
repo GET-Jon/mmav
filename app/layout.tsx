@@ -15,8 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lot Logic | Mindful Motor Co.",
-  description: "Vehicle acquisition intelligence for Mindful Motor Co.",
+  title: {
+    default: "Lot Logic | AI Vehicle Acquisition Intelligence",
+    template: "%s | Lot Logic",
+  },
+  description:
+    "AI-powered vehicle evaluation for automotive professionals. Analyze VIN-specific local comps, dealer fit, likely reconditioning costs, all-in basis, margin, and bid guidance in one place.",
 };
 
 export default function RootLayout({
