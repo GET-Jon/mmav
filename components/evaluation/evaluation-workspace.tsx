@@ -595,6 +595,55 @@ type SavedEvaluationPayload = {
   notes?: string;
 };
 
+type EvaluationStage = "vehicle" | "condition" | "market" | "verdict";
+
+function deriveEvaluationStage(payload?: SavedEvaluationPayload | null): EvaluationStage {
+  if (!payload) {
+    return "vehicle";
+  }
+
+  const decoded = payload.decodedVehicle;
+  const manual = payload.manualVehicle;
+  const hasVehicleBasics = Boolean(
+    (decoded?.year && decoded?.make && decoded?.model) ||
+      (manual?.year && manual?.make && manual?.model),
+  );
+  const vehicleComplete = Boolean(
+    hasVehicleBasics &&
+      (payload.targetMileage || 0) > 0 &&
+      (payload.evaluation?.currentBid || 0) > 0,
+  );
+
+  if (!vehicleComplete) {
+    return "vehicle";
+  }
+
+  const reviewStatus =
+    payload.conditionReviewStatus ||
+    (payload.conditionAnalysisApplied || payload.conditionAssessmentsTouched
+      ? "issues"
+      : "unreviewed");
+
+  const conditionComplete =
+    reviewStatus === "no_material_issues" ||
+    reviewStatus === "unknown" ||
+    (reviewStatus === "issues" &&
+      Boolean(
+        payload.conditionAnalysis
+          ? payload.conditionAnalysisApplied
+          : payload.conditionAssessmentsTouched,
+      ));
+
+  if (!conditionComplete) {
+    return "condition";
+  }
+
+  const hasIncludedComps = Boolean(payload.comps?.some((comp) => comp.included));
+
+  return hasIncludedComps ? "verdict" : "market";
+}
+
+
 export function EvaluationWorkspace({
   initialSavedEvaluationId = null,
   initialSavedPayload = null,
@@ -861,7 +910,7 @@ export function EvaluationWorkspace({
   const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
   const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
   const [activeStage, setActiveStage] =
-    useState<"vehicle" | "market" | "condition" | "verdict">("vehicle");
+    useState<EvaluationStage>(() => deriveEvaluationStage(initialSavedPayload));
   const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
@@ -1185,6 +1234,7 @@ export function EvaluationWorkspace({
           : null,
       );
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
+      setActiveStage(deriveEvaluationStage(draft as SavedEvaluationPayload));
     } catch (error) {
       console.error("Failed to load local evaluator draft:", error);
     } finally {
@@ -5573,7 +5623,7 @@ export function EvaluationWorkspace({
           }}
         />
 
-        <div className="mx-auto max-w-[1380px] px-4 py-4 sm:px-5 lg:px-7">
+        <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
           {activeStage === "verdict" ? (
             <section className="grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
@@ -5633,7 +5683,7 @@ export function EvaluationWorkspace({
               </article>
             </section>
           ) : (
-            <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-5 py-7 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:px-7 ${
+            <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 min-h-[500px] bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-6 py-8 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:px-7 ${
               activeStage === "vehicle" && !hasEvaluationData
                 ? "mt-[10vh] lg:mt-[13vh]"
                 : ""
@@ -5660,11 +5710,21 @@ export function EvaluationWorkspace({
                   </p>
                 </div>
 
-          <section className="relative grid gap-4 lg:grid-cols-3">
+          <section
+            className={`relative grid gap-4 transition-[grid-template-columns] duration-300 lg:grid-cols-[var(--workflow-cols)]`}
+            style={{
+              ["--workflow-cols" as string]:
+                activeStage === "vehicle"
+                  ? "1.22fr 0.89fr 0.89fr"
+                  : activeStage === "condition"
+                    ? "0.89fr 1.22fr 0.89fr"
+                    : "0.89fr 0.89fr 1.22fr",
+            }}
+          >
             <div aria-hidden="true" className="pointer-events-none absolute left-[31.8%] right-[31.8%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-blue-200 via-slate-200 to-slate-200 lg:block" />
-            <article className={`relative overflow-hidden rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
+            <article className={`relative min-h-[360px] overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "vehicle"
-                ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
+                ? "z-10 border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/90 shadow-[0_22px_50px_rgba(37,99,235,0.18)] -translate-y-1 scale-[1.025]"
                 : hasEvaluationData
                   ? "border-emerald-200 bg-white"
                   : "border-slate-200 bg-white/85 opacity-80"
@@ -5814,9 +5874,9 @@ export function EvaluationWorkspace({
               ) : null}
             </article>
 
-            <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
+            <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "condition"
-                ? "border-2 border-violet-500 bg-white ring-4 ring-violet-100/80 shadow-[0_18px_40px_rgba(124,58,237,0.14)] -translate-y-0.5 scale-[1.01]"
+                ? "z-10 border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/90 shadow-[0_22px_50px_rgba(124,58,237,0.17)] -translate-y-1 scale-[1.025]"
                 : conditionReviewComplete && vehicleStepComplete
                   ? "border-emerald-200 bg-white"
                   : vehicleStepComplete
@@ -5955,7 +6015,7 @@ export function EvaluationWorkspace({
               ) : null}
             </article>
 
-            <article className={`rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition ${
+            <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "market"
                 ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : !needsCompSearch && hasEvaluationData
