@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 type ConsentState = {
   essential: true;
@@ -128,17 +128,11 @@ function loadPostHog() {
 
 export function PrivacyConsent() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [consent, setConsent] = useState<ConsentState | null>(null);
   const [bannerOpen, setBannerOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [analytics, setAnalytics] = useState(false);
   const [advertising, setAdvertising] = useState(false);
-
-  const currentUrl = useMemo(() => {
-    const query = searchParams.toString();
-    return query ? `${pathname}?${query}` : pathname;
-  }, [pathname, searchParams]);
 
   useEffect(() => {
     const stored = readConsent();
@@ -189,7 +183,7 @@ export function PrivacyConsent() {
       const measurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
       if (measurementId) {
         window.gtag?.("event", "page_view", {
-          page_path: currentUrl,
+          page_path: `${pathname}${window.location.search}`,
           page_location: window.location.href,
         });
       }
@@ -200,7 +194,7 @@ export function PrivacyConsent() {
         $current_url: window.location.href,
       });
     }
-  }, [consent, currentUrl]);
+  }, [consent, pathname]);
 
   function save(nextAnalytics: boolean, nextAdvertising: boolean) {
     const next: ConsentState = {
