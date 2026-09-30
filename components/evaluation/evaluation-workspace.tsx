@@ -3205,7 +3205,9 @@ export function EvaluationWorkspace({
       auctionSite.trim() &&
       (quickEvalMode === "vin"
         ? vin.trim().length === 17
-        : hasManualQuickEvalBasics),
+        : String(manualVehicle.year || "").trim().length > 0 &&
+          manualVehicle.make.trim().length > 0 &&
+          manualVehicle.model.trim().length > 0),
   );
 
   const suggestedBid =
