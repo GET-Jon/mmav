@@ -104,25 +104,66 @@ function loadPostHog() {
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
   if (!token || window.__lotLogicPostHogLoaded) return;
 
+  const queue = [] as unknown as {
+    push: (value: unknown) => number;
+    init?: (token: string, options?: Record<string, unknown>) => void;
+    capture?: (event: string, properties?: Record<string, unknown>) => void;
+    opt_out_capturing?: () => void;
+    opt_in_capturing?: () => void;
+    _i?: unknown[];
+    [key: string]: unknown;
+  };
+
+  const methodNames = [
+    "capture",
+    "identify",
+    "alias",
+    "reset",
+    "register",
+    "register_once",
+    "unregister",
+    "opt_out_capturing",
+    "opt_in_capturing",
+    "get_distinct_id",
+  ];
+
+  methodNames.forEach((method) => {
+    queue[method] = (...args: unknown[]) =>
+      queue.push([method, ...args]);
+  });
+
+  queue._i = [];
+  queue.init = (projectToken: string, options: Record<string, unknown> = {}) => {
+    queue._i?.push([projectToken, options]);
+  };
+
+  window.posthog = queue;
+
+  const assetsHost = host
+    .replace("us.i.posthog.com", "us-assets.i.posthog.com")
+    .replace("eu.i.posthog.com", "eu-assets.i.posthog.com")
+    .replace(/\/$/, "");
+
   const script = document.createElement("script");
   script.async = true;
-  script.src = `${host.replace(/\/$/, "")}/static/array.js`;
-  script.onload = () => {
-    window.posthog?.init?.(token, {
-      api_host: host,
-      defaults: "2026-05-30",
-      autocapture: true,
-      capture_pageview: false,
-      capture_pageleave: true,
-      disable_session_recording: false,
-      mask_all_text: false,
-      mask_all_element_attributes: false,
-      session_recording: {
-        maskAllInputs: true,
-      },
-    });
-  };
+  script.crossOrigin = "anonymous";
+  script.src = `${assetsHost}/static/array.js`;
   document.head.appendChild(script);
+
+  window.posthog.init?.(token, {
+    api_host: host,
+    defaults: "2026-05-30",
+    autocapture: true,
+    capture_pageview: false,
+    capture_pageleave: true,
+    disable_session_recording: false,
+    mask_all_text: false,
+    mask_all_element_attributes: false,
+    session_recording: {
+      maskAllInputs: true,
+    },
+  });
+
   window.__lotLogicPostHogLoaded = true;
 }
 
