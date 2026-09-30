@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -141,6 +142,13 @@ function LoginForm() {
             </div>
           ) : null}
         </form>
+
+        <p className="mt-5 text-center text-xs font-semibold leading-5 text-slate-500">
+          By continuing, you agree to the{" "}
+          <Link href="/terms" className="font-black text-blue-700 hover:underline">Terms of Use</Link>
+          {" "}and acknowledge the{" "}
+          <Link href="/privacy" className="font-black text-blue-700 hover:underline">Privacy Policy</Link>.
+        </p>
       </div>
     </main>
   );
