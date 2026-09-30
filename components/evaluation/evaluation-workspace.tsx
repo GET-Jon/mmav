@@ -5810,7 +5810,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} strong comp{compSummary.includedCount === 1 ? "" : "s"}
+                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -5861,7 +5861,7 @@ export function EvaluationWorkspace({
             <div aria-hidden="true" className="pointer-events-none absolute left-[31.8%] right-[31.8%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-blue-200 via-slate-200 to-slate-200 lg:block" />
             <article className={`relative overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "vehicle"
-                ? "z-10 min-h-[420px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/90 shadow-[0_22px_50px_rgba(37,99,235,0.18)] -translate-y-1 scale-[1.025]"
+                ? "z-10 min-h-[360px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : hasEvaluationData
                   ? "min-h-[360px] border-emerald-200 bg-white"
                   : "min-h-[360px] border-slate-200 bg-white/85 opacity-80"
@@ -6030,7 +6030,7 @@ export function EvaluationWorkspace({
 
             <article className={`relative overflow-hidden rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "condition"
-                ? "z-10 min-h-[420px] border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/90 shadow-[0_22px_50px_rgba(124,58,237,0.17)] -translate-y-1 scale-[1.025]"
+                ? "z-10 min-h-[360px] border-2 border-violet-500 bg-white opacity-100 ring-4 ring-violet-100/80 shadow-[0_18px_40px_rgba(124,58,237,0.16)] -translate-y-0.5 scale-[1.01]"
                 : conditionReviewComplete && vehicleStepConfirmed
                   ? "min-h-[360px] border-emerald-200 bg-white"
                   : vehicleStepConfirmed
@@ -6244,7 +6244,7 @@ export function EvaluationWorkspace({
 
             <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "market"
-                ? "border-2 border-blue-500 bg-white ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
+                ? "z-10 min-h-[360px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : conditionStepConfirmed && !needsCompSearch && hasEvaluationData
                   ? "min-h-[360px] border-emerald-200 bg-white"
                   : conditionStepConfirmed
@@ -6265,7 +6265,7 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} strong comp${compSummary.includedCount === 1 ? "" : "s"}`
+                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"}`
                           : "Market evidence"}
                   </h2>
                 </div>
