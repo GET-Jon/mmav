@@ -6,6 +6,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/signup",
   "/privacy",
+  "/pricing",
   "/terms",
   "/cookies",
   "/auth/callback",
