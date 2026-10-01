@@ -8,6 +8,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [zip, setZip] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
@@ -40,6 +42,8 @@ export default function SignupPage() {
           data: {
             full_name: name.trim(),
             company_name: companyName.trim(),
+            dealership_zip: zip.trim(),
+            dealership_website: websiteUrl.trim(),
             signup_source: "public_try_lot_logic",
           },
         },
@@ -101,6 +105,17 @@ export default function SignupPage() {
               autoComplete="organization"
               className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500"
             />
+          </label>
+
+          <label className="block">
+            <div className="mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Dealership ZIP code</div>
+            <input required inputMode="numeric" pattern="[0-9]{5}" maxLength={5} autoComplete="postal-code" value={zip} onChange={(event) => setZip(event.target.value.replace(/\D/g, ""))} disabled={confirmationSent} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50" />
+            <p className="mt-1 text-xs text-slate-500">Your starting market for local vehicle comparisons.</p>
+          </label>
+          <label className="block">
+            <div className="mb-1 text-xs font-black uppercase tracking-wide text-slate-500">Dealership website <span className="normal-case font-medium">(optional)</span></div>
+            <input inputMode="url" autoComplete="url" placeholder="https://yourdealership.com" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} disabled={confirmationSent} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50" />
+            <p className="mt-1 text-xs text-slate-500">Saved for your dealership’s AI profile. You can add it later.</p>
           </label>
 
           <label className="block">

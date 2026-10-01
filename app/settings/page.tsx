@@ -11,7 +11,7 @@ import { OrganizationProfileEditor } from "@/components/settings/organization-pr
 import { LotLogicEvidenceCard } from "@/components/settings/lot-logic-evidence-card";
 import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
-import { defaultAssumptions, normalizeAssumptions } from "@/lib/assumptions";
+import { loadCompanyAssumptions } from "@/lib/company/dealership-profile";
 import { listIntelligenceSettingsData } from "@/lib/lot-logic-intelligence/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -93,15 +93,10 @@ async function loadSettingsContext(userId: string) {
       .eq("company_id", company.companyId)
       .order("created_at", { ascending: true }),
     listIntelligenceSettingsData(supabase, company.companyId),
-    supabase
-      .from("app_settings")
-      .select("payload")
-      .eq("key", "underwriting_assumptions")
-      .maybeSingle(),
+    loadCompanyAssumptions(supabase, company.companyId, company.companySlug),
   ]);
 
   if (membershipsResult.error) throw new Error(membershipsResult.error.message);
-  if (assumptionsResult.error) throw new Error(assumptionsResult.error.message);
 
   const members: CompanyMemberView[] = await Promise.all(
     (membershipsResult.data || []).map(async (membership) => {
@@ -129,9 +124,8 @@ async function loadSettingsContext(userId: string) {
     members,
     memberCount: members.filter((member) => member.status !== "disabled").length,
     intelligence,
-    assumptions: assumptionsResult.data?.payload
-      ? normalizeAssumptions(assumptionsResult.data.payload)
-      : defaultAssumptions,
+    assumptions: assumptionsResult.assumptions,
+    dealershipProfile: assumptionsResult.profile,
   };
 }
 
@@ -241,6 +235,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <OrganizationProfileEditor
                   initialName={companyContext.company.companyName}
+                  initialZip={companyContext.dealershipProfile.zip}
+                  initialWebsiteUrl={companyContext.dealershipProfile.websiteUrl}
                   canEdit={companyContext.company.role === "company_admin"}
                 />
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">

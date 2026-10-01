@@ -1,3 +1,6 @@
+import { loadCompanyAssumptions } from "@/lib/company/dealership-profile";
+import { loadCompanyMarketCheckControls } from "@/lib/marketcheck/company-controls";
+import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { POST as runStrictMarketCheckSearch } from "./strict-search";
 import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
@@ -392,6 +395,23 @@ export async function POST(request: Request) {
   }
 
   const admin = createSupabaseAdminClient();
+  const company = await getCurrentCompanyForUser(admin, user.id);
+  const [{ assumptions, profile }, { controls }] = await Promise.all([
+    loadCompanyAssumptions(admin, company.companyId, company.companySlug),
+    loadCompanyMarketCheckControls(admin, company.companyId, user.id),
+  ]);
+  if (company.companySlug !== "mindful-motor-co" && !profile.zip) {
+    return Response.json({ error: "Set your dealership ZIP in Organization & Team before searching comps.", code: "DEALERSHIP_ZIP_REQUIRED" }, { status: 422 });
+  }
+  // Resolve search limits on the server; provider usage stays metered.
+  delete normalizedBody.liveLookupEnabled;
+  if (!normalizedBody.searchStage || normalizedBody.searchStage === "initial") {
+    normalizedBody.regions = assumptions.regionalMarkets;
+    normalizedBody.maxApiCallsPerSearch = controls.maxApiCallsPerSearch;
+    normalizedBody.minInitialRegions = controls.minInitialRegions;
+  }
+  normalizedBody.minUsableCompsToStop = controls.minUsableCompsToStop;
+
   const subjectKey = vehicleUsageSubject({
     vin: normalizedBody.vin || decodedVehicle.vin || nestedVehicle.vin,
     year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year,

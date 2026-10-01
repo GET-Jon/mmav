@@ -6,12 +6,34 @@ import Link from "next/link";
 type ProvisionResponse = {
   company?: { id: string; name: string };
   error?: string;
+  code?: string;
 };
 
 export function OnboardingCheckout() {
   const started = useRef(false);
   const [status, setStatus] = useState("Creating your Lot Logic workspace…");
   const [error, setError] = useState("");
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [zip, setZip] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  async function finishProfile() {
+    setSavingProfile(true);
+    setError("");
+    try {
+      const response = await fetch("/api/onboarding/provision", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zip, websiteUrl }),
+      });
+      const data = await response.json() as ProvisionResponse;
+      if (!response.ok) throw new Error(data.error || "Workspace setup failed.");
+      window.location.replace("/evaluate?trial=started");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Workspace setup failed.");
+      setSavingProfile(false);
+    }
+  }
 
   useEffect(() => {
     if (started.current) return;
@@ -24,6 +46,10 @@ export function OnboardingCheckout() {
         });
         const provision = (await provisionResponse.json()) as ProvisionResponse;
 
+        if (provision.code === "DEALERSHIP_PROFILE_REQUIRED") {
+          setNeedsProfile(true);
+          return;
+        }
         if (!provisionResponse.ok) {
           throw new Error(provision.error || "Workspace setup failed.");
         }
@@ -48,7 +74,19 @@ export function OnboardingCheckout() {
         </div>
         <h1 className="mt-5 text-2xl font-black">Starting your free Lot Logic trial</h1>
 
-        {!error ? (
+        {needsProfile ? (
+          <form className="mt-5 space-y-4 text-left" onSubmit={(event) => { event.preventDefault(); void finishProfile(); }}>
+            <p className="text-sm leading-6 text-slate-500">Set your dealership’s starting market before your first comp search.</p>
+            <label className="block text-sm font-bold">Dealership ZIP code
+              <input required inputMode="numeric" pattern="[0-9]{5}" maxLength={5} value={zip} onChange={(event) => setZip(event.target.value.replace(/\D/g, ""))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3" />
+            </label>
+            <label className="block text-sm font-bold">Website (optional)
+              <input inputMode="url" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://yourdealership.com" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3" />
+            </label>
+            {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+            <button disabled={savingProfile} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-50">{savingProfile ? "Saving…" : "Start my free trial"}</button>
+          </form>
+        ) : !error ? (
           <>
             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{status}</p>
             <div className="mx-auto mt-6 h-1.5 w-40 overflow-hidden rounded-full bg-slate-100">

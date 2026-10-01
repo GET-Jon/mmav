@@ -1,3 +1,4 @@
+import { saveDealershipProfile, validateDealershipProfile } from "@/lib/company/dealership-profile";
 import { NextResponse } from "next/server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -90,10 +91,18 @@ async function ensureCompanyDefaults(
   if (seedError) throw new Error(seedError.message);
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => ({})) as { zip?: unknown; websiteUrl?: unknown };
+  let profile;
+  try {
+    profile = validateDealershipProfile(body.zip ?? user.user_metadata?.dealership_zip, body.websiteUrl ?? user.user_metadata?.dealership_website);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Set your dealership ZIP to continue.", code: "DEALERSHIP_PROFILE_REQUIRED" }, { status: 400 });
   }
 
   const admin = createSupabaseAdminClient();
@@ -146,6 +155,7 @@ export async function POST() {
 
     try {
       await ensureCompanyDefaults(admin, String(existingCompany.id), user.id);
+      await saveDealershipProfile(admin, String(existingCompany.id), user.id, profile, String(existingCompany.slug || ""));
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "Workspace defaults failed." },
@@ -210,6 +220,7 @@ export async function POST() {
 
   try {
     await ensureCompanyDefaults(admin, String(company.id), user.id);
+    await saveDealershipProfile(admin, String(company.id), user.id, profile);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Workspace defaults failed." },

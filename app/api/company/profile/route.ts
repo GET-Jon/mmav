@@ -1,8 +1,22 @@
+import { loadCompanyAssumptions, saveDealershipProfile, validateDealershipProfile } from "@/lib/company/dealership-profile";
 import { NextResponse } from "next/server";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
+
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  try {
+    const admin = createSupabaseAdminClient();
+    const company = await getCurrentCompanyForUser(admin, user.id);
+    const result = await loadCompanyAssumptions(admin, company.companyId, company.companySlug);
+    return NextResponse.json({ company, profile: result.profile }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load profile." }, { status: 500 });
+  }
+}
 
 export async function PATCH(request: Request) {
   const user = await getCurrentUser();
@@ -20,7 +34,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const body = (await request.json()) as { name?: unknown };
+  const body = (await request.json()) as { name?: unknown; zip?: unknown; websiteUrl?: unknown };
   const name = String(body.name || "").trim();
 
   if (name.length < 2 || name.length > 120) {
@@ -28,6 +42,18 @@ export async function PATCH(request: Request) {
       { error: "Company name must be between 2 and 120 characters." },
       { status: 400 },
     );
+  }
+
+  let profile;
+  try {
+    profile = validateDealershipProfile(body.zip, body.websiteUrl);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid profile." }, { status: 400 });
+  }
+  try {
+    await saveDealershipProfile(admin, company.companyId, user.id, profile, company.companySlug);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save dealership profile." }, { status: 500 });
   }
 
   const { data, error } = await admin
@@ -41,5 +67,5 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ company: data });
+  return NextResponse.json({ company: data, profile });
 }

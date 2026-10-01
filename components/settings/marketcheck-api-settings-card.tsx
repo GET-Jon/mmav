@@ -196,8 +196,8 @@ export function MarketCheckApiSettingsCard() {
           setSettingsSource(data.source === "database" ? "database" : "defaults");
           setStatus(
             data.source === "database"
-              ? "Loaded company API settings."
-              : "Loaded safe defaults. Save once to create company API settings."
+              ? "Loaded your saved MarketCheck settings."
+              : "Loaded safe defaults. Save to set your MarketCheck preferences."
           );
         }
       } catch (error) {
@@ -309,7 +309,7 @@ export function MarketCheckApiSettingsCard() {
             disabled={saving}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Reset Safe Defaults
+            Reset Search Defaults
           </button>
         </div>
 
@@ -318,28 +318,7 @@ export function MarketCheckApiSettingsCard() {
           with browser fallback retained for safety.
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <span>
-              <span className="block text-xs font-black uppercase tracking-wide text-slate-500">
-                Live Lookup
-              </span>
-              <span className="mt-1 block text-sm font-semibold text-slate-700">
-                Allow live MarketCheck calls
-              </span>
-            </span>
-
-            <input
-              type="checkbox"
-              checked={controls.liveLookupEnabled}
-              onChange={(event) =>
-                updateControls({
-                  liveLookupEnabled: event.target.checked,
-                })
-              }
-            />
-          </label>
-
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <label className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="text-xs font-black uppercase tracking-wide text-slate-500">
               Initial API Calls
@@ -480,7 +459,7 @@ export function MarketCheckApiSettingsCard() {
                   Shows the retrieval-level candidate pool before final vehicle-equivalence qualification.
                 </p>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
                   <div className="rounded-xl bg-slate-50 px-3 py-3">
                     <div className="text-xs font-black uppercase tracking-wide text-slate-500">
                       Returned
@@ -519,7 +498,7 @@ export function MarketCheckApiSettingsCard() {
                 </div>
 
                 <div className="mt-4 rounded-xl border border-slate-200">
-                  <div className="grid grid-cols-2 gap-0 divide-x divide-slate-200 text-sm md:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-0 divide-x divide-slate-200 text-sm md:grid-cols-3">
                     <div className="px-3 py-3">
                       <div className="text-xs font-black uppercase tracking-wide text-slate-500">
                         Fuel mismatch

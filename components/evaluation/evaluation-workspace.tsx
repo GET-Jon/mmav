@@ -950,6 +950,8 @@ export function EvaluationWorkspace({
   const [customCompZip, setCustomCompZip] = useState("");
   const [customCompMarkets, setCustomCompMarkets] = useState<Array<{ market: string; zip: string }>>([]);
   const [compTrimRelaxed, setCompTrimRelaxed] = useState(false);
+  const [needsDealershipZip, setNeedsDealershipZip] = useState(false);
+  const [dealershipProfile, setDealershipProfile] = useState<{ zip: string; websiteUrl: string }>({ zip: "", websiteUrl: "" });
   const [dealerProfileOpen, setDealerProfileOpen] = useState(false);
   const [whyLotLogicOpen, setWhyLotLogicOpen] = useState(false);
   const [conditionProfitabilityOpen, setConditionProfitabilityOpen] =
@@ -1049,7 +1051,7 @@ export function EvaluationWorkspace({
   );
 
   const [activeAssumptions, setActiveAssumptions] =
-    useState(defaultAssumptions);
+    useState({ ...defaultAssumptions, regionalMarkets: [] as typeof defaultAssumptions.regionalMarkets });
   const [assumptionsSource, setAssumptionsSource] = useState<
     "default" | "saved"
   >("default");
@@ -1078,6 +1080,8 @@ export function EvaluationWorkspace({
 
         if (!cancelled && data?.assumptions) {
           setActiveAssumptions(data.assumptions);
+          setNeedsDealershipZip(Boolean(data.needsDealershipZip));
+          setDealershipProfile(data.dealershipProfile || { zip: "", websiteUrl: "" });
           setAssumptionsSource(data.source === "saved" ? "saved" : "default");
 
           if (!initialSavedEvaluationId && decodedVehicle) {
@@ -2189,6 +2193,10 @@ export function EvaluationWorkspace({
       useTaxonomyFallbackTrim?: boolean;
     },
   ) {
+    if (needsDealershipZip) {
+      setMarketCheckStatus("Set your dealership ZIP in Organization & Team before searching comps.");
+      return;
+    }
     if (marketCheckInFlightRef.current || marketCheckLoading) {
       setMarketCheckStatus("MarketCheck search already in progress.");
       return;
@@ -2232,9 +2240,7 @@ export function EvaluationWorkspace({
 
     setMarketCheckLoading(true);
     setMarketCheckStatus(
-      marketCheckApiControls.liveLookupEnabled
-        ? "Searching MarketCheck comps..."
-        : "Live MarketCheck lookup is disabled. Running safe no-call check...",
+      "Searching MarketCheck comps...",
     );
 
     try {
@@ -2270,7 +2276,6 @@ export function EvaluationWorkspace({
           // Pull the full standard MarketCheck candidate pool per region before
       // spending another API call. Lot Logic still qualifies/ranks strictly.
       rows: 50,
-          liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
           maxApiCallsPerSearch:
             options?.maxApiCallsPerSearch ??
             (options?.searchStage === "expanded" ||
@@ -2425,6 +2430,7 @@ export function EvaluationWorkspace({
   }
 
   function getCompExpansionMarkets() {
+    if (!activeAssumptions.regionalMarkets.length) return [];
     return buildExpansionMarkets(
       activeAssumptions.regionalMarkets,
       marketCheckSearchMeta?.searchedZips || [],
@@ -4325,29 +4331,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-4">
-                  <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <span>
-                      <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                        Live Lookup
-                      </span>
-                      <span className="mt-1 block text-sm font-semibold text-slate-700">
-                        Allow live calls
-                      </span>
-                    </span>
-
-                    <input
-                      type="checkbox"
-                      checked={methodologyControls.liveLookupEnabled}
-                      onChange={(event) =>
-                        updateMethodologyControl({
-                          liveLookupEnabled: event.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 accent-blue-700"
-                    />
-                  </label>
-
+                <div className="grid gap-3 md:grid-cols-3">
                   <label className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
                       Initial API Calls
@@ -5454,10 +5438,10 @@ export function EvaluationWorkspace({
             role="dialog"
             aria-modal="true"
             aria-label="Why Lot Logic thinks this"
-            className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            className="flex max-h-[calc(100dvh-3rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
                   Decision details
@@ -5479,7 +5463,7 @@ export function EvaluationWorkspace({
               </button>
             </div>
 
-            <div className="max-h-[calc(92vh-92px)] overflow-y-auto px-6 py-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6">
               <div className="grid gap-5 lg:grid-cols-2">
                 <section className="rounded-2xl border border-slate-200 p-5">
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
@@ -5562,6 +5546,7 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
                       <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
+                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit profit target →</button>
                     </div>
                   </dl>
                 </section>
@@ -5693,9 +5678,11 @@ export function EvaluationWorkspace({
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-black text-slate-900">Dealership website intelligence</div>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">Next onboarding step</span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">{dealershipProfile.websiteUrl ? "Website saved" : "Add in settings"}</span>
                   </div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Lot Logic will use the dealership URL to infer inventory mix, price bands, vehicle types, age/mileage patterns, and positioning, then let the dealer confirm or correct the profile.</p>
+                  {dealershipProfile.websiteUrl ? <p className="mt-2 break-all text-xs font-bold text-blue-700">{dealershipProfile.websiteUrl}</p> : null}
+                  <Link href="/settings?tab=organization" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Edit dealership profile</Link>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Website analysis will help identify inventory mix, price bands, and dealership positioning. Your URL is saved as context; automatic website analysis is not active yet.</p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 p-4">
@@ -5893,6 +5880,8 @@ export function EvaluationWorkspace({
         />
 
         <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
+          {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
+
           {activeStage === "verdict" ? (
             <section className="grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
@@ -5929,7 +5918,7 @@ export function EvaluationWorkspace({
                     ? "Known issues"
                     : conditionReviewStatus === "unknown"
                       ? "Condition unknown"
-                      : "No material issues"}
+                      : "No material issues"} · {money(displayedReconReserve)}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -5946,7 +5935,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"}
+                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -6628,12 +6617,12 @@ export function EvaluationWorkspace({
                 <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
                   <h2 className="text-base font-black text-slate-950">Deal Snapshot</h2>
                   <div className="mt-4 grid grid-cols-2 gap-4">
-                    <ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} />
-                    <ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} />
+                    <button type="button" aria-label="View Deal Economics decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} /></button>
+                    <button type="button" aria-label="View Dealer Fit decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} /></button>
                   </div>
-                  <div className="mt-4 border-t border-slate-100 pt-4">
+                  <button type="button" aria-label="View Current Market Age decision details" onClick={() => setWhyLotLogicOpen(true)} className="mt-4 w-full border-t border-slate-100 pt-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600">
                     <MarketLiquidityVisual soldLow={liquiditySoldLow} soldHigh={liquiditySoldHigh} soldMedian={liquiditySoldMedian} activeDays={liquidityActiveDays} label={liquidityLabel} confidence={liquidityConfidence} sampleSize={liquiditySampleSize} />
-                  </div>
+                  </button>
                 </article>
               </section>
 
@@ -6739,9 +6728,7 @@ export function EvaluationWorkspace({
                     </div>
                   </div>
 
-                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
-                    Every line above is editable. Use × to zero out a cost. Editing the combined condition & reconditioning reserve replaces its underlying condition/title allocation with one explicit recon reserve.
-                  </p>
+
                 </div>
 
                 <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
