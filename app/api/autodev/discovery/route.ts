@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
+import {
+  checkUsageAllowance,
+  recordUsageEvent,
+  vehicleUsageSubject,
+} from "@/lib/billing/usage";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
 import { findGenerationCompRule } from "@/lib/marketcheck/generation-comps";
 
 export const dynamic = "force-dynamic";
@@ -133,6 +140,46 @@ export async function POST(request: Request) {
   const model = String(body.model || "").trim();
   const trim = String(body.trim || "").trim();
 
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  const subjectKey = vehicleUsageSubject({
+    vin: body.vin,
+    year,
+    make,
+    model,
+    trim,
+  });
+
+  const discoveryAllowance = await checkUsageAllowance({
+    supabase: admin,
+    userId: user.id,
+    kind: "auto_dev_discovery",
+    subjectKey,
+  });
+  if (!discoveryAllowance.allowed) {
+    return NextResponse.json(
+      { error: discoveryAllowance.message, code: discoveryAllowance.code, usage: discoveryAllowance.summary },
+      { status: discoveryAllowance.status },
+    );
+  }
+
+  const providerAllowance = await checkUsageAllowance({
+    supabase: admin,
+    userId: user.id,
+    kind: "provider_api_call",
+    expectedUnits: 1,
+  });
+  if (!providerAllowance.allowed) {
+    return NextResponse.json(
+      { error: providerAllowance.message, code: providerAllowance.code, usage: providerAllowance.summary },
+      { status: providerAllowance.status },
+    );
+  }
+
   if (!year || !make || !model) {
     return NextResponse.json(
       { error: "Year, make, and model are required for national discovery." },
@@ -188,7 +235,28 @@ export async function POST(request: Request) {
   }
 
   if (!upstream.ok) {
+    await Promise.all([
+      recordUsageEvent({
+        supabase: admin,
+        companyId: discoveryAllowance.summary.company.companyId,
+        userId: user.id,
+        kind: "auto_dev_discovery",
+        subjectKey,
+        metadata: { failed: true },
+      }),
+      recordUsageEvent({
+        supabase: admin,
+        companyId: discoveryAllowance.summary.company.companyId,
+        userId: user.id,
+        kind: "provider_api_call",
+        subjectKey,
+        units: 1,
+        metadata: { provider: "auto_dev", failed: true },
+      }),
+    ]);
     await recordApiUsageEvent({
+      companyId: discoveryAllowance.summary.company.companyId,
+      userId: user.id,
       provider: "auto_dev",
       endpoint: "/listings",
       vehicleYear: year,
@@ -245,6 +313,25 @@ export async function POST(request: Request) {
     acc[state] = (acc[state] || 0) + 1;
     return acc;
   }, {});
+
+  await Promise.all([
+    recordUsageEvent({
+      supabase: admin,
+      companyId: discoveryAllowance.summary.company.companyId,
+      userId: user.id,
+      kind: "auto_dev_discovery",
+      subjectKey,
+    }),
+    recordUsageEvent({
+      supabase: admin,
+      companyId: discoveryAllowance.summary.company.companyId,
+      userId: user.id,
+      kind: "provider_api_call",
+      subjectKey,
+      units: 1,
+      metadata: { provider: "auto_dev" },
+    }),
+  ]);
 
   await recordApiUsageEvent({
     provider: "auto_dev",
