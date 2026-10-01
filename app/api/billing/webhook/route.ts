@@ -33,6 +33,28 @@ function subscriptionPeriodEnd(subscription: JsonRecord) {
   return unixToIso(first.current_period_end);
 }
 
+
+function planKeyForSubscription(subscription: JsonRecord) {
+  const metadata = record(subscription.metadata);
+  const metadataPlan = stringValue(metadata.plan_key);
+  if (metadataPlan === "dealer" || metadataPlan === "dealer_pro") return metadataPlan;
+
+  const priceId = firstSubscriptionPriceId(subscription);
+  if (priceId && priceId === process.env.STRIPE_DEALER_PRICE_ID) return "dealer";
+  if (priceId && priceId === process.env.STRIPE_DEALER_PRO_PRICE_ID) return "dealer_pro";
+  return "starter";
+}
+
+function planEntitlements(planKey: string) {
+  if (planKey === "dealer_pro") {
+    return { evaluations_per_month: 200, seats_limit: 5 };
+  }
+  if (planKey === "dealer") {
+    return { evaluations_per_month: 75, seats_limit: 3 };
+  }
+  return { evaluations_per_month: 20, seats_limit: 1 };
+}
+
 async function companyIdFromCustomer(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   customerId: string | null,
@@ -117,6 +139,8 @@ export async function POST(request: NextRequest) {
       (await companyIdFromCustomer(admin, customerId));
 
     if (companyId) {
+      const planKey = planKeyForSubscription(object);
+      const entitlements = planEntitlements(planKey);
       const rawStatus = stringValue(object.status) || "not_configured";
       const mappedStatus =
         rawStatus === "incomplete" || rawStatus === "incomplete_expired"
@@ -138,6 +162,7 @@ export async function POST(request: NextRequest) {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
             status: mappedStatus,
+            plan_key: planKey,
             stripe_price_id: firstSubscriptionPriceId(object),
             trial_ends_at: unixToIso(object.trial_end),
             current_period_end: subscriptionPeriodEnd(object),
@@ -149,6 +174,27 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      const { error: entitlementError } = await admin
+        .from("company_entitlements")
+        .upsert(
+          {
+            company_id: companyId,
+            plan_key: planKey,
+            evaluations_per_month: entitlements.evaluations_per_month,
+            seats_limit: entitlements.seats_limit,
+            auto_dev_enabled: true,
+            inventory_enabled: false,
+            insights_enabled: true,
+            advanced_market_expansion_enabled: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "company_id" },
+        );
+
+      if (entitlementError) {
+        return NextResponse.json({ error: entitlementError.message }, { status: 500 });
       }
     }
   }
