@@ -55,7 +55,7 @@ async function ensureCompanyDefaults(
         evaluations_per_month: null,
         seats_limit: null,
         auto_dev_enabled: true,
-        inventory_enabled: true,
+        inventory_enabled: false,
         insights_enabled: true,
         advanced_market_expansion_enabled: true,
       },
