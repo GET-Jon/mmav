@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
+import { getUsageSummary } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
@@ -13,7 +14,7 @@ export async function GET() {
   const admin = createSupabaseAdminClient();
   const company = await getCurrentCompanyForUser(admin, user.id);
 
-  const [{ data: billing, error: billingError }, { data: entitlements, error: entitlementError }] =
+  const [{ data: billing, error: billingError }, { data: entitlements, error: entitlementError }, usage] =
     await Promise.all([
       admin
         .from("company_billing_accounts")
@@ -29,6 +30,7 @@ export async function GET() {
         )
         .eq("company_id", company.companyId)
         .maybeSingle(),
+      getUsageSummary(admin, user.id),
     ]);
 
   if (billingError) {
@@ -49,6 +51,7 @@ export async function GET() {
       plan_key: "starter",
     },
     entitlements,
+    usage,
     checkoutConfigured: Boolean(
       process.env.STRIPE_SECRET_KEY && process.env.STRIPE_DEFAULT_PRICE_ID,
     ),
