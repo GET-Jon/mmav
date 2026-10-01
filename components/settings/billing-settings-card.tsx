@@ -28,7 +28,32 @@ type BillingStatus = {
     insights_enabled?: boolean;
     advanced_market_expansion_enabled?: boolean;
   } | null;
+  usage?: {
+    status?: string;
+    planKey?: "starter" | "dealer" | "dealer_pro";
+    trialEndsAt?: string | null;
+    trialActive?: boolean;
+    paidActive?: boolean;
+    trialEvaluationsUsed?: number;
+    trialEvaluationsRemaining?: number | null;
+    monthlyEvaluationsUsed?: number;
+    monthlyEvaluationsRemaining?: number | null;
+    monthlyProviderCalls?: number;
+    limits?: {
+      evaluationsPerMonth?: number;
+      seats?: number;
+      marketSearchesPerEvaluation?: number;
+      autoDevPerEvaluation?: number;
+      conditionAnalysesPerEvaluation?: number;
+      providerCallsPerMonth?: number;
+    };
+  };
   checkoutConfigured?: boolean;
+  configuredPlans?: {
+    starter?: boolean;
+    dealer?: boolean;
+    dealer_pro?: boolean;
+  };
   portalConfigured?: boolean;
   error?: string;
 };
@@ -79,13 +104,18 @@ export function BillingSettingsCard() {
     };
   }, []);
 
-  async function launch(action: "checkout" | "portal") {
+  async function launch(
+    action: "checkout" | "portal",
+    planKey: "starter" | "dealer" | "dealer_pro" = "starter",
+  ) {
     setActionLoading(action);
     setStatus("");
 
     try {
       const response = await fetch(`/api/billing/${action}`, {
         method: "POST",
+        headers: action === "checkout" ? { "Content-Type": "application/json" } : undefined,
+        body: action === "checkout" ? JSON.stringify({ planKey }) : undefined,
       });
       const payload = (await response.json()) as { url?: string; error?: string };
       if (!response.ok || !payload.url) {
@@ -109,8 +139,10 @@ export function BillingSettingsCard() {
 
   const billing = data?.billing;
   const entitlements = data?.entitlements;
+  const usage = data?.usage;
   const isAdmin = data?.company?.role === "company_admin";
   const hasCustomer = Boolean(billing?.stripe_customer_id);
+  const hasSubscription = Boolean(billing?.stripe_subscription_id);
 
   return (
     <section className="space-y-5">
@@ -149,17 +181,40 @@ export function BillingSettingsCard() {
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {!hasCustomer ? (
-            <button
-              type="button"
-              disabled={!isAdmin || !data?.checkoutConfigured || actionLoading !== null}
-              onClick={() => void launch("checkout")}
-              className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {actionLoading === "checkout" ? "Opening checkout…" : "Start subscription"}
-            </button>
-          ) : (
+        {usage?.trialActive && !usage?.paidActive ? (
+          <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
+            Free trial active: {usage.trialEvaluationsRemaining ?? 0} of 5 evaluations remaining
+            {usage.trialEndsAt ? ` · through ${dateLabel(usage.trialEndsAt)}` : ""}.
+            No credit card is required until you choose a paid plan.
+          </div>
+        ) : null}
+
+        {!hasSubscription ? (
+          <div className="mt-5">
+            <div className="text-xs font-black uppercase tracking-wide text-slate-400">Choose a paid plan</div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              {[
+                { key: "starter" as const, label: "Starter · $29/mo", configured: data?.configuredPlans?.starter },
+                { key: "dealer" as const, label: "Dealer · $79/mo", configured: data?.configuredPlans?.dealer },
+                { key: "dealer_pro" as const, label: "Dealer Pro · $149/mo", configured: data?.configuredPlans?.dealer_pro },
+              ].map((plan) => (
+                <button
+                  key={plan.key}
+                  type="button"
+                  disabled={!isAdmin || !plan.configured || actionLoading !== null}
+                  onClick={() => void launch("checkout", plan.key)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-black text-slate-900 shadow-sm hover:border-blue-300 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  {actionLoading === "checkout" ? "Opening checkout…" : plan.label}
+                  {!plan.configured ? (
+                    <span className="mt-1 block text-[10px] font-bold uppercase text-slate-400">Not configured yet</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5">
             <button
               type="button"
               disabled={!isAdmin || !data?.portalConfigured || actionLoading !== null}
@@ -168,14 +223,14 @@ export function BillingSettingsCard() {
             >
               {actionLoading === "portal" ? "Opening portal…" : "Manage billing"}
             </button>
-          )}
+          </div>
+        )}
 
-          {data && !data.checkoutConfigured ? (
-            <div className="rounded-xl bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">
-              Stripe wiring is ready; checkout activates when the product/price is configured for this environment.
-            </div>
-          ) : null}
-        </div>
+        {data && !data.checkoutConfigured ? (
+          <div className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">
+            Stripe wiring is ready; paid checkout activates when at least the Starter price is configured for this environment.
+          </div>
+        ) : null}
 
         {billing?.cancel_at_period_end ? (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
@@ -191,9 +246,44 @@ export function BillingSettingsCard() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-black text-slate-950">Usage</h3>
+        <p className="mt-1 text-sm font-semibold text-slate-500">
+          Only completed valuations count toward your evaluation allowance. Drafts, edits, reopened evaluations, and comp refreshes do not consume another evaluation.
+        </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Evaluations used</div>
+            <div className="mt-2 text-lg font-black text-slate-950">
+              {usage?.trialActive && !usage?.paidActive
+                ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
+                : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this month`}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Market searches / evaluation</div>
+            <div className="mt-2 text-lg font-black text-slate-950">
+              {usage?.trialActive && !usage?.paidActive ? "3" : usage?.limits?.marketSearchesPerEvaluation || "—"}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">AI recon runs / evaluation</div>
+            <div className="mt-2 text-lg font-black text-slate-950">
+              {usage?.trialActive && !usage?.paidActive ? "3" : usage?.limits?.conditionAnalysesPerEvaluation || "—"}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Extended data usage</div>
+            <div className="mt-2 text-sm font-black text-slate-950">
+              Protected by fair-use safety limits
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-black text-slate-950">Current entitlements</h3>
         <p className="mt-1 text-sm font-semibold text-slate-500">
-          These controls are intentionally separate from price so plans can evolve without reworking the application.
+          Your plan controls monthly evaluations, seats, and access to supported Lot Logic capabilities.
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
