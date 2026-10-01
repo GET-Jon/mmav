@@ -89,6 +89,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let onboarding = false;
+  try {
+    const body = (await request.json()) as { source?: string };
+    onboarding = body?.source === "onboarding";
+  } catch {
+    onboarding = false;
+  }
+
   const siteUrl = getBillingSiteUrl(request.url);
   const params = new URLSearchParams();
   params.set("mode", "subscription");
@@ -99,8 +107,18 @@ export async function POST(request: NextRequest) {
   params.set("client_reference_id", company.companyId);
   params.set("metadata[company_id]", company.companyId);
   params.set("subscription_data[metadata][company_id]", company.companyId);
-  params.set("success_url", `${siteUrl}/settings?tab=billing&checkout=success`);
-  params.set("cancel_url", `${siteUrl}/settings?tab=billing&checkout=canceled`);
+  params.set(
+    "success_url",
+    onboarding
+      ? `${siteUrl}/evaluate?checkout=success`
+      : `${siteUrl}/settings?tab=billing&checkout=success`,
+  );
+  params.set(
+    "cancel_url",
+    onboarding
+      ? `${siteUrl}/onboarding?checkout=canceled`
+      : `${siteUrl}/settings?tab=billing&checkout=canceled`,
+  );
 
   const session = await stripePost("/checkout/sessions", params);
   const url = typeof session.url === "string" ? session.url : null;
