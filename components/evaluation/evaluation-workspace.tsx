@@ -5217,7 +5217,7 @@ export function EvaluationWorkspace({
           <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
               <div>
-                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Edit Comps</h2>
+                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Expand / Improve Comps</h2>
                 <p className="mt-1 max-w-lg text-sm font-semibold leading-5 text-slate-500">
                   Expand where Lot Logic looks, or broaden how specifically it matches this vehicle. Geography suggestions keep widening outward from your starting market.
                 </p>
@@ -6324,6 +6324,26 @@ export function EvaluationWorkspace({
                         <div className="text-sm font-black text-slate-900">
                           {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
                         </div>
+                        {conditionReviewStatus === "unknown" ? (
+                          <div className="mt-3">
+                            <label htmlFor="condition-uncertainty-allowance" className="text-xs font-bold text-slate-800">Condition uncertainty allowance ($)</label>
+                            <input
+                              id="condition-uncertainty-allowance"
+                              type="number"
+                              min="0"
+                              step="100"
+                              inputMode="decimal"
+                              value={conditionPlanningEstimateOverride ?? ""}
+                              placeholder="0"
+                              onChange={(event) => {
+                                const amount = event.target.valueAsNumber;
+                                setConditionPlanningEstimateOverride(Number.isFinite(amount) ? Math.max(0, amount) : null);
+                              }}
+                              className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-slate-900"
+                            />
+                            <p className="mt-2 text-xs leading-5 text-slate-600">Optional reserve for unseen repairs. Included in all-in cost and reduces your maximum bid; condition remains unknown.</p>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="mt-3 flex gap-2">
                         <button type="button" onClick={() => {
@@ -6484,7 +6504,7 @@ export function EvaluationWorkspace({
                         ) : compNextStep.path === "discovered-markets" ? (
                           <button type="button" onClick={() => void searchAutoDevRecommendedMarkets()} disabled={marketCheckLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">Search Recommended Markets</button>
                         ) : (
-                          <button type="button" onClick={openCompMarketEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Expand / Edit Search</button>
+                          <button type="button" onClick={openCompMarketEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Expand / Improve Comps</button>
                         )}
                         <button type="button" onClick={() => setCompSectionExpanded(true)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">More comp details</button>
                       </div>
@@ -6506,7 +6526,7 @@ export function EvaluationWorkspace({
                 title="Comparable Vehicles"
                 action={
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                    <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
                     <button type="button" onClick={openMethodology} className="text-xs font-black text-slate-400 hover:text-slate-700">Methodology</button>
                   </div>
                 }
@@ -6642,7 +6662,7 @@ export function EvaluationWorkspace({
                           {verdictCompsExpanded ? "Show fewer" : `Show all ${comps.length}`}
                         </button>
                       ) : null}
-                      <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                      <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
                     </div>
                   }
                 >
