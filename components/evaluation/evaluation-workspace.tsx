@@ -6455,6 +6455,7 @@ export function EvaluationWorkspace({
                         </div>
                       </div>
                       {activeStage === "market" ? (
+                        <>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button type="button" onClick={() => setCompSectionExpanded((open) => !open)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
                             {compSectionExpanded ? "Hide comps" : "Review comps"}
@@ -6479,6 +6480,7 @@ export function EvaluationWorkspace({
                             </Link>
                           </div>
                         ) : null}
+                        </>
                       ) : null}
                     </>
                   ) : activeStage === "market" ? (
