@@ -94,7 +94,7 @@ export function LotLogicMarketingSite() {
             <Link href="/login" className="hidden rounded-xl px-4 py-2.5 text-sm font-extrabold text-slate-700 transition hover:bg-slate-100 sm:inline-flex">
               Sign in
             </Link>
-            <Link href="/evaluate" className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800">
+            <Link href="/signup" className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800">
               Try Lot Logic <ArrowIcon />
             </Link>
           </div>
@@ -115,7 +115,7 @@ export function LotLogicMarketingSite() {
               Lot Logic uses AI to evaluate any VIN against true local-market comps, your dealership&apos;s strengths, likely reconditioning costs, and your profit targets—so you know what a vehicle is worth <span className="font-extrabold text-slate-900">to you</span>.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/evaluate" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-base font-black text-white shadow-[0_14px_35px_rgba(37,99,235,0.24)] transition hover:bg-blue-700">
+              <Link href="/signup" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-base font-black text-white shadow-[0_14px_35px_rgba(37,99,235,0.24)] transition hover:bg-blue-700">
                 Try Lot Logic <ArrowIcon />
               </Link>
               <a href="#how-it-works" className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3.5 text-base font-black text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50">
@@ -382,7 +382,7 @@ export function LotLogicMarketingSite() {
           <h2 className="mt-5 text-4xl font-black tracking-[-0.045em] text-slate-950 sm:text-6xl">Make the next buying decision with the whole deal in view.</h2>
           <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-8 text-slate-600">Evaluate the VIN. Understand the market. Price the recon. Protect the margin.</p>
           <div className="mt-8">
-            <Link href="/evaluate" className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 text-base font-black text-white shadow-[0_14px_35px_rgba(37,99,235,0.24)] transition hover:bg-blue-700">
+            <Link href="/signup" className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 text-base font-black text-white shadow-[0_14px_35px_rgba(37,99,235,0.24)] transition hover:bg-blue-700">
               Try Lot Logic <ArrowIcon />
             </Link>
           </div>
