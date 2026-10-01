@@ -33,6 +33,53 @@ async function uniqueCompanySlug(
   return `${base}-${Date.now().toString(36)}`;
 }
 
+
+async function ensureCompanyDefaults(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  companyId: string,
+  userId: string,
+) {
+  const seedResults = await Promise.all([
+    admin.from("company_billing_accounts").upsert(
+      {
+        company_id: companyId,
+        status: "not_configured",
+        plan_key: "starter",
+      },
+      { onConflict: "company_id" },
+    ),
+    admin.from("company_entitlements").upsert(
+      {
+        company_id: companyId,
+        plan_key: "starter",
+        evaluations_per_month: null,
+        seats_limit: null,
+        auto_dev_enabled: true,
+        inventory_enabled: true,
+        insights_enabled: true,
+        advanced_market_expansion_enabled: true,
+      },
+      { onConflict: "company_id" },
+    ),
+    admin.from("company_api_settings").upsert(
+      {
+        company_id: companyId,
+        provider: "marketcheck",
+        live_lookup_enabled: true,
+        max_api_calls_per_search: 3,
+        min_usable_comps_to_stop: 10,
+        min_initial_regions: 2,
+        created_by: userId,
+        updated_by: userId,
+      },
+      { onConflict: "company_id,provider" },
+    ),
+  ]);
+
+  const seedError = seedResults.find((result) => result.error)?.error;
+  if (seedError) throw new Error(seedError.message);
+}
+
 export async function POST() {
   const user = await getCurrentUser();
   if (!user) {
@@ -59,6 +106,15 @@ export async function POST() {
     : existingMembership?.company;
 
   if (existingMembership?.company_id && existingCompany?.id) {
+    try {
+      await ensureCompanyDefaults(admin, String(existingCompany.id), user.id);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Workspace defaults failed." },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
       company: {
         id: String(existingCompany.id),
@@ -119,46 +175,13 @@ export async function POST() {
     return NextResponse.json({ error: membershipError.message }, { status: 500 });
   }
 
-  const seedResults = await Promise.all([
-    admin.from("company_billing_accounts").upsert(
-      {
-        company_id: company.id,
-        status: "not_configured",
-        plan_key: "starter",
-      },
-      { onConflict: "company_id" },
-    ),
-    admin.from("company_entitlements").upsert(
-      {
-        company_id: company.id,
-        plan_key: "starter",
-        evaluations_per_month: null,
-        seats_limit: null,
-        auto_dev_enabled: true,
-        inventory_enabled: true,
-        insights_enabled: true,
-        advanced_market_expansion_enabled: true,
-      },
-      { onConflict: "company_id" },
-    ),
-    admin.from("company_api_settings").upsert(
-      {
-        company_id: company.id,
-        provider: "marketcheck",
-        live_lookup_enabled: true,
-        max_api_calls_per_search: 3,
-        min_usable_comps_to_stop: 10,
-        min_initial_regions: 2,
-        created_by: user.id,
-        updated_by: user.id,
-      },
-      { onConflict: "company_id,provider" },
-    ),
-  ]);
-
-  const seedError = seedResults.find((result) => result.error)?.error;
-  if (seedError) {
-    return NextResponse.json({ error: seedError.message }, { status: 500 });
+  try {
+    await ensureCompanyDefaults(admin, String(company.id), user.id);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Workspace defaults failed." },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({
