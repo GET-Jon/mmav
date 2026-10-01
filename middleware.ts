@@ -1,7 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = ["/", "/login", "/auth/callback", "/auth/partner-invite", "/auth/partner-claim"];
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/privacy",
+  "/terms",
+  "/cookies",
+  "/auth/callback",
+  "/auth/partner-invite",
+  "/auth/partner-claim",
+];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(
@@ -90,7 +99,8 @@ export async function middleware(request: NextRequest) {
       !isPartnerPageRoute &&
       !isPartnerApiRoute &&
       !isPartnerEstimateRoute &&
-      !isPartnerAuthRoute
+      !isPartnerAuthRoute &&
+      !isPublicPath(pathname)
     ) {
       const claimUrl = request.nextUrl.clone();
       claimUrl.pathname = "/auth/partner-claim";
