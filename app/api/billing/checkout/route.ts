@@ -21,10 +21,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const priceId = process.env.STRIPE_DEFAULT_PRICE_ID;
+  let requestedPlan = "starter";
+  try {
+    const body = (await request.json()) as { planKey?: string };
+    const requested = String(body?.planKey || "starter").trim().toLowerCase();
+    if (requested === "dealer" || requested === "dealer_pro") {
+      requestedPlan = requested;
+    }
+  } catch {
+    requestedPlan = "starter";
+  }
+
+  const priceId =
+    requestedPlan === "dealer"
+      ? process.env.STRIPE_DEALER_PRICE_ID
+      : requestedPlan === "dealer_pro"
+        ? process.env.STRIPE_DEALER_PRO_PRICE_ID
+        : process.env.STRIPE_STARTER_PRICE_ID || process.env.STRIPE_DEFAULT_PRICE_ID;
+
   if (!process.env.STRIPE_SECRET_KEY || !priceId) {
     return NextResponse.json(
-      { error: "Billing checkout is not active yet." },
+      { error: "That paid plan is not configured for checkout yet." },
       { status: 503 },
     );
   }
@@ -73,28 +90,15 @@ export async function POST(request: NextRequest) {
 
     const { error: updateError } = await admin
       .from("company_billing_accounts")
-      .upsert(
-        {
-          company_id: company.companyId,
-          stripe_customer_id: customerId,
-          status: "not_configured",
-          plan_key: "starter",
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "company_id" },
-      );
+      .update({
+        stripe_customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", company.companyId);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
-  }
-
-  let onboarding = false;
-  try {
-    const body = (await request.json()) as { source?: string };
-    onboarding = body?.source === "onboarding";
-  } catch {
-    onboarding = false;
   }
 
   const siteUrl = getBillingSiteUrl(request.url);
@@ -107,18 +111,10 @@ export async function POST(request: NextRequest) {
   params.set("client_reference_id", company.companyId);
   params.set("metadata[company_id]", company.companyId);
   params.set("subscription_data[metadata][company_id]", company.companyId);
-  params.set(
-    "success_url",
-    onboarding
-      ? `${siteUrl}/evaluate?checkout=success`
-      : `${siteUrl}/settings?tab=billing&checkout=success`,
-  );
-  params.set(
-    "cancel_url",
-    onboarding
-      ? `${siteUrl}/onboarding?checkout=canceled`
-      : `${siteUrl}/settings?tab=billing&checkout=canceled`,
-  );
+  params.set("success_url", `${siteUrl}/settings?tab=billing&checkout=success`);
+  params.set("cancel_url", `${siteUrl}/settings?tab=billing&checkout=canceled`);
+  params.set("metadata[plan_key]", requestedPlan);
+  params.set("subscription_data[metadata][plan_key]", requestedPlan);
 
   const session = await stripePost("/checkout/sessions", params);
   const url = typeof session.url === "string" ? session.url : null;
@@ -130,5 +126,5 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ url });
+  return NextResponse.json({ url, planKey: requestedPlan });
 }
