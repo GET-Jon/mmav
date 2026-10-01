@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
@@ -30,7 +29,6 @@ function navClass(isActive: boolean) {
 }
 
 export function AppTopNav({ active, userEmail = null, userRole = null, onNewEvaluation }: AppTopNavProps) {
-  const router = useRouter();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -108,8 +106,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     try {
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.signOut();
-      router.push("/login");
-      router.refresh();
+      window.location.replace("/");
     } finally {
       setSigningOut(false);
     }
