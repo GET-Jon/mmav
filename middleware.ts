@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 const PUBLIC_PATHS = [
   "/",
   "/login",
+  "/signup",
   "/privacy",
   "/terms",
   "/cookies",
@@ -110,7 +111,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (user && pathname === "/login") {
+  if (user && (pathname === "/login" || pathname === "/signup")) {
     const evaluatorUrl = request.nextUrl.clone();
     evaluatorUrl.pathname = "/evaluate";
     evaluatorUrl.search = "";
