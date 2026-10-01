@@ -385,19 +385,17 @@ function MarketLiquidityVisual({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-baseline gap-2">
-            <div className="text-xs font-extrabold text-slate-600">
-              Time to Sell
-            </div>
-            <div className={`text-base font-black ${labelTone}`}>{label}</div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <div className="text-xs font-extrabold text-slate-600">
+            Time to Sell
           </div>
+          <div className={`text-base font-black ${labelTone}`}>{label}</div>
         </div>
 
         {hasSoldRange ? (
-          <div className="text-right">
-            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+          <div className="text-left sm:text-right">
+            <div className="text-[9px] font-black uppercase tracking-[0.07em] text-slate-400 sm:text-[10px]">
               Typical retail window
             </div>
             <div className="mt-0.5 text-sm font-black text-slate-800">
@@ -405,7 +403,7 @@ function MarketLiquidityVisual({
             </div>
           </div>
         ) : hasActive ? (
-          <div className="text-right text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+          <div className="inline-flex w-fit rounded-full bg-blue-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-blue-700 sm:bg-transparent sm:px-0 sm:py-0 sm:text-right sm:text-[10px] sm:text-slate-400">
             Current market age
           </div>
         ) : null}
@@ -1732,6 +1730,40 @@ export function EvaluationWorkspace({
         [key]: value,
       },
     }));
+  }
+
+  function updateAllInCostAmount(
+    key:
+      | "currentBid"
+      | "auctionFee"
+      | "transport"
+      | "reconCombined"
+      | "detailAdmin"
+      | "generalRiskReserve"
+      | "brandRiskAdd",
+    value: number,
+  ) {
+    const normalizedValue = Math.max(0, Number.isFinite(value) ? value : 0);
+
+    if (key === "currentBid") {
+      updateEvaluationField("currentBid", normalizedValue);
+      return;
+    }
+
+    if (key === "reconCombined") {
+      setEvaluation((previous) => ({
+        ...previous,
+        costs: {
+          ...previous.costs,
+          recon: normalizedValue,
+          conditionRiskAdd: 0,
+          titleHistoryRiskAdd: 0,
+        },
+      }));
+      return;
+    }
+
+    updateCost(key, normalizedValue);
   }
 
   function toggleCondition(conditionName: string) {
@@ -3515,13 +3547,13 @@ export function EvaluationWorkspace({
     valuationInput.costs.titleHistoryRiskAdd;
   const displayedCurrentCost = valuation.allInCost;
   const allInCostBreakdown = [
-    { label: "Current bid / purchase price", amount: Math.max(0, valuationInput.currentBid) },
-    { label: "Auction fee", amount: valuationInput.costs.auctionFee },
-    { label: "Transport", amount: valuationInput.costs.transport },
-    { label: "Condition & reconditioning reserve", amount: displayedReconReserve },
-    { label: "Detail / admin", amount: valuationInput.costs.detailAdmin },
-    { label: "Contingency reserve", amount: valuationInput.costs.generalRiskReserve },
-    { label: "Brand risk adjustment", amount: valuationInput.costs.brandRiskAdd },
+    { key: "currentBid" as const, label: "Current bid / purchase price", amount: Math.max(0, valuationInput.currentBid) },
+    { key: "auctionFee" as const, label: "Auction fee", amount: valuationInput.costs.auctionFee },
+    { key: "transport" as const, label: "Transport", amount: valuationInput.costs.transport },
+    { key: "reconCombined" as const, label: "Condition & reconditioning reserve", amount: displayedReconReserve },
+    { key: "detailAdmin" as const, label: "Detail / admin", amount: valuationInput.costs.detailAdmin },
+    { key: "generalRiskReserve" as const, label: "Contingency reserve", amount: valuationInput.costs.generalRiskReserve },
+    { key: "brandRiskAdd" as const, label: "Brand risk adjustment", amount: valuationInput.costs.brandRiskAdd },
   ];
   const dealerFitPillTone =
     dealerFitResult.score >= 70
@@ -6489,14 +6521,14 @@ export function EvaluationWorkspace({
                     <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
-                    <div>
-                      <div className="text-[9px] font-black uppercase text-slate-500">All-In Cost</div>
+                  <div className="mt-4 grid gap-2 border-t border-current/10 pt-4 text-center sm:grid-cols-3 sm:gap-3">
+                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">All-In Cost</div>
                       <button
                         type="button"
                         onClick={() => setAllInCostOpen(true)}
                         disabled={valuationInput.currentBid <= 0}
-                        className="mt-2 text-[25px] font-black text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline"
+                        className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline sm:mt-2 sm:text-[25px]"
                       >
                         {valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}
                       </button>
@@ -6510,13 +6542,13 @@ export function EvaluationWorkspace({
                         </button>
                       ) : null}
                     </div>
-                    <div>
-                      <div className="text-[9px] font-black uppercase text-slate-500">Sale Estimate</div>
-                      <div className="mt-2 text-[25px] font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Sale Estimate</div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                     </div>
-                    <div>
-                      <div className="text-[9px] font-black uppercase text-slate-500">Estimated Profit</div>
-                      <div className={`mt-2 text-[25px] font-black ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{money(valuation.expectedGrossProfit)}</div>
+                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Estimated Profit</div>
+                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{money(valuation.expectedGrossProfit)}</div>
                     </div>
                   </div>
                   {presentationDecision === "review" && reviewReasons.length ? (
@@ -6617,9 +6649,33 @@ export function EvaluationWorkspace({
                 <div className="p-5">
                   <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
                     {allInCostBreakdown.map((item) => (
-                      <div key={item.label} className="flex items-center justify-between gap-4 px-4 py-3">
-                        <span className="text-sm font-semibold text-slate-600">{item.label}</span>
-                        <span className="text-sm font-black text-slate-950">{money(item.amount)}</span>
+                      <div key={item.label} className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_150px]">
+                        <span className="text-sm font-semibold leading-5 text-slate-600">{item.label}</span>
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="flex min-w-0 items-center rounded-lg border border-slate-200 bg-white shadow-sm focus-within:border-blue-300">
+                            <span className="pl-2.5 text-sm text-slate-400">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatNumberInput(item.amount)}
+                              onFocus={(event) => event.currentTarget.select()}
+                              onChange={(event) =>
+                                updateAllInCostAmount(item.key, toNumber(event.target.value))
+                              }
+                              aria-label={`Edit ${item.label}`}
+                              className="min-w-0 w-full rounded-lg bg-transparent px-2 py-2 text-right text-sm font-black text-slate-950 outline-none"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateAllInCostAmount(item.key, 0)}
+                            className="shrink-0 rounded-md px-1.5 py-1 text-[10px] font-black text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            title={`Zero out ${item.label}`}
+                            aria-label={`Zero out ${item.label}`}
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                     ))}
                     <div className="flex items-center justify-between gap-4 bg-slate-50 px-4 py-3">
@@ -6628,11 +6684,9 @@ export function EvaluationWorkspace({
                     </div>
                   </div>
 
-                  {displayedReconReserve > 0 ? (
-                    <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
-                      Condition and reconditioning is shown as one reserve here. Internally, Lot Logic still preserves the mechanical, cosmetic, and history allocation from the condition review so the planning estimate can remain traceable.
-                    </p>
-                  ) : null}
+                  <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+                    Every line above is editable. Use × to zero out a cost. Editing the combined condition & reconditioning reserve replaces its underlying condition/title allocation with one explicit recon reserve.
+                  </p>
                 </div>
 
                 <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">
