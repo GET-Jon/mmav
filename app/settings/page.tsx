@@ -181,7 +181,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             </div>
             {company?.role === "company_admin" ? (
               <div className="mt-5 text-sm font-semibold text-slate-500">
-                Team roles and access are managed from <Link href="/admin/team" className="font-black text-slate-950 hover:underline">Admin → Team & Access</Link>.
+                {company.companySlug === "mindful-motor-co" ? (
+                  <>
+                    Team roles and access are managed from{" "}
+                    <Link href="/admin/team" className="font-black text-slate-950 hover:underline">
+                      Admin → Team & Access
+                    </Link>.
+                  </>
+                ) : (
+                  <>
+                    You are the company administrator for this Lot Logic workspace.
+                    Company admins can manage billing and evaluator configuration without
+                    receiving Mindful Motor Co. internal operations access.
+                  </>
+                )}
               </div>
             ) : null}
           </section>
