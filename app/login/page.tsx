@@ -14,7 +14,11 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"password" | "magic">("password");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(
+    searchParams.get("authError") === "confirmation"
+      ? "We couldn’t finish signing you in from that email link. Sign in with your password to continue, or request a fresh magic link."
+      : "",
+  );
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

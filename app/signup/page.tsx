@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -13,6 +13,17 @@ export default function SignupPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
+
+  useEffect(() => {
+    if (!confirmationSent) return;
+    const supabase = createSupabaseBrowserClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        window.location.replace("/onboarding");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [confirmationSent]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +54,7 @@ export default function SignupPage() {
 
       setConfirmationSent(true);
       setStatus(
-        "We sent a confirmation email. Open that email and click the confirmation link to continue to your plan.",
+        "We sent a confirmation email. Click its link to sign in and start your free trial automatically — no need to log in again.",
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Account creation failed.");
@@ -63,7 +74,7 @@ export default function SignupPage() {
             Create your dealership workspace
           </h1>
           <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-            Set up your account, start your plan, and go directly into your first evaluation.
+            Start with 5 free evaluations — no credit card required.
           </p>
         </div>
 
