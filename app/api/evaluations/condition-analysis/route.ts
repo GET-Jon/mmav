@@ -73,6 +73,24 @@ export async function POST(request: Request) {
       );
     }
 
+    const providerAllowance = await checkUsageAllowance({
+      supabase: admin,
+      userId: user.id,
+      kind: "provider_api_call",
+      expectedUnits: 1,
+    });
+
+    if (!providerAllowance.allowed) {
+      return NextResponse.json(
+        {
+          error: providerAllowance.message,
+          code: providerAllowance.code,
+          usage: providerAllowance.summary,
+        },
+        { status: providerAllowance.status },
+      );
+    }
+
     if (!rawIssueText) {
       return NextResponse.json(
         { error: "Condition information is required." },
@@ -131,17 +149,28 @@ export async function POST(request: Request) {
 
     const analysis = await generateConditionAnalysis(input);
 
-    await recordUsageEvent({
-      supabase: admin,
-      companyId: allowance.summary.company.companyId,
-      userId: user.id,
-      kind: "condition_analysis",
-      subjectKey,
-      metadata: {
-        issueCount: analysis.issues.length,
-        planningEstimate: analysis.planningEstimate,
-      },
-    });
+    await Promise.all([
+      recordUsageEvent({
+        supabase: admin,
+        companyId: allowance.summary.company.companyId,
+        userId: user.id,
+        kind: "condition_analysis",
+        subjectKey,
+        metadata: {
+          issueCount: analysis.issues.length,
+          planningEstimate: analysis.planningEstimate,
+        },
+      }),
+      recordUsageEvent({
+        supabase: admin,
+        companyId: allowance.summary.company.companyId,
+        userId: user.id,
+        kind: "provider_api_call",
+        subjectKey,
+        units: 1,
+        metadata: { provider: "google_ai", feature: "condition_analysis" },
+      }),
+    ]);
 
     return NextResponse.json({ analysis, intelligence: intelligenceMeta });
   } catch (error) {
