@@ -84,6 +84,12 @@ grant select on table public.company_billing_accounts to authenticated;
 grant select on table public.company_entitlements to authenticated;
 grant select on table public.billing_events to authenticated;
 
+-- Server-side billing and onboarding routes use the Supabase service role.
+-- Explicit grants are required in addition to RLS bypass privileges.
+grant all on table public.company_billing_accounts to service_role;
+grant all on table public.company_entitlements to service_role;
+grant all on table public.billing_events to service_role;
+
 -- Seed a neutral entitlement row for every existing company.
 insert into public.company_entitlements (
   company_id,
