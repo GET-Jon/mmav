@@ -2,6 +2,13 @@ import { POST as runStrictMarketCheckSearch } from "./strict-search";
 import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import {
+  checkUsageAllowance,
+  recordUsageEvent,
+  vehicleUsageSubject,
+} from "@/lib/billing/usage";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/server-auth";
+import {
   evaluateVehicleEquivalence,
   type VehicleIdentity,
 } from "@/lib/marketcheck/vehicle-equivalence";
@@ -379,6 +386,48 @@ export async function POST(request: Request) {
   const decodedVehicle = asRecord(normalizedBody.decodedVehicle);
   const nestedVehicle = asRecord(normalizedBody.vehicle);
 
+  const user = await getCurrentUser();
+  if (!user) {
+    return Response.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  const subjectKey = vehicleUsageSubject({
+    vin: normalizedBody.vin || decodedVehicle.vin || nestedVehicle.vin,
+    year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year,
+    make: normalizedBody.make || decodedVehicle.make || nestedVehicle.make,
+    model: normalizedBody.model || decodedVehicle.model || nestedVehicle.model,
+    trim: normalizedBody.trim || decodedVehicle.trim || nestedVehicle.trim,
+  });
+
+  const searchAllowance = await checkUsageAllowance({
+    supabase: admin,
+    userId: user.id,
+    kind: "market_search",
+    subjectKey,
+  });
+
+  if (!searchAllowance.allowed) {
+    return Response.json(
+      { error: searchAllowance.message, code: searchAllowance.code, usage: searchAllowance.summary },
+      { status: searchAllowance.status },
+    );
+  }
+
+  const providerAllowance = await checkUsageAllowance({
+    supabase: admin,
+    userId: user.id,
+    kind: "provider_api_call",
+    expectedUnits: 3,
+  });
+
+  if (!providerAllowance.allowed) {
+    return Response.json(
+      { error: providerAllowance.message, code: providerAllowance.code, usage: providerAllowance.summary },
+      { status: providerAllowance.status },
+    );
+  }
+
   const forwardedRequest = new Request(request.url, {
     method: "POST",
     headers: request.headers,
@@ -394,7 +443,29 @@ export async function POST(request: Request) {
       failurePayload = {};
     }
     const failureUsage = asRecord(failurePayload.apiUsage);
+    const failedCallCount = Math.max(1, Number(failureUsage.apiCallsMade || 1));
+    await Promise.all([
+      recordUsageEvent({
+        supabase: admin,
+        companyId: searchAllowance.summary.company.companyId,
+        userId: user.id,
+        kind: "market_search",
+        subjectKey,
+        metadata: { failed: true, searchStage: String(normalizedBody.searchStage || "initial") },
+      }),
+      recordUsageEvent({
+        supabase: admin,
+        companyId: searchAllowance.summary.company.companyId,
+        userId: user.id,
+        kind: "provider_api_call",
+        subjectKey,
+        units: failedCallCount,
+        metadata: { provider: "marketcheck", failed: true },
+      }),
+    ]);
     await recordApiUsageEvent({
+      companyId: searchAllowance.summary.company.companyId,
+      userId: user.id,
       provider: "marketcheck",
       endpoint: "/v2/search/car/active",
       vehicleYear: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0) || null,
@@ -485,6 +556,27 @@ export async function POST(request: Request) {
   const rankedRecord = asRecord(rankedPayload);
   const usage = asRecord(rankedRecord.apiUsage);
   const equivalence = asRecord(rankedRecord.equivalenceSummary);
+
+  const providerCallCount = Math.max(1, Number(usage.apiCallsMade || 1));
+  await Promise.all([
+    recordUsageEvent({
+      supabase: admin,
+      companyId: searchAllowance.summary.company.companyId,
+      userId: user.id,
+      kind: "market_search",
+      subjectKey,
+      metadata: { searchStage: String(normalizedBody.searchStage || "initial") },
+    }),
+    recordUsageEvent({
+      supabase: admin,
+      companyId: searchAllowance.summary.company.companyId,
+      userId: user.id,
+      kind: "provider_api_call",
+      subjectKey,
+      units: providerCallCount,
+      metadata: { provider: "marketcheck" },
+    }),
+  ]);
 
   await recordApiUsageEvent({
     provider: "marketcheck",
