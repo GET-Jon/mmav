@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type BillingStatus = {
   company?: {
@@ -152,10 +153,9 @@ export function BillingSettingsCard() {
             <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">Billing</div>
             <h2 className="mt-1 text-2xl font-black text-slate-950">Subscription & plan</h2>
             <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">
-              Billing belongs to your company workspace. Plans can control evaluations,
-              seats, market expansion, Auto.dev discovery, inventory, and other entitlements
-              without tying access to one person.
+              Choose a plan to keep evaluating vehicles. Your plan and evaluation allowance are shared by your dealership team.
             </p>
+            <Link href="/evaluate" className="mt-3 inline-block text-sm font-bold text-blue-700 hover:underline">Return to your evaluation →</Link>
           </div>
           <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">
             {readableStatus(billing?.status)}

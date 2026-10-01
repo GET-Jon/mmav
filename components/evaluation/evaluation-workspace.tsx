@@ -929,6 +929,7 @@ export function EvaluationWorkspace({
   });
   const [verdictTransitioning, setVerdictTransitioning] = useState(false);
   const [usageLimitMessage, setUsageLimitMessage] = useState("");
+  const [evaluationAccessError, setEvaluationAccessError] = useState("");
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
@@ -3702,6 +3703,23 @@ export function EvaluationWorkspace({
       has_bid_or_ask: valuationInput.currentBid > 0,
     });
     setEvaluationRunning(true);
+    setEvaluationAccessError("");
+
+    // Check access before decoding or requesting paid market/AI services.
+    // The current vehicle is already persisted by the draft autosave effect.
+    try {
+      const response = await fetch("/api/usage/status", { cache: "no-store" });
+      const access = await response.json();
+      if (!response.ok) throw new Error(access.error || "Unable to check your evaluation allowance. Please try again.");
+      if (access.canStartEvaluation === false) {
+        window.location.assign("/settings?tab=billing");
+        return;
+      }
+    } catch (error) {
+      setEvaluationAccessError(error instanceof Error ? error.message : "Unable to check your evaluation allowance. Please try again.");
+      setEvaluationRunning(false);
+      return;
+    }
 
     if (quickEvalMode === "manual") {
       const manualOverride = {
@@ -6126,6 +6144,7 @@ export function EvaluationWorkspace({
                   {vinDecodeError ? (
                     <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{vinDecodeError}</div>
                   ) : null}
+                  {evaluationAccessError ? <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{evaluationAccessError}</div> : null}
 
                   <button
                     type="button"

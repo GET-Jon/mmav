@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getUsageSummary } from "@/lib/billing/usage";
+import { checkUsageAllowance } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
@@ -12,8 +12,16 @@ export async function GET() {
 
   try {
     const admin = createSupabaseAdminClient();
-    const summary = await getUsageSummary(admin, user.id);
-    return NextResponse.json(summary);
+    const allowance = await checkUsageAllowance({
+      supabase: admin,
+      userId: user.id,
+      kind: "evaluation_completed",
+    });
+    return NextResponse.json({
+      ...allowance.summary,
+      canStartEvaluation: allowance.allowed,
+      evaluationAccessMessage: allowance.allowed ? null : allowance.message,
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Usage failed to load." },
