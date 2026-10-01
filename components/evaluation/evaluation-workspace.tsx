@@ -928,6 +928,7 @@ export function EvaluationWorkspace({
     return stage === "market" || stage === "verdict";
   });
   const [verdictTransitioning, setVerdictTransitioning] = useState(false);
+  const [usageLimitMessage, setUsageLimitMessage] = useState("");
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
@@ -3112,6 +3113,55 @@ export function EvaluationWorkspace({
 
     setConditionAssessmentsTouched(true);
     setConditionReviewStatus("issues");
+  }
+
+  async function continueToVerdict() {
+    if (verdictTransitioning) return;
+
+    setUsageLimitMessage("");
+    setVerdictTransitioning(true);
+
+    try {
+      const response = await fetch("/api/usage/evaluation-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vin,
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          hasUsableValuation: compSummary.includedCount > 0 && finalTargetUsed > 0,
+          valuationCompCount: compSummary.includedCount,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        code?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "This evaluation cannot continue yet.");
+      }
+
+      trackEvent("evaluation_verdict_viewed", {
+        valuation_comp_count: compSummary.includedCount,
+        comp_confidence: compSummary.confidence,
+        condition_review_status: conditionReviewStatus,
+        presentation_decision: presentationDecision,
+      });
+
+      window.setTimeout(() => {
+        setActiveStage("verdict");
+        setVerdictTransitioning(false);
+      }, 220);
+    } catch (error) {
+      setVerdictTransitioning(false);
+      setUsageLimitMessage(
+        error instanceof Error ? error.message : "This evaluation cannot continue yet.",
+      );
+    }
   }
 
   async function saveEvaluation() {
@@ -6411,26 +6461,24 @@ export function EvaluationWorkspace({
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (verdictTransitioning) return;
-                              trackEvent("evaluation_verdict_viewed", {
-                                valuation_comp_count: compSummary.includedCount,
-                                comp_confidence: compSummary.confidence,
-                                condition_review_status: conditionReviewStatus,
-                                presentation_decision: presentationDecision,
-                              });
-                              setVerdictTransitioning(true);
-                              window.setTimeout(() => {
-                                setActiveStage("verdict");
-                                setVerdictTransitioning(false);
-                              }, 220);
-                            }}
+                            onClick={() => void continueToVerdict()}
                             disabled={verdictTransitioning}
                             className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70"
                           >
                             {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
                           </button>
                         </div>
+                        {usageLimitMessage ? (
+                          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{usageLimitMessage}</span>
+                            <Link
+                              href="/settings?tab=billing"
+                              className="shrink-0 rounded-lg bg-slate-950 px-3 py-2 text-center text-xs font-black text-white"
+                            >
+                              Choose a plan
+                            </Link>
+                          </div>
+                        ) : null}
                       ) : null}
                     </>
                   ) : activeStage === "market" ? (
