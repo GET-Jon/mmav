@@ -170,9 +170,9 @@ export function BillingSettingsCard() {
             </button>
           )}
 
-          {!data?.checkoutConfigured ? (
+          {data && !data.checkoutConfigured ? (
             <div className="rounded-xl bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">
-              Stripe wiring is ready; checkout activates when the live product/price is configured.
+              Stripe wiring is ready; checkout activates when the product/price is configured for this environment.
             </div>
           ) : null}
         </div>
