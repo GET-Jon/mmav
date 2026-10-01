@@ -38,7 +38,7 @@ create table if not exists public.company_entitlements (
   evaluations_per_month integer,
   seats_limit integer,
   auto_dev_enabled boolean not null default true,
-  inventory_enabled boolean not null default true,
+  inventory_enabled boolean not null default false,
   insights_enabled boolean not null default true,
   advanced_market_expansion_enabled boolean not null default true,
   metadata jsonb not null default '{}'::jsonb,
