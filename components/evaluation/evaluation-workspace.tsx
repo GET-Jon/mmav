@@ -29,7 +29,7 @@ import type {
   ConditionAnalysisIssue,
 } from "@/lib/ai/condition-analysis-types";
 
-const draftStorageKey = "mmav:evaluationDraft:v1";
+import { evaluationDraftStorageKey as draftStorageKey } from "@/lib/evaluation-draft";
 
 const initialTargetMileage = 0;
 
