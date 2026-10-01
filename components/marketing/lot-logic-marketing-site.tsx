@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PricingSection } from "@/components/marketing/pricing-section";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
 
@@ -88,6 +89,7 @@ export function LotLogicMarketingSite() {
             <a href="#how-it-works" className="transition hover:text-slate-950">How it works</a>
             <a href="#recon" className="transition hover:text-slate-950">AI Recon</a>
             <a href="#why-lot-logic" className="transition hover:text-slate-950">Why Lot Logic</a>
+            <a href="#pricing" className="transition hover:text-slate-950">Pricing</a>
           </nav>
 
           <div className="ml-auto flex items-center gap-2.5">
@@ -116,13 +118,14 @@ export function LotLogicMarketingSite() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/signup" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-base font-black text-white shadow-[0_14px_35px_rgba(37,99,235,0.24)] transition hover:bg-blue-700">
-                Try Lot Logic <ArrowIcon />
+                Start free <ArrowIcon />
               </Link>
               <a href="#how-it-works" className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3.5 text-base font-black text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50">
                 See how it works
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-slate-500">
+            <div className="mt-4 text-sm font-black text-blue-700">5 free evaluations · No credit card required</div>
+            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-slate-500">
               <span className="inline-flex items-center gap-2"><span className="text-blue-600"><CheckIcon /></span> Built for professional buyers</span>
               <span className="inline-flex items-center gap-2"><span className="text-blue-600"><CheckIcon /></span> Auction + marketplace ready</span>
               <span className="inline-flex items-center gap-2"><span className="text-blue-600"><CheckIcon /></span> AI-first workflow</span>
@@ -360,6 +363,8 @@ export function LotLogicMarketingSite() {
           </div>
         </div>
       </section>
+
+      <PricingSection />
 
       <section className="border-t border-slate-200 bg-slate-950 text-white">
         <div className="mx-auto grid max-w-[1240px] gap-10 px-5 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:px-8 lg:py-24">
