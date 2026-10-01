@@ -1,5 +1,5 @@
 import { PricingSection } from "@/components/marketing/pricing-section";
-import { LotLogicLogo } from "@/components/lot-logic-logo";
+import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
 import Link from "next/link";
 
 export default function PricingPage() {
