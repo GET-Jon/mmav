@@ -240,15 +240,15 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <OrganizationProfileEditor
-                  initialName={company.companyName}
-                  canEdit={company.role === "company_admin"}
+                  initialName={companyContext.company.companyName}
+                  canEdit={companyContext.company.role === "company_admin"}
                 />
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                     Your access
                   </div>
                   <div className="mt-2 text-lg font-black text-slate-950">
-                    {roleLabel(company.role)}
+                    {roleLabel(companyContext.company.role)}
                   </div>
                   <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
                     Company Admins can manage billing, evaluator configuration, and team access for this workspace.
@@ -257,7 +257,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </div>
             </section>
 
-            {company.role === "company_admin" ? (
+            {companyContext.company.role === "company_admin" ? (
               <CompanyUserInviteForm canManageUsers />
             ) : null}
 
@@ -312,7 +312,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                             membershipId={member.id}
                             currentRole={member.role || "user"}
                             currentStatus={member.status || "active"}
-                            canManageUsers={company.role === "company_admin"}
+                            canManageUsers={companyContext.company.role === "company_admin"}
                             isCurrentUser={member.user_id === user.id}
                           />
                         </td>
