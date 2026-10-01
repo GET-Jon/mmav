@@ -8,11 +8,6 @@ type ProvisionResponse = {
   error?: string;
 };
 
-type CheckoutResponse = {
-  url?: string;
-  error?: string;
-};
-
 export function OnboardingCheckout() {
   const started = useRef(false);
   const [status, setStatus] = useState("Creating your Lot Logic workspace…");
@@ -33,22 +28,10 @@ export function OnboardingCheckout() {
           throw new Error(provision.error || "Workspace setup failed.");
         }
 
-        setStatus("Workspace ready. Opening secure checkout…");
-
-        const checkoutResponse = await fetch("/api/billing/checkout", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ source: "onboarding" }),
-        });
-        const checkout = (await checkoutResponse.json()) as CheckoutResponse;
-
-        if (!checkoutResponse.ok || !checkout.url) {
-          throw new Error(checkout.error || "Checkout could not be opened.");
-        }
-
-        window.location.assign(checkout.url);
+        setStatus("Workspace ready. Your 5 free evaluations are active — no credit card required.");
+        window.setTimeout(() => {
+          window.location.assign("/evaluate?trial=started");
+        }, 700);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Onboarding failed.");
       }
@@ -63,7 +46,7 @@ export function OnboardingCheckout() {
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-700">
           LL
         </div>
-        <h1 className="mt-5 text-2xl font-black">Setting up Lot Logic</h1>
+        <h1 className="mt-5 text-2xl font-black">Starting your free Lot Logic trial</h1>
 
         {!error ? (
           <>
@@ -86,10 +69,10 @@ export function OnboardingCheckout() {
                 Try again
               </button>
               <Link
-                href="/settings?tab=billing"
+                href="/evaluate"
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700"
               >
-                Billing settings
+                Go to evaluator
               </Link>
             </div>
           </>
