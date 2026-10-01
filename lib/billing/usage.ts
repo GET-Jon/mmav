@@ -7,6 +7,7 @@ export type UsageKind =
   | "market_search"
   | "auto_dev_discovery"
   | "condition_analysis"
+  | "evaluation_summary"
   | "provider_api_call";
 
 export type PlanKey = "starter" | "dealer" | "dealer_pro";
@@ -17,6 +18,7 @@ type PlanLimits = {
   marketSearchesPerEvaluation: number;
   autoDevPerEvaluation: number;
   conditionAnalysesPerEvaluation: number;
+  evaluationSummariesPerEvaluation: number;
   providerCallsPerMonth: number;
 };
 
@@ -27,6 +29,7 @@ export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
     marketSearchesPerEvaluation: 6,
     autoDevPerEvaluation: 2,
     conditionAnalysesPerEvaluation: 5,
+    evaluationSummariesPerEvaluation: 5,
     providerCallsPerMonth: 250,
   },
   dealer: {
@@ -35,6 +38,7 @@ export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
     marketSearchesPerEvaluation: 8,
     autoDevPerEvaluation: 3,
     conditionAnalysesPerEvaluation: 8,
+    evaluationSummariesPerEvaluation: 8,
     providerCallsPerMonth: 900,
   },
   dealer_pro: {
@@ -43,6 +47,7 @@ export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
     marketSearchesPerEvaluation: 12,
     autoDevPerEvaluation: 4,
     conditionAnalysesPerEvaluation: 12,
+    evaluationSummariesPerEvaluation: 12,
     providerCallsPerMonth: 2500,
   },
 };
@@ -53,6 +58,7 @@ export const TRIAL_LIMITS = {
   marketSearchesPerEvaluation: 3,
   autoDevPerEvaluation: 1,
   conditionAnalysesPerEvaluation: 3,
+  evaluationSummariesPerEvaluation: 3,
   providerCallsTotal: 30,
 };
 
@@ -258,12 +264,16 @@ export async function checkUsageAllowance(args: {
         ? TRIAL_LIMITS.marketSearchesPerEvaluation
         : kind === "auto_dev_discovery"
           ? TRIAL_LIMITS.autoDevPerEvaluation
-          : TRIAL_LIMITS.conditionAnalysesPerEvaluation
+          : kind === "evaluation_summary"
+            ? TRIAL_LIMITS.evaluationSummariesPerEvaluation
+            : TRIAL_LIMITS.conditionAnalysesPerEvaluation
       : kind === "market_search"
         ? summary.limits.marketSearchesPerEvaluation
         : kind === "auto_dev_discovery"
           ? summary.limits.autoDevPerEvaluation
-          : summary.limits.conditionAnalysesPerEvaluation;
+          : kind === "evaluation_summary"
+            ? summary.limits.evaluationSummariesPerEvaluation
+            : summary.limits.conditionAnalysesPerEvaluation;
 
     if (usedForVehicle + expectedUnits > perVehicleLimit) {
       return {
@@ -275,7 +285,9 @@ export async function checkUsageAllowance(args: {
             ? "This evaluation has reached its extended market-search allowance."
             : kind === "auto_dev_discovery"
               ? "This evaluation has reached its national-discovery allowance."
-              : "This evaluation has reached its AI condition-analysis allowance.",
+              : kind === "evaluation_summary"
+                ? "This evaluation has reached its AI summary allowance."
+                : "This evaluation has reached its AI condition-analysis allowance.",
         summary,
       };
     }
