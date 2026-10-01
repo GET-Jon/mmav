@@ -22,8 +22,10 @@ export async function POST(request: NextRequest) {
   }
 
   let requestedPlan = "starter";
+  let returnToEvaluator = false;
   try {
-    const body = (await request.json()) as { planKey?: string };
+    const body = (await request.json()) as { planKey?: string; returnTo?: string };
+    returnToEvaluator = body.returnTo === "/evaluate";
     const requested = String(body?.planKey || "starter").trim().toLowerCase();
     if (requested === "dealer" || requested === "dealer_pro") {
       requestedPlan = requested;
@@ -111,8 +113,8 @@ export async function POST(request: NextRequest) {
   params.set("client_reference_id", company.companyId);
   params.set("metadata[company_id]", company.companyId);
   params.set("subscription_data[metadata][company_id]", company.companyId);
-  params.set("success_url", `${siteUrl}/settings?tab=billing&checkout=success`);
-  params.set("cancel_url", `${siteUrl}/settings?tab=billing&checkout=canceled`);
+  params.set("success_url", returnToEvaluator ? `${siteUrl}/?checkout=success` : `${siteUrl}/settings?tab=billing&checkout=success`);
+  params.set("cancel_url", returnToEvaluator ? `${siteUrl}/?checkout=canceled` : `${siteUrl}/settings?tab=billing&checkout=canceled`);
   params.set("metadata[plan_key]", requestedPlan);
   params.set("subscription_data[metadata][plan_key]", requestedPlan);
 

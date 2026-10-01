@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
@@ -930,6 +931,7 @@ export function EvaluationWorkspace({
   const [verdictTransitioning, setVerdictTransitioning] = useState(false);
   const [usageLimitMessage, setUsageLimitMessage] = useState("");
   const [evaluationAccessError, setEvaluationAccessError] = useState("");
+  const [planSelectionMessage, setPlanSelectionMessage] = useState<string | null>(null);
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
@@ -3712,7 +3714,8 @@ export function EvaluationWorkspace({
       const access = await response.json();
       if (!response.ok) throw new Error(access.error || "Unable to check your evaluation allowance. Please try again.");
       if (access.canStartEvaluation === false) {
-        window.location.assign("/settings?tab=billing");
+        setPlanSelectionMessage(access.evaluationAccessMessage || "Choose a plan to continue evaluating vehicles.");
+        setEvaluationRunning(false);
         return;
       }
     } catch (error) {
@@ -4077,6 +4080,7 @@ export function EvaluationWorkspace({
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      {planSelectionMessage ? <PlanSelectionModal message={planSelectionMessage} onClose={() => setPlanSelectionMessage(null)} /> : null}
       {quickEvalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
