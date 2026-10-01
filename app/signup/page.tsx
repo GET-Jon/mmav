@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,8 +41,9 @@ export default function SignupPage() {
         return;
       }
 
+      setConfirmationSent(true);
       setStatus(
-        "Check your email to confirm your account. After confirmation, we’ll finish setup and take you to checkout.",
+        "We sent a confirmation email. Open that email and click the confirmation link to continue to your plan.",
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Account creation failed.");
@@ -72,8 +74,9 @@ export default function SignupPage() {
               required
               value={name}
               onChange={(event) => setName(event.target.value)}
+              disabled={confirmationSent}
               autoComplete="name"
-              className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500"
+              className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
             />
           </label>
 
@@ -83,6 +86,7 @@ export default function SignupPage() {
               required
               value={companyName}
               onChange={(event) => setCompanyName(event.target.value)}
+              disabled={confirmationSent}
               autoComplete="organization"
               className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500"
             />
@@ -95,6 +99,7 @@ export default function SignupPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={confirmationSent}
               autoComplete="email"
               className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500"
             />
@@ -108,6 +113,7 @@ export default function SignupPage() {
               minLength={8}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              disabled={confirmationSent}
               autoComplete="new-password"
               className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold outline-none focus:border-blue-500"
             />
@@ -116,10 +122,14 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-300"
+            disabled={loading || confirmationSent}
+            className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
           >
-            {loading ? "Creating workspace…" : "Continue to plan"}
+            {confirmationSent
+              ? "Check your email to continue"
+              : loading
+                ? "Creating account…"
+                : "Create account"}
           </button>
 
           {status ? (
