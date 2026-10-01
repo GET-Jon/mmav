@@ -5,6 +5,9 @@ import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
 import { BillingSettingsCard } from "@/components/settings/billing-settings-card";
+import { CompanyUserActions } from "@/components/settings/company-user-actions";
+import { CompanyUserInviteForm } from "@/components/settings/company-user-invite-form";
+import { OrganizationProfileEditor } from "@/components/settings/organization-profile-editor";
 import { LotLogicEvidenceCard } from "@/components/settings/lot-logic-evidence-card";
 import { LotLogicIntelligenceCard } from "@/components/settings/lot-logic-intelligence-card";
 import { MarketCheckApiSettingsCard } from "@/components/settings/marketcheck-api-settings-card";
@@ -29,6 +32,31 @@ type SettingsPageProps = {
     tab?: string | string[];
   }>;
 };
+
+
+type CompanyMemberView = {
+  id: string;
+  user_id: string;
+  role: string | null;
+  status: string | null;
+  created_at: string | null;
+  email: string;
+  displayName: string;
+  lastSignInAt: string | null;
+};
+
+function formatMemberDate(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function roleLabel(role: string | null) {
+  return role === "company_admin" ? "Company Admin" : "User";
+}
 
 function normalizeTab(value: string | string[] | undefined): SettingsTab {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -58,11 +86,12 @@ async function loadSettingsContext(userId: string) {
   const supabase = createSupabaseAdminClient();
   const company = await getCurrentCompanyForUser(supabase, userId);
 
-  const [{ count, error }, intelligence, assumptionsResult] = await Promise.all([
+  const [membershipsResult, intelligence, assumptionsResult] = await Promise.all([
     supabase
       .from("company_memberships")
-      .select("id", { count: "exact", head: true })
-      .eq("company_id", company.companyId),
+      .select("id,user_id,role,status,created_at")
+      .eq("company_id", company.companyId)
+      .order("created_at", { ascending: true }),
     listIntelligenceSettingsData(supabase, company.companyId),
     supabase
       .from("app_settings")
@@ -71,12 +100,34 @@ async function loadSettingsContext(userId: string) {
       .maybeSingle(),
   ]);
 
-  if (error) throw new Error(error.message);
+  if (membershipsResult.error) throw new Error(membershipsResult.error.message);
   if (assumptionsResult.error) throw new Error(assumptionsResult.error.message);
+
+  const members: CompanyMemberView[] = await Promise.all(
+    (membershipsResult.data || []).map(async (membership) => {
+      const { data } = await supabase.auth.admin.getUserById(membership.user_id);
+      const memberUser = data?.user;
+      const metadata = memberUser?.user_metadata || {};
+      const displayName =
+        typeof metadata.full_name === "string" && metadata.full_name.trim()
+          ? metadata.full_name.trim()
+          : typeof metadata.name === "string" && metadata.name.trim()
+            ? metadata.name.trim()
+            : memberUser?.email?.split("@")[0] || "Unknown user";
+
+      return {
+        ...membership,
+        email: memberUser?.email || "Unknown user",
+        displayName,
+        lastSignInAt: memberUser?.last_sign_in_at || null,
+      };
+    }),
+  );
 
   return {
     company,
-    memberCount: count || 0,
+    members,
+    memberCount: members.filter((member) => member.status !== "disabled").length,
     intelligence,
     assumptions: assumptionsResult.data?.payload
       ? normalizeAssumptions(assumptionsResult.data.payload)
@@ -125,7 +176,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <Link href="/settings?tab=account" className={tabClass(activeTab === "account")}>Account</Link>
           <Link href="/settings?tab=evaluator" className={tabClass(activeTab === "evaluator")}>Evaluator Settings</Link>
           <Link href="/settings?tab=api" className={tabClass(activeTab === "api")}>API Usage</Link>
-          <Link href="/settings?tab=organization" className={tabClass(activeTab === "organization")}>Organization</Link>
+          <Link href="/settings?tab=organization" className={tabClass(activeTab === "organization")}>Organization & Team</Link>
           <Link href="/settings?tab=billing" className={tabClass(activeTab === "billing")}>Billing</Link>
           <Link href="/settings?tab=intelligence" className={tabClass(activeTab === "intelligence")}>Lot Logic Intelligence</Link>
         </div>
@@ -167,37 +218,111 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
         {activeTab === "api" ? <MarketCheckApiSettingsCard /> : null}
 
-        {activeTab === "organization" ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-5">
-              <h2 className="text-xl font-bold">Organization</h2>
-              <p className="mt-1 max-w-3xl text-sm text-slate-600">Your current organization context.</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Company</div><div className="mt-2 text-lg font-black">{company?.companyName || "—"}</div></div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Slug</div><div className="mt-2 font-mono text-sm font-bold">{company?.companySlug || "—"}</div></div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Your Role</div><div className="mt-2 text-lg font-black">{company?.role || "—"}</div></div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-500">Members</div><div className="mt-2 text-lg font-black">{companyContext?.memberCount ?? "—"}</div></div>
-            </div>
-            {company?.role === "company_admin" ? (
-              <div className="mt-5 text-sm font-semibold text-slate-500">
-                {company.companySlug === "mindful-motor-co" ? (
-                  <>
-                    Team roles and access are managed from{" "}
-                    <Link href="/admin/team" className="font-black text-slate-950 hover:underline">
-                      Admin → Team & Access
-                    </Link>.
-                  </>
-                ) : (
-                  <>
-                    You are the company administrator for this Lot Logic workspace.
-                    Company admins can manage billing and evaluator configuration without
-                    receiving Mindful Motor Co. internal operations access.
-                  </>
-                )}
+        {activeTab === "organization" && companyContext ? (
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
+                    Organization & Team
+                  </div>
+                  <h2 className="mt-1 text-xl font-black text-slate-950">
+                    Manage your Lot Logic workspace
+                  </h2>
+                  <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
+                    Keep your company details current and control who can access this workspace.
+                  </p>
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+                  {companyContext.memberCount} active member{companyContext.memberCount === 1 ? "" : "s"}
+                </div>
               </div>
+
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+                <OrganizationProfileEditor
+                  initialName={company.companyName}
+                  canEdit={company.role === "company_admin"}
+                />
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    Your access
+                  </div>
+                  <div className="mt-2 text-lg font-black text-slate-950">
+                    {roleLabel(company.role)}
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                    Company Admins can manage billing, evaluator configuration, and team access for this workspace.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {company.role === "company_admin" ? (
+              <CompanyUserInviteForm canManageUsers />
             ) : null}
-          </section>
+
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+                <h3 className="text-lg font-black text-slate-950">Team members</h3>
+                <p className="mt-1 text-sm font-semibold text-slate-500">
+                  Company Admins can invite users, change roles, or disable access.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[860px] text-left text-sm">
+                  <thead className="bg-white text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-5 py-3">Member</th>
+                      <th className="px-5 py-3">Role</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Added</th>
+                      <th className="px-5 py-3">Last sign in</th>
+                      <th className="px-5 py-3">Access</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {companyContext.members.map((member) => (
+                      <tr key={member.id} className="align-top hover:bg-slate-50/70">
+                        <td className="px-5 py-4">
+                          <div className="font-black text-slate-950">{member.displayName}</div>
+                          <div className="mt-0.5 text-xs font-semibold text-slate-500">{member.email}</div>
+                          {member.user_id === user.id ? (
+                            <span className="mt-1.5 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">You</span>
+                          ) : null}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase text-blue-700">
+                            {roleLabel(member.role)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+                            member.status === "disabled"
+                              ? "bg-slate-100 text-slate-500"
+                              : "bg-emerald-50 text-emerald-700"
+                          }`}>
+                            {member.status || "active"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 font-semibold text-slate-600">{formatMemberDate(member.created_at)}</td>
+                        <td className="px-5 py-4 font-semibold text-slate-600">{formatMemberDate(member.lastSignInAt)}</td>
+                        <td className="px-5 py-4">
+                          <CompanyUserActions
+                            membershipId={member.id}
+                            currentRole={member.role || "user"}
+                            currentStatus={member.status || "active"}
+                            canManageUsers={company.role === "company_admin"}
+                            isCurrentUser={member.user_id === user.id}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         ) : null}
 
         {activeTab === "billing" ? <BillingSettingsCard /> : null}
