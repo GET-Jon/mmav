@@ -37,6 +37,10 @@ export function OnboardingCheckout() {
 
         const checkoutResponse = await fetch("/api/billing/checkout", {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ source: "onboarding" }),
         });
         const checkout = (await checkoutResponse.json()) as CheckoutResponse;
 
