@@ -39,21 +39,31 @@ async function ensureCompanyDefaults(
   companyId: string,
   userId: string,
 ) {
-  const seedResults = await Promise.all([
-    admin.from("company_billing_accounts").upsert(
-      {
+  const { data: existingBilling, error: billingLookupError } = await admin
+    .from("company_billing_accounts")
+    .select("company_id,status,trial_ends_at")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (billingLookupError) throw new Error(billingLookupError.message);
+
+  const billingWrite = existingBilling?.company_id
+    ? Promise.resolve({ error: null })
+    : admin.from("company_billing_accounts").insert({
         company_id: companyId,
-        status: "not_configured",
+        status: "trialing",
         plan_key: "starter",
-      },
-      { onConflict: "company_id" },
-    ),
+        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+
+  const seedResults = await Promise.all([
+    billingWrite,
     admin.from("company_entitlements").upsert(
       {
         company_id: companyId,
         plan_key: "starter",
-        evaluations_per_month: null,
-        seats_limit: null,
+        evaluations_per_month: 20,
+        seats_limit: 1,
         auto_dev_enabled: true,
         inventory_enabled: false,
         insights_enabled: true,
