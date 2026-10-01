@@ -35,17 +35,20 @@ export async function stripePost(
 }
 
 export function getBillingSiteUrl(requestUrl?: string) {
+  // Checkout must return to the same host that started it. This keeps
+  // preview authentication on the preview domain and production auth on
+  // yourlotlogic.com instead of crossing cookie boundaries.
+  if (requestUrl) {
+    const url = new URL(requestUrl);
+    return url.origin;
+  }
+
   const configured =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.URL ||
     process.env.DEPLOY_PRIME_URL;
 
   if (configured) return configured.replace(/\/$/, "");
-
-  if (requestUrl) {
-    const url = new URL(requestUrl);
-    return url.origin;
-  }
 
   return "https://yourlotlogic.com";
 }
