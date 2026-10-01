@@ -7,6 +7,12 @@ import { AiTemporarilyUnavailableError } from "@/lib/ai/errors";
 import { buildEvaluatorIntelligenceContext } from "@/lib/lot-logic-intelligence/evaluator-context";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
+  checkUsageAllowance,
+  recordUsageEvent,
+  vehicleUsageSubject,
+} from "@/lib/billing/usage";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import {
   createSupabaseServerAuthClient,
   getCurrentUser,
 } from "@/lib/supabase/server-auth";
@@ -39,6 +45,34 @@ export async function POST(request: Request) {
 
     const rawIssueText = cleanString(body.rawIssueText, 20_000);
 
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const admin = createSupabaseAdminClient();
+    const subjectKey = vehicleUsageSubject({
+      vin: body.vehicle?.vin,
+      year: body.vehicle?.year,
+      make: body.vehicle?.make,
+      model: body.vehicle?.model,
+      trim: body.vehicle?.trim,
+    });
+
+    const allowance = await checkUsageAllowance({
+      supabase: admin,
+      userId: user.id,
+      kind: "condition_analysis",
+      subjectKey,
+    });
+
+    if (!allowance.allowed) {
+      return NextResponse.json(
+        { error: allowance.message, code: allowance.code, usage: allowance.summary },
+        { status: allowance.status },
+      );
+    }
+
     if (!rawIssueText) {
       return NextResponse.json(
         { error: "Condition information is required." },
@@ -69,7 +103,6 @@ export async function POST(request: Request) {
     };
 
     try {
-      const user = await getCurrentUser();
       if (user) {
         const supabase = await createSupabaseServerAuthClient();
         const company = await getCurrentCompanyForUser(supabase, user.id);
@@ -97,6 +130,18 @@ export async function POST(request: Request) {
     }
 
     const analysis = await generateConditionAnalysis(input);
+
+    await recordUsageEvent({
+      supabase: admin,
+      companyId: allowance.summary.company.companyId,
+      userId: user.id,
+      kind: "condition_analysis",
+      subjectKey,
+      metadata: {
+        issueCount: analysis.issues.length,
+        planningEstimate: analysis.planningEstimate,
+      },
+    });
 
     return NextResponse.json({ analysis, intelligence: intelligenceMeta });
   } catch (error) {
