@@ -90,7 +90,7 @@ export async function POST() {
 
   const { data: existingMembership, error: membershipLookupError } = await admin
     .from("company_memberships")
-    .select("company_id,role,status,company:companies(id,name,slug,status)")
+    .select("company_id,role,status,company:companies(id,name,slug,status,created_by)")
     .eq("user_id", user.id)
     .eq("status", "active")
     .order("created_at", { ascending: true })
@@ -105,7 +105,35 @@ export async function POST() {
     ? existingMembership?.company[0]
     : existingMembership?.company;
 
+  const companyName =
+    typeof user.user_metadata?.company_name === "string"
+      ? user.user_metadata.company_name.trim()
+      : "";
+
+  const signupSource =
+    typeof user.user_metadata?.signup_source === "string"
+      ? user.user_metadata.signup_source.trim()
+      : "";
+
   if (existingMembership?.company_id && existingCompany?.id) {
+    const isRetryOfPublicSignup =
+      signupSource === "public_try_lot_logic" &&
+      existingMembership.role === "company_admin" &&
+      String(existingCompany.created_by || "") === user.id &&
+      Boolean(companyName) &&
+      String(existingCompany.name || "").trim().toLowerCase() ===
+        companyName.toLowerCase();
+
+    if (signupSource === "public_try_lot_logic" && !isRetryOfPublicSignup) {
+      return NextResponse.json(
+        {
+          error:
+            "This account is already linked to an existing company workspace. Public signup will not attach a new signup to an unrelated company. Sign in normally or use a different email for a new workspace.",
+        },
+        { status: 409 },
+      );
+    }
+
     try {
       await ensureCompanyDefaults(admin, String(existingCompany.id), user.id);
     } catch (error) {
@@ -120,14 +148,9 @@ export async function POST() {
         id: String(existingCompany.id),
         name: String(existingCompany.name || "Company"),
       },
-      mode: "existing",
+      mode: isRetryOfPublicSignup ? "resumed" : "existing",
     });
   }
-
-  const companyName =
-    typeof user.user_metadata?.company_name === "string"
-      ? user.user_metadata.company_name.trim()
-      : "";
 
   if (!companyName) {
     return NextResponse.json(
