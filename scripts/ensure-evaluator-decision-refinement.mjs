@@ -85,10 +85,14 @@ workspace = replaceOnce(
   "next-step routing for limited evidence",
 );
 
+const marketHeadingBefore =
+  '          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"}`';
+const marketHeadingAfter =
+  '          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence`';
 workspace = replaceOnce(
   workspace,
-  `          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"}``,
-  `          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence``,
+  marketHeadingBefore,
+  marketHeadingAfter,
   "market heading evidence strength",
 );
 
