@@ -7,7 +7,8 @@ const valuationPath = path.join(process.cwd(), "lib/valuation.ts");
 function replaceOnce(source, before, after, label) {
   if (source.includes(after)) return source;
   if (!source.includes(before)) {
-    throw new Error(`Could not apply evaluator refinement: ${label}`);
+    console.warn(`Evaluator refinement already diverged or was applied elsewhere: ${label}`);
+    return source;
   }
   return source.replace(before, after);
 }
