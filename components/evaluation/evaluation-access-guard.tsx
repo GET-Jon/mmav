@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 type UsageStatus = {
   canStartEvaluation?: boolean;
@@ -85,12 +85,20 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
     };
   }, [exhausted]);
 
-  function blockExhaustedAction(event: React.SyntheticEvent) {
-    if (!exhausted) return;
-    const target = event.target as HTMLElement | null;
-    const action = target?.closest<HTMLElement>("button, a[href]");
-    if (!action || action.closest("dialog[open]") || isVehicleNext(action)) return;
+  function shouldBlock(target: EventTarget | null) {
+    if (!exhausted || !(target instanceof Element)) return false;
+    const action = target.closest<HTMLElement>("button, a[href]");
+    return Boolean(action && !action.closest("dialog[open]") && !isVehicleNext(action));
+  }
 
+  function blockMouseAction(event: MouseEvent<HTMLDivElement>) {
+    if (!shouldBlock(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function blockKeyboardAction(event: KeyboardEvent<HTMLDivElement>) {
+    if ((event.key !== "Enter" && event.key !== " ") || !shouldBlock(event.target)) return;
     event.preventDefault();
     event.stopPropagation();
   }
@@ -98,10 +106,8 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
   return (
     <div
       ref={rootRef}
-      onClickCapture={blockExhaustedAction}
-      onKeyDownCapture={(event) => {
-        if (event.key === "Enter" || event.key === " ") blockExhaustedAction(event);
-      }}
+      onClickCapture={blockMouseAction}
+      onKeyDownCapture={blockKeyboardAction}
       className="[&_button[data-evaluation-limit-disabled='true']]:cursor-not-allowed [&_button[data-evaluation-limit-disabled='true']]:opacity-35 [&_a[data-evaluation-limit-disabled='true']]:cursor-not-allowed [&_a[data-evaluation-limit-disabled='true']]:opacity-35"
     >
       {children}
