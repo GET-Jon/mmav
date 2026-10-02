@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getBillingSiteUrl, stripePost } from "@/lib/billing/stripe";
+import { addCheckoutPrice } from "@/lib/billing/checkout-prices";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let requestedPlan = "starter";
+  let requestedPlan: "starter" | "dealer" | "dealer_pro" = "starter";
   let returnToEvaluator = false;
   try {
     const body = (await request.json()) as { planKey?: string; returnTo?: string };
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
         ? process.env.STRIPE_DEALER_PRO_PRICE_ID
         : process.env.STRIPE_STARTER_PRICE_ID || process.env.STRIPE_DEFAULT_PRICE_ID;
 
-  if (!process.env.STRIPE_SECRET_KEY || !priceId) {
+  if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json(
       { error: "That paid plan is not configured for checkout yet." },
       { status: 503 },
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
   const params = new URLSearchParams();
   params.set("mode", "subscription");
   params.set("customer", customerId);
-  params.set("line_items[0][price]", priceId);
+  addCheckoutPrice(params, requestedPlan, priceId);
   params.set("line_items[0][quantity]", "1");
   params.set("allow_promotion_codes", "true");
   params.set("client_reference_id", company.companyId);

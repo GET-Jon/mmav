@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import { monthlyCheckoutPlans } from "@/lib/billing/checkout-prices";
 
 export const pricingPlans = [
   {
     key: "starter",
     name: "Starter",
-    price: "$29",
+    price: `$${monthlyCheckoutPlans.starter.amount / 100}`,
     cadence: "/month",
     alternate: "or $9/week",
     evaluations: "20 evaluations / month",
@@ -15,7 +16,7 @@ export const pricingPlans = [
   {
     key: "dealer",
     name: "Dealer",
-    price: "$79",
+    price: `$${monthlyCheckoutPlans.dealer.amount / 100}`,
     cadence: "/month",
     alternate: "",
     evaluations: "75 evaluations / month",
@@ -26,7 +27,7 @@ export const pricingPlans = [
   {
     key: "dealer_pro",
     name: "Dealer Pro",
-    price: "$149",
+    price: `$${monthlyCheckoutPlans.dealer_pro.amount / 100}`,
     cadence: "/month",
     alternate: "",
     evaluations: "200 evaluations / month",

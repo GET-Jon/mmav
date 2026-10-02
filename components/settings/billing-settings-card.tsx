@@ -228,7 +228,7 @@ export function BillingSettingsCard() {
 
         {data && !data.checkoutConfigured ? (
           <div className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">
-            Stripe wiring is ready; paid checkout activates when at least the Starter price is configured for this environment.
+            Paid checkout is not available yet. Your vehicle draft is saved.
           </div>
         ) : null}
 

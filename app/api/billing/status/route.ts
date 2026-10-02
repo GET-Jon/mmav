@@ -52,19 +52,11 @@ export async function GET() {
     },
     entitlements,
     usage,
-    checkoutConfigured: Boolean(
-      process.env.STRIPE_SECRET_KEY &&
-        (process.env.STRIPE_STARTER_PRICE_ID || process.env.STRIPE_DEFAULT_PRICE_ID),
-    ),
+    checkoutConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
     configuredPlans: {
-      starter: Boolean(
-        process.env.STRIPE_SECRET_KEY &&
-          (process.env.STRIPE_STARTER_PRICE_ID || process.env.STRIPE_DEFAULT_PRICE_ID),
-      ),
-      dealer: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_DEALER_PRICE_ID),
-      dealer_pro: Boolean(
-        process.env.STRIPE_SECRET_KEY && process.env.STRIPE_DEALER_PRO_PRICE_ID,
-      ),
+      starter: Boolean(process.env.STRIPE_SECRET_KEY),
+      dealer: Boolean(process.env.STRIPE_SECRET_KEY),
+      dealer_pro: Boolean(process.env.STRIPE_SECRET_KEY),
     },
     portalConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
   });
