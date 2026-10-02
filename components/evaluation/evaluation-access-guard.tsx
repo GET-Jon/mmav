@@ -56,6 +56,8 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
     if (!root) return;
 
     function syncDisabledActions() {
+      if (!root) return;
+
       const actions = root.querySelectorAll<HTMLElement>("button, a[href]");
 
       actions.forEach((action) => {
