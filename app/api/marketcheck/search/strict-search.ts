@@ -51,7 +51,6 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 const MIN_MARKETCHECK_INTERVAL_MS = 350;
 
 const MARKETCHECK_API_CONTROLS = {
-  liveLookupEnabled: true,
   maxApiCallsPerSearch: 3,
   minUsableCompsToStop: 10,
   minInitialRegions: 2,
@@ -1281,10 +1280,6 @@ export async function POST(request: Request) {
 
     const apiControls = {
       ...MARKETCHECK_API_CONTROLS,
-      liveLookupEnabled:
-        body.liveLookupEnabled === false
-          ? false
-          : MARKETCHECK_API_CONTROLS.liveLookupEnabled,
       maxApiCallsPerSearch: Math.max(
         1,
         Math.min(
@@ -1378,33 +1373,6 @@ export async function POST(request: Request) {
       model,
       trim: preferredTrim,
     });
-
-    if (!apiControls.liveLookupEnabled) {
-      return NextResponse.json({
-        error: "Live MarketCheck lookup is currently disabled by API controls.",
-        apiControls,
-        apiUsage: {
-          apiCallsMade: 0,
-          cacheHit: false,
-          stopReason:
-            "Live lookup disabled before any MarketCheck API request was made.",
-          searchLog: [],
-        },
-        search: {
-          year,
-          make,
-          model,
-          preferredTrim,
-          targetMileage,
-          zips,
-          regions: orderedRegions,
-          radius,
-          rows,
-          generationFilter: generationCompRule,
-        },
-        comps: [],
-      });
-    }
 
     const searchKey = makeStableSearchKey({
       year,

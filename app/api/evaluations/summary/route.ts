@@ -3,6 +3,12 @@ import { generateEvaluationSummary, type EvaluationSummaryInput } from "@/lib/ai
 import { buildEvaluatorIntelligenceContext } from "@/lib/lot-logic-intelligence/evaluator-context";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
+  checkUsageAllowance,
+  recordUsageEvent,
+  vehicleUsageSubject,
+} from "@/lib/billing/usage";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import {
   createSupabaseServerAuthClient,
   getCurrentUser,
 } from "@/lib/supabase/server-auth";
@@ -58,6 +64,54 @@ function cleanThesisMode(value: unknown) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const admin = createSupabaseAdminClient();
+    const subjectKey = vehicleUsageSubject({
+      vin: body.vin,
+      year: body.year ?? body.vehicle?.year,
+      make: body.make ?? body.vehicle?.make,
+      model: body.model ?? body.vehicle?.model,
+      trim: body.trim ?? body.vehicle?.trim,
+    });
+
+    const summaryAllowance = await checkUsageAllowance({
+      supabase: admin,
+      userId: user.id,
+      kind: "evaluation_summary",
+      subjectKey,
+    });
+    if (!summaryAllowance.allowed) {
+      return NextResponse.json(
+        {
+          error: summaryAllowance.message,
+          code: summaryAllowance.code,
+          usage: summaryAllowance.summary,
+        },
+        { status: summaryAllowance.status },
+      );
+    }
+
+    const providerAllowance = await checkUsageAllowance({
+      supabase: admin,
+      userId: user.id,
+      kind: "provider_api_call",
+      expectedUnits: 1,
+    });
+    if (!providerAllowance.allowed) {
+      return NextResponse.json(
+        {
+          error: providerAllowance.message,
+          code: providerAllowance.code,
+          usage: providerAllowance.summary,
+        },
+        { status: providerAllowance.status },
+      );
+    }
 
     const input: EvaluationSummaryInput = {
       thesisMode: cleanThesisMode(body.thesisMode),
@@ -125,7 +179,6 @@ export async function POST(request: Request) {
     };
 
     try {
-      const user = await getCurrentUser();
       if (user) {
         const supabase = await createSupabaseServerAuthClient();
         const company = await getCurrentCompanyForUser(supabase, user.id);
@@ -158,6 +211,25 @@ export async function POST(request: Request) {
     }
 
     const summary = await generateEvaluationSummary(input);
+
+    await Promise.all([
+      recordUsageEvent({
+        supabase: admin,
+        companyId: summaryAllowance.summary.company.companyId,
+        userId: user.id,
+        kind: "evaluation_summary",
+        subjectKey,
+      }),
+      recordUsageEvent({
+        supabase: admin,
+        companyId: summaryAllowance.summary.company.companyId,
+        userId: user.id,
+        kind: "provider_api_call",
+        subjectKey,
+        units: 1,
+        metadata: { provider: "google_ai", feature: "evaluation_summary" },
+      }),
+    ]);
 
     return NextResponse.json({ summary, intelligence: intelligenceMeta });
   } catch (error) {

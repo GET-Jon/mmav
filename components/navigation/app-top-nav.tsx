@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
@@ -30,13 +29,16 @@ function navClass(isActive: boolean) {
 }
 
 export function AppTopNav({ active, userEmail = null, userRole = null, onNewEvaluation }: AppTopNavProps) {
-  const router = useRouter();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [resolvedRole, setResolvedRole] = useState<string | null>(userRole);
+  const [resolvedCompanyName, setResolvedCompanyName] = useState<string | null>(null);
+  const [resolvedCompanySlug, setResolvedCompanySlug] = useState<string | null>(null);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
   const isAdmin = resolvedRole === "company_admin";
+  const isMindfulAdmin =
+    isAdmin && resolvedCompanySlug === "mindful-motor-co";
 
   const initials = userLabel
     .split(/[.\-_\s]+/)
@@ -47,21 +49,38 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     .toUpperCase() || "MM";
 
   useEffect(() => {
-    if (resolvedRole || !userEmail) return;
+    if (!userEmail) return;
     let cancelled = false;
     void (async () => {
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || cancelled) return;
-      const { data } = await supabase
+
+      const { data: membership } = await supabase
         .from("company_memberships")
-        .select("role")
+        .select("role,company_id")
         .eq("user_id", user.id)
         .eq("status", "active")
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
-      if (!cancelled) setResolvedRole(data?.role || "user");
+
+      if (!membership || cancelled) return;
+
+      if (!resolvedRole) {
+        setResolvedRole(membership.role || "user");
+      }
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name,slug")
+        .eq("id", membership.company_id)
+        .maybeSingle();
+
+      if (!cancelled) {
+        setResolvedCompanyName(company?.name || null);
+        setResolvedCompanySlug(company?.slug || null);
+      }
     })();
     return () => { cancelled = true; };
   }, [resolvedRole, userEmail]);
@@ -87,8 +106,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     try {
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.signOut();
-      router.push("/login");
-      router.refresh();
+      window.location.replace("/");
     } finally {
       setSigningOut(false);
     }
@@ -106,15 +124,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
           <Link href="/evaluate" className={navClass(active === "evaluator")}>Evaluator</Link>
           <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
           <Link href="/insights" className={navClass(active === "insights")}>Insights</Link>
-          {isAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
-          {isAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
+          {isMindfulAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
+          {isMindfulAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {onNewEvaluation ? (
             <button type="button" onClick={onNewEvaluation} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</button>
           ) : (
-            <Link href="/evaluate" className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
+            <Link href="/evaluate/new" prefetch={false} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
           )}
 
           <div ref={menuRef} className="relative">
@@ -122,7 +140,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">{initials}</div>
               <div className="hidden min-w-0 text-left sm:block">
                 <div className="truncate text-xs font-extrabold text-slate-900">{userLabel}</div>
-                <div className="text-[10px] font-semibold text-slate-500">Mindful Motor Co.</div>
+                <div className="text-[10px] font-semibold text-slate-500">{resolvedCompanyName || "Your company"}</div>
               </div>
               <span className="hidden text-[10px] font-black text-slate-400 sm:block">{menuOpen ? "▲" : "▼"}</span>
             </button>
@@ -131,11 +149,11 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
               <div role="menu" className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 <div className="border-b border-slate-100 px-4 py-3">
                   <div className="truncate text-xs font-black text-slate-950">{userEmail || userLabel}</div>
-                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{isAdmin ? "Administrator" : "User"}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{isMindfulAdmin ? "Mindful Admin" : isAdmin ? "Company Admin" : "User"}</div>
                 </div>
                 <div className="p-1.5">
                   <Link role="menuitem" href="/settings" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Settings</Link>
-                  {isAdmin ? <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Admin</Link> : null}
+                  {isMindfulAdmin ? <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Admin</Link> : null}
                 </div>
                 {userEmail ? (
                   <div className="border-t border-slate-100 p-1.5">

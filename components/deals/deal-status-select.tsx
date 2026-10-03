@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
-import { PurchaseConfirmationModal } from "@/components/mindful-inventory/purchase-confirmation-modal";
 
 const statusOptions = [
   { value: "watching", label: "Watching" },
@@ -55,18 +54,6 @@ export function DealStatusSelect({
     useState(normalizedStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [purchaseModalOpen, setPurchaseModalOpen] =
-    useState(false);
-
-  const closePurchaseModal = useCallback(() => {
-    if (saving) {
-      return;
-    }
-
-    setPurchaseModalOpen(false);
-    setError("");
-  }, [saving]);
-
   async function updateStandardStatus(nextStatus: string) {
     const previousStatus = localStatus;
 
@@ -110,57 +97,8 @@ export function DealStatusSelect({
     }
   }
 
-  async function confirmPurchaseAndImport() {
-    setSaving(true);
-    setError("");
-
-    try {
-      const response = await fetch(
-        "/api/mindful/inventory/import-evaluation",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            evaluationId,
-          }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Failed to add vehicle to Inventory.",
-        );
-      }
-
-      setLocalStatus("purchased");
-      setPurchaseModalOpen(false);
-      onStatusChange?.(evaluationId, "purchased");
-    } catch (purchaseError) {
-      setError(
-        purchaseError instanceof Error
-          ? purchaseError.message
-          : "Failed to add vehicle to Inventory.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   function handleSelection(nextStatus: string) {
     setError("");
-
-    if (
-      nextStatus === "purchased" &&
-      localStatus !== "purchased"
-    ) {
-      setPurchaseModalOpen(true);
-      return;
-    }
 
     if (nextStatus === localStatus) {
       return;
@@ -192,22 +130,13 @@ export function DealStatusSelect({
           ))}
         </select>
 
-        {error && !purchaseModalOpen ? (
+        {error ? (
           <div className="text-xs font-semibold text-red-600">
             {error}
           </div>
         ) : null}
       </div>
 
-      <PurchaseConfirmationModal
-        open={purchaseModalOpen}
-        saving={saving}
-        error={purchaseModalOpen ? error : ""}
-        onCancel={closePurchaseModal}
-        onConfirm={() => {
-          void confirmPurchaseAndImport();
-        }}
-      />
     </>
   );
 }

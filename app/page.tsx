@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { EvaluationAccessGuard } from "@/components/evaluation/evaluation-access-guard";
 import { EvaluationWorkspace } from "@/components/evaluation/evaluation-workspace";
 import { LotLogicMarketingSite } from "@/components/marketing/lot-logic-marketing-site";
 import { MarketingMotion } from "@/components/marketing/marketing-motion";
@@ -51,5 +52,9 @@ export default async function Home() {
     }
   }
 
-  return <EvaluationWorkspace userEmail={user.email} />;
+  return (
+    <EvaluationAccessGuard>
+      <EvaluationWorkspace userEmail={user.email} />
+    </EvaluationAccessGuard>
+  );
 }
