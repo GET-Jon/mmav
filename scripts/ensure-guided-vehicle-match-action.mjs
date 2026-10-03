@@ -33,6 +33,12 @@ replaceOnce(
   "Market card vehicle-match action",
 );
 
+replaceOnce(
+  `<button type="button" onClick={() => setCompSectionExpanded(true)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">More comp details</button>`,
+  `<button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">Expand / Improve Comps</button>`,
+  "Market card secondary comp action",
+);
+
 if (changed) {
   fs.writeFileSync(workspacePath, source);
   console.log("Applied guided vehicle-match recovery updates.");
