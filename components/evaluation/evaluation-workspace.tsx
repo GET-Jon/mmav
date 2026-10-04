@@ -2596,6 +2596,11 @@ export function EvaluationWorkspace({
     );
   }
 
+  function openCompVehicleMatchEditor() {
+    setCompEditorTab("vehicle");
+    setCompMarketEditorOpen(true);
+  }
+
   function openCompMarketEditor() {
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
     const suggested = getCompExpansionMarkets()
@@ -2722,7 +2727,7 @@ export function EvaluationWorkspace({
         : `Broadening retrieval for ${vehicleMake} ${vehicleModel} while retaining strict final vehicle qualification.`,
     );
 
-    await pullMarketCheckComps(
+    return await pullMarketCheckComps(
       {
         year: String(vehicleYear || ""),
         make: vehicleMake,
@@ -2762,6 +2767,7 @@ export function EvaluationWorkspace({
           make: vehicleMake,
           model: vehicleModel,
           trim: vehicleTrim,
+          vin: String(decodedVehicle?.vin || vin || "").trim().toUpperCase(),
           bodyClass: vehicleBodyClass,
         }),
       });
