@@ -4070,77 +4070,146 @@ export function EvaluationWorkspace({
   const compModelMismatchCount =
     marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.modelMismatch || 0;
 
-  const compNextStep = (() => {
-    if (!marketCheckSearchMeta || marketCheckLoading) {
-      return {
-        path: "none" as const,
-        title: "",
-        reason: "",
-      };
-    }
+  const compExpansionMarketsRemaining = getCompExpansionMarkets().filter(
+    (market) =>
+      !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip),
+  ).length;
 
-    if (autoDevDiscovery?.recommendedMarkets?.length) {
-      return {
-        path: "discovered-markets" as const,
-        title: "Search the markets Auto.dev found",
-        reason:
-          "National discovery has already located matching inventory, so the highest-value next MarketCheck calls are the identified 100-mile clusters.",
-      };
-    }
+  const compSearchRecommendation = recommendCompSearchAction({
+    includedCount: compSummary.includedCount,
+    confidence: String(compSummary.confidence || ""),
+    returnedListings: compReturnedListings,
+    usableListings: compUsableListings,
+    modelMismatchCount: compModelMismatchCount,
+    qualityBelowThresholdCount:
+      marketCheckApiUsage?.filterDiagnostics?.rejectionCounts
+        ?.qualityBelowThreshold || 0,
+    generationMismatchCount:
+      marketCheckApiUsage?.filterDiagnostics?.rejectionCounts
+        ?.generationMismatch || 0,
+    regionsSearched: compSearchRegions,
+    unsearchedExpansionMarkets: compExpansionMarketsRemaining,
+    hasTaxonomyFallback: Boolean(compTaxonomyFallback),
+    trimRelaxed: compTrimRelaxed,
+    nationalDiscoveryAttempted: Boolean(
+      autoDevDiscovery || autoDevDiscoveryStatus,
+    ),
+    nationalDiscoveryTotal: Number(autoDevDiscovery?.total || 0),
+    nationalRecommendedMarkets:
+      autoDevDiscovery?.recommendedMarkets?.length || 0,
+  });
 
-    if (compReturnedListings === 0 && compSearchRegions >= 3) {
-      return {
-        path: "national-discovery" as const,
-        title: "Use National Discovery",
-        reason:
-          `MarketCheck found no candidate inventory across ${compSearchRegions} searched regions. Locate where matching cars actually exist before spending more MarketCheck calls.`,
-      };
-    }
+  const compNextStep = {
+    path:
+      compSearchRecommendation.action === "broaden-vehicle" ||
+      compSearchRecommendation.action === "manual-review"
+        ? ("vehicle-match" as const)
+        : compSearchRecommendation.action === "expand-geography"
+          ? ("geography" as const)
+          : compSearchRecommendation.action === "national-discovery"
+            ? ("national-discovery" as const)
+            : compSearchRecommendation.action === "discovered-markets"
+              ? ("discovered-markets" as const)
+              : ("none" as const),
+    title: compSearchRecommendation.title,
+    reason: compSearchRecommendation.reason,
+  };
 
+  const normalizedCompConfidence = String(
+    compSummary.confidence || "",
+  ).toLowerCase();
+  const marketEvidenceStrength: "Strong" | "Moderate" | "Limited" =
+    compSummary.includedCount >= 8 && normalizedCompConfidence === "high"
+      ? "Strong"
+      : compSummary.includedCount >= 4 && normalizedCompConfidence !== "low"
+        ? "Moderate"
+        : "Limited";
+  const hasLimitedMarketEvidence =
+    compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
+  const hasLowCompConfidence = hasLimitedMarketEvidence;
+
+  async function improveCompSearch() {
     if (
-      compReturnedListings > 0 &&
-      compUsableListings === 0 &&
-      (compModelMismatchCount > 0 || Boolean(compTaxonomyFallback))
+      compSearchImproving ||
+      marketCheckLoading ||
+      autoDevDiscoveryLoading ||
+      compSearchRecommendation.action === "complete"
     ) {
-      return {
-        path: "vehicle-match" as const,
-        title: "Review Vehicle Match",
-        reason:
-          compModelMismatchCount > 0
-            ? `MarketCheck returned inventory, but ${compModelMismatchCount} listing${compModelMismatchCount === 1 ? "" : "s"} failed model identity checks. Review how this vehicle is classified before widening farther.`
-            : "MarketCheck is finding inventory, but this vehicle has a known taxonomy fallback. Review the vehicle match before spending calls on more geography.",
-      };
+      return;
     }
 
-    if (compSummary.includedCount > 0 && compSummary.includedCount < 3) {
-      return {
-        path: "national-discovery" as const,
-        title: "Use National Discovery",
-        reason:
-          "You have some usable evidence, but the comp set is still thin. National discovery can identify the best markets for the next MarketCheck calls.",
-      };
+    setCompSearchImproving(true);
+    setCompMarketEditorOpen(false);
+
+    try {
+      if (compSearchRecommendation.action === "manual-review") {
+        setCompSearchImprovementStatus(
+          "Automatic search paths are exhausted. Review the vehicle identity or use advanced controls.",
+        );
+        openCompVehicleMatchEditor();
+        return;
+      }
+
+      if (compSearchRecommendation.action === "discovered-markets") {
+        setCompSearchImprovementStatus(
+          "Validating the strongest nationally discovered markets with MarketCheck…",
+        );
+        await searchAutoDevRecommendedMarkets();
+        return;
+      }
+
+      if (compSearchRecommendation.action === "national-discovery") {
+        setCompSearchImprovementStatus(
+          "Locating matching inventory nationwide, then validating the best markets…",
+        );
+        const discovery = await runAutoDevDiscovery();
+
+        if (discovery?.recommendedMarkets?.length) {
+          await searchAutoDevRecommendedMarkets(discovery);
+        }
+        return;
+      }
+
+      if (compSearchRecommendation.action === "broaden-vehicle") {
+        setCompSearchImprovementStatus(
+          "Broadening provider retrieval while keeping final vehicle qualification strict…",
+        );
+        const outcome = await broadenCompVehicleMatch();
+
+        if (
+          outcome &&
+          Number(outcome.includedCount || 0) === 0 &&
+          Number(outcome.returnedListings || 0) === 0 &&
+          !autoDevDiscovery
+        ) {
+          const discovery = await runAutoDevDiscovery();
+          if (discovery?.recommendedMarkets?.length) {
+            await searchAutoDevRecommendedMarkets(discovery);
+          }
+        }
+        return;
+      }
+
+      setCompSearchImprovementStatus(
+        "Expanding to the next highest-value regional markets…",
+      );
+      const outcome = await expandMarketCheckSearch();
+
+      if (
+        outcome &&
+        Number(outcome.includedCount || 0) === 0 &&
+        Number(outcome.returnedListings || 0) === 0 &&
+        !autoDevDiscovery
+      ) {
+        const discovery = await runAutoDevDiscovery();
+        if (discovery?.recommendedMarkets?.length) {
+          await searchAutoDevRecommendedMarkets(discovery);
+        }
+      }
+    } finally {
+      setCompSearchImproving(false);
     }
-
-    if (compReturnedListings === 0 && compSearchRegions < 3) {
-      return {
-        path: "geography" as const,
-        title: "Expand Geography",
-        reason:
-          "The local search is still shallow. Give MarketCheck a wider regional look before escalating to national discovery.",
-      };
-    }
-
-    return {
-      path: "geography" as const,
-      title: "Refine the MarketCheck Search",
-      reason:
-        "MarketCheck is seeing some inventory, so refine geography or vehicle matching before using national discovery.",
-    };
-  })();
-
-  const hasLowCompConfidence =
-    comps.length > 0 &&
-    String(compSummary.confidence || "").toLowerCase() === "low";
+  }
 
   const hasLimitedDealerFit = dealerFitResult.score < 55;
 
