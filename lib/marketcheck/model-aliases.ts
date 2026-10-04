@@ -77,6 +77,18 @@ export const marketCheckModelAliases: MarketCheckModelAlias[] = [
     fallbackModel: "GLS",
     notes: "Mercedes-Benz GLS standard model-code fallback.",
   },
+  {
+    make: "Mercedes-Benz",
+    models: ["eqe-class suv", "eqe class suv", "eqe suv", "eqe-class", "eqe class"],
+    fallbackModel: "EQE",
+    notes: "Mercedes-Benz EQE decoder/provider taxonomy fallback.",
+  },
+  {
+    make: "Mercedes-Benz",
+    models: ["eqs-class suv", "eqs class suv", "eqs suv", "eqs-class", "eqs class"],
+    fallbackModel: "EQS",
+    notes: "Mercedes-Benz EQS decoder/provider taxonomy fallback.",
+  },
 
   // Audi standard aliases
   {
