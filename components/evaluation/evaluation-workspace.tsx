@@ -2779,27 +2779,107 @@ export function EvaluationWorkspace({
       }
 
       setAutoDevDiscovery(data);
-      setAutoDevDiscoveryStatus(
-        `Auto.dev found ${data.total || 0} matching active listings nationwide.`,
+
+      const total = Number(data.total || 0);
+      const attempts = Array.isArray(data.discovery?.attempts)
+        ? data.discovery.attempts
+        : [];
+      const usedNormalizedIdentity = Boolean(
+        data.discovery?.normalizedIdentityUsed,
       );
+      const status =
+        total > 0
+          ? "Found " +
+            total +
+            " matching active listing" +
+            (total === 1 ? "" : "s") +
+            " nationwide" +
+            (usedNormalizedIdentity && data.query?.model
+              ? " after matching the provider classification “" +
+                data.query.model +
+                "”."
+              : ".")
+          : "No matching national inventory found after checking " +
+            Math.max(1, attempts.length) +
+            " exact/normalized vehicle identit" +
+            (Math.max(1, attempts.length) === 1 ? "y." : "ies.");
+
+      setAutoDevDiscoveryStatus(status);
+      setCompSearchHistory((current) =>
+        [
+          ...current,
+          {
+            id: "autodev-" + Date.now() + "-" + current.length,
+            source: "Auto.dev",
+            strategy: usedNormalizedIdentity
+              ? "National discovery with normalized vehicle identity"
+              : "National discovery",
+            summary: status,
+            details: attempts.map(
+              (attempt: any) =>
+                String(attempt.model || "Vehicle identity") +
+                ": " +
+                Number(attempt.total || attempt.returned || 0) +
+                " found",
+            ),
+            apiCalls: Math.max(1, attempts.length),
+            candidateListings: Number(data.returned || 0),
+            usableComps: 0,
+            regions: Array.isArray(data.recommendedMarkets)
+              ? data.recommendedMarkets
+                  .map((market: any) =>
+                    String(market.market || market.zip || ""),
+                  )
+                  .filter(Boolean)
+              : [],
+            createdAt: new Date().toISOString(),
+          },
+        ].slice(-12),
+      );
+
+      return data;
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Auto.dev national discovery failed.";
       setAutoDevDiscovery(null);
-      setAutoDevDiscoveryStatus(
-        error instanceof Error ? error.message : "Auto.dev national discovery failed.",
+      setAutoDevDiscoveryStatus(message);
+      setCompSearchHistory((current) =>
+        [
+          ...current,
+          {
+            id: "autodev-error-" + Date.now() + "-" + current.length,
+            source: "Auto.dev",
+            strategy: "National discovery",
+            summary: message,
+            details: [],
+            apiCalls: 0,
+            candidateListings: 0,
+            usableComps: 0,
+            regions: [],
+            createdAt: new Date().toISOString(),
+          },
+        ].slice(-12),
       );
+      return null;
     } finally {
       setAutoDevDiscoveryLoading(false);
     }
   }
 
-  async function searchAutoDevRecommendedMarkets() {
-    if (!autoDevDiscovery?.recommendedMarkets?.length) {
-      setAutoDevDiscoveryStatus("No Auto.dev market clusters are available to search.");
-      return;
+  async function searchAutoDevRecommendedMarkets(
+    discoveryOverride: typeof autoDevDiscovery = autoDevDiscovery,
+  ) {
+    const discovery = discoveryOverride;
+
+    if (!discovery?.recommendedMarkets?.length) {
+      setAutoDevDiscoveryStatus("No national inventory clusters are available to search.");
+      return null;
     }
 
     const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const regions = autoDevDiscovery.recommendedMarkets
+    const regions = discovery.recommendedMarkets
       .filter((market) => !searched.has(market.zip))
       .slice(0, 3)
       .map((market, index) => ({
@@ -2820,7 +2900,7 @@ export function EvaluationWorkspace({
       `Searching MarketCheck in ${regions.length} Auto.dev-identified market${regions.length === 1 ? "" : "s"}...`,
     );
 
-    await pullMarketCheckComps(null, {
+    const outcome = await pullMarketCheckComps(null, {
       searchStage: "expanded",
       regions,
       mergeResults: true,
@@ -2831,8 +2911,16 @@ export function EvaluationWorkspace({
     });
 
     setAutoDevDiscoveryStatus(
-      `MarketCheck search completed in ${regions.map((region) => region.market.replace(" · Auto.dev discovery", "")).join(", ")}.`,
+      "MarketCheck validation completed in " +
+        regions
+          .map((region) =>
+            region.market.replace(" · Auto.dev discovery", ""),
+          )
+          .join(", ") +
+        ".",
     );
+
+    return outcome;
   }
 
   async function expandMarketCheckSearch() {
