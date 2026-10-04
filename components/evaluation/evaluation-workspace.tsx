@@ -2496,12 +2496,14 @@ export function EvaluationWorkspace({
       // fallback rows client-side just because MarketCheck returned inventory:
       // that can temporarily manufacture a sale value/profit verdict before
       // vehicle-equivalence checks have established usable comps.
-      const normalizedComps = pulledComps.map((comp: MarketComp) => ({
-        ...comp,
-        included: comp.included === true,
-      }));
+      const normalizedComps: MarketComp[] = pulledComps.map(
+        (comp: MarketComp) => ({
+          ...comp,
+          included: comp.included === true,
+        }),
+      );
 
-      const mergedComps = options?.mergeResults
+      const mergedComps: MarketComp[] = options?.mergeResults
         ? [
             ...comps,
             ...normalizedComps.filter(
