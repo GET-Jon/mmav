@@ -165,16 +165,10 @@ export function calculateDecision({
     return "Pass";
   }
 
-  if (currentBid <= safeBid) {
-    return "Strong Buy";
-  }
-
+  // Lot Logic exposes one acquisition ceiling. The legacy bid fields stay
+  // in the function signature for saved-evaluation compatibility only.
   if (currentBid <= maxSmartBid) {
-    return "Bid If Clean";
-  }
-
-  if (currentBid <= stretchBid) {
-    return "Watch / Stretch Only";
+    return "Strong Buy";
   }
 
   return "Pass";
