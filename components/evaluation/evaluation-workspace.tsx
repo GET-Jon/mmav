@@ -4246,14 +4246,15 @@ export function EvaluationWorkspace({
     !conditionReviewPending &&
     !hasHardPass &&
     (isAboveRecommendedBuy ||
-      valuation.decision === "Watch / Stretch Only" ||
-      hasLowCompConfidence ||
+      hasLimitedMarketEvidence ||
       hasMaterialConditionRisk ||
       conditionUnknown);
 
   const reviewReasons = [
     isAboveRecommendedBuy ? "the current bid is above the Recommended Max Buy" : null,
-    hasLowCompConfidence ? "market evidence is still thin" : null,
+    hasLimitedMarketEvidence
+      ? "market evidence is limited; strengthen the comp set before treating the recommendation as high-confidence"
+      : null,
     hasMaterialConditionRisk ? "a material vehicle-specific risk needs review" : null,
     conditionUnknown ? "condition is unknown or has not been adequately reviewed" : null,
   ].filter((reason): reason is string => Boolean(reason));
@@ -4270,9 +4271,7 @@ export function EvaluationWorkspace({
           ? "PASS"
         : isAboveRecommendedBuy
           ? "ABOVE TARGET PRICE"
-          : valuation.decision === "Watch / Stretch Only"
-            ? "WATCH CLOSELY"
-            : requiresReview
+          : requiresReview
               ? "REVIEW REQUIRED"
               : "WORTH PURSUING";
 
@@ -4340,7 +4339,7 @@ export function EvaluationWorkspace({
     presentationDecision === "pursue" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    comps.length > 0 ? compSummary.confidence : "—";
+    compSummary.includedCount > 0 ? marketEvidenceStrength : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
