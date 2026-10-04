@@ -4199,11 +4199,13 @@ export function EvaluationWorkspace({
       const outcome = await expandMarketCheckSearch();
 
       if (
-        outcome &&
-        Number(outcome.includedCount || 0) === 0 &&
-        Number(outcome.returnedListings || 0) === 0 &&
-        !autoDevDiscovery
+        !outcome ||
+        (Number(outcome.includedCount || 0) === 0 &&
+          Number(outcome.returnedListings || 0) === 0)
       ) {
+        setCompSearchImprovementStatus(
+          "Regional expansion is complete. Checking national inventory next…",
+        );
         const discovery = await runAutoDevDiscovery();
         if (discovery?.recommendedMarkets?.length) {
           await searchAutoDevRecommendedMarkets(discovery);
@@ -6939,6 +6941,7 @@ export function EvaluationWorkspace({
                     }
                     recommendation={compSearchRecommendation}
                     improving={compSearchImproving}
+                    activityStatus={compSearchImprovementStatus}
                     onImprove={() => void improveCompSearch()}
                   />
                 </div>
