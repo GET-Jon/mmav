@@ -2334,6 +2334,10 @@ export function EvaluationWorkspace({
       setComps([]);
       setMarketCheckSearchMeta(null);
       setMarketCheckApiUsage(null);
+      setCompSearchHistory([]);
+      setAutoDevDiscovery(null);
+      setAutoDevDiscoveryStatus("");
+      setCompSearchImprovementStatus("");
     }
 
     setMarketCheckLoading(true);
@@ -2441,10 +2445,49 @@ export function EvaluationWorkspace({
           minimumQualityScore: data.minimumQualityScore,
         });
 
-        setMarketCheckStatus(
-          data.apiUsage?.stopReason || data.error || "No comps found",
+        recordMarketCheckSearch(data);
+
+        const returnedListings = Number(
+          data.apiUsage?.filterDiagnostics?.returnedListings || 0,
         );
-        return;
+        const usableListings = Number(
+          data.apiUsage?.filterDiagnostics?.usableListings ||
+            data.apiUsage?.usableCompCount ||
+            0,
+        );
+        const searchedThisPass = Array.isArray(data.search?.regionsChecked)
+          ? data.search.regionsChecked.length
+          : 0;
+
+        setMarketCheckStatus(
+          returnedListings > 0
+            ? "Search completed: " +
+              returnedListings +
+              " listing" +
+              (returnedListings === 1 ? "" : "s") +
+              " returned, but none qualified as valuation evidence."
+            : "Search completed across " +
+              (searchedThisPass || 1) +
+              " market" +
+              (searchedThisPass === 1 ? "" : "s") +
+              "; no candidate listings were returned.",
+        );
+
+        const retainedComps = options?.mergeResults ? comps : [];
+
+        return {
+          data,
+          mergedComps: retainedComps,
+          includedCount: retainedComps.filter((comp) => comp.included).length,
+          returnedListings,
+          usableListings,
+          regionsChecked: Array.from(
+            new Set([
+              ...previousRegionsChecked,
+              ...(data.search?.regionsChecked || []),
+            ]),
+          ),
+        };
       }
 
       const pulledComps = Array.isArray(data.comps) ? data.comps : [];
@@ -2510,6 +2553,8 @@ export function EvaluationWorkspace({
         minimumQualityScore: data.minimumQualityScore,
       });
 
+      recordMarketCheckSearch(data);
+
       setMarketCheckStatus(
         `${mergedComps.length} comps loaded${
           combinedRegionsChecked.length
@@ -2517,6 +2562,21 @@ export function EvaluationWorkspace({
             : ""
         }${data.cache?.hit ? " from cache" : ""}`,
       );
+
+      return {
+        data,
+        mergedComps,
+        includedCount: mergedComps.filter((comp) => comp.included).length,
+        returnedListings: Number(
+          data.apiUsage?.filterDiagnostics?.returnedListings || 0,
+        ),
+        usableListings: Number(
+          data.apiUsage?.filterDiagnostics?.usableListings ||
+            data.apiUsage?.usableCompCount ||
+            0,
+        ),
+        regionsChecked: combinedRegionsChecked,
+      };
     } catch (error) {
       setMarketCheckStatus(
         error instanceof Error ? error.message : "MarketCheck search failed.",
