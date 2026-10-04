@@ -14,6 +14,12 @@ import {
   type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
+import { CompSearchReport } from "@/components/evaluation/comp-search-report";
+import {
+  describeMarketCheckAttempt,
+  recommendCompSearchAction,
+  type CompSearchReportEntry,
+} from "@/lib/evaluation/comp-search-orchestration";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
@@ -747,6 +753,10 @@ export function EvaluationWorkspace({
       latitude: number | null;
     }>;
   } | null>(null);
+  const [compSearchHistory, setCompSearchHistory] = useState<CompSearchReportEntry[]>([]);
+  const [compSearchImproving, setCompSearchImproving] = useState(false);
+  const [compSearchImprovementStatus, setCompSearchImprovementStatus] = useState("");
+
   const [marketCheckSearchMeta, setMarketCheckSearchMeta] = useState<{
     loadedCount: number;
     regionsChecked: string[];
@@ -3375,10 +3385,9 @@ export function EvaluationWorkspace({
           manualVehicle.model.trim().length > 0),
   );
 
-  const suggestedBid =
-    "safeBid" in valuation && typeof valuation.safeBid === "number"
-      ? valuation.safeBid
-      : valuation.maxSmartBid;
+  // Recommended Max Buy is the single acquisition ceiling.
+  // safeBid/stretchBid remain in saved payloads only for backwards compatibility.
+  const suggestedBid = valuation.maxSmartBid;
 
   const profitabilityScore = calculateDealEconomicsScore(
     valuation.expectedGrossProfit,
