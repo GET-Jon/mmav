@@ -2246,7 +2246,7 @@ export function EvaluationWorkspace({
         ...current,
         {
           id: "marketcheck-" + Date.now() + "-" + current.length,
-          source: "MarketCheck",
+          source: "MarketCheck" as const,
           strategy: strategies.length
             ? strategies.join(" → ")
             : "MarketCheck search",
@@ -2810,7 +2810,7 @@ export function EvaluationWorkspace({
           ...current,
           {
             id: "autodev-" + Date.now() + "-" + current.length,
-            source: "Auto.dev",
+            source: "Auto.dev" as const,
             strategy: usedNormalizedIdentity
               ? "National discovery with normalized vehicle identity"
               : "National discovery",
@@ -2850,7 +2850,7 @@ export function EvaluationWorkspace({
           ...current,
           {
             id: "autodev-error-" + Date.now() + "-" + current.length,
-            source: "Auto.dev",
+            source: "Auto.dev" as const,
             strategy: "National discovery",
             summary: message,
             details: [],
