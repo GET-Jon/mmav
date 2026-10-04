@@ -2943,12 +2943,12 @@ export function EvaluationWorkspace({
 
     if (nextRegions.length === 0) {
       setMarketCheckStatus(
-        "Nearby configured markets have been searched. Major reference markets are available as the final expansion step.",
+        "Nearby configured markets have been searched. Lot Logic will use national discovery or advanced controls for the next step.",
       );
-      return;
+      return null;
     }
 
-    await pullMarketCheckComps(null, {
+    return await pullMarketCheckComps(null, {
       searchStage: "expanded",
       regions: nextRegions,
       mergeResults: true,
