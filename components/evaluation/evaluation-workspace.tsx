@@ -6912,14 +6912,33 @@ export function EvaluationWorkspace({
                   </div>
                 }
               >
-                {comps.length ? (
-                  <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center">
-                    <div className="text-sm font-black text-slate-800">No usable comps yet</div>
-                    <div className="mt-1 text-xs font-semibold text-slate-500">{marketCheckStatus || "Adjust the search to establish market evidence."}</div>
-                  </div>
-                )}
+                <div className="space-y-4">
+                  {comps.length ? (
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                  ) : null}
+                  <CompSearchReport
+                    vehicleLabel={[vehicleYear, vehicleMake, vehicleModel, vehicleTrim].filter(Boolean).join(" ") || "Current vehicle"}
+                    regionsChecked={marketCheckSearchMeta?.regionsChecked || []}
+                    retrievalLabel={
+                      compTrimRelaxed
+                        ? compRetrievalLabel
+                        : marketCheckSearchMeta?.lowConfidenceFallback
+                          ? "Low-confidence fallback retrieval"
+                          : "Exact vehicle with strict qualification"
+                    }
+                    apiCallsMade={Number(marketCheckApiUsage?.apiCallsMade || 0)}
+                    searchLog={marketCheckApiUsage?.searchLog || []}
+                    filterDiagnostics={marketCheckApiUsage?.filterDiagnostics || null}
+                    entries={compSearchHistory}
+                    nationalDiscoveryStatus={autoDevDiscoveryStatus}
+                    nationalDiscoveryTotal={
+                      autoDevDiscovery ? Number(autoDevDiscovery.total || 0) : null
+                    }
+                    recommendation={compSearchRecommendation}
+                    improving={compSearchImproving}
+                    onImprove={() => void improveCompSearch()}
+                  />
+                </div>
               </SectionCard>
             </section>
           ) : null}
