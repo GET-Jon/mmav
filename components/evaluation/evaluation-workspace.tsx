@@ -5557,13 +5557,35 @@ export function EvaluationWorkspace({
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Expand / Improve Comps</h2>
                 <p className="mt-1 max-w-lg text-sm font-semibold leading-5 text-slate-500">
-                  Expand where Lot Logic looks, or broaden how specifically it matches this vehicle. Geography suggestions keep widening outward from your starting market.
+                  Let Lot Logic choose the next best search step automatically, or use the advanced controls below to adjust geography or vehicle matching yourself.
                 </p>
               </div>
               <button type="button" onClick={() => setCompMarketEditorOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-50">Close</button>
             </div>
 
-            <div className="border-b border-slate-200 px-6">
+                        <div className="border-b border-slate-100 px-6 py-4">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">Lot Logic recommendation</div>
+                <div className="mt-1 text-base font-black text-slate-950">{compSearchRecommendation.title}</div>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">{compSearchRecommendation.reason}</p>
+                {compSearchRecommendation.action !== "complete" ? (
+                  <button
+                    type="button"
+                    onClick={() => void improveCompSearch()}
+                    disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                    className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
+                  >
+                    {compSearchImproving ? "Improving Search…" : "Let Lot Logic Improve Search →"}
+                  </button>
+                ) : null}
+                {compSearchImprovementStatus ? (
+                  <div className="mt-2 text-[11px] font-bold leading-4 text-blue-900/70">{compSearchImprovementStatus}</div>
+                ) : null}
+              </div>
+              <div className="mt-3 text-[10px] font-black uppercase tracking-[0.09em] text-slate-400">Advanced controls</div>
+            </div>
+
+<div className="border-b border-slate-200 px-6">
               <div className="flex gap-6" role="tablist">
                 <button
                   type="button"
