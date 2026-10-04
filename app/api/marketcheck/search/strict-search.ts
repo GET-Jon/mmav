@@ -1834,6 +1834,7 @@ export async function POST(request: Request) {
       taxonomyRetrieval?.fallbackModel || aliasRetrievalModel || null;
 
     let searches: MarketCheckSearchResult[] = [];
+    let vinNativeSearches: MarketCheckSearchResult[] = [];
     let exactSearches: MarketCheckSearchResult[] = [];
     let taxonomyRetrySearches: MarketCheckSearchResult[] = [];
     let generationSearches: MarketCheckSearchResult[] = [];
@@ -1885,11 +1886,19 @@ export async function POST(request: Request) {
           apiControls,
         });
       } else {
-        usedVinNativeMatch = true;
-        exactSearches = [vinExact];
+        vinNativeSearches = [vinExact];
         searches = [vinExact];
 
+        const vinExactSummary = buildCompSummary(vinNativeSearches);
+        usedVinNativeMatch = vinExactSummary.comps.length > 0;
+
+        if (!usedVinNativeMatch) {
+          vinNativeFallbackReason =
+            "MarketCheck VIN matching returned no qualifying candidates, so Lot Logic continued with model-taxonomy recovery.";
+        }
+
         if (
+          usedVinNativeMatch &&
           generationCompRule &&
           generationYears.length > 0 &&
           buildCompSummary(searches).comps.length < MIN_USABLE_COMPS &&
@@ -1987,7 +1996,7 @@ export async function POST(request: Request) {
           });
         }
 
-        searches = [...taxonomyRetrySearches];
+        searches = [...vinNativeSearches, ...taxonomyRetrySearches];
         activeRetrievalModel = explicitFallbackModel;
         activeRetrievalTrim =
           useTaxonomyFallbackTrim
@@ -2024,8 +2033,8 @@ export async function POST(request: Request) {
           });
         }
 
-        searches = [...exactSearches];
-        const exactSummary = buildCompSummary(exactSearches);
+        searches = [...vinNativeSearches, ...exactSearches];
+        const exactSummary = buildCompSummary(searches);
 
         if (
           exactSummary.rawCount === 0 &&
