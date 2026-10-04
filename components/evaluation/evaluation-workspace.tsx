@@ -6751,7 +6751,7 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"}`
+                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence`
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -6799,11 +6799,26 @@ export function EvaluationWorkspace({
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
-                          <div className="mt-1 text-xl font-black text-slate-950">{compSummary.confidence || "—"}</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{marketEvidenceStrength}</div>
+                          <div className="mt-0.5 text-[10px] font-bold text-slate-400">Evidence strength</div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
                         <>
+                        {hasLimitedMarketEvidence ? (
+                          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                            <div className="text-xs font-black text-amber-900">Recommended next step: {compSearchRecommendation.title}</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-5 text-amber-800">{compSearchRecommendation.reason}</div>
+                            <button
+                              type="button"
+                              onClick={() => void improveCompSearch()}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                              className="mt-2 rounded-lg bg-blue-700 px-3 py-2 text-[11px] font-black text-white disabled:bg-slate-300"
+                            >
+                              {compSearchImproving ? "Improving Search…" : "Improve Search Automatically"}
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button type="button" onClick={() => setCompSectionExpanded((open) => !open)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
                             {compSectionExpanded ? "Hide comps" : "Review comps"}
@@ -6838,14 +6853,19 @@ export function EvaluationWorkspace({
                         <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {compNextStep.path === "national-discovery" ? (
-                          <button type="button" onClick={() => void runAutoDevDiscovery()} disabled={autoDevDiscoveryLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">{autoDevDiscoveryLoading ? "Scanning..." : "Scan National Inventory"}</button>
-                        ) : compNextStep.path === "discovered-markets" ? (
-                          <button type="button" onClick={() => void searchAutoDevRecommendedMarkets()} disabled={marketCheckLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">Search Recommended Markets</button>
+                        {compSearchRecommendation.action === "manual-review" ? (
+                          <button type="button" onClick={openCompVehicleMatchEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Review Vehicle Match →</button>
                         ) : (
-                          <button type="button" onClick={openCompMarketEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Expand / Improve Comps</button>
+                          <button
+                            type="button"
+                            onClick={() => void improveCompSearch()}
+                            disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                            className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
+                          >
+                            {compSearchImproving ? "Improving Search…" : "Improve Search Automatically"}
+                          </button>
                         )}
-                        <button type="button" onClick={() => setCompSectionExpanded(true)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">More comp details</button>
+                        <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
                       </div>
                     </>
                   ) : (
