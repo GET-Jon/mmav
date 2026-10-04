@@ -2928,8 +2928,11 @@ export function EvaluationWorkspace({
   async function expandMarketCheckSearch() {
     const searchedZips = new Set(marketCheckSearchMeta?.searchedZips || []);
 
-    const nextRegions = activeAssumptions.regionalMarkets
-      .filter((market) => market.enabled)
+    // Use the same expansion engine that powers the UI recommendations so the
+    // automatic path cannot recommend markets that its own action cannot search.
+    const nextRegions = getCompExpansionMarkets()
+      .filter((market) => !searchedZips.has(market.zip))
+      .slice(0, 3)
       .map((market, index) => ({
         market: market.market,
         zip: market.zip,
@@ -2937,15 +2940,12 @@ export function EvaluationWorkspace({
           typeof market.order === "number" && Number.isFinite(market.order)
             ? market.order
             : index + 1,
-        enabled: market.enabled,
-      }))
-      .sort((a, b) => a.order - b.order)
-      .filter((market) => !searchedZips.has(market.zip))
-      .slice(0, 3);
+        enabled: true,
+      }));
 
     if (nextRegions.length === 0) {
       setMarketCheckStatus(
-        "Nearby configured markets have been searched. Lot Logic will use national discovery or advanced controls for the next step.",
+        "Regional expansion is complete. Lot Logic will use national discovery for the next step.",
       );
       return null;
     }
@@ -2957,6 +2957,7 @@ export function EvaluationWorkspace({
       useVinMatch: !compTrimRelaxed,
       preferTaxonomyFallback: compTrimRelaxed,
       useTaxonomyFallbackTrim: !compTrimRelaxed,
+      maxApiCallsPerSearch: Math.min(3, nextRegions.length),
     });
   }
 
