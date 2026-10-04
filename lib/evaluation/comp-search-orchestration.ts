@@ -52,64 +52,70 @@ export function recommendCompSearchAction(
   const confidence = normalizedConfidence(input.confidence);
   const evidenceIsUsable =
     input.includedCount >= 4 && confidence !== "low" && confidence !== "weak";
+  const regionalSearchIsMature = input.regionsSearched >= 5;
 
   if (evidenceIsUsable) {
     return {
       action: "complete",
       title: "Market evidence is usable",
       reason:
-        "Lot Logic has enough qualifying evidence to continue without spending more search calls.",
+        "Lot Logic has enough qualifying evidence to continue without searching farther.",
     };
   }
 
+  // Once national discovery has located inventory, stop guessing at geography.
+  // Validate the discovered clusters directly with MarketCheck.
   if (input.nationalRecommendedMarkets > 0) {
     return {
       action: "discovered-markets",
-      title: "Search the markets where matching cars exist",
+      title: "Verify the strongest national markets",
       reason:
-        "National discovery found matching inventory. The highest-value next step is to validate those specific markets with MarketCheck.",
+        "Matching inventory was found nationwide. Lot Logic can now verify the best markets with MarketCheck.",
     };
   }
 
+  // If the provider is returning inventory under the wrong model taxonomy,
+  // normalize retrieval once before spending calls on more geography.
   if (
-    input.returnedListings > 0 &&
-    input.usableListings === 0 &&
     !input.trimRelaxed &&
-    (input.modelMismatchCount > 0 || input.hasTaxonomyFallback)
+    (input.modelMismatchCount > 0 || input.hasTaxonomyFallback) &&
+    input.usableListings === 0
   ) {
     return {
       action: "broaden-vehicle",
-      title: "Broaden retrieval, keep strict qualification",
+      title: "Improve the vehicle match",
       reason:
-        "Inventory is being returned, but the provider taxonomy is preventing it from qualifying. Lot Logic should broaden retrieval while keeping final vehicle-equivalence safeguards active.",
+        "Lot Logic found possible inventory, but the provider is classifying the vehicle differently. Broaden retrieval once while keeping the final comp rules strict.",
+    };
+  }
+
+  // Do not blindly walk the country market-by-market. After a meaningful
+  // regional sample, national discovery is the higher-information next step.
+  if (regionalSearchIsMature && !input.nationalDiscoveryAttempted) {
+    return {
+      action: "national-discovery",
+      title: "Search nationally for matching inventory",
+      reason:
+        "The regional search is broad enough. Find where matching cars actually exist, then verify those markets instead of guessing at more cities.",
     };
   }
 
   if (input.includedCount > 0) {
-    if (input.unsearchedExpansionMarkets > 0 && input.regionsSearched < 6) {
+    if (input.unsearchedExpansionMarkets > 0) {
       return {
         action: "expand-geography",
-        title: "Expand to the next best markets",
+        title: "Check a few more nearby markets",
         reason:
-          "The current comp set is useful but still thin. Search the next nearby markets before escalating to national discovery.",
+          "The current comp set is useful but still thin. One more regional pass may strengthen it before national discovery.",
       };
     }
 
     if (!input.nationalDiscoveryAttempted) {
       return {
         action: "national-discovery",
-        title: "Use national discovery",
+        title: "Search nationally for matching inventory",
         reason:
-          "The local and regional evidence is still thin. Locate where matching inventory actually exists before spending more MarketCheck calls.",
-      };
-    }
-
-    if (input.unsearchedExpansionMarkets > 0) {
-      return {
-        action: "expand-geography",
-        title: "Search additional markets",
-        reason:
-          "National discovery did not produce a better cluster, so the next useful move is to continue widening geography while preserving strict qualification.",
+          "The available regional evidence is still thin. Find where matching inventory is concentrated before searching farther.",
       };
     }
 
@@ -117,7 +123,7 @@ export function recommendCompSearchAction(
       action: "manual-review",
       title: "Review the available evidence",
       reason:
-        "Lot Logic has exhausted its high-value automatic search paths. Review the vehicle match or add a specific market only if you have additional information.",
+        "Lot Logic has exhausted the strongest automatic search paths for this vehicle.",
     };
   }
 
@@ -125,40 +131,18 @@ export function recommendCompSearchAction(
     if (input.regionsSearched < 3 && input.unsearchedExpansionMarkets > 0) {
       return {
         action: "expand-geography",
-        title: "Expand the regional search",
+        title: "Widen the regional search",
         reason:
-          "The search is still shallow. Check the next nearby markets before escalating to a national inventory scan.",
+          "The first search was too narrow to draw a conclusion. Check the next nearby markets.",
       };
     }
 
     if (!input.nationalDiscoveryAttempted) {
       return {
         action: "national-discovery",
-        title: "Use national discovery",
+        title: "Search nationally for matching inventory",
         reason:
-          "Regional MarketCheck searches found no candidate inventory. Locate where matching cars actually exist before spending more MarketCheck calls.",
-      };
-    }
-
-    if (
-      input.nationalDiscoveryTotal === 0 &&
-      !input.trimRelaxed &&
-      input.hasTaxonomyFallback
-    ) {
-      return {
-        action: "broaden-vehicle",
-        title: "Check the broader provider classification",
-        reason:
-          "Neither regional nor national discovery found the exact provider identity. Broaden retrieval once while keeping final qualification strict.",
-      };
-    }
-
-    if (input.unsearchedExpansionMarkets > 0) {
-      return {
-        action: "expand-geography",
-        title: "Search additional markets",
-        reason:
-          "National discovery did not identify a stronger cluster. Continue to the next unsearched markets if you want more evidence.",
+          "Nearby searches found no candidate inventory. Locate matching cars nationwide before spending more MarketCheck calls.",
       };
     }
 
@@ -166,31 +150,37 @@ export function recommendCompSearchAction(
       action: "manual-review",
       title: "Confirm the vehicle identity",
       reason:
-        "Exact, normalized, regional, and national search paths did not produce usable evidence. Confirm the vehicle classification before spending more provider calls.",
+        "Regional and national searches did not produce usable evidence. Review the vehicle match before searching farther.",
     };
   }
 
-  if (input.usableListings === 0 && input.unsearchedExpansionMarkets > 0) {
+  // Returned inventory that still fails qualification gets one measured
+  // geography expansion. After five markets, switch to national discovery.
+  if (
+    input.usableListings === 0 &&
+    input.unsearchedExpansionMarkets > 0 &&
+    !regionalSearchIsMature
+  ) {
     return {
       action: "expand-geography",
-      title: "Look for better-quality matches",
+      title: "Look for stronger matches nearby",
       reason:
-        "Inventory exists, but the current listings do not clear Lot Logic's quality and equivalence checks. Search the next markets for stronger matches.",
+        "The listings found so far were not close enough to trust. Check the next nearby markets once, then move to national discovery if needed.",
     };
   }
 
   if (!input.nationalDiscoveryAttempted) {
     return {
       action: "national-discovery",
-      title: "Use national discovery",
+      title: "Search nationally for matching inventory",
       reason:
-        "The current evidence is not strong enough. Find where matching inventory is concentrated before making more regional calls.",
+        "The regional evidence is not strong enough. Find where matching inventory actually exists before making more regional calls.",
     };
   }
 
   return {
     action: "manual-review",
-    title: "Review the available evidence",
+    title: "Review the vehicle match",
     reason:
       "Lot Logic has completed the strongest automatic search paths available for this vehicle.",
   };
