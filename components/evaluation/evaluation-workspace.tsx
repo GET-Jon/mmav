@@ -2189,6 +2189,91 @@ export function EvaluationWorkspace({
     }
   }
 
+  function recordMarketCheckSearch(data: any) {
+    const usage = data?.apiUsage || {};
+    const diagnostics = usage?.filterDiagnostics || {};
+    const log = Array.isArray(usage?.searchLog) ? usage.searchLog : [];
+    const regions = Array.isArray(data?.search?.regionsChecked)
+      ? data.search.regionsChecked
+      : [];
+    const strategies = Array.from(
+      new Set(
+        log
+          .map((row: any) =>
+            describeMarketCheckAttempt(String(row?.attemptName || "")),
+          )
+          .filter(Boolean),
+      ),
+    );
+    const candidateListings = Number(
+      diagnostics?.returnedListings ??
+        log.reduce(
+          (sum: number, row: any) => sum + Number(row?.listingCount || 0),
+          0,
+        ),
+    );
+    const usableComps = Number(
+      diagnostics?.usableListings ??
+        usage?.usableCompCount ??
+        log.reduce(
+          (sum: number, row: any) => sum + Number(row?.usableComps || 0),
+          0,
+        ),
+    );
+    const rejectionCounts = diagnostics?.rejectionCounts || {};
+    const details = [
+      data?.search?.generationWidening?.attempted
+        ? "Nearby model years checked within " +
+          (data.search.generationWidening.generation || "the same generation")
+        : null,
+      data?.search?.taxonomyDiscovery?.attempted
+        ? "Provider model taxonomy checked"
+        : null,
+      Number(rejectionCounts?.modelMismatch || 0) > 0
+        ? String(Number(rejectionCounts.modelMismatch)) +
+          " model mismatch" +
+          (Number(rejectionCounts.modelMismatch) === 1 ? "" : "es") +
+          " rejected"
+        : null,
+      Number(rejectionCounts?.qualityBelowThreshold || 0) > 0
+        ? String(Number(rejectionCounts.qualityBelowThreshold)) +
+          " below quality threshold"
+        : null,
+    ].filter((value): value is string => Boolean(value));
+
+    setCompSearchHistory((current) =>
+      [
+        ...current,
+        {
+          id: "marketcheck-" + Date.now() + "-" + current.length,
+          source: "MarketCheck",
+          strategy: strategies.length
+            ? strategies.join(" → ")
+            : "MarketCheck search",
+          summary:
+            candidateListings > 0
+              ? String(candidateListings) +
+                " candidate listing" +
+                (candidateListings === 1 ? "" : "s") +
+                " reviewed; " +
+                String(usableComps) +
+                " cleared the latest retrieval-quality checks."
+              : "No candidate inventory returned across " +
+                String(regions.length || 1) +
+                " searched market" +
+                (regions.length === 1 ? "" : "s") +
+                " in this pass.",
+          details,
+          apiCalls: Number(usage?.apiCallsMade || 0),
+          candidateListings,
+          usableComps,
+          regions,
+          createdAt: new Date().toISOString(),
+        },
+      ].slice(-12),
+    );
+  }
+
   async function pullMarketCheckComps(
     vehicleOverride?: VinDecodeResult | MarketCheckVehicleOverride | null,
     options?: {
