@@ -96,7 +96,7 @@ export function buildDeterministicVehicleIdentityProfile(
   const makeCanonical = canonicalVehicleMake(decoded.make);
   const make = prettyMake(makeCanonical);
   const modelFamily = canonicalModelFamily({
-    year,
+    year: year || 0,
     make: decoded.make,
     model: decoded.model,
     trim: decoded.trim,
@@ -105,7 +105,7 @@ export function buildDeterministicVehicleIdentityProfile(
     fuelType: decoded.fuelType,
   });
   const bodyClass = canonicalBodyClass({
-    year,
+    year: year || 0,
     make: decoded.make,
     model: decoded.model,
     trim: decoded.trim,
