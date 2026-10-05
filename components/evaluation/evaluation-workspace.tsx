@@ -2593,6 +2593,12 @@ export function EvaluationWorkspace({
               ...(data.search?.regionsChecked || []),
             ]),
           ),
+          searchedZips: Array.from(
+            new Set([
+              ...previousSearchedZips,
+              ...(data.search?.searchedZips || []),
+            ]),
+          ),
         };
       }
 
@@ -2684,6 +2690,7 @@ export function EvaluationWorkspace({
             0,
         ),
         regionsChecked: combinedRegionsChecked,
+        searchedZips: combinedSearchedZips,
       };
     } catch (error) {
       setMarketCheckStatus(
@@ -2979,6 +2986,7 @@ export function EvaluationWorkspace({
 
   async function searchAutoDevRecommendedMarkets(
     discoveryOverride: typeof autoDevDiscovery = autoDevDiscovery,
+    searchedZipsOverride?: string[],
   ) {
     const discovery = discoveryOverride;
 
@@ -2987,7 +2995,9 @@ export function EvaluationWorkspace({
       return null;
     }
 
-    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
+    const searched = new Set(
+      searchedZipsOverride || marketCheckSearchMeta?.searchedZips || [],
+    );
     const regions = discovery.recommendedMarkets
       .filter((market) => !searched.has(market.zip))
       .slice(0, 3)
