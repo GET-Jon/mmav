@@ -1283,12 +1283,14 @@ export async function POST(request: Request) {
     const reason = String(body.reason || "explicit-user-comp-search");
     const preferTaxonomyFallback = body.preferTaxonomyFallback === true;
     const useTaxonomyFallbackTrim = body.useTaxonomyFallbackTrim !== false;
-    const preferredModelAliases = Array.isArray(body.preferredModelAliases)
+    const preferredModelAliases: string[] = Array.isArray(
+      body.preferredModelAliases,
+    )
       ? Array.from(
-          new Set(
+          new Set<string>(
             body.preferredModelAliases
               .map((value: unknown) => String(value || "").trim())
-              .filter(Boolean),
+              .filter((value: string) => Boolean(value)),
           ),
         ).slice(0, 8)
       : [];
