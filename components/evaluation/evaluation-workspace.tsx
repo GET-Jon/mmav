@@ -7045,27 +7045,61 @@ export function EvaluationWorkspace({
                       ) : null}
                     </>
                   ) : activeStage === "market" ? (
-                    <>
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                        <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
-                        <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {compSearchRecommendation.action === "manual-review" ? (
-                          <button type="button" onClick={openCompVehicleMatchEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Review Vehicle Match →</button>
-                        ) : (
+                    compSearchHandedOff ? (
+                      <>
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                          <div className="text-sm font-black text-blue-950">
+                            Comp search is being handled below
+                          </div>
+                          <div className="mt-1 text-xs font-semibold leading-5 text-blue-800">
+                            {compSearchImproving
+                              ? compSearchImprovementStatus ||
+                                "Lot Logic is working through the search plan…"
+                              : automaticCompSearchCompleted
+                                ? "The automatic search is complete. Review the result and next option in Comparable Vehicles."
+                                : "Continue from the Comparable Vehicles section for the next search step."}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 opacity-45">
                           <button
                             type="button"
-                            onClick={() => void improveCompSearch()}
-                            disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
-                            className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
+                            disabled
+                            className="rounded-lg bg-slate-200 px-4 py-2 text-xs font-black text-slate-500"
                           >
-                            {compSearchImproving ? "Improving Search…" : "Improve Search Automatically"}
+                            Search controls moved below ↓
                           </button>
-                        )}
-                        <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
-                      </div>
-                    </>
+                          <button
+                            type="button"
+                            disabled
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-400"
+                          >
+                            Expand / Improve Comps
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                          <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
+                          <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {compSearchRecommendation.action === "manual-review" ? (
+                            <button type="button" onClick={openCompVehicleMatchEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Review Vehicle Match →</button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void improveCompSearch()}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                              className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
+                            >
+                              {compSearchImproving ? "Improving Search…" : "Improve Search Automatically"}
+                            </button>
+                          )}
+                          <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
+                        </div>
+                      </>
+                    )
                   ) : (
                     <div className="text-sm font-semibold text-slate-500">Market evidence incomplete.</div>
                   )}
