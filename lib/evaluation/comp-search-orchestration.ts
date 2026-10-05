@@ -131,9 +131,9 @@ export function recommendCompSearchAction(
     if (input.regionsSearched < 3 && input.unsearchedExpansionMarkets > 0) {
       return {
         action: "expand-geography",
-        title: "Widen the regional search",
+        title: "No close matches found nearby",
         reason:
-          "The first search was too narrow to draw a conclusion. Check the next nearby markets.",
+          "The first search was too narrow to find strong comparisons. You can either have Lot Logic automatically widen your search, or expand the parameters yourself below.",
       };
     }
 
