@@ -1229,6 +1229,11 @@ export function EvaluationWorkspace({
 
       if (draft.decodedVehicle) {
         setDecodedVehicle(draft.decodedVehicle);
+        setVehicleIdentityProfile(
+          draft.vehicleIdentityProfile ||
+            buildDeterministicVehicleIdentityProfile(draft.decodedVehicle),
+        );
+        setVehicleIdentityProfileStatus("Vehicle identity ready");
       }
 
       if (draft.manualVehicle) {
@@ -1355,6 +1360,7 @@ export function EvaluationWorkspace({
           auctionSite,
           finalTargetOverride,
           decodedVehicle,
+          vehicleIdentityProfile,
           manualVehicle,
           targetMileage,
           evaluation,
@@ -1384,6 +1390,7 @@ export function EvaluationWorkspace({
     auctionSite,
     finalTargetOverride,
     decodedVehicle,
+    vehicleIdentityProfile,
     manualVehicle,
     targetMileage,
     evaluation,
