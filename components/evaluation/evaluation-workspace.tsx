@@ -2876,6 +2876,7 @@ export function EvaluationWorkspace({
           model: vehicleModel,
           trim: vehicleTrim,
           vin: String(decodedVehicle?.vin || vin || "").trim().toUpperCase(),
+          providerAliases: vehicleIdentityProfile?.providerAliases || [],
           bodyClass: vehicleBodyClass,
         }),
       });
