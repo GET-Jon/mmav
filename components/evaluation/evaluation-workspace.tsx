@@ -5770,7 +5770,11 @@ export function EvaluationWorkspace({
                     disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
                     className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
                   >
-                    {compSearchImproving ? "Improving Search…" : "Let Lot Logic Improve Search →"}
+                    {compSearchImproving
+                      ? "Improving Search…"
+                      : compSearchRecommendation.action === "manual-review"
+                        ? "Review Broader Match Options →"
+                        : "Let Lot Logic Improve Search →"}
                   </button>
                 ) : null}
                 {compSearchImprovementStatus ? (
