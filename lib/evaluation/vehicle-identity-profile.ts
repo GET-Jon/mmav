@@ -137,12 +137,22 @@ export function buildDeterministicVehicleIdentityProfile(
   });
 
   const familyAlias =
-    modelFamily && normalizeVehicleText(modelFamily) !== normalizeVehicleText(decoded.model)
+    modelFamily &&
+    normalizeVehicleText(modelFamily) !== normalizeVehicleText(decoded.model)
       ? modelFamily
+      : null;
+  const sourceModelText = normalizeVehicleText(decoded.model);
+  const familyBodyAlias =
+    bodyClass === "suv" &&
+    sourceModelText.includes("suv") &&
+    modelFamily &&
+    !normalizeVehicleText(modelFamily).includes("suv")
+      ? `${modelFamily.toUpperCase()} SUV`
       : null;
 
   const providerAliases = unique([
     decoded.model,
+    familyBodyAlias,
     taxonomyFallback?.fallbackModel,
     ...knownAliases,
     familyAlias,
