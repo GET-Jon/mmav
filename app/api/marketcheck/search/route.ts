@@ -414,10 +414,26 @@ export async function POST(request: Request) {
 
   const subjectKey = vehicleUsageSubject({
     vin: normalizedBody.vin || decodedVehicle.vin || nestedVehicle.vin,
-    year: normalizedBody.year || decodedVehicle.year || nestedVehicle.year,
-    make: normalizedBody.make || decodedVehicle.make || nestedVehicle.make,
-    model: normalizedBody.model || decodedVehicle.model || nestedVehicle.model,
-    trim: normalizedBody.trim || decodedVehicle.trim || nestedVehicle.trim,
+    year:
+      normalizedBody.qualificationYear ||
+      normalizedBody.year ||
+      decodedVehicle.year ||
+      nestedVehicle.year,
+    make:
+      normalizedBody.qualificationMake ||
+      normalizedBody.make ||
+      decodedVehicle.make ||
+      nestedVehicle.make,
+    model:
+      normalizedBody.qualificationModel ||
+      normalizedBody.model ||
+      decodedVehicle.model ||
+      nestedVehicle.model,
+    trim:
+      normalizedBody.qualificationTrim ||
+      normalizedBody.trim ||
+      decodedVehicle.trim ||
+      nestedVehicle.trim,
   });
 
   const searchAllowance = await checkUsageAllowance({
@@ -521,12 +537,37 @@ export async function POST(request: Request) {
 
   const payload = (await response.json()) as Record<string, unknown>;
   const rankedPayload = rerankByCompFit(payload, {
-    year: Number(normalizedBody.year || decodedVehicle.year || nestedVehicle.year || 0),
-    make: String(normalizedBody.make || decodedVehicle.make || nestedVehicle.make || "").trim(),
-    model: String(normalizedBody.model || decodedVehicle.model || nestedVehicle.model || "").trim(),
-    trim: String(normalizedBody.trim || decodedVehicle.trim || nestedVehicle.trim || "").trim(),
+    year: Number(
+      normalizedBody.qualificationYear ||
+        normalizedBody.year ||
+        decodedVehicle.year ||
+        nestedVehicle.year ||
+        0,
+    ),
+    make: String(
+      normalizedBody.qualificationMake ||
+        normalizedBody.make ||
+        decodedVehicle.make ||
+        nestedVehicle.make ||
+        "",
+    ).trim(),
+    model: String(
+      normalizedBody.qualificationModel ||
+        normalizedBody.model ||
+        decodedVehicle.model ||
+        nestedVehicle.model ||
+        "",
+    ).trim(),
+    trim: String(
+      normalizedBody.qualificationTrim ||
+        normalizedBody.trim ||
+        decodedVehicle.trim ||
+        nestedVehicle.trim ||
+        "",
+    ).trim(),
     fuelType: canonicalFuelIdentity(
-      normalizedBody.fuelType ||
+      normalizedBody.qualificationFuelType ||
+        normalizedBody.fuelType ||
         normalizedBody.targetFuelType ||
         decodedVehicle.fuelType ||
         nestedVehicle.fuelType ||
@@ -540,13 +581,15 @@ export async function POST(request: Request) {
         0,
     ),
     drivetrain: String(
-      normalizedBody.drivetrain ||
+      normalizedBody.qualificationDrivetrain ||
+        normalizedBody.drivetrain ||
         decodedVehicle.drivetrain ||
         nestedVehicle.drivetrain ||
         "",
     ).trim(),
     bodyType: String(
-      normalizedBody.bodyType ||
+      normalizedBody.qualificationBodyType ||
+        normalizedBody.bodyType ||
         decodedVehicle.bodyType ||
         decodedVehicle.bodyStyle ||
         nestedVehicle.bodyType ||
