@@ -204,7 +204,6 @@ export function LotLogicMarketingSite() {
               </div>
             </div>
           </div>
-          </div>
         </div>
       </section>
 
