@@ -210,6 +210,54 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   return model;
 }
 
+function stripDrivetrainBranding(value: unknown) {
+  return String(value || "")
+    .replace(/\b(?:xdrive|sdrive|quattro|4matic|4motion|awd|4wd|fwd|rwd|4x4)\b/gi, " ")
+    .replace(/\b(?:all[-\s]?wheel drive|four[-\s]?wheel drive|rear[-\s]?wheel drive|front[-\s]?wheel drive)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
+  const modelFamily = canonicalModelFamily(vehicle);
+  const normalizedFamily = normalizeVehicleText(modelFamily);
+  const normalizedModel = normalizeVehicleText(vehicle.model);
+
+  const cleanedTrim = stripDrivetrainBranding(vehicle.trim);
+  const normalizedTrim = normalizeVehicleText(cleanedTrim);
+
+  // Prefer a substantive trim/derivative once drivetrain branding is removed.
+  // Examples: "EQE350 4MATIC" -> "EQE350", "760i xDrive" -> "760i".
+  if (
+    cleanedTrim &&
+    normalizedTrim &&
+    normalizedTrim !== normalizedFamily
+  ) {
+    return normalizedTrim;
+  }
+
+  // Some VIN decoders place the derivative in model and drivetrain branding
+  // in trim. Example: BMW model "760i", trim "xDrive", family "7 Series".
+  if (
+    normalizedModel &&
+    normalizedFamily &&
+    normalizedModel !== normalizedFamily
+  ) {
+    return normalizedModel;
+  }
+
+  // BMW commonly combines drivetrain + derivative in a single trim token.
+  // Preserve the derivative portion for comparison.
+  if (canonicalVehicleMake(vehicle.make) === "bmw" && vehicle.trim) {
+    const compactTrim = String(vehicle.trim)
+      .replace(/^(?:xdrive|sdrive)/i, "")
+      .trim();
+    if (compactTrim) return normalizeVehicleText(compactTrim);
+  }
+
+  return normalizedTrim || normalizedModel || normalizedFamily;
+}
+
 function classifyBodyText(value: unknown) {
   const text = normalizeVehicleText(value);
   if (!text) return null;
