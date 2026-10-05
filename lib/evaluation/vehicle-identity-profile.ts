@@ -69,11 +69,75 @@ function prettyMake(value: string) {
     .join(" ");
 }
 
-function describeDirectCriteria(decoded: VinDecodeResult, modelFamily: string) {
+function stripDrivetrainBranding(value: string) {
+  return String(value || "")
+    .replace(/\b(?:xdrive|sdrive|quattro|4matic|4motion|awd|4wd|fwd|rwd|4x4)\b/gi, " ")
+    .replace(/\b(?:all[-\s]?wheel drive|four[-\s]?wheel drive|rear[-\s]?wheel drive|front[-\s]?wheel drive)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function deriveVehicleVariant({
+  make,
+  model,
+  trim,
+  modelFamily,
+}: {
+  make: string;
+  model: string;
+  trim: string;
+  modelFamily: string;
+}) {
+  const cleanedTrim = stripDrivetrainBranding(trim);
+  const normalizedCleanedTrim = normalizeVehicleText(cleanedTrim);
+  const normalizedFamily = normalizeVehicleText(modelFamily);
+  const normalizedModel = normalizeVehicleText(model);
+
+  // VIN providers often put drivetrain branding in the trim field. Prefer the
+  // substantive part of trim, but never treat xDrive/quattro/4MATIC alone as
+  // the vehicle variant.
+  if (
+    cleanedTrim &&
+    normalizedCleanedTrim &&
+    normalizedCleanedTrim !== normalizedFamily
+  ) {
+    return cleanedTrim;
+  }
+
+  // For many German vehicles, the decoded "model" is actually the derivative
+  // (760i, 330i, C300, etc.) while the canonical family is broader
+  // (7 Series, 3 Series, C-Class). Preserve that derivative as the variant.
+  if (
+    model &&
+    normalizedModel &&
+    normalizedFamily &&
+    normalizedModel !== normalizedFamily
+  ) {
+    return model;
+  }
+
+  // BMW trims frequently encode drivetrain + derivative in one token
+  // (xDrive30i). If stripping the drivetrain prefix leaves a substantive code,
+  // use it as the comparison variant.
+  if (canonicalVehicleMake(make) === "bmw" && trim) {
+    const compactTrim = trim
+      .replace(/^(?:xdrive|sdrive)/i, "")
+      .trim();
+    if (compactTrim) return compactTrim;
+  }
+
+  return cleanedTrim || model || "";
+}
+
+function describeDirectCriteria(
+  decoded: VinDecodeResult,
+  modelFamily: string,
+  variant: string,
+) {
   const pieces = [
     decoded.year || null,
     prettyMake(canonicalVehicleMake(decoded.make)),
-    decoded.trim || decoded.model || modelFamily,
+    variant || decoded.model || modelFamily,
     canonicalBodyClass({
       year: Number(decoded.year) || 0,
       make: decoded.make,
@@ -115,6 +179,12 @@ export function buildDeterministicVehicleIdentityProfile(
   });
   const drivetrain = canonicalDrivetrain(decoded.driveType);
   const fuelType = canonicalFuelType(decoded.fuelType);
+  const variant = deriveVehicleVariant({
+    make: decoded.make,
+    model: decoded.model,
+    trim: decoded.trim,
+    modelFamily,
+  });
 
   const generation = year
     ? findGenerationCompRule({
@@ -164,7 +234,11 @@ export function buildDeterministicVehicleIdentityProfile(
     modelFamily ? `Different model family than ${modelFamily}` : null,
   ]);
 
-  const directCriteria = describeDirectCriteria(decoded, modelFamily);
+  const directCriteria = describeDirectCriteria(
+    decoded,
+    modelFamily,
+    variant,
+  );
 
   const comparisonLadder: VehicleComparisonStep[] = [
     {
@@ -205,7 +279,7 @@ export function buildDeterministicVehicleIdentityProfile(
     make,
     modelFamily,
     bodyClass,
-    variant: decoded.trim || "",
+    variant,
     drivetrain,
     fuelType,
     generation: generation?.generation || null,
@@ -218,6 +292,10 @@ export function buildDeterministicVehicleIdentityProfile(
       taxonomyFallback?.notes,
       knownAliases.length
         ? "Known provider aliases are available for broader retrieval."
+        : null,
+      decoded.trim &&
+      normalizeVehicleText(decoded.trim) !== normalizeVehicleText(variant)
+        ? `VIN trim “${decoded.trim}” was interpreted as drivetrain/configuration; comparison variant is “${variant || decoded.model}”.`
         : null,
       "Provider aliases broaden retrieval only; final comp qualification stays tied to the decoded vehicle.",
     ]),
