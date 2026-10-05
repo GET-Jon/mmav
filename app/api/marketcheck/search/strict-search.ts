@@ -421,30 +421,35 @@ function modelIdentityMatches({
   return false;
 }
 
-function trimMatches({
-  listingTrim,
-  preferredTrim,
+function variantMatchesListing({
+  listing,
+  preferredVariant,
 }: {
-  listingTrim: string;
-  preferredTrim: string;
+  listing: MarketCheckListing;
+  preferredVariant: string;
 }) {
-  const listing = normalize(listingTrim);
-  const preferred = normalize(preferredTrim);
+  const preferredCompact = compactVehicleText(preferredVariant);
+  if (!preferredCompact) return true;
 
-  if (!preferred || !listing) {
-    return true;
-  }
+  const build = listing.build || {};
+  const candidateFields = [
+    build.trim,
+    listing.trim,
+    build.model,
+    listing.model,
+    listing.heading,
+    listing.title,
+  ]
+    .map((value) => compactVehicleText(value))
+    .filter(Boolean);
 
-  const listingCompact = compactVehicleText(listing);
-  const preferredCompact = compactVehicleText(preferred);
+  if (!candidateFields.length) return true;
 
-  return (
-    listing.includes(preferred) ||
-    preferred.includes(listing) ||
-    (listingCompact &&
-      preferredCompact &&
-      (listingCompact.includes(preferredCompact) ||
-        preferredCompact.includes(listingCompact)))
+  return candidateFields.some(
+    (candidate) =>
+      candidate === preferredCompact ||
+      candidate.includes(preferredCompact) ||
+      preferredCompact.includes(candidate),
   );
 }
 
@@ -466,7 +471,6 @@ function calculateQualityScore({
     listing.miles ?? listing.mileage ?? listing.odometer,
   );
   const year = toNumber(build.year ?? listing.year, searchYear);
-  const listingTrim = String(build.trim || listing.trim || "");
 
   let score = 100;
 
@@ -474,9 +478,16 @@ function calculateQualityScore({
     score -= 20;
   }
 
-  if (preferredTrim && !trimMatches({ listingTrim, preferredTrim })) {
-    // Trim/configuration fidelity is intentionally more important than a
-    // moderate distance advantage. Search farther before matching looser.
+  if (
+    preferredTrim &&
+    !variantMatchesListing({
+      listing,
+      preferredVariant: preferredTrim,
+    })
+  ) {
+    // Variant fidelity is intentionally more important than a moderate
+    // distance advantage. Look across model/trim/title because providers
+    // frequently split derivative and drivetrain labels differently.
     score -= 28;
   }
 
