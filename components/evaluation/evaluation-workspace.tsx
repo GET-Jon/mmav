@@ -4184,7 +4184,7 @@ export function EvaluationWorkspace({
       !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip),
   ).length;
 
-  const compSearchRecommendation = recommendCompSearchAction({
+  const rawCompSearchRecommendation = recommendCompSearchAction({
     includedCount: compSummary.includedCount,
     confidence: String(compSummary.confidence || ""),
     returnedListings: compReturnedListings,
@@ -4207,6 +4207,16 @@ export function EvaluationWorkspace({
     nationalRecommendedMarkets:
       autoDevDiscovery?.recommendedMarkets?.length || 0,
   });
+
+  const compSearchRecommendation =
+    automaticCompSearchCompleted && compSummary.includedCount === 0
+      ? {
+          action: "manual-review" as const,
+          title: "Automatic search is complete",
+          reason:
+            "Lot Logic checked the exact vehicle, broader provider naming, regional markets, and national inventory without finding a reliable direct comp set. Review broader match options only if you want supporting evidence.",
+        }
+      : rawCompSearchRecommendation;
 
   const compNextStep = {
     path:
@@ -4247,80 +4257,135 @@ export function EvaluationWorkspace({
       return;
     }
 
-    setCompSearchImproving(true);
+    setCompSearchHandedOff(true);
+    setCompSectionExpanded(true);
     setCompMarketEditorOpen(false);
+    setCompSearchImproving(true);
+    setAutomaticCompSearchCompleted(false);
+
+    window.setTimeout(() => {
+      compSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
 
     try {
       if (compSearchRecommendation.action === "manual-review") {
         setCompSearchImprovementStatus(
-          "Automatic search paths are exhausted. Review the vehicle identity or use advanced controls.",
+          "Automatic search is complete. Review broader vehicle-match options if you want supporting evidence.",
         );
         openCompVehicleMatchEditor();
         return;
       }
 
+      let latestIncludedCount = compSummary.includedCount;
+      let latestRegionCount = compSearchRegions;
+
       if (compSearchRecommendation.action === "discovered-markets") {
         setCompSearchImprovementStatus(
-          "Validating the strongest nationally discovered markets with MarketCheck…",
+          "Verifying the strongest markets found by national discovery…",
         );
-        await searchAutoDevRecommendedMarkets();
+        const validation = await searchAutoDevRecommendedMarkets();
+        latestIncludedCount = Number(
+          validation?.includedCount || latestIncludedCount,
+        );
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found. The comp set is ready for review.",
+          );
+          return;
+        }
+
+        setAutomaticCompSearchCompleted(true);
+        setCompSearchImprovementStatus(
+          "Automatic search complete. No reliable direct comp set was established.",
+        );
         return;
       }
 
-      if (compSearchRecommendation.action === "national-discovery") {
+      if (
+        compSearchRecommendation.action === "broaden-vehicle" &&
+        !compTrimRelaxed
+      ) {
         setCompSearchImprovementStatus(
-          "Locating matching inventory nationwide, then validating the best markets…",
+          vehicleIdentityProfile?.providerAliases?.length
+            ? "Using the vehicle search profile to normalize provider naming while keeping final comp rules strict…"
+            : "Normalizing provider naming while keeping final comp rules strict…",
         );
-        const discovery = await runAutoDevDiscovery();
 
-        if (discovery?.recommendedMarkets?.length) {
-          await searchAutoDevRecommendedMarkets(discovery);
+        const broadened = await broadenCompVehicleMatch();
+        latestIncludedCount = Number(
+          broadened?.includedCount || latestIncludedCount,
+        );
+        latestRegionCount = Number(
+          broadened?.regionsChecked?.length || latestRegionCount,
+        );
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found after normalizing the vehicle match.",
+          );
+          return;
         }
-        return;
       }
 
-      if (compSearchRecommendation.action === "broaden-vehicle") {
+      if (latestRegionCount < 5) {
         setCompSearchImprovementStatus(
-          "Broadening provider retrieval while keeping final vehicle qualification strict…",
+          "Checking the next best nearby markets before going national…",
         );
-        const outcome = await broadenCompVehicleMatch();
+        const expanded = await expandMarketCheckSearch();
+        latestIncludedCount = Number(
+          expanded?.includedCount || latestIncludedCount,
+        );
+        latestRegionCount = Number(
+          expanded?.regionsChecked?.length || latestRegionCount,
+        );
 
-        if (
-          outcome &&
-          Number(outcome.includedCount || 0) === 0 &&
-          Number(outcome.returnedListings || 0) === 0 &&
-          !autoDevDiscovery
-        ) {
-          const discovery = await runAutoDevDiscovery();
-          if (discovery?.recommendedMarkets?.length) {
-            await searchAutoDevRecommendedMarkets(discovery);
-          }
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found after regional expansion.",
+          );
+          return;
         }
-        return;
       }
 
       setCompSearchImprovementStatus(
-        "Expanding to the next highest-value regional markets…",
+        "Regional search is complete. Locating matching inventory nationwide…",
       );
-      const outcome = await expandMarketCheckSearch();
 
-      if (
-        !outcome ||
-        (Number(outcome.includedCount || 0) === 0 &&
-          Number(outcome.returnedListings || 0) === 0)
-      ) {
+      const discovery =
+        autoDevDiscovery || (await runAutoDevDiscovery());
+
+      if (discovery?.recommendedMarkets?.length) {
         setCompSearchImprovementStatus(
-          "Regional expansion is complete. Checking national inventory next…",
+          "National inventory found. Verifying the strongest markets with MarketCheck…",
         );
-        const discovery = await runAutoDevDiscovery();
-        if (discovery?.recommendedMarkets?.length) {
-          await searchAutoDevRecommendedMarkets(discovery);
+        const validation = await searchAutoDevRecommendedMarkets(discovery);
+        latestIncludedCount = Number(
+          validation?.includedCount || latestIncludedCount,
+        );
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found after national discovery.",
+          );
+          return;
         }
       }
+
+      setAutomaticCompSearchCompleted(true);
+      setCompSearchImprovementStatus(
+        discovery
+          ? "Automatic search complete. Lot Logic checked regional and national inventory but did not establish a reliable direct comp set."
+          : "Automatic search complete. No reliable direct comp set was established.",
+      );
     } finally {
       setCompSearchImproving(false);
     }
   }
+
 
   const hasLimitedDealerFit = dealerFitResult.score < 55;
 
