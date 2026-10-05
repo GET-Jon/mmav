@@ -300,6 +300,11 @@ export function MarketCompsTable({
             <span className="block truncate font-semibold text-slate-700">
               {row.original.trim || "Unavailable"}
             </span>
+            <span
+              className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-black ${tierTone(row.original)}`}
+            >
+              {tierLabel(row.original)}
+            </span>
           </div>
         ),
       },
