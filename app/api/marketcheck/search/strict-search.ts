@@ -201,6 +201,7 @@ function makeStableSearchKey({
   rows,
   preferTaxonomyFallback,
   useTaxonomyFallbackTrim,
+  preferredModelAliases,
 }: {
   year: number;
   make: string;
@@ -214,6 +215,7 @@ function makeStableSearchKey({
   rows: number;
   preferTaxonomyFallback: boolean;
   useTaxonomyFallbackTrim: boolean;
+  preferredModelAliases: string[];
 }) {
   return JSON.stringify({
     year,
@@ -228,8 +230,12 @@ function makeStableSearchKey({
     rows,
     preferTaxonomyFallback,
     useTaxonomyFallbackTrim,
+    preferredModelAliases: [...preferredModelAliases]
+      .map((alias) => normalize(alias))
+      .filter(Boolean)
+      .sort(),
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v18-retrieval-strategy",
+    cacheVersion: "progressive-regions-v19-identity-profile",
   });
 }
 
@@ -1277,6 +1283,15 @@ export async function POST(request: Request) {
     const reason = String(body.reason || "explicit-user-comp-search");
     const preferTaxonomyFallback = body.preferTaxonomyFallback === true;
     const useTaxonomyFallbackTrim = body.useTaxonomyFallbackTrim !== false;
+    const preferredModelAliases = Array.isArray(body.preferredModelAliases)
+      ? Array.from(
+          new Set(
+            body.preferredModelAliases
+              .map((value: unknown) => String(value || "").trim())
+              .filter(Boolean),
+          ),
+        ).slice(0, 8)
+      : [];
 
     const apiControls = {
       ...MARKETCHECK_API_CONTROLS,
@@ -1387,6 +1402,7 @@ export async function POST(request: Request) {
       rows,
       preferTaxonomyFallback,
       useTaxonomyFallbackTrim,
+      preferredModelAliases,
     });
 
     const cached = getCachedResponse(searchKey);
@@ -1828,7 +1844,12 @@ export async function POST(request: Request) {
     }
 
     const taxonomyRetrieval = findModelTaxonomyFallback({ make, model });
-    const modelAliases = findMarketCheckModelAliases({ make, model });
+    const modelAliases = Array.from(
+      new Set([
+        ...preferredModelAliases,
+        ...findMarketCheckModelAliases({ make, model }),
+      ]),
+    ).filter((alias) => normalize(alias) !== normalize(model));
     const aliasRetrievalModel = modelAliases[0] || null;
     const explicitFallbackModel =
       taxonomyRetrieval?.fallbackModel || aliasRetrievalModel || null;
