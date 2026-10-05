@@ -42,7 +42,7 @@ function actionLabel(action: CompSearchRecommendation["action"]) {
     case "discovered-markets":
       return "Verify discovered markets";
     case "manual-review":
-      return "Vehicle match review";
+      return "Broader match review";
     default:
       return "Search complete";
   }
@@ -59,7 +59,7 @@ function actionButton(action: CompSearchRecommendation["action"]) {
     case "discovered-markets":
       return "Verify Discovered Markets →";
     case "manual-review":
-      return "Review Vehicle Match →";
+      return "Review Broader Match Options →";
     default:
       return "Continue →";
   }
