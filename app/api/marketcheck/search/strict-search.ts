@@ -449,7 +449,7 @@ function variantMatchesListing({
     (candidate) =>
       candidate === preferredCompact ||
       candidate.includes(preferredCompact) ||
-      preferredCompact.includes(candidate),
+      (candidate.length >= 3 && preferredCompact.includes(candidate)),
   );
 }
 
