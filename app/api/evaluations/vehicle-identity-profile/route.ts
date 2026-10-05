@@ -88,10 +88,6 @@ function mergeAiProfile(
   ai: Record<string, unknown>,
 ): VehicleIdentityProfile {
   const family = normalizeVehicleText(baseline.modelFamily).replace(/\s+/g, "");
-  const sourceModel = normalizeVehicleText(
-    baseline.displayName,
-  ).replace(/\s+/g, "");
-
   const aiAliases = cleanStringArray(ai.providerAliases, 8).filter((alias) => {
     const compact = normalizeVehicleText(alias).replace(/\s+/g, "");
     if (!compact) return false;
@@ -100,9 +96,8 @@ function mergeAiProfile(
     // relationship to the deterministic model family/source identity.
     return (
       !family ||
-      compact.includes(family) ||
-      family.includes(compact) ||
-      sourceModel.includes(compact)
+      (compact.length >= 2 &&
+        (compact.includes(family) || family.includes(compact)))
     );
   });
 
