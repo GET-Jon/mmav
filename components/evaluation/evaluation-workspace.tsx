@@ -4292,6 +4292,7 @@ export function EvaluationWorkspace({
 
       let latestIncludedCount = compSummary.includedCount;
       let latestRegionCount = compSearchRegions;
+      let latestSearchedZips = marketCheckSearchMeta?.searchedZips || [];
 
       if (compSearchRecommendation.action === "discovered-markets") {
         setCompSearchImprovementStatus(
@@ -4333,6 +4334,8 @@ export function EvaluationWorkspace({
         latestRegionCount = Number(
           broadened?.regionsChecked?.length || latestRegionCount,
         );
+        latestSearchedZips =
+          broadened?.searchedZips || latestSearchedZips;
 
         if (latestIncludedCount >= 4) {
           setCompSearchImprovementStatus(
@@ -4353,6 +4356,8 @@ export function EvaluationWorkspace({
         latestRegionCount = Number(
           expanded?.regionsChecked?.length || latestRegionCount,
         );
+        latestSearchedZips =
+          expanded?.searchedZips || latestSearchedZips;
 
         if (latestIncludedCount >= 4) {
           setCompSearchImprovementStatus(
@@ -4373,7 +4378,10 @@ export function EvaluationWorkspace({
         setCompSearchImprovementStatus(
           "National inventory found. Verifying the strongest markets with MarketCheck…",
         );
-        const validation = await searchAutoDevRecommendedMarkets(discovery);
+        const validation = await searchAutoDevRecommendedMarkets(
+          discovery,
+          latestSearchedZips,
+        );
         latestIncludedCount = Number(
           validation?.includedCount || latestIncludedCount,
         );
