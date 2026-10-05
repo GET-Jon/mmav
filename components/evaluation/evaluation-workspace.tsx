@@ -1850,6 +1850,55 @@ export function EvaluationWorkspace({
       reason: profileMatch.reason,
     });
   }
+  async function enrichVehicleIdentityProfile(decoded: VinDecodeResult) {
+    const requestVin = String(decoded.vin || "").trim().toUpperCase();
+    const baseline = buildDeterministicVehicleIdentityProfile(decoded);
+
+    vehicleIdentityRequestVinRef.current = requestVin;
+    setVehicleIdentityProfile(baseline);
+    setVehicleIdentityProfileStatus("Building vehicle search profile…");
+
+    try {
+      const response = await fetch("/api/evaluations/vehicle-identity-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ decodedVehicle: decoded }),
+      });
+      const data = await response.json();
+
+      if (
+        vehicleIdentityRequestVinRef.current !== requestVin ||
+        String(decoded.vin || "").trim().toUpperCase() !== requestVin
+      ) {
+        return baseline;
+      }
+
+      if (!response.ok || !data.profile) {
+        setVehicleIdentityProfile(baseline);
+        setVehicleIdentityProfileStatus("Vehicle search profile ready");
+        return baseline;
+      }
+
+      setVehicleIdentityProfile(data.profile as VehicleIdentityProfile);
+      setVehicleIdentityProfileStatus(
+        data.aiEnhanced
+          ? "AI-assisted vehicle search profile ready"
+          : "Vehicle search profile ready",
+      );
+      return data.profile as VehicleIdentityProfile;
+    } catch (error) {
+      console.warn("Vehicle identity profile enrichment failed:", error);
+      if (vehicleIdentityRequestVinRef.current === requestVin) {
+        setVehicleIdentityProfile(baseline);
+        setVehicleIdentityProfileStatus("Vehicle search profile ready");
+      }
+      return baseline;
+    }
+  }
+
   async function decodeVinFromBasics(
     vinOverride?: string,
   ): Promise<VinDecodeResult | null> {
@@ -1908,6 +1957,7 @@ export function EvaluationWorkspace({
       const decoded = data as VinDecodeResult;
 
       handleDecodedVinAndReset(decoded);
+      void enrichVehicleIdentityProfile(decoded);
 
       window.setTimeout(() => {
         mileageInputRef.current?.focus();
@@ -1928,6 +1978,10 @@ export function EvaluationWorkspace({
 
   function handleDecodedVinAndReset(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
+    setVehicleIdentityProfile(
+      buildDeterministicVehicleIdentityProfile(decoded),
+    );
+    setVehicleIdentityProfileStatus("Vehicle search profile ready");
     setManualVehicle(initialManualVehicle);
     setVin(decoded.vin);
 
@@ -1977,6 +2031,12 @@ export function EvaluationWorkspace({
     setMarketCheckStatus("");
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
+    setCompSearchHistory([]);
+    setCompSearchHandedOff(false);
+    setAutomaticCompSearchCompleted(false);
+    setAutoDevDiscovery(null);
+    setAutoDevDiscoveryStatus("");
+    setCompSearchImprovementStatus("");
     setSavedEvaluationId(null);
     setSaveStatus("");
     setConditionReviewStatus("unreviewed");
@@ -1994,6 +2054,10 @@ export function EvaluationWorkspace({
 
   function resetForDecodedVin(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
+    setVehicleIdentityProfile(
+      buildDeterministicVehicleIdentityProfile(decoded),
+    );
+    setVehicleIdentityProfileStatus("Vehicle search profile ready");
     setManualVehicle(initialManualVehicle);
     setVin(decoded.vin);
 
