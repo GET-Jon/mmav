@@ -5907,6 +5907,76 @@ export function EvaluationWorkspace({
                   </p>
                 </div>
 
+                {vehicleIdentityProfile ? (
+                  <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/50 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">Vehicle search profile</div>
+                        <div className="mt-1 text-base font-black text-slate-950">
+                          {[vehicleIdentityProfile.make, vehicleIdentityProfile.modelFamily, vehicleIdentityProfile.bodyClass].filter(Boolean).join(" · ")}
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                          {vehicleIdentityProfileStatus || "Vehicle identity ready"}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-blue-700">
+                        {vehicleIdentityProfile.source === "ai-assisted" ? "AI-assisted" : "Rules-based"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl bg-white px-3 py-3">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Variant</div>
+                        <div className="mt-1 text-xs font-black text-slate-800">{vehicleIdentityProfile.variant || "—"}</div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-3">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Drivetrain</div>
+                        <div className="mt-1 text-xs font-black text-slate-800">{vehicleIdentityProfile.drivetrain || "—"}</div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-3">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Powertrain</div>
+                        <div className="mt-1 text-xs font-black text-slate-800">{vehicleIdentityProfile.fuelType || "—"}</div>
+                      </div>
+                    </div>
+
+                    {vehicleIdentityProfile.providerAliases.length ? (
+                      <div className="mt-4">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Provider names Lot Logic can try</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {vehicleIdentityProfile.providerAliases.map((alias) => (
+                            <span key={alias} className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-[10px] font-bold text-blue-800">
+                              {alias}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 space-y-2">
+                      {vehicleIdentityProfile.comparisonLadder.map((step) => (
+                        <div key={step.tier} className="rounded-xl border border-blue-100 bg-white px-3 py-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-black text-slate-900">{step.label}</div>
+                            {step.requiresConfirmation ? (
+                              <span className="text-[9px] font-black uppercase tracking-[0.08em] text-amber-600">User review</span>
+                            ) : (
+                              <span className="text-[9px] font-black uppercase tracking-[0.08em] text-emerald-600">Automatic</span>
+                            )}
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold leading-5 text-slate-500">{step.criteria}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {vehicleIdentityProfile.hardExclusions.length ? (
+                      <div className="mt-3 text-[10px] font-semibold leading-4 text-slate-500">
+                        <span className="font-black text-slate-700">Never auto-qualify:</span>{" "}
+                        {vehicleIdentityProfile.hardExclusions.join(" · ")}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {vehicleTrim ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
                     <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Alternate MarketCheck classification</div>
@@ -5957,7 +6027,7 @@ export function EvaluationWorkspace({
                 )}
 
                 <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs font-semibold leading-5 text-blue-900/80">
-                  Broaden vehicle match changes what qualifies as a comparable; Geography changes where Lot Logic looks. Keeping those choices separate makes it clear which assumption you are changing.
+                  Broader retrieval changes how Lot Logic finds candidates, not what automatically qualifies. Geography changes where it looks. Supporting evidence remains a separate review decision.
                 </div>
               </div>
             )}
