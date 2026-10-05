@@ -2433,6 +2433,8 @@ export function EvaluationWorkspace({
       setAutoDevDiscovery(null);
       setAutoDevDiscoveryStatus("");
       setCompSearchImprovementStatus("");
+      setCompSearchHandedOff(false);
+      setAutomaticCompSearchCompleted(false);
     }
 
     setMarketCheckLoading(true);
@@ -2453,6 +2455,15 @@ export function EvaluationWorkspace({
           trim,
           vin: marketCheckVin,
           fuelType,
+          preferredModelAliases:
+            vehicleIdentityProfile?.providerAliases || [],
+          qualificationYear: vehicleYear,
+          qualificationMake: vehicleMake,
+          qualificationModel: vehicleModel,
+          qualificationTrim: vehicleTrim,
+          qualificationFuelType: decodedVehicle?.fuelType || null,
+          qualificationDrivetrain: decodedVehicle?.driveType || null,
+          qualificationBodyType: decodedVehicle?.bodyClass || null,
           targetMileage,
           searchStage: options?.searchStage || "initial",
           regions:
