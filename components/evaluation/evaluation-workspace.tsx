@@ -7383,6 +7383,31 @@ export function EvaluationWorkspace({
                     </div>
                   }
                 >
+                  {comps.length && marketCheckSearchMeta?.regionsChecked?.length ? (
+                    <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
+                      <span className="font-black text-slate-800">Search coverage:</span>{" "}
+                      {marketCheckSearchMeta.regionsChecked.join(" → ")}
+                      {Array.from(
+                        new Set(
+                          comps
+                            .filter((comp) => comp.included && comp.region)
+                            .map((comp) => comp.region),
+                        ),
+                      ).length ? (
+                        <>
+                          {" · "}
+                          <span className="font-black text-slate-800">Qualifying comps found in:</span>{" "}
+                          {Array.from(
+                            new Set(
+                              comps
+                                .filter((comp) => comp.included && comp.region)
+                                .map((comp) => comp.region),
+                            ),
+                          ).join(", ")}
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {comps.length ? (
                     <MarketCompsTable comps={verdictCompsExpanded ? comps : comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
                   ) : (
