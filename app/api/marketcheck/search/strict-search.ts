@@ -8,6 +8,11 @@ import {
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
 import { resolveMarketCheckModelCandidates } from "@/lib/marketcheck/model-discovery";
+import {
+  canonicalModelFamily,
+  canonicalVehicleMake,
+  compactVehicleText,
+} from "@/lib/marketcheck/vehicle-identity";
 
 type MarketCheckListing = Record<string, any>;
 
@@ -295,9 +300,11 @@ function normalizeModelIdentity(value: unknown) {
 
 function modelIdentityMatches({
   listing,
+  requestedMake,
   requestedModel,
 }: {
   listing: MarketCheckListing;
+  requestedMake: string;
   requestedModel: string;
 }) {
   const build = listing.build || {};
@@ -307,9 +314,61 @@ function modelIdentityMatches({
     return true;
   }
 
-  const listingModel = normalizeModelIdentity(
+  const listingMake = String(
+    build.make ?? listing.make ?? requestedMake ?? "",
+  ).trim();
+  const listingModelRaw = String(
     build.model ?? listing.model ?? "",
-  );
+  ).trim();
+  const listingModel = normalizeModelIdentity(listingModelRaw);
+
+  // Provider model strings are not stable enough for literal equality.
+  // Compare canonical model families first so equivalent names such as
+  // "EQE-Class SUV", "EQE SUV", and "EQE 350" can survive retrieval.
+  if (listingModel) {
+    const requestedFamily = canonicalModelFamily({
+      year: 0,
+      make: requestedMake,
+      model: requestedModel,
+    });
+    const listingFamily = canonicalModelFamily({
+      year: Number(build.year ?? listing.year ?? 0),
+      make: listingMake,
+      model: listingModelRaw,
+      trim: String(build.trim ?? listing.trim ?? ""),
+      bodyType: String(
+        build.body_type ??
+          build.body_style ??
+          listing.body_type ??
+          listing.body_style ??
+          "",
+      ),
+      drivetrain: String(
+        build.drivetrain ??
+          build.drive_type ??
+          listing.drivetrain ??
+          listing.drive_type ??
+          "",
+      ),
+      fuelType: String(
+        build.fuel_type ??
+          build.fuel ??
+          listing.fuel_type ??
+          listing.fuel ??
+          "",
+      ),
+    });
+
+    if (
+      canonicalVehicleMake(requestedMake) ===
+        canonicalVehicleMake(listingMake) &&
+      requestedFamily &&
+      listingFamily &&
+      requestedFamily === listingFamily
+    ) {
+      return true;
+    }
+  }
 
   if (listingModel === requested) {
     return true;
@@ -376,7 +435,17 @@ function trimMatches({
     return true;
   }
 
-  return listing.includes(preferred) || preferred.includes(listing);
+  const listingCompact = compactVehicleText(listing);
+  const preferredCompact = compactVehicleText(preferred);
+
+  return (
+    listing.includes(preferred) ||
+    preferred.includes(listing) ||
+    (listingCompact &&
+      preferredCompact &&
+      (listingCompact.includes(preferredCompact) ||
+        preferredCompact.includes(listingCompact)))
+  );
 }
 
 function calculateQualityScore({
@@ -490,6 +559,7 @@ function mapListingToComp({
   if (
     !modelIdentityMatches({
       listing,
+      requestedMake: searchMake,
       requestedModel: searchModel,
     })
   ) {
@@ -1545,6 +1615,7 @@ export async function POST(request: Request) {
           if (
             !modelIdentityMatches({
               listing,
+              requestedMake: make,
               requestedModel: model,
             })
           ) {
