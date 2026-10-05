@@ -2398,10 +2398,14 @@ export function EvaluationWorkspace({
     const year = vehicleOverride?.year || vehicleYear;
     const make = vehicleOverride?.make || vehicleMake;
     const model = vehicleOverride?.model || vehicleModel;
+    const profileVariant = String(
+      vehicleIdentityProfile?.variant || "",
+    ).trim();
     const trim =
-      vehicleOverride && Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
+      vehicleOverride &&
+      Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
         ? String(vehicleOverride.trim || "")
-        : vehicleTrim;
+        : profileVariant || vehicleTrim;
     const fuelType =
       vehicleOverride?.fuelType || decodedVehicle?.fuelType || null;
     const candidateVin = String(decodedVehicle?.vin || vin || "")
@@ -2460,10 +2464,19 @@ export function EvaluationWorkspace({
           qualificationYear: vehicleYear,
           qualificationMake: vehicleMake,
           qualificationModel: vehicleModel,
-          qualificationTrim: vehicleTrim,
-          qualificationFuelType: decodedVehicle?.fuelType || null,
-          qualificationDrivetrain: decodedVehicle?.driveType || null,
-          qualificationBodyType: decodedVehicle?.bodyClass || null,
+          qualificationTrim: profileVariant || vehicleTrim,
+          qualificationFuelType:
+            vehicleIdentityProfile?.fuelType ||
+            decodedVehicle?.fuelType ||
+            null,
+          qualificationDrivetrain:
+            vehicleIdentityProfile?.drivetrain ||
+            decodedVehicle?.driveType ||
+            null,
+          qualificationBodyType:
+            vehicleIdentityProfile?.bodyClass ||
+            decodedVehicle?.bodyClass ||
+            null,
           targetMileage,
           searchStage: options?.searchStage || "initial",
           regions:
