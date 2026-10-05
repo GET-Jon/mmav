@@ -6,6 +6,7 @@ import {
   canonicalTractionClass,
   canonicalTransmission,
   canonicalVehicleMake,
+  canonicalVehicleVariant,
   compactVehicleText,
   normalizeVehicleText,
 } from "./vehicle-identity";
@@ -280,11 +281,24 @@ export function findVehicleTaxonomyRule(vehicle: VehicleIdentity) {
 }
 
 function genericTrimTier(target: VehicleIdentity, candidate: VehicleIdentity) {
-  const targetTrim = normalize(target.trim);
-  const candidateTrim = normalize(candidate.trim);
+  const targetVariant = canonicalVehicleVariant(target);
+  const candidateVariant = canonicalVehicleVariant(candidate);
 
-  if (!targetTrim || !candidateTrim) return "supporting" as const;
-  if (targetTrim === candidateTrim) return "direct" as const;
+  if (!targetVariant || !candidateVariant) return "supporting" as const;
+  if (targetVariant === candidateVariant) return "direct" as const;
+
+  const targetCompact = compactVehicleText(targetVariant);
+  const candidateCompact = compactVehicleText(candidateVariant);
+
+  if (
+    targetCompact &&
+    candidateCompact &&
+    (targetCompact.includes(candidateCompact) ||
+      candidateCompact.includes(targetCompact))
+  ) {
+    return "direct" as const;
+  }
+
   return "near" as const;
 }
 
@@ -389,8 +403,12 @@ export function evaluateVehicleEquivalence({
       }
     } else {
       tier = genericTrimTier(target, candidate);
-      if (normalize(target.trim) !== normalize(candidate.trim)) {
-        reasons.push("trim differs or is incomplete");
+      const targetVariant = canonicalVehicleVariant(target);
+      const candidateVariant = canonicalVehicleVariant(candidate);
+      if (targetVariant !== candidateVariant) {
+        reasons.push(
+          `variant differs or is incomplete: ${targetVariant || "unknown"} vs ${candidateVariant || "unknown"}`,
+        );
       }
     }
   }
