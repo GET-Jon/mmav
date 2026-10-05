@@ -8,6 +8,11 @@ import {
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
 import { resolveMarketCheckModelCandidates } from "@/lib/marketcheck/model-discovery";
+import {
+  canonicalModelFamily,
+  canonicalVehicleMake,
+  compactVehicleText,
+} from "@/lib/marketcheck/vehicle-identity";
 
 type MarketCheckListing = Record<string, any>;
 
@@ -51,7 +56,6 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 const MIN_MARKETCHECK_INTERVAL_MS = 350;
 
 const MARKETCHECK_API_CONTROLS = {
-  liveLookupEnabled: true,
   maxApiCallsPerSearch: 3,
   minUsableCompsToStop: 10,
   minInitialRegions: 2,
@@ -202,6 +206,7 @@ function makeStableSearchKey({
   rows,
   preferTaxonomyFallback,
   useTaxonomyFallbackTrim,
+  preferredModelAliases,
 }: {
   year: number;
   make: string;
@@ -215,6 +220,7 @@ function makeStableSearchKey({
   rows: number;
   preferTaxonomyFallback: boolean;
   useTaxonomyFallbackTrim: boolean;
+  preferredModelAliases: string[];
 }) {
   return JSON.stringify({
     year,
@@ -229,8 +235,12 @@ function makeStableSearchKey({
     rows,
     preferTaxonomyFallback,
     useTaxonomyFallbackTrim,
+    preferredModelAliases: [...preferredModelAliases]
+      .map((alias) => normalize(alias))
+      .filter(Boolean)
+      .sort(),
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v18-retrieval-strategy",
+    cacheVersion: "progressive-regions-v19-identity-profile",
   });
 }
 
@@ -290,9 +300,11 @@ function normalizeModelIdentity(value: unknown) {
 
 function modelIdentityMatches({
   listing,
+  requestedMake,
   requestedModel,
 }: {
   listing: MarketCheckListing;
+  requestedMake: string;
   requestedModel: string;
 }) {
   const build = listing.build || {};
@@ -302,9 +314,61 @@ function modelIdentityMatches({
     return true;
   }
 
-  const listingModel = normalizeModelIdentity(
+  const listingMake = String(
+    build.make ?? listing.make ?? requestedMake ?? "",
+  ).trim();
+  const listingModelRaw = String(
     build.model ?? listing.model ?? "",
-  );
+  ).trim();
+  const listingModel = normalizeModelIdentity(listingModelRaw);
+
+  // Provider model strings are not stable enough for literal equality.
+  // Compare canonical model families first so equivalent names such as
+  // "EQE-Class SUV", "EQE SUV", and "EQE 350" can survive retrieval.
+  if (listingModel) {
+    const requestedFamily = canonicalModelFamily({
+      year: 0,
+      make: requestedMake,
+      model: requestedModel,
+    });
+    const listingFamily = canonicalModelFamily({
+      year: Number(build.year ?? listing.year ?? 0),
+      make: listingMake,
+      model: listingModelRaw,
+      trim: String(build.trim ?? listing.trim ?? ""),
+      bodyType: String(
+        build.body_type ??
+          build.body_style ??
+          listing.body_type ??
+          listing.body_style ??
+          "",
+      ),
+      drivetrain: String(
+        build.drivetrain ??
+          build.drive_type ??
+          listing.drivetrain ??
+          listing.drive_type ??
+          "",
+      ),
+      fuelType: String(
+        build.fuel_type ??
+          build.fuel ??
+          listing.fuel_type ??
+          listing.fuel ??
+          "",
+      ),
+    });
+
+    if (
+      canonicalVehicleMake(requestedMake) ===
+        canonicalVehicleMake(listingMake) &&
+      requestedFamily &&
+      listingFamily &&
+      requestedFamily === listingFamily
+    ) {
+      return true;
+    }
+  }
 
   if (listingModel === requested) {
     return true;
@@ -371,7 +435,17 @@ function trimMatches({
     return true;
   }
 
-  return listing.includes(preferred) || preferred.includes(listing);
+  const listingCompact = compactVehicleText(listing);
+  const preferredCompact = compactVehicleText(preferred);
+
+  return (
+    listing.includes(preferred) ||
+    preferred.includes(listing) ||
+    (listingCompact &&
+      preferredCompact &&
+      (listingCompact.includes(preferredCompact) ||
+        preferredCompact.includes(listingCompact)))
+  );
 }
 
 function calculateQualityScore({
@@ -485,6 +559,7 @@ function mapListingToComp({
   if (
     !modelIdentityMatches({
       listing,
+      requestedMake: searchMake,
       requestedModel: searchModel,
     })
   ) {
@@ -1278,13 +1353,20 @@ export async function POST(request: Request) {
     const reason = String(body.reason || "explicit-user-comp-search");
     const preferTaxonomyFallback = body.preferTaxonomyFallback === true;
     const useTaxonomyFallbackTrim = body.useTaxonomyFallbackTrim !== false;
+    const preferredModelAliases: string[] = Array.isArray(
+      body.preferredModelAliases,
+    )
+      ? Array.from(
+          new Set<string>(
+            body.preferredModelAliases
+              .map((value: unknown) => String(value || "").trim())
+              .filter((value: string) => Boolean(value)),
+          ),
+        ).slice(0, 8)
+      : [];
 
     const apiControls = {
       ...MARKETCHECK_API_CONTROLS,
-      liveLookupEnabled:
-        body.liveLookupEnabled === false
-          ? false
-          : MARKETCHECK_API_CONTROLS.liveLookupEnabled,
       maxApiCallsPerSearch: Math.max(
         1,
         Math.min(
@@ -1379,33 +1461,6 @@ export async function POST(request: Request) {
       trim: preferredTrim,
     });
 
-    if (!apiControls.liveLookupEnabled) {
-      return NextResponse.json({
-        error: "Live MarketCheck lookup is currently disabled by API controls.",
-        apiControls,
-        apiUsage: {
-          apiCallsMade: 0,
-          cacheHit: false,
-          stopReason:
-            "Live lookup disabled before any MarketCheck API request was made.",
-          searchLog: [],
-        },
-        search: {
-          year,
-          make,
-          model,
-          preferredTrim,
-          targetMileage,
-          zips,
-          regions: orderedRegions,
-          radius,
-          rows,
-          generationFilter: generationCompRule,
-        },
-        comps: [],
-      });
-    }
-
     const searchKey = makeStableSearchKey({
       year,
       make,
@@ -1419,6 +1474,7 @@ export async function POST(request: Request) {
       rows,
       preferTaxonomyFallback,
       useTaxonomyFallbackTrim,
+      preferredModelAliases,
     });
 
     const cached = getCachedResponse(searchKey);
@@ -1559,6 +1615,7 @@ export async function POST(request: Request) {
           if (
             !modelIdentityMatches({
               listing,
+              requestedMake: make,
               requestedModel: model,
             })
           ) {
@@ -1860,12 +1917,18 @@ export async function POST(request: Request) {
     }
 
     const taxonomyRetrieval = findModelTaxonomyFallback({ make, model });
-    const modelAliases = findMarketCheckModelAliases({ make, model });
+    const modelAliases = Array.from(
+      new Set([
+        ...preferredModelAliases,
+        ...findMarketCheckModelAliases({ make, model }),
+      ]),
+    ).filter((alias) => normalize(alias) !== normalize(model));
     const aliasRetrievalModel = modelAliases[0] || null;
     const explicitFallbackModel =
       taxonomyRetrieval?.fallbackModel || aliasRetrievalModel || null;
 
     let searches: MarketCheckSearchResult[] = [];
+    let vinNativeSearches: MarketCheckSearchResult[] = [];
     let exactSearches: MarketCheckSearchResult[] = [];
     let taxonomyRetrySearches: MarketCheckSearchResult[] = [];
     let generationSearches: MarketCheckSearchResult[] = [];
@@ -1917,11 +1980,19 @@ export async function POST(request: Request) {
           apiControls,
         });
       } else {
-        usedVinNativeMatch = true;
-        exactSearches = [vinExact];
+        vinNativeSearches = [vinExact];
         searches = [vinExact];
 
+        const vinExactSummary = buildCompSummary(vinNativeSearches);
+        usedVinNativeMatch = vinExactSummary.comps.length > 0;
+
+        if (!usedVinNativeMatch) {
+          vinNativeFallbackReason =
+            "MarketCheck VIN matching returned no qualifying candidates, so Lot Logic continued with model-taxonomy recovery.";
+        }
+
         if (
+          usedVinNativeMatch &&
           generationCompRule &&
           generationYears.length > 0 &&
           buildCompSummary(searches).comps.length < MIN_USABLE_COMPS &&
@@ -2019,7 +2090,7 @@ export async function POST(request: Request) {
           });
         }
 
-        searches = [...taxonomyRetrySearches];
+        searches = [...vinNativeSearches, ...taxonomyRetrySearches];
         activeRetrievalModel = explicitFallbackModel;
         activeRetrievalTrim =
           useTaxonomyFallbackTrim
@@ -2056,8 +2127,8 @@ export async function POST(request: Request) {
           });
         }
 
-        searches = [...exactSearches];
-        const exactSummary = buildCompSummary(exactSearches);
+        searches = [...vinNativeSearches, ...exactSearches];
+        const exactSummary = buildCompSummary(searches);
 
         if (
           exactSummary.rawCount === 0 &&

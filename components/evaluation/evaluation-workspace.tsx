@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
@@ -13,6 +14,16 @@ import {
   type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
+import { CompSearchReport } from "@/components/evaluation/comp-search-report";
+import {
+  describeMarketCheckAttempt,
+  recommendCompSearchAction,
+  type CompSearchReportEntry,
+} from "@/lib/evaluation/comp-search-orchestration";
+import {
+  buildDeterministicVehicleIdentityProfile,
+  type VehicleIdentityProfile,
+} from "@/lib/evaluation/vehicle-identity-profile";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
@@ -20,6 +31,7 @@ import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
 import { calculateDealEconomicsScore, calculateValuation } from "@/lib/valuation";
+import { trackEvent } from "@/lib/analytics/client";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
 import type { EvaluationCosts, ValuationInput } from "@/types/evaluation";
@@ -28,7 +40,7 @@ import type {
   ConditionAnalysisIssue,
 } from "@/lib/ai/condition-analysis-types";
 
-const draftStorageKey = "mmav:evaluationDraft:v1";
+import { evaluationDraftStorageKey as draftStorageKey } from "@/lib/evaluation-draft";
 
 const initialTargetMileage = 0;
 
@@ -384,19 +396,17 @@ function MarketLiquidityVisual({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-baseline gap-2">
-            <div className="text-xs font-extrabold text-slate-600">
-              Time to Sell
-            </div>
-            <div className={`text-base font-black ${labelTone}`}>{label}</div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <div className="text-xs font-extrabold text-slate-600">
+            Time to Sell
           </div>
+          <div className={`text-base font-black ${labelTone}`}>{label}</div>
         </div>
 
         {hasSoldRange ? (
-          <div className="text-right">
-            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+          <div className="text-left sm:text-right">
+            <div className="text-[9px] font-black uppercase tracking-[0.07em] text-slate-400 sm:text-[10px]">
               Typical retail window
             </div>
             <div className="mt-0.5 text-sm font-black text-slate-800">
@@ -404,7 +414,7 @@ function MarketLiquidityVisual({
             </div>
           </div>
         ) : hasActive ? (
-          <div className="text-right text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+          <div className="inline-flex w-fit rounded-full bg-blue-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-blue-700 sm:bg-transparent sm:px-0 sm:py-0 sm:text-right sm:text-[10px] sm:text-slate-400">
             Current market age
           </div>
         ) : null}
@@ -586,6 +596,7 @@ type SavedEvaluationPayload = {
   auctionSite?: string;
   finalTargetOverride?: number | null;
   decodedVehicle?: VinDecodeResult | null;
+  vehicleIdentityProfile?: VehicleIdentityProfile | null;
   manualVehicle?: ManualVehicleBasics;
   targetMileage?: number;
   evaluation?: ValuationInput;
@@ -693,6 +704,21 @@ export function EvaluationWorkspace({
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null,
   );
+  const [vehicleIdentityProfile, setVehicleIdentityProfile] =
+    useState<VehicleIdentityProfile | null>(
+      initialSavedPayload?.vehicleIdentityProfile ||
+        (initialSavedPayload?.decodedVehicle
+          ? buildDeterministicVehicleIdentityProfile(
+              initialSavedPayload.decodedVehicle,
+            )
+          : null),
+    );
+  const [vehicleIdentityProfileStatus, setVehicleIdentityProfileStatus] =
+    useState(
+      initialSavedPayload?.vehicleIdentityProfile
+        ? "Vehicle identity ready"
+        : "",
+    );
 
   const [manualVehicle, setManualVehicle] = useState<ManualVehicleBasics>(
     initialSavedPayload?.manualVehicle || initialManualVehicle,
@@ -747,6 +773,10 @@ export function EvaluationWorkspace({
       latitude: number | null;
     }>;
   } | null>(null);
+  const [compSearchHistory, setCompSearchHistory] = useState<CompSearchReportEntry[]>([]);
+  const [compSearchImproving, setCompSearchImproving] = useState(false);
+  const [compSearchImprovementStatus, setCompSearchImprovementStatus] = useState("");
+
   const [marketCheckSearchMeta, setMarketCheckSearchMeta] = useState<{
     loadedCount: number;
     regionsChecked: string[];
@@ -909,6 +939,7 @@ export function EvaluationWorkspace({
   } | null>(null);
 
   const marketCheckInFlightRef = useRef(false);
+  const vehicleIdentityRequestVinRef = useRef("");
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
@@ -916,6 +947,9 @@ export function EvaluationWorkspace({
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [compSectionExpanded, setCompSectionExpanded] = useState(true);
+  const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
+  const [automaticCompSearchCompleted, setAutomaticCompSearchCompleted] =
+    useState(false);
   const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
   const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
   const [activeStage, setActiveStage] =
@@ -929,6 +963,9 @@ export function EvaluationWorkspace({
     return stage === "market" || stage === "verdict";
   });
   const [verdictTransitioning, setVerdictTransitioning] = useState(false);
+  const [usageLimitMessage, setUsageLimitMessage] = useState("");
+  const [evaluationAccessError, setEvaluationAccessError] = useState("");
+  const [planSelectionMessage, setPlanSelectionMessage] = useState<string | null>(null);
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
@@ -950,6 +987,8 @@ export function EvaluationWorkspace({
   const [customCompZip, setCustomCompZip] = useState("");
   const [customCompMarkets, setCustomCompMarkets] = useState<Array<{ market: string; zip: string }>>([]);
   const [compTrimRelaxed, setCompTrimRelaxed] = useState(false);
+  const [needsDealershipZip, setNeedsDealershipZip] = useState(false);
+  const [dealershipProfile, setDealershipProfile] = useState<{ zip: string; websiteUrl: string }>({ zip: "", websiteUrl: "" });
   const [dealerProfileOpen, setDealerProfileOpen] = useState(false);
   const [whyLotLogicOpen, setWhyLotLogicOpen] = useState(false);
   const [conditionProfitabilityOpen, setConditionProfitabilityOpen] =
@@ -1049,7 +1088,7 @@ export function EvaluationWorkspace({
   );
 
   const [activeAssumptions, setActiveAssumptions] =
-    useState(defaultAssumptions);
+    useState({ ...defaultAssumptions, regionalMarkets: [] as typeof defaultAssumptions.regionalMarkets });
   const [assumptionsSource, setAssumptionsSource] = useState<
     "default" | "saved"
   >("default");
@@ -1078,6 +1117,8 @@ export function EvaluationWorkspace({
 
         if (!cancelled && data?.assumptions) {
           setActiveAssumptions(data.assumptions);
+          setNeedsDealershipZip(Boolean(data.needsDealershipZip));
+          setDealershipProfile(data.dealershipProfile || { zip: "", websiteUrl: "" });
           setAssumptionsSource(data.source === "saved" ? "saved" : "default");
 
           if (!initialSavedEvaluationId && decodedVehicle) {
@@ -1188,6 +1229,11 @@ export function EvaluationWorkspace({
 
       if (draft.decodedVehicle) {
         setDecodedVehicle(draft.decodedVehicle);
+        setVehicleIdentityProfile(
+          draft.vehicleIdentityProfile ||
+            buildDeterministicVehicleIdentityProfile(draft.decodedVehicle),
+        );
+        setVehicleIdentityProfileStatus("Vehicle identity ready");
       }
 
       if (draft.manualVehicle) {
@@ -1314,6 +1360,7 @@ export function EvaluationWorkspace({
           auctionSite,
           finalTargetOverride,
           decodedVehicle,
+          vehicleIdentityProfile,
           manualVehicle,
           targetMileage,
           evaluation,
@@ -1343,6 +1390,7 @@ export function EvaluationWorkspace({
     auctionSite,
     finalTargetOverride,
     decodedVehicle,
+    vehicleIdentityProfile,
     manualVehicle,
     targetMileage,
     evaluation,
@@ -1733,6 +1781,40 @@ export function EvaluationWorkspace({
     }));
   }
 
+  function updateAllInCostAmount(
+    key:
+      | "currentBid"
+      | "auctionFee"
+      | "transport"
+      | "reconCombined"
+      | "detailAdmin"
+      | "generalRiskReserve"
+      | "brandRiskAdd",
+    value: number,
+  ) {
+    const normalizedValue = Math.max(0, Number.isFinite(value) ? value : 0);
+
+    if (key === "currentBid") {
+      updateEvaluationField("currentBid", normalizedValue);
+      return;
+    }
+
+    if (key === "reconCombined") {
+      setEvaluation((previous) => ({
+        ...previous,
+        costs: {
+          ...previous.costs,
+          recon: normalizedValue,
+          conditionRiskAdd: 0,
+          titleHistoryRiskAdd: 0,
+        },
+      }));
+      return;
+    }
+
+    updateCost(key, normalizedValue);
+  }
+
   function toggleCondition(conditionName: string) {
     setSelectedConditions((previous) =>
       previous.includes(conditionName)
@@ -1768,6 +1850,55 @@ export function EvaluationWorkspace({
       reason: profileMatch.reason,
     });
   }
+  async function enrichVehicleIdentityProfile(decoded: VinDecodeResult) {
+    const requestVin = String(decoded.vin || "").trim().toUpperCase();
+    const baseline = buildDeterministicVehicleIdentityProfile(decoded);
+
+    vehicleIdentityRequestVinRef.current = requestVin;
+    setVehicleIdentityProfile(baseline);
+    setVehicleIdentityProfileStatus("Building vehicle search profile…");
+
+    try {
+      const response = await fetch("/api/evaluations/vehicle-identity-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ decodedVehicle: decoded }),
+      });
+      const data = await response.json();
+
+      if (
+        vehicleIdentityRequestVinRef.current !== requestVin ||
+        String(decoded.vin || "").trim().toUpperCase() !== requestVin
+      ) {
+        return baseline;
+      }
+
+      if (!response.ok || !data.profile) {
+        setVehicleIdentityProfile(baseline);
+        setVehicleIdentityProfileStatus("Vehicle search profile ready");
+        return baseline;
+      }
+
+      setVehicleIdentityProfile(data.profile as VehicleIdentityProfile);
+      setVehicleIdentityProfileStatus(
+        data.aiEnhanced
+          ? "AI-assisted vehicle search profile ready"
+          : "Vehicle search profile ready",
+      );
+      return data.profile as VehicleIdentityProfile;
+    } catch (error) {
+      console.warn("Vehicle identity profile enrichment failed:", error);
+      if (vehicleIdentityRequestVinRef.current === requestVin) {
+        setVehicleIdentityProfile(baseline);
+        setVehicleIdentityProfileStatus("Vehicle search profile ready");
+      }
+      return baseline;
+    }
+  }
+
   async function decodeVinFromBasics(
     vinOverride?: string,
   ): Promise<VinDecodeResult | null> {
@@ -1826,6 +1957,7 @@ export function EvaluationWorkspace({
       const decoded = data as VinDecodeResult;
 
       handleDecodedVinAndReset(decoded);
+      void enrichVehicleIdentityProfile(decoded);
 
       window.setTimeout(() => {
         mileageInputRef.current?.focus();
@@ -1846,6 +1978,10 @@ export function EvaluationWorkspace({
 
   function handleDecodedVinAndReset(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
+    setVehicleIdentityProfile(
+      buildDeterministicVehicleIdentityProfile(decoded),
+    );
+    setVehicleIdentityProfileStatus("Vehicle search profile ready");
     setManualVehicle(initialManualVehicle);
     setVin(decoded.vin);
 
@@ -1895,6 +2031,12 @@ export function EvaluationWorkspace({
     setMarketCheckStatus("");
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
+    setCompSearchHistory([]);
+    setCompSearchHandedOff(false);
+    setAutomaticCompSearchCompleted(false);
+    setAutoDevDiscovery(null);
+    setAutoDevDiscoveryStatus("");
+    setCompSearchImprovementStatus("");
     setSavedEvaluationId(null);
     setSaveStatus("");
     setConditionReviewStatus("unreviewed");
@@ -1912,6 +2054,10 @@ export function EvaluationWorkspace({
 
   function resetForDecodedVin(decoded: VinDecodeResult) {
     setDecodedVehicle(decoded);
+    setVehicleIdentityProfile(
+      buildDeterministicVehicleIdentityProfile(decoded),
+    );
+    setVehicleIdentityProfileStatus("Vehicle search profile ready");
     setManualVehicle(initialManualVehicle);
     setVin(decoded.vin);
 
@@ -2138,6 +2284,91 @@ export function EvaluationWorkspace({
     }
   }
 
+  function recordMarketCheckSearch(data: any) {
+    const usage = data?.apiUsage || {};
+    const diagnostics = usage?.filterDiagnostics || {};
+    const log = Array.isArray(usage?.searchLog) ? usage.searchLog : [];
+    const regions = Array.isArray(data?.search?.regionsChecked)
+      ? data.search.regionsChecked
+      : [];
+    const strategies = Array.from(
+      new Set(
+        log
+          .map((row: any) =>
+            describeMarketCheckAttempt(String(row?.attemptName || "")),
+          )
+          .filter(Boolean),
+      ),
+    );
+    const candidateListings = Number(
+      diagnostics?.returnedListings ??
+        log.reduce(
+          (sum: number, row: any) => sum + Number(row?.listingCount || 0),
+          0,
+        ),
+    );
+    const usableComps = Number(
+      diagnostics?.usableListings ??
+        usage?.usableCompCount ??
+        log.reduce(
+          (sum: number, row: any) => sum + Number(row?.usableComps || 0),
+          0,
+        ),
+    );
+    const rejectionCounts = diagnostics?.rejectionCounts || {};
+    const details = [
+      data?.search?.generationWidening?.attempted
+        ? "Nearby model years checked within " +
+          (data.search.generationWidening.generation || "the same generation")
+        : null,
+      data?.search?.taxonomyDiscovery?.attempted
+        ? "Provider model taxonomy checked"
+        : null,
+      Number(rejectionCounts?.modelMismatch || 0) > 0
+        ? String(Number(rejectionCounts.modelMismatch)) +
+          " model mismatch" +
+          (Number(rejectionCounts.modelMismatch) === 1 ? "" : "es") +
+          " rejected"
+        : null,
+      Number(rejectionCounts?.qualityBelowThreshold || 0) > 0
+        ? String(Number(rejectionCounts.qualityBelowThreshold)) +
+          " below quality threshold"
+        : null,
+    ].filter((value): value is string => Boolean(value));
+
+    setCompSearchHistory((current) =>
+      [
+        ...current,
+        {
+          id: "marketcheck-" + Date.now() + "-" + current.length,
+          source: "MarketCheck" as const,
+          strategy: strategies.length
+            ? strategies.join(" → ")
+            : "MarketCheck search",
+          summary:
+            candidateListings > 0
+              ? String(candidateListings) +
+                " candidate listing" +
+                (candidateListings === 1 ? "" : "s") +
+                " reviewed; " +
+                String(usableComps) +
+                " cleared the latest retrieval-quality checks."
+              : "No candidate inventory returned across " +
+                String(regions.length || 1) +
+                " searched market" +
+                (regions.length === 1 ? "" : "s") +
+                " in this pass.",
+          details,
+          apiCalls: Number(usage?.apiCallsMade || 0),
+          candidateListings,
+          usableComps,
+          regions,
+          createdAt: new Date().toISOString(),
+        },
+      ].slice(-12),
+    );
+  }
+
   async function pullMarketCheckComps(
     vehicleOverride?: VinDecodeResult | MarketCheckVehicleOverride | null,
     options?: {
@@ -2155,6 +2386,10 @@ export function EvaluationWorkspace({
       useTaxonomyFallbackTrim?: boolean;
     },
   ) {
+    if (needsDealershipZip) {
+      setMarketCheckStatus("Set your dealership ZIP in Organization & Team before searching comps.");
+      return;
+    }
     if (marketCheckInFlightRef.current || marketCheckLoading) {
       setMarketCheckStatus("MarketCheck search already in progress.");
       return;
@@ -2194,13 +2429,17 @@ export function EvaluationWorkspace({
       setComps([]);
       setMarketCheckSearchMeta(null);
       setMarketCheckApiUsage(null);
+      setCompSearchHistory([]);
+      setAutoDevDiscovery(null);
+      setAutoDevDiscoveryStatus("");
+      setCompSearchImprovementStatus("");
+      setCompSearchHandedOff(false);
+      setAutomaticCompSearchCompleted(false);
     }
 
     setMarketCheckLoading(true);
     setMarketCheckStatus(
-      marketCheckApiControls.liveLookupEnabled
-        ? "Searching MarketCheck comps..."
-        : "Live MarketCheck lookup is disabled. Running safe no-call check...",
+      "Searching MarketCheck comps...",
     );
 
     try {
@@ -2216,6 +2455,15 @@ export function EvaluationWorkspace({
           trim,
           vin: marketCheckVin,
           fuelType,
+          preferredModelAliases:
+            vehicleIdentityProfile?.providerAliases || [],
+          qualificationYear: vehicleYear,
+          qualificationMake: vehicleMake,
+          qualificationModel: vehicleModel,
+          qualificationTrim: vehicleTrim,
+          qualificationFuelType: decodedVehicle?.fuelType || null,
+          qualificationDrivetrain: decodedVehicle?.driveType || null,
+          qualificationBodyType: decodedVehicle?.bodyClass || null,
           targetMileage,
           searchStage: options?.searchStage || "initial",
           regions:
@@ -2236,7 +2484,6 @@ export function EvaluationWorkspace({
           // Pull the full standard MarketCheck candidate pool per region before
       // spending another API call. Lot Logic still qualifies/ranks strictly.
       rows: 50,
-          liveLookupEnabled: marketCheckApiControls.liveLookupEnabled,
           maxApiCallsPerSearch:
             options?.maxApiCallsPerSearch ??
             (options?.searchStage === "expanded" ||
@@ -2304,10 +2551,55 @@ export function EvaluationWorkspace({
           minimumQualityScore: data.minimumQualityScore,
         });
 
-        setMarketCheckStatus(
-          data.apiUsage?.stopReason || data.error || "No comps found",
+        recordMarketCheckSearch(data);
+
+        const returnedListings = Number(
+          data.apiUsage?.filterDiagnostics?.returnedListings || 0,
         );
-        return;
+        const usableListings = Number(
+          data.apiUsage?.filterDiagnostics?.usableListings ||
+            data.apiUsage?.usableCompCount ||
+            0,
+        );
+        const searchedThisPass = Array.isArray(data.search?.regionsChecked)
+          ? data.search.regionsChecked.length
+          : 0;
+
+        setMarketCheckStatus(
+          returnedListings > 0
+            ? "Search completed: " +
+              returnedListings +
+              " listing" +
+              (returnedListings === 1 ? "" : "s") +
+              " returned, but none qualified as valuation evidence."
+            : "Search completed across " +
+              (searchedThisPass || 1) +
+              " market" +
+              (searchedThisPass === 1 ? "" : "s") +
+              "; no candidate listings were returned.",
+        );
+
+        const retainedComps = options?.mergeResults ? comps : [];
+
+        return {
+          data,
+          mergedComps: retainedComps,
+          includedCount: retainedComps.filter((comp) => comp.included).length,
+          returnedListings,
+          usableListings,
+          regionsChecked: Array.from(
+            new Set([
+              ...previousRegionsChecked,
+              ...(data.search?.regionsChecked || []),
+            ]),
+          ),
+          searchedZips: Array.from(
+            new Set([
+              ...previousSearchedZips,
+              ...(data.search?.searchedZips || []),
+            ]),
+          ),
+        };
       }
 
       const pulledComps = Array.isArray(data.comps) ? data.comps : [];
@@ -2316,12 +2608,14 @@ export function EvaluationWorkspace({
       // fallback rows client-side just because MarketCheck returned inventory:
       // that can temporarily manufacture a sale value/profit verdict before
       // vehicle-equivalence checks have established usable comps.
-      const normalizedComps = pulledComps.map((comp: MarketComp) => ({
-        ...comp,
-        included: comp.included === true,
-      }));
+      const normalizedComps: MarketComp[] = pulledComps.map(
+        (comp: MarketComp) => ({
+          ...comp,
+          included: comp.included === true,
+        }),
+      );
 
-      const mergedComps = options?.mergeResults
+      const mergedComps: MarketComp[] = options?.mergeResults
         ? [
             ...comps,
             ...normalizedComps.filter(
@@ -2373,6 +2667,8 @@ export function EvaluationWorkspace({
         minimumQualityScore: data.minimumQualityScore,
       });
 
+      recordMarketCheckSearch(data);
+
       setMarketCheckStatus(
         `${mergedComps.length} comps loaded${
           combinedRegionsChecked.length
@@ -2380,6 +2676,22 @@ export function EvaluationWorkspace({
             : ""
         }${data.cache?.hit ? " from cache" : ""}`,
       );
+
+      return {
+        data,
+        mergedComps,
+        includedCount: mergedComps.filter((comp) => comp.included).length,
+        returnedListings: Number(
+          data.apiUsage?.filterDiagnostics?.returnedListings || 0,
+        ),
+        usableListings: Number(
+          data.apiUsage?.filterDiagnostics?.usableListings ||
+            data.apiUsage?.usableCompCount ||
+            0,
+        ),
+        regionsChecked: combinedRegionsChecked,
+        searchedZips: combinedSearchedZips,
+      };
     } catch (error) {
       setMarketCheckStatus(
         error instanceof Error ? error.message : "MarketCheck search failed.",
@@ -2391,11 +2703,17 @@ export function EvaluationWorkspace({
   }
 
   function getCompExpansionMarkets() {
+    if (!activeAssumptions.regionalMarkets.length) return [];
     return buildExpansionMarkets(
       activeAssumptions.regionalMarkets,
       marketCheckSearchMeta?.searchedZips || [],
       marketCheckSearchMeta?.regionsChecked || [],
     );
+  }
+
+  function openCompVehicleMatchEditor() {
+    setCompEditorTab("vehicle");
+    setCompMarketEditorOpen(true);
   }
 
   function openCompMarketEditor() {
@@ -2524,7 +2842,7 @@ export function EvaluationWorkspace({
         : `Broadening retrieval for ${vehicleMake} ${vehicleModel} while retaining strict final vehicle qualification.`,
     );
 
-    await pullMarketCheckComps(
+    return await pullMarketCheckComps(
       {
         year: String(vehicleYear || ""),
         make: vehicleMake,
@@ -2564,6 +2882,8 @@ export function EvaluationWorkspace({
           make: vehicleMake,
           model: vehicleModel,
           trim: vehicleTrim,
+          vin: String(decodedVehicle?.vin || vin || "").trim().toUpperCase(),
+          providerAliases: vehicleIdentityProfile?.providerAliases || [],
           bodyClass: vehicleBodyClass,
         }),
       });
@@ -2575,27 +2895,110 @@ export function EvaluationWorkspace({
       }
 
       setAutoDevDiscovery(data);
-      setAutoDevDiscoveryStatus(
-        `Auto.dev found ${data.total || 0} matching active listings nationwide.`,
+
+      const total = Number(data.total || 0);
+      const attempts = Array.isArray(data.discovery?.attempts)
+        ? data.discovery.attempts
+        : [];
+      const usedNormalizedIdentity = Boolean(
+        data.discovery?.normalizedIdentityUsed,
       );
+      const status =
+        total > 0
+          ? "Found " +
+            total +
+            " matching active listing" +
+            (total === 1 ? "" : "s") +
+            " nationwide" +
+            (usedNormalizedIdentity && data.query?.model
+              ? " after matching the provider classification “" +
+                data.query.model +
+                "”."
+              : ".")
+          : "No matching national inventory found after checking " +
+            Math.max(1, attempts.length) +
+            " exact/normalized vehicle identit" +
+            (Math.max(1, attempts.length) === 1 ? "y." : "ies.");
+
+      setAutoDevDiscoveryStatus(status);
+      setCompSearchHistory((current) =>
+        [
+          ...current,
+          {
+            id: "autodev-" + Date.now() + "-" + current.length,
+            source: "Auto.dev" as const,
+            strategy: usedNormalizedIdentity
+              ? "National discovery with normalized vehicle identity"
+              : "National discovery",
+            summary: status,
+            details: attempts.map(
+              (attempt: any) =>
+                String(attempt.model || "Vehicle identity") +
+                ": " +
+                Number(attempt.total || attempt.returned || 0) +
+                " found",
+            ),
+            apiCalls: Math.max(1, attempts.length),
+            candidateListings: Number(data.returned || 0),
+            usableComps: 0,
+            regions: Array.isArray(data.recommendedMarkets)
+              ? data.recommendedMarkets
+                  .map((market: any) =>
+                    String(market.market || market.zip || ""),
+                  )
+                  .filter(Boolean)
+              : [],
+            createdAt: new Date().toISOString(),
+          },
+        ].slice(-12),
+      );
+
+      return data;
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Auto.dev national discovery failed.";
       setAutoDevDiscovery(null);
-      setAutoDevDiscoveryStatus(
-        error instanceof Error ? error.message : "Auto.dev national discovery failed.",
+      setAutoDevDiscoveryStatus(message);
+      setCompSearchHistory((current) =>
+        [
+          ...current,
+          {
+            id: "autodev-error-" + Date.now() + "-" + current.length,
+            source: "Auto.dev" as const,
+            strategy: "National discovery",
+            summary: message,
+            details: [],
+            apiCalls: 0,
+            candidateListings: 0,
+            usableComps: 0,
+            regions: [],
+            createdAt: new Date().toISOString(),
+          },
+        ].slice(-12),
       );
+      return null;
     } finally {
       setAutoDevDiscoveryLoading(false);
     }
   }
 
-  async function searchAutoDevRecommendedMarkets() {
-    if (!autoDevDiscovery?.recommendedMarkets?.length) {
-      setAutoDevDiscoveryStatus("No Auto.dev market clusters are available to search.");
-      return;
+  async function searchAutoDevRecommendedMarkets(
+    discoveryOverride: typeof autoDevDiscovery = autoDevDiscovery,
+    searchedZipsOverride?: string[],
+  ) {
+    const discovery = discoveryOverride;
+
+    if (!discovery?.recommendedMarkets?.length) {
+      setAutoDevDiscoveryStatus("No national inventory clusters are available to search.");
+      return null;
     }
 
-    const searched = new Set(marketCheckSearchMeta?.searchedZips || []);
-    const regions = autoDevDiscovery.recommendedMarkets
+    const searched = new Set(
+      searchedZipsOverride || marketCheckSearchMeta?.searchedZips || [],
+    );
+    const regions = discovery.recommendedMarkets
       .filter((market) => !searched.has(market.zip))
       .slice(0, 3)
       .map((market, index) => ({
@@ -2616,7 +3019,7 @@ export function EvaluationWorkspace({
       `Searching MarketCheck in ${regions.length} Auto.dev-identified market${regions.length === 1 ? "" : "s"}...`,
     );
 
-    await pullMarketCheckComps(null, {
+    const outcome = await pullMarketCheckComps(null, {
       searchStage: "expanded",
       regions,
       mergeResults: true,
@@ -2627,15 +3030,26 @@ export function EvaluationWorkspace({
     });
 
     setAutoDevDiscoveryStatus(
-      `MarketCheck search completed in ${regions.map((region) => region.market.replace(" · Auto.dev discovery", "")).join(", ")}.`,
+      "MarketCheck validation completed in " +
+        regions
+          .map((region) =>
+            region.market.replace(" · Auto.dev discovery", ""),
+          )
+          .join(", ") +
+        ".",
     );
+
+    return outcome;
   }
 
   async function expandMarketCheckSearch() {
     const searchedZips = new Set(marketCheckSearchMeta?.searchedZips || []);
 
-    const nextRegions = activeAssumptions.regionalMarkets
-      .filter((market) => market.enabled)
+    // Use the same expansion engine that powers the UI recommendations so the
+    // automatic path cannot recommend markets that its own action cannot search.
+    const nextRegions = getCompExpansionMarkets()
+      .filter((market) => !searchedZips.has(market.zip))
+      .slice(0, 3)
       .map((market, index) => ({
         market: market.market,
         zip: market.zip,
@@ -2643,26 +3057,24 @@ export function EvaluationWorkspace({
           typeof market.order === "number" && Number.isFinite(market.order)
             ? market.order
             : index + 1,
-        enabled: market.enabled,
-      }))
-      .sort((a, b) => a.order - b.order)
-      .filter((market) => !searchedZips.has(market.zip))
-      .slice(0, 3);
+        enabled: true,
+      }));
 
     if (nextRegions.length === 0) {
       setMarketCheckStatus(
-        "Nearby configured markets have been searched. Major reference markets are available as the final expansion step.",
+        "Regional expansion is complete. Lot Logic will use national discovery for the next step.",
       );
-      return;
+      return null;
     }
 
-    await pullMarketCheckComps(null, {
+    return await pullMarketCheckComps(null, {
       searchStage: "expanded",
       regions: nextRegions,
       mergeResults: true,
       useVinMatch: !compTrimRelaxed,
       preferTaxonomyFallback: compTrimRelaxed,
       useTaxonomyFallbackTrim: !compTrimRelaxed,
+      maxApiCallsPerSearch: Math.min(3, nextRegions.length),
     });
   }
 
@@ -2895,6 +3307,15 @@ export function EvaluationWorkspace({
       return;
     }
 
+    trackEvent("condition_analysis_started", {
+      source: auctionSite,
+      note_length_bucket:
+        rawIssueText.length < 250
+          ? "short"
+          : rawIssueText.length < 1000
+            ? "medium"
+            : "long",
+    });
     setConditionAnalysisLoading(true);
     setConditionAnalysisError("");
     setConditionAnalysisRetryable(false);
@@ -2941,6 +3362,13 @@ export function EvaluationWorkspace({
       setConditionPlanningEstimateOverride(null);
       setConditionReadyDaysLowOverride(null);
       setConditionReadyDaysHighOverride(null);
+      trackEvent("condition_analysis_completed", {
+        issue_count: data.analysis.issues.length,
+        included_issue_count: data.analysis.issues.filter(
+          (issue) => issue.includeInValuation,
+        ).length,
+        planning_estimate: data.analysis.planningEstimate,
+      });
     } catch (error) {
       setConditionAnalysisError(
         error instanceof Error ? error.message : "Condition analysis failed.",
@@ -3016,6 +3444,10 @@ export function EvaluationWorkspace({
     setConditionAssessmentsTouched(true);
     setConditionAnalysisApplied(true);
     setConditionReviewStatus("issues");
+    trackEvent("condition_review_applied", {
+      included_issue_count: includedIssues.length,
+      planning_estimate: effectivePlanningEstimate,
+    });
   }
 
   function openConditionProfitability() {
@@ -3059,6 +3491,55 @@ export function EvaluationWorkspace({
 
     setConditionAssessmentsTouched(true);
     setConditionReviewStatus("issues");
+  }
+
+  async function continueToVerdict() {
+    if (verdictTransitioning) return;
+
+    setUsageLimitMessage("");
+    setVerdictTransitioning(true);
+
+    try {
+      const response = await fetch("/api/usage/evaluation-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vin,
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+          trim: vehicleTrim,
+          hasUsableValuation: compSummary.includedCount > 0 && finalTargetUsed > 0,
+          valuationCompCount: compSummary.includedCount,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        code?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "This evaluation cannot continue yet.");
+      }
+
+      trackEvent("evaluation_verdict_viewed", {
+        valuation_comp_count: compSummary.includedCount,
+        comp_confidence: compSummary.confidence,
+        condition_review_status: conditionReviewStatus,
+        presentation_decision: presentationDecision,
+      });
+
+      window.setTimeout(() => {
+        setActiveStage("verdict");
+        setVerdictTransitioning(false);
+      }, 220);
+    } catch (error) {
+      setVerdictTransitioning(false);
+      setUsageLimitMessage(
+        error instanceof Error ? error.message : "This evaluation cannot continue yet.",
+      );
+    }
   }
 
   async function saveEvaluation() {
@@ -3116,6 +3597,12 @@ export function EvaluationWorkspace({
       setSaveStatus(
         data.mode === "updated" ? "Updated in Supabase" : "Saved to Supabase",
       );
+      trackEvent("evaluation_saved_to_pipeline", {
+        save_mode: data.mode === "updated" ? "updated" : "created",
+        valuation_comp_count: compSummary.includedCount,
+        comp_confidence: compSummary.confidence,
+        condition_review_status: conditionReviewStatus,
+      });
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : "Save failed.");
     } finally {
@@ -3257,10 +3744,9 @@ export function EvaluationWorkspace({
           manualVehicle.model.trim().length > 0),
   );
 
-  const suggestedBid =
-    "safeBid" in valuation && typeof valuation.safeBid === "number"
-      ? valuation.safeBid
-      : valuation.maxSmartBid;
+  // Recommended Max Buy is the single acquisition ceiling.
+  // safeBid/stretchBid remain in saved payloads only for backwards compatibility.
+  const suggestedBid = valuation.maxSmartBid;
 
   const profitabilityScore = calculateDealEconomicsScore(
     valuation.expectedGrossProfit,
@@ -3488,13 +3974,13 @@ export function EvaluationWorkspace({
     valuationInput.costs.titleHistoryRiskAdd;
   const displayedCurrentCost = valuation.allInCost;
   const allInCostBreakdown = [
-    { label: "Current bid / purchase price", amount: Math.max(0, valuationInput.currentBid) },
-    { label: "Auction fee", amount: valuationInput.costs.auctionFee },
-    { label: "Transport", amount: valuationInput.costs.transport },
-    { label: "Condition & reconditioning reserve", amount: displayedReconReserve },
-    { label: "Detail / admin", amount: valuationInput.costs.detailAdmin },
-    { label: "Contingency reserve", amount: valuationInput.costs.generalRiskReserve },
-    { label: "Brand risk adjustment", amount: valuationInput.costs.brandRiskAdd },
+    { key: "currentBid" as const, label: "Current bid / purchase price", amount: Math.max(0, valuationInput.currentBid) },
+    { key: "auctionFee" as const, label: "Auction fee", amount: valuationInput.costs.auctionFee },
+    { key: "transport" as const, label: "Transport", amount: valuationInput.costs.transport },
+    { key: "reconCombined" as const, label: "Condition & reconditioning reserve", amount: displayedReconReserve },
+    { key: "detailAdmin" as const, label: "Detail / admin", amount: valuationInput.costs.detailAdmin },
+    { key: "generalRiskReserve" as const, label: "Contingency reserve", amount: valuationInput.costs.generalRiskReserve },
+    { key: "brandRiskAdd" as const, label: "Brand risk adjustment", amount: valuationInput.costs.brandRiskAdd },
   ];
   const dealerFitPillTone =
     dealerFitResult.score >= 70
@@ -3580,7 +4066,31 @@ export function EvaluationWorkspace({
   }
 
   async function runPrimaryEvaluation() {
+    trackEvent("evaluation_vehicle_submitted", {
+      input_mode: quickEvalMode,
+      source: auctionSite,
+      has_mileage: targetMileage > 0,
+      has_bid_or_ask: valuationInput.currentBid > 0,
+    });
     setEvaluationRunning(true);
+    setEvaluationAccessError("");
+
+    // Check access before decoding or requesting paid market/AI services.
+    // The current vehicle is already persisted by the draft autosave effect.
+    try {
+      const response = await fetch("/api/usage/status", { cache: "no-store" });
+      const access = await response.json();
+      if (!response.ok) throw new Error(access.error || "Unable to check your evaluation allowance. Please try again.");
+      if (access.canStartEvaluation === false) {
+        setPlanSelectionMessage(access.evaluationAccessMessage || "Choose a plan to continue evaluating vehicles.");
+        setEvaluationRunning(false);
+        return;
+      }
+    } catch (error) {
+      setEvaluationAccessError(error instanceof Error ? error.message : "Unable to check your evaluation allowance. Please try again.");
+      setEvaluationRunning(false);
+      return;
+    }
 
     if (quickEvalMode === "manual") {
       const manualOverride = {
@@ -3680,77 +4190,221 @@ export function EvaluationWorkspace({
   const compModelMismatchCount =
     marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.modelMismatch || 0;
 
-  const compNextStep = (() => {
-    if (!marketCheckSearchMeta || marketCheckLoading) {
-      return {
-        path: "none" as const,
-        title: "",
-        reason: "",
-      };
-    }
+  const compExpansionMarketsRemaining = getCompExpansionMarkets().filter(
+    (market) =>
+      !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip),
+  ).length;
 
-    if (autoDevDiscovery?.recommendedMarkets?.length) {
-      return {
-        path: "discovered-markets" as const,
-        title: "Search the markets Auto.dev found",
-        reason:
-          "National discovery has already located matching inventory, so the highest-value next MarketCheck calls are the identified 100-mile clusters.",
-      };
-    }
+  const rawCompSearchRecommendation = recommendCompSearchAction({
+    includedCount: compSummary.includedCount,
+    confidence: String(compSummary.confidence || ""),
+    returnedListings: compReturnedListings,
+    usableListings: compUsableListings,
+    modelMismatchCount: compModelMismatchCount,
+    qualityBelowThresholdCount:
+      marketCheckApiUsage?.filterDiagnostics?.rejectionCounts
+        ?.qualityBelowThreshold || 0,
+    generationMismatchCount:
+      marketCheckApiUsage?.filterDiagnostics?.rejectionCounts
+        ?.generationMismatch || 0,
+    regionsSearched: compSearchRegions,
+    unsearchedExpansionMarkets: compExpansionMarketsRemaining,
+    hasTaxonomyFallback: Boolean(compTaxonomyFallback),
+    trimRelaxed: compTrimRelaxed,
+    nationalDiscoveryAttempted: Boolean(
+      autoDevDiscovery || autoDevDiscoveryStatus,
+    ),
+    nationalDiscoveryTotal: Number(autoDevDiscovery?.total || 0),
+    nationalRecommendedMarkets:
+      autoDevDiscovery?.recommendedMarkets?.length || 0,
+  });
 
-    if (compReturnedListings === 0 && compSearchRegions >= 3) {
-      return {
-        path: "national-discovery" as const,
-        title: "Use National Discovery",
-        reason:
-          `MarketCheck found no candidate inventory across ${compSearchRegions} searched regions. Locate where matching cars actually exist before spending more MarketCheck calls.`,
-      };
-    }
+  const compSearchRecommendation =
+    automaticCompSearchCompleted && compSummary.includedCount === 0
+      ? {
+          action: "manual-review" as const,
+          title: "Automatic search is complete",
+          reason:
+            "Lot Logic checked the exact vehicle, broader provider naming, regional markets, and national inventory without finding a reliable direct comp set. Review broader match options only if you want supporting evidence.",
+        }
+      : rawCompSearchRecommendation;
 
+  const compNextStep = {
+    path:
+      compSearchRecommendation.action === "broaden-vehicle" ||
+      compSearchRecommendation.action === "manual-review"
+        ? ("vehicle-match" as const)
+        : compSearchRecommendation.action === "expand-geography"
+          ? ("geography" as const)
+          : compSearchRecommendation.action === "national-discovery"
+            ? ("national-discovery" as const)
+            : compSearchRecommendation.action === "discovered-markets"
+              ? ("discovered-markets" as const)
+              : ("none" as const),
+    title: compSearchRecommendation.title,
+    reason: compSearchRecommendation.reason,
+  };
+
+  const normalizedCompConfidence = String(
+    compSummary.confidence || "",
+  ).toLowerCase();
+  const marketEvidenceStrength: "Strong" | "Moderate" | "Limited" =
+    compSummary.includedCount >= 8 && normalizedCompConfidence === "high"
+      ? "Strong"
+      : compSummary.includedCount >= 4 && normalizedCompConfidence !== "low"
+        ? "Moderate"
+        : "Limited";
+  const hasLimitedMarketEvidence =
+    compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
+  const hasLowCompConfidence = hasLimitedMarketEvidence;
+
+  async function improveCompSearch() {
     if (
-      compReturnedListings > 0 &&
-      compUsableListings === 0 &&
-      (compModelMismatchCount > 0 || Boolean(compTaxonomyFallback))
+      compSearchImproving ||
+      marketCheckLoading ||
+      autoDevDiscoveryLoading ||
+      compSearchRecommendation.action === "complete"
     ) {
-      return {
-        path: "vehicle-match" as const,
-        title: "Review Vehicle Match",
-        reason:
-          compModelMismatchCount > 0
-            ? `MarketCheck returned inventory, but ${compModelMismatchCount} listing${compModelMismatchCount === 1 ? "" : "s"} failed model identity checks. Review how this vehicle is classified before widening farther.`
-            : "MarketCheck is finding inventory, but this vehicle has a known taxonomy fallback. Review the vehicle match before spending calls on more geography.",
-      };
+      return;
     }
 
-    if (compSummary.includedCount > 0 && compSummary.includedCount < 3) {
-      return {
-        path: "national-discovery" as const,
-        title: "Use National Discovery",
-        reason:
-          "You have some usable evidence, but the comp set is still thin. National discovery can identify the best markets for the next MarketCheck calls.",
-      };
+    setCompSearchHandedOff(true);
+    setCompSectionExpanded(true);
+    setCompMarketEditorOpen(false);
+    setCompSearchImproving(true);
+    setAutomaticCompSearchCompleted(false);
+
+    window.setTimeout(() => {
+      compSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+
+    try {
+      if (compSearchRecommendation.action === "manual-review") {
+        setCompSearchImprovementStatus(
+          "Automatic search is complete. Review broader vehicle-match options if you want supporting evidence.",
+        );
+        openCompVehicleMatchEditor();
+        return;
+      }
+
+      let latestIncludedCount = compSummary.includedCount;
+      let latestRegionCount = compSearchRegions;
+      let latestSearchedZips = marketCheckSearchMeta?.searchedZips || [];
+
+      if (compSearchRecommendation.action === "discovered-markets") {
+        setCompSearchImprovementStatus(
+          "Verifying the strongest markets found by national discovery…",
+        );
+        const validation = await searchAutoDevRecommendedMarkets();
+        latestIncludedCount = Number(
+          validation?.includedCount || latestIncludedCount,
+        );
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found. The comp set is ready for review.",
+          );
+          return;
+        }
+
+        setAutomaticCompSearchCompleted(true);
+        setCompSearchImprovementStatus(
+          "Automatic search complete. No reliable direct comp set was established.",
+        );
+        return;
+      }
+
+      if (
+        compSearchRecommendation.action === "broaden-vehicle" &&
+        !compTrimRelaxed
+      ) {
+        setCompSearchImprovementStatus(
+          vehicleIdentityProfile?.providerAliases?.length
+            ? "Using the vehicle search profile to normalize provider naming while keeping final comp rules strict…"
+            : "Normalizing provider naming while keeping final comp rules strict…",
+        );
+
+        const broadened = await broadenCompVehicleMatch();
+        latestIncludedCount = Number(
+          broadened?.includedCount || latestIncludedCount,
+        );
+        latestRegionCount = Number(
+          broadened?.regionsChecked?.length || latestRegionCount,
+        );
+        latestSearchedZips =
+          broadened?.searchedZips || latestSearchedZips;
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found after normalizing the vehicle match.",
+          );
+          return;
+        }
+      }
+
+      if (latestRegionCount < 5) {
+        setCompSearchImprovementStatus(
+          "Checking the next best nearby markets before going national…",
+        );
+        const expanded = await expandMarketCheckSearch();
+        latestIncludedCount = Number(
+          expanded?.includedCount || latestIncludedCount,
+        );
+        latestRegionCount = Number(
+          expanded?.regionsChecked?.length || latestRegionCount,
+        );
+        latestSearchedZips =
+          expanded?.searchedZips || latestSearchedZips;
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found after regional expansion.",
+          );
+          return;
+        }
+      }
+
+      setCompSearchImprovementStatus(
+        "Regional search is complete. Locating matching inventory nationwide…",
+      );
+
+      const discovery =
+        autoDevDiscovery || (await runAutoDevDiscovery());
+
+      if (discovery?.recommendedMarkets?.length) {
+        setCompSearchImprovementStatus(
+          "National inventory found. Verifying the strongest markets with MarketCheck…",
+        );
+        const validation = await searchAutoDevRecommendedMarkets(
+          discovery,
+          latestSearchedZips,
+        );
+        latestIncludedCount = Number(
+          validation?.includedCount || latestIncludedCount,
+        );
+
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus(
+            "Reliable market evidence found after national discovery.",
+          );
+          return;
+        }
+      }
+
+      setAutomaticCompSearchCompleted(true);
+      setCompSearchImprovementStatus(
+        discovery
+          ? "Automatic search complete. Lot Logic checked regional and national inventory but did not establish a reliable direct comp set."
+          : "Automatic search complete. No reliable direct comp set was established.",
+      );
+    } finally {
+      setCompSearchImproving(false);
     }
+  }
 
-    if (compReturnedListings === 0 && compSearchRegions < 3) {
-      return {
-        path: "geography" as const,
-        title: "Expand Geography",
-        reason:
-          "The local search is still shallow. Give MarketCheck a wider regional look before escalating to national discovery.",
-      };
-    }
-
-    return {
-      path: "geography" as const,
-      title: "Refine the MarketCheck Search",
-      reason:
-        "MarketCheck is seeing some inventory, so refine geography or vehicle matching before using national discovery.",
-    };
-  })();
-
-  const hasLowCompConfidence =
-    comps.length > 0 &&
-    String(compSummary.confidence || "").toLowerCase() === "low";
 
   const hasLimitedDealerFit = dealerFitResult.score < 55;
 
@@ -3787,14 +4441,15 @@ export function EvaluationWorkspace({
     !conditionReviewPending &&
     !hasHardPass &&
     (isAboveRecommendedBuy ||
-      valuation.decision === "Watch / Stretch Only" ||
-      hasLowCompConfidence ||
+      hasLimitedMarketEvidence ||
       hasMaterialConditionRisk ||
       conditionUnknown);
 
   const reviewReasons = [
     isAboveRecommendedBuy ? "the current bid is above the Recommended Max Buy" : null,
-    hasLowCompConfidence ? "market evidence is still thin" : null,
+    hasLimitedMarketEvidence
+      ? "market evidence is limited; strengthen the comp set before treating the recommendation as high-confidence"
+      : null,
     hasMaterialConditionRisk ? "a material vehicle-specific risk needs review" : null,
     conditionUnknown ? "condition is unknown or has not been adequately reviewed" : null,
   ].filter((reason): reason is string => Boolean(reason));
@@ -3811,9 +4466,7 @@ export function EvaluationWorkspace({
           ? "PASS"
         : isAboveRecommendedBuy
           ? "ABOVE TARGET PRICE"
-          : valuation.decision === "Watch / Stretch Only"
-            ? "WATCH CLOSELY"
-            : requiresReview
+          : requiresReview
               ? "REVIEW REQUIRED"
               : "WORTH PURSUING";
 
@@ -3881,7 +4534,7 @@ export function EvaluationWorkspace({
     presentationDecision === "pursue" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    comps.length > 0 ? compSummary.confidence : "—";
+    compSummary.includedCount > 0 ? marketEvidenceStrength : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
@@ -3938,6 +4591,7 @@ export function EvaluationWorkspace({
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
+      {planSelectionMessage ? <PlanSelectionModal message={planSelectionMessage} onClose={() => setPlanSelectionMessage(null)} /> : null}
       {quickEvalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -4210,29 +4864,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-4">
-                  <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <span>
-                      <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
-                        Live Lookup
-                      </span>
-                      <span className="mt-1 block text-sm font-semibold text-slate-700">
-                        Allow live calls
-                      </span>
-                    </span>
-
-                    <input
-                      type="checkbox"
-                      checked={methodologyControls.liveLookupEnabled}
-                      onChange={(event) =>
-                        updateMethodologyControl({
-                          liveLookupEnabled: event.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 accent-blue-700"
-                    />
-                  </label>
-
+                <div className="grid gap-3 md:grid-cols-3">
                   <label className="block rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
                       Initial API Calls
@@ -5052,7 +5684,10 @@ export function EvaluationWorkspace({
                 {conditionModalTab === "ai" && conditionAnalysis ? (
                   <button
                     type="button"
-                    onClick={applyConditionAnalysis}
+                    onClick={() => {
+                      applyConditionAnalysis();
+                      setConditionProfitabilityOpen(false);
+                    }}
                     className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800"
                   >
                     {conditionAnalysisApplied
@@ -5115,15 +5750,41 @@ export function EvaluationWorkspace({
           <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
               <div>
-                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Edit Comps</h2>
+                <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">Expand / Improve Comps</h2>
                 <p className="mt-1 max-w-lg text-sm font-semibold leading-5 text-slate-500">
-                  Expand where Lot Logic looks, or broaden how specifically it matches this vehicle. Geography suggestions keep widening outward from your starting market.
+                  Let Lot Logic choose the next best search step automatically, or use the advanced controls below to adjust geography or vehicle matching yourself.
                 </p>
               </div>
               <button type="button" onClick={() => setCompMarketEditorOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-50">Close</button>
             </div>
 
-            <div className="border-b border-slate-200 px-6">
+                        <div className="border-b border-slate-100 px-6 py-4">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">Lot Logic recommendation</div>
+                <div className="mt-1 text-base font-black text-slate-950">{compSearchRecommendation.title}</div>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">{compSearchRecommendation.reason}</p>
+                {compSearchRecommendation.action !== "complete" ? (
+                  <button
+                    type="button"
+                    onClick={() => void improveCompSearch()}
+                    disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                    className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
+                  >
+                    {compSearchImproving
+                      ? "Improving Search…"
+                      : compSearchRecommendation.action === "manual-review"
+                        ? "Review Broader Match Options →"
+                        : "Let Lot Logic Improve Search →"}
+                  </button>
+                ) : null}
+                {compSearchImprovementStatus ? (
+                  <div className="mt-2 text-[11px] font-bold leading-4 text-blue-900/70">{compSearchImprovementStatus}</div>
+                ) : null}
+              </div>
+              <div className="mt-3 text-[10px] font-black uppercase tracking-[0.09em] text-slate-400">Advanced controls</div>
+            </div>
+
+<div className="border-b border-slate-200 px-6">
               <div className="flex gap-6" role="tablist">
                 <button
                   type="button"
@@ -5269,6 +5930,76 @@ export function EvaluationWorkspace({
                   </p>
                 </div>
 
+                {vehicleIdentityProfile ? (
+                  <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/50 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">Vehicle search profile</div>
+                        <div className="mt-1 text-base font-black text-slate-950">
+                          {[vehicleIdentityProfile.make, vehicleIdentityProfile.modelFamily, vehicleIdentityProfile.bodyClass].filter(Boolean).join(" · ")}
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                          {vehicleIdentityProfileStatus || "Vehicle identity ready"}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-blue-700">
+                        {vehicleIdentityProfile.source === "ai-assisted" ? "AI-assisted" : "Rules-based"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl bg-white px-3 py-3">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Variant</div>
+                        <div className="mt-1 text-xs font-black text-slate-800">{vehicleIdentityProfile.variant || "—"}</div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-3">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Drivetrain</div>
+                        <div className="mt-1 text-xs font-black text-slate-800">{vehicleIdentityProfile.drivetrain || "—"}</div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-3">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Powertrain</div>
+                        <div className="mt-1 text-xs font-black text-slate-800">{vehicleIdentityProfile.fuelType || "—"}</div>
+                      </div>
+                    </div>
+
+                    {vehicleIdentityProfile.providerAliases.length ? (
+                      <div className="mt-4">
+                        <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Provider names Lot Logic can try</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {vehicleIdentityProfile.providerAliases.map((alias) => (
+                            <span key={alias} className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-[10px] font-bold text-blue-800">
+                              {alias}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 space-y-2">
+                      {vehicleIdentityProfile.comparisonLadder.map((step) => (
+                        <div key={step.tier} className="rounded-xl border border-blue-100 bg-white px-3 py-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-black text-slate-900">{step.label}</div>
+                            {step.requiresConfirmation ? (
+                              <span className="text-[9px] font-black uppercase tracking-[0.08em] text-amber-600">User review</span>
+                            ) : (
+                              <span className="text-[9px] font-black uppercase tracking-[0.08em] text-emerald-600">Automatic</span>
+                            )}
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold leading-5 text-slate-500">{step.criteria}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {vehicleIdentityProfile.hardExclusions.length ? (
+                      <div className="mt-3 text-[10px] font-semibold leading-4 text-slate-500">
+                        <span className="font-black text-slate-700">Never auto-qualify:</span>{" "}
+                        {vehicleIdentityProfile.hardExclusions.join(" · ")}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {vehicleTrim ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
                     <div className="text-[10px] font-black uppercase tracking-[0.09em] text-amber-700">Alternate MarketCheck classification</div>
@@ -5319,7 +6050,7 @@ export function EvaluationWorkspace({
                 )}
 
                 <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs font-semibold leading-5 text-blue-900/80">
-                  Broaden vehicle match changes what qualifies as a comparable; Geography changes where Lot Logic looks. Keeping those choices separate makes it clear which assumption you are changing.
+                  Broader retrieval changes how Lot Logic finds candidates, not what automatically qualifies. Geography changes where it looks. Supporting evidence remains a separate review decision.
                 </div>
               </div>
             )}
@@ -5336,10 +6067,10 @@ export function EvaluationWorkspace({
             role="dialog"
             aria-modal="true"
             aria-label="Why Lot Logic thinks this"
-            className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            className="flex max-h-[calc(100dvh-3rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
                   Decision details
@@ -5361,7 +6092,7 @@ export function EvaluationWorkspace({
               </button>
             </div>
 
-            <div className="max-h-[calc(92vh-92px)] overflow-y-auto px-6 py-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6">
               <div className="grid gap-5 lg:grid-cols-2">
                 <section className="rounded-2xl border border-slate-200 p-5">
                   <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
@@ -5444,6 +6175,7 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
                       <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
+                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit profit target →</button>
                     </div>
                   </dl>
                 </section>
@@ -5575,9 +6307,11 @@ export function EvaluationWorkspace({
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-black text-slate-900">Dealership website intelligence</div>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">Next onboarding step</span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">{dealershipProfile.websiteUrl ? "Website saved" : "Add in settings"}</span>
                   </div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Lot Logic will use the dealership URL to infer inventory mix, price bands, vehicle types, age/mileage patterns, and positioning, then let the dealer confirm or correct the profile.</p>
+                  {dealershipProfile.websiteUrl ? <p className="mt-2 break-all text-xs font-bold text-blue-700">{dealershipProfile.websiteUrl}</p> : null}
+                  <Link href="/settings?tab=organization" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Edit dealership profile</Link>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Website analysis will help identify inventory mix, price bands, and dealership positioning. Your URL is saved as context; automatic website analysis is not active yet.</p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 p-4">
@@ -5775,6 +6509,8 @@ export function EvaluationWorkspace({
         />
 
         <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
+          {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
+
           {activeStage === "verdict" ? (
             <section className="grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
@@ -5811,7 +6547,7 @@ export function EvaluationWorkspace({
                     ? "Known issues"
                     : conditionReviewStatus === "unknown"
                       ? "Condition unknown"
-                      : "No material issues"}
+                      : "No material issues"} · {money(displayedReconReserve)}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -5828,7 +6564,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"}
+                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -6019,6 +6755,7 @@ export function EvaluationWorkspace({
                   {vinDecodeError ? (
                     <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{vinDecodeError}</div>
                   ) : null}
+                  {evaluationAccessError ? <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{evaluationAccessError}</div> : null}
 
                   <button
                     type="button"
@@ -6185,24 +6922,26 @@ export function EvaluationWorkspace({
                           </div>
                         </>
                       ) : (
-                        <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
-                          <div className="text-sm font-black text-slate-950">{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} issue{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length === 1 ? "" : "s"} identified</div>
-                          <div className="mt-1 text-xs font-semibold text-slate-500">Planning reserve ≈ {money(getEffectiveConditionPlanningEstimate())}</div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button type="button" onClick={openConditionAnalysis} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700">Review details</button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                applyConditionAnalysis();
-                                setConditionStepConfirmed(true);
-                                setActiveStage("market");
-                              }}
-                              className="rounded-lg bg-violet-700 px-4 py-2 text-xs font-black text-white hover:bg-violet-800"
-                            >
-                              Apply & Next →
-                            </button>
+                        <>
+                          <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                            <div className="text-sm font-black text-slate-950">{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} issue{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length === 1 ? "" : "s"} identified</div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">Planning reserve ≈ {money(getEffectiveConditionPlanningEstimate())}</div>
+                            <div className="mt-3">
+                              <button type="button" onClick={openConditionAnalysis} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700">Review details</button>
+                            </div>
                           </div>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              applyConditionAnalysis();
+                              setConditionStepConfirmed(true);
+                              setActiveStage("market");
+                            }}
+                            className="mt-3 w-full rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-800"
+                          >
+                            Use this condition & continue →
+                          </button>
+                        </>
                       )}
                     </div>
                   ) : (
@@ -6215,6 +6954,26 @@ export function EvaluationWorkspace({
                         <div className="text-sm font-black text-slate-900">
                           {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
                         </div>
+                        {conditionReviewStatus === "unknown" ? (
+                          <div className="mt-3">
+                            <label htmlFor="condition-uncertainty-allowance" className="text-xs font-bold text-slate-800">Condition uncertainty allowance ($)</label>
+                            <input
+                              id="condition-uncertainty-allowance"
+                              type="number"
+                              min="0"
+                              step="100"
+                              inputMode="decimal"
+                              value={conditionPlanningEstimateOverride ?? ""}
+                              placeholder="0"
+                              onChange={(event) => {
+                                const amount = event.target.valueAsNumber;
+                                setConditionPlanningEstimateOverride(Number.isFinite(amount) ? Math.max(0, amount) : null);
+                              }}
+                              className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-slate-900"
+                            />
+                            <p className="mt-2 text-xs leading-5 text-slate-600">Optional reserve for unseen repairs. Included in all-in cost and reduces your maximum bid; condition remains unknown.</p>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="mt-3 flex gap-2">
                         <button type="button" onClick={() => {
@@ -6283,7 +7042,7 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"}`
+                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence`
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -6331,49 +7090,109 @@ export function EvaluationWorkspace({
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
-                          <div className="mt-1 text-xl font-black text-slate-950">{compSummary.confidence || "—"}</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{marketEvidenceStrength}</div>
+                          <div className="mt-0.5 text-[10px] font-bold text-slate-400">Evidence strength</div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
+                        <>
+                        {hasLimitedMarketEvidence ? (
+                          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                            <div className="text-xs font-black text-amber-900">Recommended next step: {compSearchRecommendation.title}</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-5 text-amber-800">{compSearchRecommendation.reason}</div>
+                            <button
+                              type="button"
+                              onClick={() => void improveCompSearch()}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                              className="mt-2 rounded-lg bg-blue-700 px-3 py-2 text-[11px] font-black text-white disabled:bg-slate-300"
+                            >
+                              {compSearchImproving ? "Improving Search…" : "Improve Search Automatically"}
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button type="button" onClick={() => setCompSectionExpanded((open) => !open)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
                             {compSectionExpanded ? "Hide comps" : "Review comps"}
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (verdictTransitioning) return;
-                              setVerdictTransitioning(true);
-                              window.setTimeout(() => {
-                                setActiveStage("verdict");
-                                setVerdictTransitioning(false);
-                              }, 220);
-                            }}
+                            onClick={() => void continueToVerdict()}
                             disabled={verdictTransitioning}
                             className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70"
                           >
                             {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
                           </button>
                         </div>
+                        {usageLimitMessage ? (
+                          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{usageLimitMessage}</span>
+                            <Link
+                              href="/settings?tab=billing"
+                              className="shrink-0 rounded-lg bg-slate-950 px-3 py-2 text-center text-xs font-black text-white"
+                            >
+                              Choose a plan
+                            </Link>
+                          </div>
+                        ) : null}
+                        </>
                       ) : null}
                     </>
                   ) : activeStage === "market" ? (
-                    <>
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                        <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
-                        <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {compNextStep.path === "national-discovery" ? (
-                          <button type="button" onClick={() => void runAutoDevDiscovery()} disabled={autoDevDiscoveryLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">{autoDevDiscoveryLoading ? "Scanning..." : "Scan National Inventory"}</button>
-                        ) : compNextStep.path === "discovered-markets" ? (
-                          <button type="button" onClick={() => void searchAutoDevRecommendedMarkets()} disabled={marketCheckLoading} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300">Search Recommended Markets</button>
-                        ) : (
-                          <button type="button" onClick={openCompMarketEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Expand / Edit Search</button>
-                        )}
-                        <button type="button" onClick={() => setCompSectionExpanded(true)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">More comp details</button>
-                      </div>
-                    </>
+                    compSearchHandedOff ? (
+                      <>
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                          <div className="text-sm font-black text-blue-950">
+                            Comp search is being handled below
+                          </div>
+                          <div className="mt-1 text-xs font-semibold leading-5 text-blue-800">
+                            {compSearchImproving
+                              ? compSearchImprovementStatus ||
+                                "Lot Logic is working through the search plan…"
+                              : automaticCompSearchCompleted
+                                ? "The automatic search is complete. Review the result and next option in Comparable Vehicles."
+                                : "Continue from the Comparable Vehicles section for the next search step."}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 opacity-45">
+                          <button
+                            type="button"
+                            disabled
+                            className="rounded-lg bg-slate-200 px-4 py-2 text-xs font-black text-slate-500"
+                          >
+                            Search controls moved below ↓
+                          </button>
+                          <button
+                            type="button"
+                            disabled
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-400"
+                          >
+                            Expand / Improve Comps
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                          <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
+                          <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {compSearchRecommendation.action === "manual-review" ? (
+                            <button type="button" onClick={openCompVehicleMatchEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Review Vehicle Match →</button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void improveCompSearch()}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                              className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
+                            >
+                              {compSearchImproving ? "Improving Search…" : "Improve Search Automatically"}
+                            </button>
+                          )}
+                          <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
+                        </div>
+                      </>
+                    )
                   ) : (
                     <div className="text-sm font-semibold text-slate-500">Market evidence incomplete.</div>
                   )}
@@ -6391,19 +7210,39 @@ export function EvaluationWorkspace({
                 title="Comparable Vehicles"
                 action={
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                    <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
                     <button type="button" onClick={openMethodology} className="text-xs font-black text-slate-400 hover:text-slate-700">Methodology</button>
                   </div>
                 }
               >
-                {comps.length ? (
-                  <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center">
-                    <div className="text-sm font-black text-slate-800">No usable comps yet</div>
-                    <div className="mt-1 text-xs font-semibold text-slate-500">{marketCheckStatus || "Adjust the search to establish market evidence."}</div>
-                  </div>
-                )}
+                <div className="space-y-4">
+                  {comps.length ? (
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                  ) : null}
+                  <CompSearchReport
+                    vehicleLabel={[vehicleYear, vehicleMake, vehicleModel, vehicleTrim].filter(Boolean).join(" ") || "Current vehicle"}
+                    regionsChecked={marketCheckSearchMeta?.regionsChecked || []}
+                    retrievalLabel={
+                      compTrimRelaxed
+                        ? compRetrievalLabel
+                        : marketCheckSearchMeta?.lowConfidenceFallback
+                          ? "Low-confidence fallback retrieval"
+                          : "Exact vehicle with strict qualification"
+                    }
+                    apiCallsMade={Number(marketCheckApiUsage?.apiCallsMade || 0)}
+                    searchLog={marketCheckApiUsage?.searchLog || []}
+                    filterDiagnostics={marketCheckApiUsage?.filterDiagnostics || null}
+                    entries={compSearchHistory}
+                    nationalDiscoveryStatus={autoDevDiscoveryStatus}
+                    nationalDiscoveryTotal={
+                      autoDevDiscovery ? Number(autoDevDiscovery.total || 0) : null
+                    }
+                    recommendation={compSearchRecommendation}
+                    improving={compSearchImproving}
+                    activityStatus={compSearchImprovementStatus}
+                    onImprove={() => void improveCompSearch()}
+                  />
+                </div>
               </SectionCard>
             </section>
           ) : null}
@@ -6450,14 +7289,14 @@ export function EvaluationWorkspace({
                     <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-3 border-t border-current/10 pt-4 text-center">
-                    <div>
-                      <div className="text-[9px] font-black uppercase text-slate-500">All-In Cost</div>
+                  <div className="mt-4 grid gap-2 border-t border-current/10 pt-4 text-center sm:grid-cols-3 sm:gap-3">
+                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">All-In Cost</div>
                       <button
                         type="button"
                         onClick={() => setAllInCostOpen(true)}
                         disabled={valuationInput.currentBid <= 0}
-                        className="mt-2 text-[25px] font-black text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline"
+                        className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline sm:mt-2 sm:text-[25px]"
                       >
                         {valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}
                       </button>
@@ -6471,13 +7310,13 @@ export function EvaluationWorkspace({
                         </button>
                       ) : null}
                     </div>
-                    <div>
-                      <div className="text-[9px] font-black uppercase text-slate-500">Sale Estimate</div>
-                      <div className="mt-2 text-[25px] font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Sale Estimate</div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                     </div>
-                    <div>
-                      <div className="text-[9px] font-black uppercase text-slate-500">Estimated Profit</div>
-                      <div className={`mt-2 text-[25px] font-black ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{money(valuation.expectedGrossProfit)}</div>
+                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Estimated Profit</div>
+                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{money(valuation.expectedGrossProfit)}</div>
                     </div>
                   </div>
                   {presentationDecision === "review" && reviewReasons.length ? (
@@ -6502,12 +7341,12 @@ export function EvaluationWorkspace({
                 <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
                   <h2 className="text-base font-black text-slate-950">Deal Snapshot</h2>
                   <div className="mt-4 grid grid-cols-2 gap-4">
-                    <ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} />
-                    <ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} />
+                    <button type="button" aria-label="View Deal Economics decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} /></button>
+                    <button type="button" aria-label="View Dealer Fit decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} /></button>
                   </div>
-                  <div className="mt-4 border-t border-slate-100 pt-4">
+                  <button type="button" aria-label="View Current Market Age decision details" onClick={() => setWhyLotLogicOpen(true)} className="mt-4 w-full border-t border-slate-100 pt-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600">
                     <MarketLiquidityVisual soldLow={liquiditySoldLow} soldHigh={liquiditySoldHigh} soldMedian={liquiditySoldMedian} activeDays={liquidityActiveDays} label={liquidityLabel} confidence={liquidityConfidence} sampleSize={liquiditySampleSize} />
-                  </div>
+                  </button>
                 </article>
               </section>
 
@@ -6527,7 +7366,7 @@ export function EvaluationWorkspace({
                           {verdictCompsExpanded ? "Show fewer" : `Show all ${comps.length}`}
                         </button>
                       ) : null}
-                      <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Edit Comps</button>
+                      <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
                     </div>
                   }
                 >
@@ -6578,9 +7417,33 @@ export function EvaluationWorkspace({
                 <div className="p-5">
                   <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
                     {allInCostBreakdown.map((item) => (
-                      <div key={item.label} className="flex items-center justify-between gap-4 px-4 py-3">
-                        <span className="text-sm font-semibold text-slate-600">{item.label}</span>
-                        <span className="text-sm font-black text-slate-950">{money(item.amount)}</span>
+                      <div key={item.label} className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_150px]">
+                        <span className="text-sm font-semibold leading-5 text-slate-600">{item.label}</span>
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="flex min-w-0 items-center rounded-lg border border-slate-200 bg-white shadow-sm focus-within:border-blue-300">
+                            <span className="pl-2.5 text-sm text-slate-400">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={formatNumberInput(item.amount)}
+                              onFocus={(event) => event.currentTarget.select()}
+                              onChange={(event) =>
+                                updateAllInCostAmount(item.key, toNumber(event.target.value))
+                              }
+                              aria-label={`Edit ${item.label}`}
+                              className="min-w-0 w-full rounded-lg bg-transparent px-2 py-2 text-right text-sm font-black text-slate-950 outline-none"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateAllInCostAmount(item.key, 0)}
+                            className="shrink-0 rounded-md px-1.5 py-1 text-[10px] font-black text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            title={`Zero out ${item.label}`}
+                            aria-label={`Zero out ${item.label}`}
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                     ))}
                     <div className="flex items-center justify-between gap-4 bg-slate-50 px-4 py-3">
@@ -6589,11 +7452,7 @@ export function EvaluationWorkspace({
                     </div>
                   </div>
 
-                  {displayedReconReserve > 0 ? (
-                    <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
-                      Condition and reconditioning is shown as one reserve here. Internally, Lot Logic still preserves the mechanical, cosmetic, and history allocation from the condition review so the planning estimate can remain traceable.
-                    </p>
-                  ) : null}
+
                 </div>
 
                 <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4">

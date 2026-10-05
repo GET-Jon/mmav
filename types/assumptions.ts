@@ -34,6 +34,8 @@ export type AuctionFeeRule = {
 };
 
 export type RegionalMarket = {
+  latitude?: number;
+  longitude?: number;
   market: string;
   zip: string;
   order: number;

@@ -136,6 +136,10 @@ function findAnchor(
   searchedZips: string[],
   searchedRegions: string[],
 ) {
+  const home = configured[0];
+  if (home && Number.isFinite(home.latitude) && Number.isFinite(home.longitude)) {
+    return { market: home.market, zip: home.zip, lat: home.latitude!, lon: home.longitude! };
+  }
   const searchedSeeds = getSearchedSeeds(searchedZips, searchedRegions);
   if (searchedSeeds.length) return searchedSeeds[0];
 
@@ -164,6 +168,11 @@ export function buildExpansionMarkets(
 
   const anchor = findAnchor(configured, searchedZips, searchedRegions);
   const searchedSeeds = getSearchedSeeds(searchedZips, searchedRegions);
+  for (const market of configured) {
+    if (searchedZips.includes(market.zip) && Number.isFinite(market.latitude) && Number.isFinite(market.longitude)) {
+      searchedSeeds.push({ market: market.market, zip: market.zip, lat: market.latitude!, lon: market.longitude! });
+    }
+  }
   const searchedZipSet = new Set(searchedZips);
   const configuredZips = new Set(configured.map((market) => market.zip));
   const configuredNames = new Set(

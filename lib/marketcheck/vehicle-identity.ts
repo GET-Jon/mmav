@@ -100,7 +100,21 @@ function canonicalMercedesFamily(model: string, modelCompact: string) {
 
   if (namedClasses.includes(normalized)) return normalized;
 
+  if (
+    ["eqe", "eqe suv", "eqe class", "eqe class suv"].includes(normalized)
+  ) {
+    return "eqe";
+  }
+
+  if (
+    ["eqs", "eqs suv", "eqs class", "eqs class suv"].includes(normalized)
+  ) {
+    return "eqs";
+  }
+
   const families: Array<[string, string[]]> = [
+    ["eqe", ["eqeclasssuv", "eqesuv", "eqe350", "eqe500", "eqe53", "eqe"]],
+    ["eqs", ["eqsclasssuv", "eqssuv", "eqs450", "eqs580", "eqs53", "eqs"]],
     ["a class", ["amga35", "amga45", "a35", "a45"]],
     ["c class", ["amgc43", "amgc63", "c250", "c300", "c350", "c400", "c43", "c450", "c63"]],
     ["e class", ["amge53", "amge63", "e300", "e350", "e400", "e450", "e53", "e550", "e63"]],
