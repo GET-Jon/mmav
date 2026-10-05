@@ -75,7 +75,7 @@ function describeDirectCriteria(decoded: VinDecodeResult, modelFamily: string) {
     prettyMake(canonicalVehicleMake(decoded.make)),
     decoded.trim || decoded.model || modelFamily,
     canonicalBodyClass({
-      year: Number(decoded.year) || null,
+      year: Number(decoded.year) || 0,
       make: decoded.make,
       model: decoded.model,
       trim: decoded.trim,
