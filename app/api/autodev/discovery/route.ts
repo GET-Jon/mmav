@@ -14,8 +14,13 @@ function toNumber(value: unknown): number | null { const parsed = Number(value);
 function normalizeText(value: unknown) { return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 function uniqueStrings(values: Array<string | null | undefined>) { return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))); }
 
-function buildDiscoveryModels(make: string, model: string, trim: string) {
-  const models = [model];
+function buildDiscoveryModels(
+  make: string,
+  model: string,
+  trim: string,
+  providerAliases: string[] = [],
+) {
+  const models = [model, ...providerAliases];
   const normalizedMake = normalizeText(make);
   const normalizedModel = normalizeText(model);
   const normalizedTrim = normalizeText(trim);
@@ -77,7 +82,24 @@ export async function POST(request: Request) {
 
   const generation = findGenerationCompRule({ year, make, model, trim, bodyStyle: String(body.bodyStyle || "").trim(), bodyClass: String(body.bodyClass || "").trim() });
   const yearMin = generation ? Math.max(generation.startYear, year - 1) : Math.max(1900, year - 1); const yearMax = generation ? Math.min(generation.endYear, year + 1) : Math.min(2100, year + 1);
-  const attempts: DiscoveryAttempt[] = buildDiscoveryModels(make, model, trim).map((candidateModel, index) => ({ label: index === 0 ? "exact decoded model" : "normalized provider model", make, model: candidateModel, yearMin, yearMax }));
+  const providerAliases = Array.isArray(body.providerAliases)
+    ? body.providerAliases
+        .map((value: unknown) => String(value || "").trim())
+        .filter(Boolean)
+        .slice(0, 8)
+    : [];
+  const attempts: DiscoveryAttempt[] = buildDiscoveryModels(
+    make,
+    model,
+    trim,
+    providerAliases,
+  ).map((candidateModel, index) => ({
+    label: index === 0 ? "exact decoded model" : "normalized provider model",
+    make,
+    model: candidateModel,
+    yearMin,
+    yearMax,
+  }));
   let selectedAttempt: DiscoveryAttempt | null = null; let selectedPayload: any = null; let listings: AutoDevListing[] = []; let callsMade = 0;
   const attemptResults: Array<{ label: string; model: string; returned: number; total: number }> = [];
 
