@@ -20,6 +20,10 @@ import {
   recommendCompSearchAction,
   type CompSearchReportEntry,
 } from "@/lib/evaluation/comp-search-orchestration";
+import {
+  buildDeterministicVehicleIdentityProfile,
+  type VehicleIdentityProfile,
+} from "@/lib/evaluation/vehicle-identity-profile";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
@@ -592,6 +596,7 @@ type SavedEvaluationPayload = {
   auctionSite?: string;
   finalTargetOverride?: number | null;
   decodedVehicle?: VinDecodeResult | null;
+  vehicleIdentityProfile?: VehicleIdentityProfile | null;
   manualVehicle?: ManualVehicleBasics;
   targetMileage?: number;
   evaluation?: ValuationInput;
@@ -699,6 +704,21 @@ export function EvaluationWorkspace({
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null,
   );
+  const [vehicleIdentityProfile, setVehicleIdentityProfile] =
+    useState<VehicleIdentityProfile | null>(
+      initialSavedPayload?.vehicleIdentityProfile ||
+        (initialSavedPayload?.decodedVehicle
+          ? buildDeterministicVehicleIdentityProfile(
+              initialSavedPayload.decodedVehicle,
+            )
+          : null),
+    );
+  const [vehicleIdentityProfileStatus, setVehicleIdentityProfileStatus] =
+    useState(
+      initialSavedPayload?.vehicleIdentityProfile
+        ? "Vehicle identity ready"
+        : "",
+    );
 
   const [manualVehicle, setManualVehicle] = useState<ManualVehicleBasics>(
     initialSavedPayload?.manualVehicle || initialManualVehicle,
@@ -919,6 +939,7 @@ export function EvaluationWorkspace({
   } | null>(null);
 
   const marketCheckInFlightRef = useRef(false);
+  const vehicleIdentityRequestVinRef = useRef("");
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
@@ -926,6 +947,9 @@ export function EvaluationWorkspace({
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [compSectionExpanded, setCompSectionExpanded] = useState(true);
+  const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
+  const [automaticCompSearchCompleted, setAutomaticCompSearchCompleted] =
+    useState(false);
   const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
   const [vehicleInfoOpen, setVehicleInfoOpen] = useState(false);
   const [activeStage, setActiveStage] =
