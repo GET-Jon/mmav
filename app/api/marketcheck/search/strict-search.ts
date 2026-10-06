@@ -240,7 +240,7 @@ function makeStableSearchKey({
       .filter(Boolean)
       .sort(),
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v20-semantic-identity",
+    cacheVersion: "progressive-regions-v21-rav4-semantic-powertrain",
   });
 }
 
