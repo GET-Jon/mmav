@@ -100,6 +100,7 @@ export async function POST(request: Request) {
       model: result.Model || "",
       trim: result.Trim || result.Series || "",
       bodyClass: result.BodyClass || "",
+      doors: result.Doors || "",
       engineCylinders: result.EngineCylinders || "",
       displacementL: result.DisplacementL || "",
       driveType: result.DriveType || "",
