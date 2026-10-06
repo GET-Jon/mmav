@@ -12,6 +12,7 @@ import {
   canonicalModelFamily,
   canonicalVehicleMake,
   compactVehicleText,
+  resolveSemanticFuelType,
 } from "@/lib/marketcheck/vehicle-identity";
 
 type MarketCheckListing = Record<string, any>;
@@ -141,18 +142,26 @@ function normalizeFuelType(value: unknown) {
 
 function getListingFuelType(listing: MarketCheckListing) {
   const build = listing.build || {};
-
-  return normalizeFuelType(
+  const make = build.make || listing.make || "";
+  const model = build.model || listing.model || "";
+  const trim = build.trim || listing.trim || "";
+  const fuelType =
     build.fuel_type ||
-      build.fuelType ||
-      build.fuel ||
-      listing.fuel_type ||
-      listing.fuelType ||
-      listing.fuel ||
-      listing.engine?.fuel_type ||
-      listing.engine?.fuelType ||
-      listing.engine?.fuel,
-  );
+    build.fuelType ||
+    build.fuel ||
+    listing.fuel_type ||
+    listing.fuelType ||
+    listing.fuel ||
+    listing.engine?.fuel_type ||
+    listing.engine?.fuelType ||
+    listing.engine?.fuel;
+
+  return resolveSemanticFuelType({
+    make,
+    model,
+    trim,
+    fuelType,
+  });
 }
 
 function fuelTypesMatch({
@@ -170,8 +179,12 @@ function fuelTypesMatch({
 
   const listingFuelType = getListingFuelType(listing);
 
+  // Missing provider fuel data is unresolved, not a contradiction. Keep the
+  // listing in the candidate pool so the outer qualification layer can verify
+  // its listing VIN before deciding whether it is a valid comp. Only an
+  // explicit conflicting fuel type is rejected here.
   if (!listingFuelType) {
-    return false;
+    return true;
   }
 
   return listingFuelType === normalizedTargetFuelType;
@@ -240,7 +253,7 @@ function makeStableSearchKey({
       .filter(Boolean)
       .sort(),
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v19-identity-profile",
+    cacheVersion: "progressive-regions-v22-vin-identity-verification",
   });
 }
 
@@ -421,30 +434,35 @@ function modelIdentityMatches({
   return false;
 }
 
-function trimMatches({
-  listingTrim,
-  preferredTrim,
+function variantMatchesListing({
+  listing,
+  preferredVariant,
 }: {
-  listingTrim: string;
-  preferredTrim: string;
+  listing: MarketCheckListing;
+  preferredVariant: string;
 }) {
-  const listing = normalize(listingTrim);
-  const preferred = normalize(preferredTrim);
+  const preferredCompact = compactVehicleText(preferredVariant);
+  if (!preferredCompact) return true;
 
-  if (!preferred || !listing) {
-    return true;
-  }
+  const build = listing.build || {};
+  const candidateFields = [
+    build.trim,
+    listing.trim,
+    build.model,
+    listing.model,
+    listing.heading,
+    listing.title,
+  ]
+    .map((value) => compactVehicleText(value))
+    .filter(Boolean);
 
-  const listingCompact = compactVehicleText(listing);
-  const preferredCompact = compactVehicleText(preferred);
+  if (!candidateFields.length) return true;
 
-  return (
-    listing.includes(preferred) ||
-    preferred.includes(listing) ||
-    (listingCompact &&
-      preferredCompact &&
-      (listingCompact.includes(preferredCompact) ||
-        preferredCompact.includes(listingCompact)))
+  return candidateFields.some(
+    (candidate) =>
+      candidate === preferredCompact ||
+      candidate.includes(preferredCompact) ||
+      (candidate.length >= 3 && preferredCompact.includes(candidate)),
   );
 }
 
@@ -466,7 +484,6 @@ function calculateQualityScore({
     listing.miles ?? listing.mileage ?? listing.odometer,
   );
   const year = toNumber(build.year ?? listing.year, searchYear);
-  const listingTrim = String(build.trim || listing.trim || "");
 
   let score = 100;
 
@@ -474,9 +491,16 @@ function calculateQualityScore({
     score -= 20;
   }
 
-  if (preferredTrim && !trimMatches({ listingTrim, preferredTrim })) {
-    // Trim/configuration fidelity is intentionally more important than a
-    // moderate distance advantage. Search farther before matching looser.
+  if (
+    preferredTrim &&
+    !variantMatchesListing({
+      listing,
+      preferredVariant: preferredTrim,
+    })
+  ) {
+    // Variant fidelity is intentionally more important than a moderate
+    // distance advantage. Look across model/trim/title because providers
+    // frequently split derivative and drivetrain labels differently.
     score -= 28;
   }
 
@@ -553,7 +577,14 @@ function mapListingToComp({
       listing,
     })
   ) {
-    return null;
+    const candidateVin = String(listing.vin || "").trim().toUpperCase();
+    // A conflicting provider fuel label can itself be taxonomy noise. If the
+    // listing has a real VIN, keep it long enough for the outer qualification
+    // layer to verify the vehicle directly. Without a VIN, preserve the hard
+    // rejection here.
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(candidateVin)) {
+      return null;
+    }
   }
 
   if (
@@ -711,14 +742,7 @@ function mapListingToComp({
             listing.transmission ||
             "",
         ) || null,
-      fuelType:
-        String(
-          build.fuel_type ||
-            build.fuel ||
-            listing.fuel_type ||
-            listing.fuel ||
-            "",
-        ) || null,
+      fuelType: getListingFuelType(listing) || null,
       engine:
         String(
           build.engine ||

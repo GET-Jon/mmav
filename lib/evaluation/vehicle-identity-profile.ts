@@ -5,6 +5,7 @@ import {
   canonicalFuelType,
   canonicalModelFamily,
   canonicalVehicleMake,
+  canonicalVehicleVariant,
   normalizeVehicleText,
 } from "@/lib/marketcheck/vehicle-identity";
 import { findMarketCheckModelAliases } from "@/lib/marketcheck/model-aliases";
@@ -69,11 +70,15 @@ function prettyMake(value: string) {
     .join(" ");
 }
 
-function describeDirectCriteria(decoded: VinDecodeResult, modelFamily: string) {
+function describeDirectCriteria(
+  decoded: VinDecodeResult,
+  modelFamily: string,
+  variant: string,
+) {
   const pieces = [
     decoded.year || null,
     prettyMake(canonicalVehicleMake(decoded.make)),
-    decoded.trim || decoded.model || modelFamily,
+    variant || decoded.model || modelFamily,
     canonicalBodyClass({
       year: Number(decoded.year) || 0,
       make: decoded.make,
@@ -115,6 +120,15 @@ export function buildDeterministicVehicleIdentityProfile(
   });
   const drivetrain = canonicalDrivetrain(decoded.driveType);
   const fuelType = canonicalFuelType(decoded.fuelType);
+  const variant = canonicalVehicleVariant({
+    year: year || 0,
+    make: decoded.make,
+    model: decoded.model,
+    trim: decoded.trim,
+    bodyType: decoded.bodyClass,
+    drivetrain: decoded.driveType,
+    fuelType: decoded.fuelType,
+  });
 
   const generation = year
     ? findGenerationCompRule({
@@ -164,7 +178,11 @@ export function buildDeterministicVehicleIdentityProfile(
     modelFamily ? `Different model family than ${modelFamily}` : null,
   ]);
 
-  const directCriteria = describeDirectCriteria(decoded, modelFamily);
+  const directCriteria = describeDirectCriteria(
+    decoded,
+    modelFamily,
+    variant,
+  );
 
   const comparisonLadder: VehicleComparisonStep[] = [
     {
@@ -205,7 +223,7 @@ export function buildDeterministicVehicleIdentityProfile(
     make,
     modelFamily,
     bodyClass,
-    variant: decoded.trim || "",
+    variant,
     drivetrain,
     fuelType,
     generation: generation?.generation || null,
@@ -218,6 +236,10 @@ export function buildDeterministicVehicleIdentityProfile(
       taxonomyFallback?.notes,
       knownAliases.length
         ? "Known provider aliases are available for broader retrieval."
+        : null,
+      decoded.trim &&
+      normalizeVehicleText(decoded.trim) !== normalizeVehicleText(variant)
+        ? `VIN trim “${decoded.trim}” was interpreted as drivetrain/configuration; comparison variant is “${variant || decoded.model}”.`
         : null,
       "Provider aliases broaden retrieval only; final comp qualification stays tied to the decoded vehicle.",
     ]),

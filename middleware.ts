@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/terms",
   "/cookies",
   "/auth/callback",
+  "/auth/confirm",
   "/auth/partner-invite",
   "/auth/partner-claim",
 ];

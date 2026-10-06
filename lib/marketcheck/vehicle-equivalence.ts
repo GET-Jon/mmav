@@ -6,6 +6,7 @@ import {
   canonicalTractionClass,
   canonicalTransmission,
   canonicalVehicleMake,
+  canonicalVehicleVariant,
   compactVehicleText,
   normalizeVehicleText,
 } from "./vehicle-identity";
@@ -221,6 +222,76 @@ function canonicalCabClass(vehicle: VehicleIdentity) {
   return null;
 }
 
+const rav4Xa50Rule: VehicleTaxonomyRule = {
+  id: "toyota-rav4-xa50-powertrain",
+  make: "Toyota",
+  model: "RAV4",
+  yearStart: 2019,
+  yearEnd: 2026,
+  generation: "XA50",
+  families: [
+    { id: "prime", labels: ["prime", "plug-in hybrid", "phev"] },
+    { id: "hybrid", labels: ["hybrid", "hev"] },
+    { id: "gasoline", labels: ["gasoline", "gas"] },
+  ],
+  classify(vehicle) {
+    const text = vehicleText(vehicle);
+    const fuel = canonicalFuelType(vehicle.fuelType);
+
+    let powertrain: "prime" | "hybrid" | "gasoline" | "unknown" = "unknown";
+    if (
+      containsAny(text, ["prime", "plug in hybrid", "phev"]) ||
+      fuel === "plug-in hybrid"
+    ) {
+      powertrain = "prime";
+    } else if (containsAny(text, ["hybrid"]) || fuel === "hybrid") {
+      powertrain = "hybrid";
+    } else if (fuel === "gasoline") {
+      powertrain = "gasoline";
+    }
+
+    const trim = normalize(vehicle.trim)
+      .replace(/\b(?:awd|4wd|fwd|rwd|4x4)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return `${powertrain}|${trim || "unknown"}`;
+  },
+  compare(targetFamily, candidateFamily) {
+    if (!targetFamily || !candidateFamily) return "supporting";
+
+    const [targetPowertrain, targetTrim = "unknown"] = targetFamily.split("|");
+    const [candidatePowertrain, candidateTrim = "unknown"] =
+      candidateFamily.split("|");
+
+    if (
+      targetPowertrain === "unknown" ||
+      candidatePowertrain === "unknown"
+    ) {
+      return "supporting";
+    }
+
+    // Prime/PHEV, ordinary Hybrid, and gasoline RAV4s are materially
+    // different valuation populations even when MarketCheck calls all of
+    // them simply "RAV4".
+    if (targetPowertrain !== candidatePowertrain) {
+      return "reject";
+    }
+
+    if (targetTrim === "unknown" || candidateTrim === "unknown") {
+      return "supporting";
+    }
+
+    if (targetTrim === candidateTrim) {
+      return "direct";
+    }
+
+    return "near";
+  },
+  notes:
+    "Treats RAV4 as the model family and uses powertrain plus trim to distinguish Prime/PHEV, Hybrid, and gasoline listings when provider model naming collapses them.",
+};
+
 const wranglerTjRule: VehicleTaxonomyRule = {
   id: "jeep-wrangler-tj-lj",
   make: "Jeep",
@@ -262,7 +333,10 @@ const wranglerTjRule: VehicleTaxonomyRule = {
     "Separates Wrangler Unlimited/LJ and Rubicon from ordinary standard-wheelbase TJ variants before mileage normalization.",
 };
 
-export const vehicleTaxonomyRules: VehicleTaxonomyRule[] = [wranglerTjRule];
+export const vehicleTaxonomyRules: VehicleTaxonomyRule[] = [
+  wranglerTjRule,
+  rav4Xa50Rule,
+];
 
 export function findVehicleTaxonomyRule(vehicle: VehicleIdentity) {
   const make = canonicalMake(vehicle.make);
@@ -280,11 +354,24 @@ export function findVehicleTaxonomyRule(vehicle: VehicleIdentity) {
 }
 
 function genericTrimTier(target: VehicleIdentity, candidate: VehicleIdentity) {
-  const targetTrim = normalize(target.trim);
-  const candidateTrim = normalize(candidate.trim);
+  const targetVariant = canonicalVehicleVariant(target);
+  const candidateVariant = canonicalVehicleVariant(candidate);
 
-  if (!targetTrim || !candidateTrim) return "supporting" as const;
-  if (targetTrim === candidateTrim) return "direct" as const;
+  if (!targetVariant || !candidateVariant) return "supporting" as const;
+  if (targetVariant === candidateVariant) return "direct" as const;
+
+  const targetCompact = compactVehicleText(targetVariant);
+  const candidateCompact = compactVehicleText(candidateVariant);
+
+  if (
+    targetCompact &&
+    candidateCompact &&
+    (targetCompact.includes(candidateCompact) ||
+      candidateCompact.includes(targetCompact))
+  ) {
+    return "direct" as const;
+  }
+
   return "near" as const;
 }
 
@@ -389,8 +476,12 @@ export function evaluateVehicleEquivalence({
       }
     } else {
       tier = genericTrimTier(target, candidate);
-      if (normalize(target.trim) !== normalize(candidate.trim)) {
-        reasons.push("trim differs or is incomplete");
+      const targetVariant = canonicalVehicleVariant(target);
+      const candidateVariant = canonicalVehicleVariant(candidate);
+      if (targetVariant !== candidateVariant) {
+        reasons.push(
+          `variant differs or is incomplete: ${targetVariant || "unknown"} vs ${candidateVariant || "unknown"}`,
+        );
       }
     }
   }

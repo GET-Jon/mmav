@@ -11,7 +11,18 @@ import {
   buildDeterministicVehicleIdentityProfile,
   type VehicleIdentityProfile,
 } from "@/lib/evaluation/vehicle-identity-profile";
-import { normalizeVehicleText } from "@/lib/marketcheck/vehicle-identity";
+import {
+  canonicalBodyClass,
+  canonicalDrivetrain,
+  canonicalFuelType,
+  canonicalModelFamily,
+  normalizeVehicleText,
+  resolveSemanticFuelType,
+} from "@/lib/marketcheck/vehicle-identity";
+import {
+  evaluateVehicleEquivalence,
+  type VehicleIdentity,
+} from "@/lib/marketcheck/vehicle-equivalence";
 import type { VinDecodeResult } from "@/types/vin";
 
 export const runtime = "nodejs";
@@ -83,36 +94,177 @@ function unique(values: string[], maxItems = 10) {
   return result;
 }
 
+function baselineIdentity(
+  baseline: VehicleIdentityProfile,
+  decoded: VinDecodeResult,
+): VehicleIdentity {
+  return {
+    year: Number(decoded.year) || baseline.year || 0,
+    make: decoded.make || baseline.make,
+    model: baseline.modelFamily || decoded.model,
+    trim: baseline.variant || decoded.trim,
+    bodyType: baseline.bodyClass || decoded.bodyClass,
+    drivetrain: baseline.drivetrain || decoded.driveType,
+    fuelType: baseline.fuelType || decoded.fuelType,
+  };
+}
+
+function modelCandidateIsSafe(
+  candidate: string,
+  baseline: VehicleIdentityProfile,
+  decoded: VinDecodeResult,
+) {
+  const normalizedCandidate = normalizeVehicleText(candidate);
+  const normalizedBaseline = normalizeVehicleText(baseline.modelFamily);
+  if (!normalizedCandidate) return false;
+
+  if (normalizedCandidate === normalizedBaseline) {
+    return true;
+  }
+
+  // Parenthetical VIN-decoder annotations are safe to remove when the remaining
+  // model name is unchanged. This handles cases such as
+  // "RAV4 Prime (PHEV)" -> "RAV4 Prime" without allowing the AI to collapse
+  // "RAV4 Prime" all the way to ordinary "RAV4".
+  const decodedWithoutAnnotations = normalizeVehicleText(
+    String(decoded.model || "").replace(/\([^)]*\)/g, " "),
+  );
+  if (
+    decodedWithoutAnnotations &&
+    normalizedCandidate === decodedWithoutAnnotations
+  ) {
+    return true;
+  }
+
+  const target = baselineIdentity(baseline, decoded);
+  const candidateIdentity: VehicleIdentity = {
+    ...target,
+    model: candidate,
+  };
+  const equivalence = evaluateVehicleEquivalence({
+    target,
+    candidate: candidateIdentity,
+  });
+
+  // This deliberately rejects performance derivatives such as M4 when the
+  // baseline is an ordinary 4 Series, while allowing aliases such as 428i.
+  return equivalence.tier === "direct" || equivalence.tier === "near";
+}
+
+function variantCandidateIsSafe(
+  candidate: string,
+  baseline: VehicleIdentityProfile,
+  decoded: VinDecodeResult,
+) {
+  const normalizedCandidate = normalizeVehicleText(candidate);
+  if (!normalizedCandidate) return false;
+
+  const candidateCompact = normalizedCandidate.replace(/\s+/g, "");
+  const baselineCompact = normalizeVehicleText(baseline.variant).replace(
+    /\s+/g,
+    "",
+  );
+  const decodedCompact = normalizeVehicleText(
+    [decoded.model, decoded.trim].filter(Boolean).join(" "),
+  ).replace(/\s+/g, "");
+
+  return Boolean(
+    (baselineCompact &&
+      (candidateCompact.includes(baselineCompact) ||
+        baselineCompact.includes(candidateCompact))) ||
+      (decodedCompact && decodedCompact.includes(candidateCompact)),
+  );
+}
+
+function mergeCanonicalField(
+  baselineValue: string | null,
+  aiValue: string | null,
+) {
+  if (!aiValue) return baselineValue;
+  if (!baselineValue) return aiValue;
+  return baselineValue === aiValue ? aiValue : baselineValue;
+}
+
 function mergeAiProfile(
   baseline: VehicleIdentityProfile,
   ai: Record<string, unknown>,
+  decoded: VinDecodeResult,
 ): VehicleIdentityProfile {
-  const family = normalizeVehicleText(baseline.modelFamily).replace(/\s+/g, "");
-  const aiAliases = cleanStringArray(ai.providerAliases, 8).filter((alias) => {
-    const compact = normalizeVehicleText(alias).replace(/\s+/g, "");
-    if (!compact) return false;
+  const requestedModelFamily =
+    cleanString(ai.modelFamily, 120) ||
+    cleanString(ai.canonicalModel, 120);
+  const modelFamily =
+    requestedModelFamily &&
+    modelCandidateIsSafe(requestedModelFamily, baseline, decoded)
+      ? requestedModelFamily
+      : baseline.modelFamily;
 
-    // AI aliases are retrieval hints only, but still require a recognizable
-    // relationship to the deterministic model family/source identity.
-    return (
-      !family ||
-      (compact.length >= 2 &&
-        (compact.includes(family) || family.includes(compact)))
-    );
+  const requestedVariant =
+    cleanString(ai.variant, 120) ||
+    cleanString(ai.comparisonVariant, 120);
+  const variant =
+    requestedVariant &&
+    variantCandidateIsSafe(requestedVariant, baseline, decoded)
+      ? normalizeVehicleText(requestedVariant)
+      : baseline.variant;
+
+  const requestedFuelType = canonicalFuelType(cleanString(ai.fuelType, 80));
+  const requestedDrivetrain = canonicalDrivetrain(
+    cleanString(ai.drivetrain, 80),
+  );
+  const requestedBodyClass = canonicalBodyClass({
+    year: Number(decoded.year) || baseline.year || 0,
+    make: decoded.make || baseline.make,
+    model: modelFamily,
+    trim: variant,
+    bodyType: cleanString(ai.bodyClass, 80),
+    drivetrain: requestedDrivetrain || baseline.drivetrain,
+    fuelType: requestedFuelType || baseline.fuelType,
   });
 
+  const fuelType =
+    resolveSemanticFuelType({
+      make: decoded.make || baseline.make,
+      model: decoded.model || modelFamily,
+      trim: decoded.trim || variant,
+      fuelType: baseline.fuelType,
+      aiFuelType: requestedFuelType,
+    }) || "";
+  const drivetrain = mergeCanonicalField(
+    baseline.drivetrain,
+    requestedDrivetrain,
+  );
+  const bodyClass = mergeCanonicalField(
+    baseline.bodyClass,
+    requestedBodyClass,
+  );
+
+  const aiAliases = cleanStringArray(ai.providerAliases, 8).filter((alias) =>
+    modelCandidateIsSafe(alias, baseline, decoded),
+  );
   const aiExclusions = cleanStringArray(ai.hardExclusions, 8);
   const aiNotes = cleanStringArray(ai.notes, 6, 180);
   const generationLabel = cleanString(ai.generation, 120);
 
+  const providerAliases = unique(
+    [
+      modelFamily,
+      ...baseline.providerAliases,
+      ...aiAliases,
+    ],
+    8,
+  );
+
   return {
     ...baseline,
     source: "ai-assisted",
+    modelFamily,
+    variant,
+    bodyClass,
+    drivetrain,
+    fuelType,
     generation: baseline.generation || generationLabel || null,
-    providerAliases: unique(
-      [...baseline.providerAliases, ...aiAliases],
-      8,
-    ),
+    providerAliases,
     hardExclusions: unique(
       [...baseline.hardExclusions, ...aiExclusions],
       10,
@@ -121,8 +273,14 @@ function mergeAiProfile(
       [
         ...baseline.notes,
         ...aiNotes,
-        "AI identity hints can broaden retrieval, but deterministic vehicle-equivalence rules decide what may influence valuation.",
-      ],
+        modelFamily !== baseline.modelFamily
+          ? `AI normalized the decoder model “${baseline.modelFamily}” to the comp-search identity “${modelFamily}”.`
+          : null,
+        fuelType !== baseline.fuelType && fuelType
+          ? `Semantic identity corrected fuel type from “${baseline.fuelType || "unknown"}” to “${fuelType}” using corroborating vehicle-name evidence.`
+          : null,
+        "AI-normalized identity feeds retrieval and target classification; deterministic vehicle-equivalence rules still prevent materially different vehicles from becoming valuation comps.",
+      ].filter((value): value is string => Boolean(value)),
       10,
     ),
   };
@@ -210,9 +368,11 @@ export async function POST(request: Request) {
       system: [
         "You are a vehicle identity normalization assistant for a professional dealer valuation tool.",
         "Your task is NOT to value the vehicle and NOT to invent replacement comps.",
-        "Use the decoded VIN facts and deterministic baseline to clarify provider naming only.",
-        "Keep body style, powertrain, performance variant, and materially different models separate.",
-        "A provider alias may broaden retrieval, but it does not make a different vehicle equivalent.",
+        "Use the decoded VIN facts and deterministic baseline to create the canonical identity the comp engine should search and qualify against.",
+        "Separate provider/model naming from trim, body style, drivetrain, and fuel/powertrain descriptors.",
+        "Keep materially meaningful named derivatives in the model identity when dropping them would mix different vehicles. Example: RAV4 Prime stays RAV4 Prime; remove only the redundant PHEV annotation from RAV4 Prime (PHEV).",
+        "For BMW-style taxonomy, a model code such as 428i can belong to the 4 Series family, but an M4 is a materially different performance derivative and must not be treated as the same direct-comp identity.",
+        "Provider aliases must describe the same comparable vehicle identity, not merely a related model family.",
         "If uncertain, omit the claim.",
         "Return JSON only.",
       ].join("\n"),
@@ -221,9 +381,19 @@ export async function POST(request: Request) {
         decodedVehicle: decoded,
         deterministicBaseline: baseline,
         outputShape: {
+          modelFamily:
+            "canonical provider-comparable model identity; remove redundant decoder annotations, but retain named derivatives needed to avoid mixing materially different vehicles",
+          variant:
+            "trim/engine/performance derivative within that model identity, excluding redundant drivetrain/fuel labels",
+          fuelType:
+            "canonical fuel/powertrain type such as gasoline, diesel, hybrid, plug-in hybrid, or electric",
+          drivetrain:
+            "canonical drivetrain when clearly supported, otherwise empty string",
+          bodyClass:
+            "canonical body class when clearly supported, otherwise empty string",
           generation: "string or empty string",
           providerAliases: [
-            "up to 6 model names a listing provider might use for this same model family/configuration",
+            "up to 6 provider/listing model names for the same comparable vehicle identity; do not include materially different performance or powertrain variants",
           ],
           hardExclusions: [
             "short descriptions of materially different vehicles that must not qualify",
@@ -236,7 +406,7 @@ export async function POST(request: Request) {
     });
 
     const ai = parseJsonObject(result.text);
-    const profile = mergeAiProfile(baseline, ai);
+    const profile = mergeAiProfile(baseline, ai, decoded);
 
     await recordUsageEvent({
       supabase: admin,

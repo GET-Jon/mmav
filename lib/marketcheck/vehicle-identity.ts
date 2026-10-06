@@ -151,6 +151,16 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
     return canonicalMercedesFamily(model, modelCompact) || model;
   }
 
+  if (make === "toyota") {
+    // MarketCheck commonly reports RAV4 Prime/PHEV listings under the base
+    // "RAV4" model and carries the electrified derivative in fuel/build data.
+    // Keep RAV4 as the family; the equivalence taxonomy below decides whether
+    // a listing is Prime/PHEV, Hybrid, gasoline, or unresolved.
+    if (startsWithAny(modelCompact, ["rav4prime", "rav4phev", "rav4hybrid", "rav4"])) {
+      return "rav4";
+    }
+  }
+
   if (make === "ford") {
     if (
       startsWithAny(modelCompact, [
@@ -208,6 +218,54 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   }
 
   return model;
+}
+
+function stripDrivetrainBranding(value: unknown) {
+  return String(value || "")
+    .replace(/\b(?:xdrive|sdrive|quattro|4matic|4motion|awd|4wd|fwd|rwd|4x4)\b/gi, " ")
+    .replace(/\b(?:all[-\s]?wheel drive|four[-\s]?wheel drive|rear[-\s]?wheel drive|front[-\s]?wheel drive)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
+  const modelFamily = canonicalModelFamily(vehicle);
+  const normalizedFamily = normalizeVehicleText(modelFamily);
+  const normalizedModel = normalizeVehicleText(vehicle.model);
+
+  const cleanedTrim = stripDrivetrainBranding(vehicle.trim);
+  const normalizedTrim = normalizeVehicleText(cleanedTrim);
+
+  // Prefer a substantive trim/derivative once drivetrain branding is removed.
+  // Examples: "EQE350 4MATIC" -> "EQE350", "760i xDrive" -> "760i".
+  if (
+    cleanedTrim &&
+    normalizedTrim &&
+    normalizedTrim !== normalizedFamily
+  ) {
+    return normalizedTrim;
+  }
+
+  // Some VIN decoders place the derivative in model and drivetrain branding
+  // in trim. Example: BMW model "760i", trim "xDrive", family "7 Series".
+  if (
+    normalizedModel &&
+    normalizedFamily &&
+    normalizedModel !== normalizedFamily
+  ) {
+    return normalizedModel;
+  }
+
+  // BMW commonly combines drivetrain + derivative in a single trim token.
+  // Preserve the derivative portion for comparison.
+  if (canonicalVehicleMake(vehicle.make) === "bmw" && vehicle.trim) {
+    const compactTrim = String(vehicle.trim)
+      .replace(/^(?:xdrive|sdrive)/i, "")
+      .trim();
+    if (compactTrim) return normalizeVehicleText(compactTrim);
+  }
+
+  return normalizedTrim || normalizedModel || normalizedFamily;
 }
 
 function classifyBodyText(value: unknown) {
@@ -309,6 +367,71 @@ export function canonicalFuelType(value: unknown) {
   }
 
   return text;
+}
+
+export function resolveSemanticFuelType({
+  make,
+  model,
+  trim,
+  fuelType,
+  aiFuelType,
+}: {
+  make?: unknown;
+  model?: unknown;
+  trim?: unknown;
+  fuelType?: unknown;
+  aiFuelType?: unknown;
+}) {
+  const baseline = canonicalFuelType(fuelType);
+  const ai = canonicalFuelType(aiFuelType);
+  const text = normalizeVehicleText([make, model, trim].filter(Boolean).join(" "));
+
+  // Named derivatives can be more authoritative than a provider's coarse fuel
+  // label. This is intentionally evidence-based rather than a free-form AI
+  // override: the vehicle name itself must corroborate the corrected fuel type.
+  if (
+    text.includes("plug in hybrid") ||
+    text.includes("phev") ||
+    (canonicalVehicleMake(make) === "toyota" &&
+      canonicalModelFamily({
+        year: 0,
+        make: String(make || ""),
+        model: String(model || ""),
+        trim: String(trim || ""),
+      }) === "rav4" &&
+      text.includes("prime"))
+  ) {
+    return "plug-in hybrid";
+  }
+
+  if (text.includes("hybrid") && !text.includes("plug in hybrid")) {
+    return "hybrid";
+  }
+
+  if (text.includes("diesel") || text.includes("tdi")) {
+    return "diesel";
+  }
+
+  if (ai && ai !== baseline) {
+    const aiIsCorroborated =
+      (ai === "plug-in hybrid" &&
+        (text.includes("prime") ||
+          text.includes("phev") ||
+          text.includes("plug in hybrid"))) ||
+      (ai === "hybrid" && text.includes("hybrid")) ||
+      (ai === "diesel" && (text.includes("diesel") || text.includes("tdi"))) ||
+      (ai === "electric" &&
+        (text.includes("electric") ||
+          text.includes(" ev ") ||
+          text.endsWith(" ev") ||
+          text.includes(" battery ")));
+
+    if (aiIsCorroborated) {
+      return ai;
+    }
+  }
+
+  return ai && !baseline ? ai : baseline || ai;
 }
 
 export function canonicalTransmission(value: unknown) {

@@ -727,6 +727,10 @@ export function EvaluationWorkspace({
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [evaluationRunning, setEvaluationRunning] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const [marketCheckError, setMarketCheckError] = useState<{
+    code: string;
+    message: string;
+  } | null>(null);
   const [autoDevDiscoveryLoading, setAutoDevDiscoveryLoading] = useState(false);
   const [autoDevDiscoveryStatus, setAutoDevDiscoveryStatus] = useState("");
   const [autoDevDiscovery, setAutoDevDiscovery] = useState<{
@@ -940,6 +944,8 @@ export function EvaluationWorkspace({
 
   const marketCheckInFlightRef = useRef(false);
   const vehicleIdentityRequestVinRef = useRef("");
+  const vehicleIdentityProfilePromiseRef =
+    useRef<Promise<VehicleIdentityProfile> | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
@@ -1899,6 +1905,17 @@ export function EvaluationWorkspace({
     }
   }
 
+  function startVehicleIdentityProfileEnrichment(decoded: VinDecodeResult) {
+    const promise = enrichVehicleIdentityProfile(decoded);
+    vehicleIdentityProfilePromiseRef.current = promise;
+
+    void promise.then(() => {
+      if (vehicleIdentityProfilePromiseRef.current === promise) {
+        vehicleIdentityProfilePromiseRef.current = null;
+      }
+    });
+  }
+
   async function decodeVinFromBasics(
     vinOverride?: string,
   ): Promise<VinDecodeResult | null> {
@@ -1957,7 +1974,7 @@ export function EvaluationWorkspace({
       const decoded = data as VinDecodeResult;
 
       handleDecodedVinAndReset(decoded);
-      void enrichVehicleIdentityProfile(decoded);
+      startVehicleIdentityProfileEnrichment(decoded);
 
       window.setTimeout(() => {
         mileageInputRef.current?.focus();
@@ -2029,6 +2046,7 @@ export function EvaluationWorkspace({
     setComps([]);
     setSelectedConditions([]);
     setMarketCheckStatus("");
+    setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
     setCompSearchHistory([]);
@@ -2076,6 +2094,7 @@ export function EvaluationWorkspace({
     setComps([]);
     setSelectedConditions([]);
     setMarketCheckStatus("");
+    setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
@@ -2395,15 +2414,54 @@ export function EvaluationWorkspace({
       return;
     }
 
+    marketCheckInFlightRef.current = true;
+
+    const overrideVin =
+      vehicleOverride && "vin" in vehicleOverride
+        ? String(vehicleOverride.vin || "").trim().toUpperCase()
+        : "";
+    const useSemanticIdentity =
+      !vehicleOverride || /^[A-HJ-NPR-Z0-9]{17}$/.test(overrideVin);
+
+    let activeVehicleIdentityProfile = vehicleIdentityProfile;
+    if (useSemanticIdentity && vehicleIdentityProfilePromiseRef.current) {
+      setMarketCheckStatus("Finishing the vehicle identity profile…");
+      activeVehicleIdentityProfile =
+        await vehicleIdentityProfilePromiseRef.current;
+    }
+
     const year = vehicleOverride?.year || vehicleYear;
-    const make = vehicleOverride?.make || vehicleMake;
-    const model = vehicleOverride?.model || vehicleModel;
+    const make = useSemanticIdentity
+      ? activeVehicleIdentityProfile?.make ||
+        vehicleOverride?.make ||
+        vehicleMake
+      : vehicleOverride?.make || vehicleMake;
+    const profileModel = String(
+      activeVehicleIdentityProfile?.modelFamily || "",
+    ).trim();
+    const model = useSemanticIdentity
+      ? profileModel || vehicleOverride?.model || vehicleModel
+      : vehicleOverride?.model || profileModel || vehicleModel;
+    const profileVariant = String(
+      activeVehicleIdentityProfile?.variant || "",
+    ).trim();
     const trim =
-      vehicleOverride && Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
+      !useSemanticIdentity &&
+      vehicleOverride &&
+      Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
         ? String(vehicleOverride.trim || "")
-        : vehicleTrim;
-    const fuelType =
-      vehicleOverride?.fuelType || decodedVehicle?.fuelType || null;
+        : profileVariant ||
+          String(vehicleOverride?.trim || "") ||
+          vehicleTrim;
+    const fuelType = useSemanticIdentity
+      ? activeVehicleIdentityProfile?.fuelType ||
+        vehicleOverride?.fuelType ||
+        decodedVehicle?.fuelType ||
+        null
+      : vehicleOverride?.fuelType ||
+        activeVehicleIdentityProfile?.fuelType ||
+        decodedVehicle?.fuelType ||
+        null;
     const candidateVin = String(decodedVehicle?.vin || vin || "")
       .trim()
       .toUpperCase();
@@ -2421,8 +2479,6 @@ export function EvaluationWorkspace({
       return;
     }
 
-    marketCheckInFlightRef.current = true;
-
     // Initial searches replace the prior vehicle's MarketCheck state.
     // Expansion searches preserve existing comps and merge new geography.
     if (!options?.mergeResults) {
@@ -2438,6 +2494,7 @@ export function EvaluationWorkspace({
     }
 
     setMarketCheckLoading(true);
+    setMarketCheckError(null);
     setMarketCheckStatus(
       "Searching MarketCheck comps...",
     );
@@ -2456,14 +2513,27 @@ export function EvaluationWorkspace({
           vin: marketCheckVin,
           fuelType,
           preferredModelAliases:
-            vehicleIdentityProfile?.providerAliases || [],
-          qualificationYear: vehicleYear,
-          qualificationMake: vehicleMake,
-          qualificationModel: vehicleModel,
-          qualificationTrim: vehicleTrim,
-          qualificationFuelType: decodedVehicle?.fuelType || null,
-          qualificationDrivetrain: decodedVehicle?.driveType || null,
-          qualificationBodyType: decodedVehicle?.bodyClass || null,
+            activeVehicleIdentityProfile?.providerAliases || [],
+          qualificationYear:
+            activeVehicleIdentityProfile?.year || vehicleYear,
+          qualificationMake:
+            activeVehicleIdentityProfile?.make || vehicleMake,
+          qualificationModel:
+            activeVehicleIdentityProfile?.modelFamily || vehicleModel,
+          qualificationTrim:
+            activeVehicleIdentityProfile?.variant || vehicleTrim,
+          qualificationFuelType:
+            activeVehicleIdentityProfile?.fuelType ||
+            decodedVehicle?.fuelType ||
+            null,
+          qualificationDrivetrain:
+            activeVehicleIdentityProfile?.drivetrain ||
+            decodedVehicle?.driveType ||
+            null,
+          qualificationBodyType:
+            activeVehicleIdentityProfile?.bodyClass ||
+            decodedVehicle?.bodyClass ||
+            null,
           targetMileage,
           searchStage: options?.searchStage || "initial",
           regions:
@@ -2505,8 +2575,15 @@ export function EvaluationWorkspace({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "MarketCheck search failed.");
+        const message = data.error || "MarketCheck search failed.";
+        setMarketCheckError({
+          code: String(data.code || "MARKET_SEARCH_FAILED"),
+          message,
+        });
+        throw new Error(message);
       }
+
+      setMarketCheckError(null);
 
       if (!data.comps || data.comps.length === 0) {
         if (!options?.mergeResults) {
@@ -2879,12 +2956,28 @@ export function EvaluationWorkspace({
         },
         body: JSON.stringify({
           year: Number(vehicleYear),
-          make: vehicleMake,
-          model: vehicleModel,
-          trim: vehicleTrim,
+          make: vehicleIdentityProfile?.make || vehicleMake,
+          model: vehicleIdentityProfile?.modelFamily || vehicleModel,
+          trim: vehicleIdentityProfile?.variant || vehicleTrim,
           vin: String(decodedVehicle?.vin || vin || "").trim().toUpperCase(),
-          providerAliases: vehicleIdentityProfile?.providerAliases || [],
-          bodyClass: vehicleBodyClass,
+          providerAliases: [
+            String(vehicleModel || "")
+              .replace(/\([^)]*\)/g, " ")
+              .replace(/\s+/g, " ")
+              .trim(),
+            ...(vehicleIdentityProfile?.providerAliases || []),
+          ].filter(Boolean),
+          fuelType:
+            vehicleIdentityProfile?.fuelType ||
+            decodedVehicle?.fuelType ||
+            "",
+          drivetrain:
+            vehicleIdentityProfile?.drivetrain ||
+            decodedVehicle?.driveType ||
+            "",
+          bodyClass:
+            vehicleIdentityProfile?.bodyClass ||
+            vehicleBodyClass,
         }),
       });
 
@@ -3616,6 +3709,7 @@ export function EvaluationWorkspace({
 
     setComps(initialComps);
     setMarketCheckStatus("");
+    setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
     setMarketCheckLoading(false);
@@ -7240,6 +7334,8 @@ export function EvaluationWorkspace({
                     recommendation={compSearchRecommendation}
                     improving={compSearchImproving}
                     activityStatus={compSearchImprovementStatus}
+                    errorCode={marketCheckError?.code || ""}
+                    errorMessage={marketCheckError?.message || ""}
                     onImprove={() => void improveCompSearch()}
                   />
                 </div>
@@ -7290,26 +7386,29 @@ export function EvaluationWorkspace({
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
                   </div>
                   <div className="mt-4 grid gap-2 border-t border-current/10 pt-4 text-center sm:grid-cols-3 sm:gap-3">
-                    <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">All-In Cost</div>
-                      <button
-                        type="button"
-                        onClick={() => setAllInCostOpen(true)}
-                        disabled={valuationInput.currentBid <= 0}
-                        className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 underline decoration-slate-300 decoration-dotted underline-offset-4 transition hover:text-blue-700 disabled:no-underline sm:mt-2 sm:text-[25px]"
-                      >
+                    <button
+                      type="button"
+                      onClick={() => setAllInCostOpen(true)}
+                      disabled={valuationInput.currentBid <= 0}
+                      className="rounded-xl bg-white/60 px-3 py-3 text-center transition hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-default disabled:bg-white/30 sm:bg-transparent sm:px-0 sm:py-0 sm:hover:bg-white/40"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">All-In Cost</span>
+                        {valuationInput.currentBid > 0 ? (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.05em] text-blue-700">
+                            Edit
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">
                         {valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}
-                      </button>
+                      </div>
                       {valuationInput.currentBid > 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => setAllInCostOpen(true)}
-                          className="mx-auto mt-1 block text-[10px] font-black text-blue-700 hover:text-blue-900"
-                        >
-                          View costs
-                        </button>
+                        <div className="mt-1 text-[10px] font-black text-blue-700">
+                          Edit or remove costs →
+                        </div>
                       ) : null}
-                    </div>
+                    </button>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
                       <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Sale Estimate</div>
                       <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
@@ -7370,6 +7469,31 @@ export function EvaluationWorkspace({
                     </div>
                   }
                 >
+                  {comps.length && marketCheckSearchMeta?.regionsChecked?.length ? (
+                    <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
+                      <span className="font-black text-slate-800">Search coverage:</span>{" "}
+                      {marketCheckSearchMeta.regionsChecked.join(" → ")}
+                      {Array.from(
+                        new Set(
+                          comps
+                            .filter((comp) => comp.included && comp.region)
+                            .map((comp) => comp.region),
+                        ),
+                      ).length ? (
+                        <>
+                          {" · "}
+                          <span className="font-black text-slate-800">Qualifying comps found in:</span>{" "}
+                          {Array.from(
+                            new Set(
+                              comps
+                                .filter((comp) => comp.included && comp.region)
+                                .map((comp) => comp.region),
+                            ),
+                          ).join(", ")}
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {comps.length ? (
                     <MarketCompsTable comps={verdictCompsExpanded ? comps : comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
                   ) : (
@@ -7401,7 +7525,7 @@ export function EvaluationWorkspace({
                   <div>
                     <h2 className="text-lg font-black text-slate-950">All-In Cost</h2>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      Every modeled acquisition and preparation cost included in the deal economics.
+                      Edit any line item or remove it from the estimate. Changes update the deal economics immediately.
                     </p>
                   </div>
                   <button
@@ -7437,11 +7561,11 @@ export function EvaluationWorkspace({
                           <button
                             type="button"
                             onClick={() => updateAllInCostAmount(item.key, 0)}
-                            className="shrink-0 rounded-md px-1.5 py-1 text-[10px] font-black text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            title={`Zero out ${item.label}`}
-                            aria-label={`Zero out ${item.label}`}
+                            className="shrink-0 rounded-md px-2 py-1 text-[10px] font-black text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            title={`Remove ${item.label} from the estimate`}
+                            aria-label={`Remove ${item.label} from the estimate`}
                           >
-                            ×
+                            Remove
                           </button>
                         </div>
                       </div>
