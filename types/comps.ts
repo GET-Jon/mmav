@@ -63,6 +63,7 @@ export type MarketComp = {
       fuelType?: string | null;
       drivetrain?: string | null;
       bodyType?: string | null;
+      doors?: number | null;
       cylinders?: number | null;
       note?: string | null;
     };
