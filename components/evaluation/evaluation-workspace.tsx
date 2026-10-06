@@ -2114,14 +2114,17 @@ export function EvaluationWorkspace({
 
   function toggleCompIncluded(id: string) {
     setComps((previous) =>
-      previous.map((comp) =>
-        comp.id === id
-          ? {
-              ...comp,
-              included: !comp.included,
-            }
-          : comp,
-      ),
+      previous.map((comp) => {
+        if (comp.id !== id) return comp;
+
+        const nextIncluded = !comp.included;
+        return {
+          ...comp,
+          included: nextIncluded,
+          dealerDecision: nextIncluded ? "include" : "exclude",
+          dealerDecisionAt: new Date().toISOString(),
+        };
+      }),
     );
   }
 
@@ -2534,6 +2537,8 @@ export function EvaluationWorkspace({
             activeVehicleIdentityProfile?.bodyClass ||
             decodedVehicle?.bodyClass ||
             null,
+          qualificationDoors: decodedVehicle?.doors || null,
+          qualificationCylinders: decodedVehicle?.engineCylinders || null,
           targetMileage,
           searchStage: options?.searchStage || "initial",
           regions:
