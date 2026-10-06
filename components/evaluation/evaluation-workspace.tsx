@@ -2410,35 +2410,52 @@ export function EvaluationWorkspace({
 
     marketCheckInFlightRef.current = true;
 
+    const overrideVin =
+      vehicleOverride && "vin" in vehicleOverride
+        ? String(vehicleOverride.vin || "").trim().toUpperCase()
+        : "";
+    const useSemanticIdentity =
+      !vehicleOverride || /^[A-HJ-NPR-Z0-9]{17}$/.test(overrideVin);
+
     let activeVehicleIdentityProfile = vehicleIdentityProfile;
-    if (!vehicleOverride && vehicleIdentityProfilePromiseRef.current) {
+    if (useSemanticIdentity && vehicleIdentityProfilePromiseRef.current) {
       setMarketCheckStatus("Finishing the vehicle identity profile…");
       activeVehicleIdentityProfile =
         await vehicleIdentityProfilePromiseRef.current;
     }
 
     const year = vehicleOverride?.year || vehicleYear;
-    const make =
-      vehicleOverride?.make ||
-      activeVehicleIdentityProfile?.make ||
-      vehicleMake;
+    const make = useSemanticIdentity
+      ? activeVehicleIdentityProfile?.make ||
+        vehicleOverride?.make ||
+        vehicleMake
+      : vehicleOverride?.make || vehicleMake;
     const profileModel = String(
       activeVehicleIdentityProfile?.modelFamily || "",
     ).trim();
-    const model = vehicleOverride?.model || profileModel || vehicleModel;
+    const model = useSemanticIdentity
+      ? profileModel || vehicleOverride?.model || vehicleModel
+      : vehicleOverride?.model || profileModel || vehicleModel;
     const profileVariant = String(
       activeVehicleIdentityProfile?.variant || "",
     ).trim();
     const trim =
+      !useSemanticIdentity &&
       vehicleOverride &&
       Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
         ? String(vehicleOverride.trim || "")
-        : profileVariant || vehicleTrim;
-    const fuelType =
-      vehicleOverride?.fuelType ||
-      activeVehicleIdentityProfile?.fuelType ||
-      decodedVehicle?.fuelType ||
-      null;
+        : profileVariant ||
+          String(vehicleOverride?.trim || "") ||
+          vehicleTrim;
+    const fuelType = useSemanticIdentity
+      ? activeVehicleIdentityProfile?.fuelType ||
+        vehicleOverride?.fuelType ||
+        decodedVehicle?.fuelType ||
+        null
+      : vehicleOverride?.fuelType ||
+        activeVehicleIdentityProfile?.fuelType ||
+        decodedVehicle?.fuelType ||
+        null;
     const candidateVin = String(decodedVehicle?.vin || vin || "")
       .trim()
       .toUpperCase();
