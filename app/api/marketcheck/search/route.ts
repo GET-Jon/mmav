@@ -398,6 +398,7 @@ type CandidateVinIdentity = {
   bodyType: string;
   drivetrain: string;
   fuelType: string;
+  doors: number | null;
   cylinders: number | null;
 };
 
@@ -439,6 +440,7 @@ async function decodeCandidateVinIdentity(
         trim,
         fuelType: row.FuelTypePrimary || "",
       }),
+      doors: Number(row.Doors || 0) || null,
       cylinders: Number(row.EngineCylinders || 0) || null,
     };
   } catch {
@@ -543,6 +545,7 @@ async function enrichAmbiguousCompsByVin({
         fuelType: identity.fuelType || details.fuelType || null,
         drivetrain: identity.drivetrain || details.drivetrain || null,
         bodyType: identity.bodyType || details.bodyType || null,
+        doors: identity.doors || details.doors || null,
         cylinders: identity.cylinders || details.cylinders || null,
         identityVerification: {
           source: "nhtsa-vin",
@@ -554,6 +557,7 @@ async function enrichAmbiguousCompsByVin({
           fuelType: identity.fuelType || null,
           drivetrain: identity.drivetrain || null,
           bodyType: identity.bodyType || null,
+          doors: identity.doors,
           cylinders: identity.cylinders,
           note:
             "Candidate identity verified from the listing VIN before final comp qualification.",
