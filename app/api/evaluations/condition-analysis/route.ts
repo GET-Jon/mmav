@@ -8,8 +8,8 @@ import { buildEvaluatorIntelligenceContext } from "@/lib/lot-logic-intelligence/
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
   checkUsageAllowance,
+  evaluationUsageSubject,
   recordUsageEvent,
-  vehicleUsageSubject,
 } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
@@ -51,7 +51,8 @@ export async function POST(request: Request) {
     }
 
     const admin = createSupabaseAdminClient();
-    const subjectKey = vehicleUsageSubject({
+    const subjectKey = evaluationUsageSubject({
+      evaluationUsageId: body.evaluationUsageId,
       vin: body.vehicle?.vin,
       year: body.vehicle?.year,
       make: body.vehicle?.make,
