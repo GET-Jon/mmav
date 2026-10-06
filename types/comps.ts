@@ -20,6 +20,8 @@ export type MarketComp = {
   targetClassification?: string | null;
   candidateClassification?: string | null;
   needsClassificationReview?: boolean;
+  dealerDecision?: "include" | "exclude" | null;
+  dealerDecisionAt?: string | null;
 
   marketCheckDetails?: {
     vin?: string | null;
@@ -43,6 +45,7 @@ export type MarketComp = {
     cylinders?: number | null;
     listingDate?: string | null;
     lastSeenDate?: string | null;
+    retrievalAttempt?: string | null;
     targetYear?: number | null;
     targetMake?: string | null;
     targetModel?: string | null;
@@ -101,5 +104,7 @@ export type CompSummary = {
   supportingCount?: number;
   cappedAdjustmentCount?: number;
   lowReliabilityAdjustmentCount?: number;
+  dealerOverrideCount?: number;
+  dealerHardOverrideCount?: number;
   confidenceReasons?: string[];
 };
