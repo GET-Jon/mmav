@@ -268,18 +268,17 @@ export function MarketCompsTable({
             <input
               type="checkbox"
               checked={row.original.included}
-              disabled={rejected}
               title={
                 rejected
-                  ? "Rejected vehicle identities cannot be used in valuation."
+                  ? "Lot Logic rejected this match automatically. You can still include it as a dealer override; valuation confidence will be reduced."
                   : row.original.equivalenceTier === "supporting"
-                    ? "Supporting comps are manual overrides and reduce valuation confidence."
+                    ? "Include this Supporting comp as a dealer selection."
                     : "Include this comp in valuation."
               }
               onClick={(event) => event.stopPropagation()}
               onChange={() => onToggleIncluded(row.original.id)}
               aria-label={`Include ${row.original.year} ${row.original.model}`}
-              className="h-4 w-4 rounded border-slate-300 accent-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-4 w-4 rounded border-slate-300 accent-blue-700"
             />
           );
         },
@@ -312,11 +311,18 @@ export function MarketCompsTable({
             <span className="block truncate font-semibold text-slate-700">
               {row.original.trim || "Unavailable"}
             </span>
-            <span
-              className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-black ${tierTone(row.original)}`}
-            >
-              {tableRelationshipLabel(row.original)}
-            </span>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-black ${tierTone(row.original)}`}
+              >
+                {tableRelationshipLabel(row.original)}
+              </span>
+              {row.original.dealerDecision === "include" ? (
+                <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black text-blue-800">
+                  Dealer selected
+                </span>
+              ) : null}
+            </div>
           </div>
         ),
       },
