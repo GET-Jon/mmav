@@ -6,8 +6,8 @@ import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry"
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import {
   checkUsageAllowance,
+  evaluationUsageSubject,
   recordUsageEvent,
-  vehicleUsageSubject,
 } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -791,7 +791,8 @@ export async function POST(request: Request) {
   }
   normalizedBody.minUsableCompsToStop = controls.minUsableCompsToStop;
 
-  const subjectKey = vehicleUsageSubject({
+  const subjectKey = evaluationUsageSubject({
+    evaluationUsageId: normalizedBody.evaluationUsageId,
     vin: normalizedBody.vin || decodedVehicle.vin || nestedVehicle.vin,
     year:
       normalizedBody.qualificationYear ||
