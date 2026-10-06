@@ -111,6 +111,43 @@ export function assertCompValuationRegressionCases() {
     "Manual Supporting-comp override should be usable but remain Low confidence.",
   );
 
+  const rejectedAutomaticSummary = calculateCompSummary({
+    comps: [
+      makeComp({
+        id: "rejected-automatic",
+        included: true,
+        equivalenceTier: "reject",
+        qualityScore: 90,
+      }),
+    ],
+    targetMileage,
+    assumptions: defaultAssumptions,
+  });
+  assert(
+    rejectedAutomaticSummary.includedCount === 0,
+    "A rejected comp must not enter valuation unless the dealer explicitly overrides it.",
+  );
+
+  const rejectedDealerOverrideSummary = calculateCompSummary({
+    comps: [
+      makeComp({
+        id: "rejected-dealer-override",
+        included: true,
+        equivalenceTier: "reject",
+        qualityScore: 90,
+        dealerDecision: "include",
+      }),
+    ],
+    targetMileage,
+    assumptions: defaultAssumptions,
+  });
+  assert(
+    rejectedDealerOverrideSummary.includedCount === 1 &&
+      rejectedDealerOverrideSummary.confidence === "Low" &&
+      rejectedDealerOverrideSummary.dealerHardOverrideCount === 1,
+    "A dealer-selected rejected comp should be usable as an explicit Low-confidence override.",
+  );
+
   const outlierSummary = calculateCompSummary({
     comps: [
       makeComp({ id: "a", askingPrice: 20000, mileage: 70000 }),
@@ -132,7 +169,7 @@ export function assertCompValuationRegressionCases() {
   );
 
   return {
-    passed: 6,
+    passed: 8,
     failed: 0,
     wranglerAdjustedExamples: {
       highMileage: firstAdjustedPrice,
