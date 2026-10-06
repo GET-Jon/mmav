@@ -98,7 +98,7 @@ function buildRecommendedMarkets(
         typeof listing.longitude === "number",
     );
   const remaining = new Set(candidates.map((_, index) => index));
-  const recommendations: Array<{ market: string; zip: string; latitude: number; longitude: number; coverageCount: number; states: string[]; vins: string[] }> = [];
+  const recommendations: Array<{ market: string; zip: string; latitude: number; longitude: number; coverageCount: number; directCount: number; nearCount: number; supportingCount: number; qualityWeight: number; states: string[]; vins: string[] }> = [];
   while (remaining.size && recommendations.length < maxMarkets) {
     let bestCenterIndex: number | null = null; let bestCovered: number[] = []; let bestScore = -1;
     for (const centerIndex of remaining) {
@@ -140,6 +140,20 @@ export async function POST(request: Request) {
   const startedAt = Date.now(); const apiKey = process.env.AUTODEV_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Missing AUTODEV_API_KEY server environment variable." }, { status: 500 });
   const body = await request.json(); const year = toNumber(body.year); const make = String(body.make || "").trim(); const model = String(body.model || "").trim(); const trim = String(body.trim || "").trim();
+  const target: VehicleIdentity = {
+    year: Number(year || 0),
+    make,
+    model,
+    trim,
+    drivetrain: String(body.drivetrain || "").trim(),
+    fuelType: resolveSemanticFuelType({
+      make,
+      model,
+      trim,
+      fuelType: body.fuelType || "",
+    }),
+    bodyType: String(body.bodyClass || body.bodyStyle || "").trim(),
+  };
   const user = await getCurrentUser(); if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   if (!year || !make || !model) return NextResponse.json({ error: "Year, make, and model are required for national discovery." }, { status: 400 });
   const admin = createSupabaseAdminClient(); const subjectKey = vehicleUsageSubject({ vin: body.vin, year, make, model, trim });
@@ -167,7 +181,8 @@ export async function POST(request: Request) {
     yearMax,
   }));
   let selectedAttempt: DiscoveryAttempt | null = null; let selectedPayload: any = null; let listings: AutoDevListing[] = []; let callsMade = 0;
-  const attemptResults: Array<{ label: string; model: string; returned: number; total: number }> = [];
+  let fallbackAttempt: DiscoveryAttempt | null = null; let fallbackPayload: any = null; let fallbackListings: AutoDevListing[] = []; let fallbackScore = -1;
+  const attemptResults: Array<{ label: string; model: string; returned: number; total: number; directNear: number; supporting: number }> = [];
 
   for (const attempt of attempts) {
     const providerAllowance = await checkUsageAllowance({ supabase: admin, userId: user.id, kind: "provider_api_call", expectedUnits: 1 });
@@ -178,13 +193,48 @@ export async function POST(request: Request) {
     await recordUsageEvent({ supabase: admin, companyId: discoveryAllowance.summary.company.companyId, userId: user.id, kind: "provider_api_call", subjectKey, units: 1, metadata: { provider: "auto_dev", discoveryModel: attempt.model, failed: !upstream.ok } });
     if (!upstream.ok) return NextResponse.json({ error: "Auto.dev national discovery failed.", status: upstream.status, details: typeof payload?.message === "string" ? payload.message : typeof payload?.error === "string" ? payload.error : undefined }, { status: upstream.status });
     const attemptListings = mapListings(payload); const total = typeof payload?.total === "number" ? payload.total : attemptListings.length;
-    attemptResults.push({ label: attempt.label, model: attempt.model, returned: attemptListings.length, total });
-    if (attemptListings.length > 0 || total > 0) { selectedAttempt = attempt; selectedPayload = payload; listings = attemptListings; break; }
+    const tiers = attemptListings.map((listing) =>
+      evaluateVehicleEquivalence({
+        target,
+        candidate: {
+          year: Number(listing.year || 0),
+          make: listing.make || make,
+          model: listing.model || attempt.model,
+          trim: listing.trim || "",
+          drivetrain: listing.drivetrain || "",
+          fuelType: resolveSemanticFuelType({
+            make: listing.make || make,
+            model: listing.model || attempt.model,
+            trim: listing.trim || "",
+            fuelType: listing.fuelType || "",
+          }),
+          bodyType: listing.bodyType || "",
+        },
+      }).tier,
+    );
+    const directNear = tiers.filter((tier) => tier === "direct" || tier === "near").length;
+    const supporting = tiers.filter((tier) => tier === "supporting").length;
+    const attemptScore = tiers.reduce((sum, tier) => sum + discoveryTierWeight(tier), 0);
+    attemptResults.push({ label: attempt.label, model: attempt.model, returned: attemptListings.length, total, directNear, supporting });
+
+    if (directNear > 0) {
+      selectedAttempt = attempt; selectedPayload = payload; listings = attemptListings; break;
+    }
+
+    if ((supporting > 0 || attemptListings.length > 0) && attemptScore > fallbackScore) {
+      fallbackAttempt = attempt; fallbackPayload = payload; fallbackListings = attemptListings; fallbackScore = attemptScore;
+    }
+  }
+
+  if (!selectedAttempt && fallbackAttempt) {
+    selectedAttempt = fallbackAttempt;
+    selectedPayload = fallbackPayload;
+    listings = fallbackListings;
   }
 
   await recordUsageEvent({ supabase: admin, companyId: discoveryAllowance.summary.company.companyId, userId: user.id, kind: "auto_dev_discovery", subjectKey, metadata: { callsMade, attemptResults } });
   const byState = listings.reduce((acc: Record<string, number>, listing) => { const state = String(listing.state || "Unknown"); acc[state] = (acc[state] || 0) + 1; return acc; }, {});
   const total = selectedPayload && typeof selectedPayload.total === "number" ? selectedPayload.total : listings.length;
   await recordApiUsageEvent({ companyId: discoveryAllowance.summary.company.companyId, userId: user.id, provider: "auto_dev", endpoint: "/listings", vehicleYear: year, vehicleMake: make, vehicleModel: selectedAttempt?.model || model, apiCallsMade: callsMade, status: 200, stopReason: listings.length ? "Auto.dev national discovery found inventory." : "Auto.dev national discovery exhausted exact and normalized vehicle identities.", metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, returned: listings.length, total, attemptResults } });
-  return NextResponse.json({ source: "auto.dev", role: "discovery-only", query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, 3), listings });
+  return NextResponse.json({ source: "auto.dev", role: "discovery-only", query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 3), listings });
 }
