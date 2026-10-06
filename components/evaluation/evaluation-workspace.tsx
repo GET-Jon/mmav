@@ -940,6 +940,8 @@ export function EvaluationWorkspace({
 
   const marketCheckInFlightRef = useRef(false);
   const vehicleIdentityRequestVinRef = useRef("");
+  const vehicleIdentityProfilePromiseRef =
+    useRef<Promise<VehicleIdentityProfile> | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
@@ -1899,6 +1901,17 @@ export function EvaluationWorkspace({
     }
   }
 
+  function startVehicleIdentityProfileEnrichment(decoded: VinDecodeResult) {
+    const promise = enrichVehicleIdentityProfile(decoded);
+    vehicleIdentityProfilePromiseRef.current = promise;
+
+    void promise.then(() => {
+      if (vehicleIdentityProfilePromiseRef.current === promise) {
+        vehicleIdentityProfilePromiseRef.current = null;
+      }
+    });
+  }
+
   async function decodeVinFromBasics(
     vinOverride?: string,
   ): Promise<VinDecodeResult | null> {
@@ -1957,7 +1970,7 @@ export function EvaluationWorkspace({
       const decoded = data as VinDecodeResult;
 
       handleDecodedVinAndReset(decoded);
-      void enrichVehicleIdentityProfile(decoded);
+      startVehicleIdentityProfileEnrichment(decoded);
 
       window.setTimeout(() => {
         mileageInputRef.current?.focus();
@@ -2395,11 +2408,26 @@ export function EvaluationWorkspace({
       return;
     }
 
+    marketCheckInFlightRef.current = true;
+
+    let activeVehicleIdentityProfile = vehicleIdentityProfile;
+    if (!vehicleOverride && vehicleIdentityProfilePromiseRef.current) {
+      setMarketCheckStatus("Finishing the vehicle identity profile…");
+      activeVehicleIdentityProfile =
+        await vehicleIdentityProfilePromiseRef.current;
+    }
+
     const year = vehicleOverride?.year || vehicleYear;
-    const make = vehicleOverride?.make || vehicleMake;
-    const model = vehicleOverride?.model || vehicleModel;
+    const make =
+      vehicleOverride?.make ||
+      activeVehicleIdentityProfile?.make ||
+      vehicleMake;
+    const profileModel = String(
+      activeVehicleIdentityProfile?.modelFamily || "",
+    ).trim();
+    const model = vehicleOverride?.model || profileModel || vehicleModel;
     const profileVariant = String(
-      vehicleIdentityProfile?.variant || "",
+      activeVehicleIdentityProfile?.variant || "",
     ).trim();
     const trim =
       vehicleOverride &&
@@ -2407,7 +2435,10 @@ export function EvaluationWorkspace({
         ? String(vehicleOverride.trim || "")
         : profileVariant || vehicleTrim;
     const fuelType =
-      vehicleOverride?.fuelType || decodedVehicle?.fuelType || null;
+      vehicleOverride?.fuelType ||
+      activeVehicleIdentityProfile?.fuelType ||
+      decodedVehicle?.fuelType ||
+      null;
     const candidateVin = String(decodedVehicle?.vin || vin || "")
       .trim()
       .toUpperCase();
@@ -2424,8 +2455,6 @@ export function EvaluationWorkspace({
       marketCheckInFlightRef.current = false;
       return;
     }
-
-    marketCheckInFlightRef.current = true;
 
     // Initial searches replace the prior vehicle's MarketCheck state.
     // Expansion searches preserve existing comps and merge new geography.
@@ -2460,21 +2489,25 @@ export function EvaluationWorkspace({
           vin: marketCheckVin,
           fuelType,
           preferredModelAliases:
-            vehicleIdentityProfile?.providerAliases || [],
-          qualificationYear: vehicleYear,
-          qualificationMake: vehicleMake,
-          qualificationModel: vehicleModel,
-          qualificationTrim: profileVariant || vehicleTrim,
+            activeVehicleIdentityProfile?.providerAliases || [],
+          qualificationYear:
+            activeVehicleIdentityProfile?.year || vehicleYear,
+          qualificationMake:
+            activeVehicleIdentityProfile?.make || vehicleMake,
+          qualificationModel:
+            activeVehicleIdentityProfile?.modelFamily || vehicleModel,
+          qualificationTrim:
+            activeVehicleIdentityProfile?.variant || vehicleTrim,
           qualificationFuelType:
-            vehicleIdentityProfile?.fuelType ||
+            activeVehicleIdentityProfile?.fuelType ||
             decodedVehicle?.fuelType ||
             null,
           qualificationDrivetrain:
-            vehicleIdentityProfile?.drivetrain ||
+            activeVehicleIdentityProfile?.drivetrain ||
             decodedVehicle?.driveType ||
             null,
           qualificationBodyType:
-            vehicleIdentityProfile?.bodyClass ||
+            activeVehicleIdentityProfile?.bodyClass ||
             decodedVehicle?.bodyClass ||
             null,
           targetMileage,
