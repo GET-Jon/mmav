@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 import {
   checkUsageAllowance,
+  evaluationUsageSubject,
   recordUsageEvent,
-  vehicleUsageSubject,
 } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       make?: unknown;
       model?: unknown;
       trim?: unknown;
+      evaluationUsageId?: unknown;
       hasUsableValuation?: boolean;
       valuationCompCount?: number;
     };
