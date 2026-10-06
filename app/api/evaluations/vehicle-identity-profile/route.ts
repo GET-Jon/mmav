@@ -17,6 +17,7 @@ import {
   canonicalFuelType,
   canonicalModelFamily,
   normalizeVehicleText,
+  resolveSemanticFuelType,
 } from "@/lib/marketcheck/vehicle-identity";
 import {
   evaluateVehicleEquivalence,
@@ -222,10 +223,13 @@ function mergeAiProfile(
   });
 
   const fuelType =
-    mergeCanonicalField(
-      baseline.fuelType || null,
-      requestedFuelType || null,
-    ) || "";
+    resolveSemanticFuelType({
+      make: decoded.make || baseline.make,
+      model: decoded.model || modelFamily,
+      trim: decoded.trim || variant,
+      fuelType: baseline.fuelType,
+      aiFuelType: requestedFuelType,
+    }) || "";
   const drivetrain = mergeCanonicalField(
     baseline.drivetrain,
     requestedDrivetrain,
@@ -271,6 +275,9 @@ function mergeAiProfile(
         ...aiNotes,
         modelFamily !== baseline.modelFamily
           ? `AI normalized the decoder model “${baseline.modelFamily}” to the comp-search identity “${modelFamily}”.`
+          : null,
+        fuelType !== baseline.fuelType && fuelType
+          ? `Semantic identity corrected fuel type from “${baseline.fuelType || "unknown"}” to “${fuelType}” using corroborating vehicle-name evidence.`
           : null,
         "AI-normalized identity feeds retrieval and target classification; deterministic vehicle-equivalence rules still prevent materially different vehicles from becoming valuation comps.",
       ].filter((value): value is string => Boolean(value)),
