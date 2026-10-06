@@ -296,23 +296,28 @@ async function decodeCandidateVinIdentity(
 }
 
 function compNeedsVinIdentityVerification(comp: RankedComp) {
-  if (comp.equivalenceTier !== "supporting") return false;
-
   const classification = String(comp.candidateClassification || "").toLowerCase();
   const reasons = (comp.equivalenceReasons || []).join(" ").toLowerCase();
 
-  return (
-    comp.needsClassificationReview === true ||
-    classification.includes("unknown") ||
-    reasons.includes("unknown") ||
-    reasons.includes("incomplete")
-  );
+  if (comp.equivalenceTier === "supporting") {
+    return (
+      comp.needsClassificationReview === true ||
+      classification.includes("unknown") ||
+      reasons.includes("unknown") ||
+      reasons.includes("incomplete")
+    );
+  }
+
+  // A provider fuel label can be wrong even when the listing VIN is valid.
+  // Give high-quality same-family candidates one VIN-backed chance to prove
+  // themselves before a fuel mismatch becomes a hard reject.
+  return comp.equivalenceTier === "reject" && reasons.includes("fuel mismatch");
 }
 
 async function enrichAmbiguousCompsByVin({
   payload,
   target,
-  maxCandidates = 6,
+  maxCandidates = 8,
 }: {
   payload: Record<string, unknown>;
   target: TargetIdentity;
