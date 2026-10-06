@@ -772,6 +772,8 @@ function mapListingToComp({
             listing.last_seen_at ||
             "",
         ) || null,
+      retrievalAttempt:
+        String(listing.__searchAttemptName || "") || null,
 
       // Preserve the complete MarketCheck object for the raw-data section
       // of the internal details modal.
@@ -1584,6 +1586,7 @@ export async function POST(request: Request) {
             ...listing,
             __searchZip: search.zip,
             __searchRegion: region?.market || "",
+            __searchAttemptName: search.attemptName,
           }));
         },
       );
