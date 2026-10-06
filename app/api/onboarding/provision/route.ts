@@ -169,6 +169,7 @@ export async function POST(request: Request) {
         name: String(existingCompany.name || "Company"),
       },
       mode: isRetryOfPublicSignup ? "resumed" : "existing",
+      profile,
     });
   }
 
@@ -234,5 +235,6 @@ export async function POST(request: Request) {
       name: String(company.name),
     },
     mode: "created",
+    profile,
   });
 }
