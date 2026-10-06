@@ -521,6 +521,7 @@ export function canonicalIdentitySnapshot(vehicle: VehicleIdentity) {
   return {
     make: canonicalVehicleMake(vehicle.make),
     modelFamily: canonicalModelFamily(vehicle),
+    variant: canonicalVehicleVariant(vehicle),
     bodyClass: canonicalBodyClass(vehicle),
     drivetrain: canonicalDrivetrain(vehicle.drivetrain),
     tractionClass: canonicalTractionClass(vehicle.drivetrain),
