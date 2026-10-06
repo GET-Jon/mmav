@@ -296,10 +296,12 @@ export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
   const normalizedFamily = normalizeVehicleText(modelFamily);
   const normalizedModel = normalizeVehicleText(vehicle.model);
 
-  const rawCleanedTrim = stripDrivetrainBranding(vehicle.trim);
-  const cleanedTrim = isLikelyVariantEnumeration(vehicle)
-    ? ""
-    : rawCleanedTrim;
+  const ambiguousTrim = isLikelyVariantEnumeration(vehicle);
+  if (ambiguousTrim) {
+    return "";
+  }
+
+  const cleanedTrim = stripDrivetrainBranding(vehicle.trim);
   const normalizedTrim = normalizeVehicleText(cleanedTrim);
 
   // Prefer a substantive trim/derivative once drivetrain branding is removed.
