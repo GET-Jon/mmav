@@ -369,6 +369,71 @@ export function canonicalFuelType(value: unknown) {
   return text;
 }
 
+export function resolveSemanticFuelType({
+  make,
+  model,
+  trim,
+  fuelType,
+  aiFuelType,
+}: {
+  make?: unknown;
+  model?: unknown;
+  trim?: unknown;
+  fuelType?: unknown;
+  aiFuelType?: unknown;
+}) {
+  const baseline = canonicalFuelType(fuelType);
+  const ai = canonicalFuelType(aiFuelType);
+  const text = normalizeVehicleText([make, model, trim].filter(Boolean).join(" "));
+
+  // Named derivatives can be more authoritative than a provider's coarse fuel
+  // label. This is intentionally evidence-based rather than a free-form AI
+  // override: the vehicle name itself must corroborate the corrected fuel type.
+  if (
+    text.includes("plug in hybrid") ||
+    text.includes("phev") ||
+    (canonicalVehicleMake(make) === "toyota" &&
+      canonicalModelFamily({
+        year: 0,
+        make: String(make || ""),
+        model: String(model || ""),
+        trim: String(trim || ""),
+      }) === "rav4" &&
+      text.includes("prime"))
+  ) {
+    return "plug-in hybrid";
+  }
+
+  if (text.includes("hybrid") && !text.includes("plug in hybrid")) {
+    return "hybrid";
+  }
+
+  if (text.includes("diesel") || text.includes("tdi")) {
+    return "diesel";
+  }
+
+  if (ai && ai !== baseline) {
+    const aiIsCorroborated =
+      (ai === "plug-in hybrid" &&
+        (text.includes("prime") ||
+          text.includes("phev") ||
+          text.includes("plug in hybrid"))) ||
+      (ai === "hybrid" && text.includes("hybrid")) ||
+      (ai === "diesel" && (text.includes("diesel") || text.includes("tdi"))) ||
+      (ai === "electric" &&
+        (text.includes("electric") ||
+          text.includes(" ev ") ||
+          text.endsWith(" ev") ||
+          text.includes(" battery ")));
+
+    if (aiIsCorroborated) {
+      return ai;
+    }
+  }
+
+  return ai && !baseline ? ai : baseline || ai;
+}
+
 export function canonicalTransmission(value: unknown) {
   const text = normalizeVehicleText(value);
   if (!text) return null;
