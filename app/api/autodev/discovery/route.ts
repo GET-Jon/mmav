@@ -4,10 +4,16 @@ import { checkUsageAllowance, recordUsageEvent, vehicleUsageSubject } from "@/li
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 import { findGenerationCompRule } from "@/lib/marketcheck/generation-comps";
+import {
+  evaluateVehicleEquivalence,
+  type VehicleIdentity,
+  type VehicleEquivalenceTier,
+} from "@/lib/marketcheck/vehicle-equivalence";
+import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 
 export const dynamic = "force-dynamic";
 
-type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null };
+type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
 type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number };
 
 function toNumber(value: unknown): number | null { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
@@ -20,7 +26,7 @@ function buildDiscoveryModels(
   trim: string,
   providerAliases: string[] = [],
 ) {
-  const models = [model, ...providerAliases];
+  const models = [...providerAliases, model];
   const normalizedMake = normalizeText(make);
   const normalizedModel = normalizeText(model);
   const normalizedTrim = normalizeText(trim);
@@ -34,7 +40,7 @@ function buildDiscoveryModels(
     const withoutClass = model.replace(/[-\s]*class\b/gi, "").replace(/\s+/g, " ").trim();
     if (withoutClass && withoutClass !== model) models.push(withoutClass);
   }
-  return uniqueStrings(models);
+  return uniqueStrings(models).slice(0, 4);
 }
 
 function haversineMiles(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
@@ -46,20 +52,80 @@ function haversineMiles(a: { latitude: number; longitude: number }, b: { latitud
   return 2 * earthRadiusMiles * Math.asin(Math.sqrt(h));
 }
 
-function buildRecommendedMarkets(listings: AutoDevListing[], maxMarkets = 3) {
-  const candidates = listings.filter((listing): listing is AutoDevListing & { zip: string; latitude: number; longitude: number } => Boolean(listing.zip) && typeof listing.latitude === "number" && typeof listing.longitude === "number");
+function discoveryTierWeight(tier: VehicleEquivalenceTier) {
+  if (tier === "direct") return 6;
+  if (tier === "near") return 4;
+  if (tier === "supporting") return 1;
+  return 0;
+}
+
+function buildRecommendedMarkets(
+  listings: AutoDevListing[],
+  target: VehicleIdentity,
+  maxMarkets = 3,
+) {
+  const candidates = listings
+    .map((listing) => {
+      const candidate: VehicleIdentity = {
+        year: Number(listing.year || 0),
+        make: listing.make || target.make,
+        model: listing.model || target.model,
+        trim: listing.trim || "",
+        drivetrain: listing.drivetrain || "",
+        fuelType: resolveSemanticFuelType({
+          make: listing.make || target.make,
+          model: listing.model || target.model,
+          trim: listing.trim || "",
+          fuelType: listing.fuelType || "",
+        }),
+        bodyType: listing.bodyType || "",
+      };
+      const equivalence = evaluateVehicleEquivalence({ target, candidate });
+      return { ...listing, equivalenceTier: equivalence.tier };
+    })
+    .filter(
+      (
+        listing,
+      ): listing is AutoDevListing & {
+        zip: string;
+        latitude: number;
+        longitude: number;
+        equivalenceTier: VehicleEquivalenceTier;
+      } =>
+        listing.equivalenceTier !== "reject" &&
+        Boolean(listing.zip) &&
+        typeof listing.latitude === "number" &&
+        typeof listing.longitude === "number",
+    );
   const remaining = new Set(candidates.map((_, index) => index));
   const recommendations: Array<{ market: string; zip: string; latitude: number; longitude: number; coverageCount: number; states: string[]; vins: string[] }> = [];
   while (remaining.size && recommendations.length < maxMarkets) {
-    let bestCenterIndex: number | null = null; let bestCovered: number[] = [];
+    let bestCenterIndex: number | null = null; let bestCovered: number[] = []; let bestScore = -1;
     for (const centerIndex of remaining) {
       const center = candidates[centerIndex];
       const covered = Array.from(remaining).filter((candidateIndex) => { const candidate = candidates[candidateIndex]; return haversineMiles({ latitude: center.latitude, longitude: center.longitude }, { latitude: candidate.latitude, longitude: candidate.longitude }) <= 100; });
-      if (covered.length > bestCovered.length) { bestCenterIndex = centerIndex; bestCovered = covered; }
+      const score = covered.reduce(
+        (sum, candidateIndex) =>
+          sum + discoveryTierWeight(candidates[candidateIndex].equivalenceTier),
+        0,
+      );
+      if (score > bestScore || (score === bestScore && covered.length > bestCovered.length)) { bestCenterIndex = centerIndex; bestCovered = covered; bestScore = score; }
     }
     if (bestCenterIndex === null) break;
     const center = candidates[bestCenterIndex]; const coveredListings = bestCovered.map((index) => candidates[index]);
-    recommendations.push({ market: [center.city, center.state].filter(Boolean).join(", ") || center.zip, zip: center.zip, latitude: center.latitude, longitude: center.longitude, coverageCount: coveredListings.length, states: Array.from(new Set(coveredListings.map((listing) => String(listing.state || "").trim()).filter(Boolean))), vins: coveredListings.map((listing) => String(listing.vin || "").trim()).filter(Boolean) });
+    recommendations.push({
+      market: [center.city, center.state].filter(Boolean).join(", ") || center.zip,
+      zip: center.zip,
+      latitude: center.latitude,
+      longitude: center.longitude,
+      coverageCount: coveredListings.length,
+      directCount: coveredListings.filter((listing) => listing.equivalenceTier === "direct").length,
+      nearCount: coveredListings.filter((listing) => listing.equivalenceTier === "near").length,
+      supportingCount: coveredListings.filter((listing) => listing.equivalenceTier === "supporting").length,
+      qualityWeight: bestScore,
+      states: Array.from(new Set(coveredListings.map((listing) => String(listing.state || "").trim()).filter(Boolean))),
+      vins: coveredListings.map((listing) => String(listing.vin || "").trim()).filter(Boolean),
+    });
     bestCovered.forEach((index) => remaining.delete(index));
   }
   return recommendations;
@@ -67,7 +133,7 @@ function buildRecommendedMarkets(listings: AutoDevListing[], maxMarkets = 3) {
 
 function mapListings(payload: any): AutoDevListing[] {
   const rows = Array.isArray(payload?.data) ? payload.data : [];
-  return rows.map((row: any) => { const vehicle = row?.vehicle || {}; const retail = row?.retailListing || {}; const location = Array.isArray(row?.location) ? row.location : []; return { vin: String(vehicle.vin || row?.vin || "").trim() || null, year: toNumber(vehicle.year), make: String(vehicle.make || "").trim() || null, model: String(vehicle.model || "").trim() || null, trim: String(vehicle.trim || "").trim() || null, drivetrain: String(vehicle.drivetrain || "").trim() || null, price: toNumber(retail.price), miles: toNumber(retail.miles ?? retail.mileage), dealer: String(retail.dealer || "").trim() || null, city: String(retail.city || "").trim() || null, state: String(retail.state || "").trim() || null, zip: String(retail.zip || "").trim() || null, url: String(retail.vdp || "").trim() || null, longitude: toNumber(location[0]), latitude: toNumber(location[1]) }; });
+  return rows.map((row: any) => { const vehicle = row?.vehicle || {}; const retail = row?.retailListing || {}; const location = Array.isArray(row?.location) ? row.location : []; return { vin: String(vehicle.vin || row?.vin || "").trim() || null, year: toNumber(vehicle.year), make: String(vehicle.make || "").trim() || null, model: String(vehicle.model || "").trim() || null, trim: String(vehicle.trim || "").trim() || null, drivetrain: String(vehicle.drivetrain || "").trim() || null, fuelType: String(vehicle.fuelType || vehicle.fuel || vehicle.powertrain || "").trim() || null, bodyType: String(vehicle.bodyType || vehicle.bodyStyle || "").trim() || null, price: toNumber(retail.price), miles: toNumber(retail.miles ?? retail.mileage), dealer: String(retail.dealer || "").trim() || null, city: String(retail.city || "").trim() || null, state: String(retail.state || "").trim() || null, zip: String(retail.zip || "").trim() || null, url: String(retail.vdp || "").trim() || null, longitude: toNumber(location[0]), latitude: toNumber(location[1]) }; });
 }
 
 export async function POST(request: Request) {
