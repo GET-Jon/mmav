@@ -170,8 +170,12 @@ function fuelTypesMatch({
 
   const listingFuelType = getListingFuelType(listing);
 
+  // Missing provider fuel data is unresolved, not a contradiction. Keep the
+  // listing in the candidate pool so the outer qualification layer can verify
+  // its listing VIN before deciding whether it is a valid comp. Only an
+  // explicit conflicting fuel type is rejected here.
   if (!listingFuelType) {
-    return false;
+    return true;
   }
 
   return listingFuelType === normalizedTargetFuelType;
@@ -240,7 +244,7 @@ function makeStableSearchKey({
       .filter(Boolean)
       .sort(),
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v21-rav4-semantic-powertrain",
+    cacheVersion: "progressive-regions-v22-vin-identity-verification",
   });
 }
 
