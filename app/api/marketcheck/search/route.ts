@@ -15,7 +15,10 @@ import {
   evaluateVehicleEquivalence,
   type VehicleIdentity,
 } from "@/lib/marketcheck/vehicle-equivalence";
-import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
+import {
+  isLikelyVariantEnumeration,
+  resolveSemanticFuelType,
+} from "@/lib/marketcheck/vehicle-identity";
 
 function normalizeIdentity(value: unknown) {
   return String(value || "")
@@ -237,6 +240,154 @@ function buildCandidateVehicle(
           0,
       ) || null,
   };
+}
+
+type TargetIdentityResolution = {
+  source: "marketcheck-vin-match-consensus";
+  originalTrim: string;
+  resolvedTrim: string | null;
+  resolvedDoors: number | null;
+  trimEvidenceCount: number;
+  trimAgreement: number;
+  doorEvidenceCount: number;
+  note: string;
+};
+
+function candidateDoorCount(comp: RankedComp) {
+  const details = comp.marketCheckDetails || {};
+  const explicit = Number(details.doors || 0);
+  if (explicit === 2 || explicit === 4) return explicit;
+
+  const text = normalizeIdentity(
+    [comp.model, comp.trim, details.heading].filter(Boolean).join(" "),
+  );
+  if (/\b2 door\b/.test(text)) return 2;
+  if (/\b4 door\b/.test(text)) return 4;
+  return null;
+}
+
+function resolveTargetIdentityFromVinMatch({
+  payload,
+  target,
+}: {
+  payload: Record<string, unknown>;
+  target: TargetIdentity;
+}) {
+  if (!Array.isArray(payload.comps)) {
+    return { target, resolution: null as TargetIdentityResolution | null };
+  }
+
+  const nativeMatches = (payload.comps as RankedComp[]).filter((comp) => {
+    const attempt = String(comp.marketCheckDetails?.retrievalAttempt || "");
+    return (
+      attempt.startsWith("vin-match-year-make-model-trim") &&
+      Number(comp.year || 0) === target.year
+    );
+  });
+
+  if (!nativeMatches.length) {
+    return { target, resolution: null as TargetIdentityResolution | null };
+  }
+
+  let resolvedTrim: string | null = null;
+  let trimEvidenceCount = 0;
+  let trimAgreement = 0;
+
+  const targetTrimNeedsResolution =
+    !normalizeIdentity(target.trim) ||
+    isLikelyVariantEnumeration({
+      make: target.make,
+      model: target.model,
+      trim: target.trim,
+    });
+
+  if (targetTrimNeedsResolution) {
+    const trimGroups = new Map<
+      string,
+      { display: string; count: number }
+    >();
+
+    for (const comp of nativeMatches) {
+      const display = String(comp.trim || "").trim();
+      const key = normalizeIdentity(display);
+      if (
+        !key ||
+        isLikelyVariantEnumeration({
+          make: target.make,
+          model: target.model,
+          trim: display,
+        })
+      ) {
+        continue;
+      }
+
+      const current = trimGroups.get(key) || { display, count: 0 };
+      current.count += 1;
+      trimGroups.set(key, current);
+      trimEvidenceCount += 1;
+    }
+
+    const winner = Array.from(trimGroups.values()).sort(
+      (a, b) => b.count - a.count,
+    )[0];
+
+    if (winner && trimEvidenceCount >= 2) {
+      trimAgreement = winner.count / trimEvidenceCount;
+      if (winner.count >= 2 && trimAgreement >= 0.75) {
+        resolvedTrim = winner.display;
+      }
+    }
+  }
+
+  let resolvedDoors: number | null = null;
+  let doorEvidenceCount = 0;
+
+  if (!target.doors) {
+    const doorCounts = new Map<number, number>();
+    for (const comp of nativeMatches) {
+      const doors = candidateDoorCount(comp);
+      if (doors !== 2 && doors !== 4) continue;
+      doorCounts.set(doors, (doorCounts.get(doors) || 0) + 1);
+      doorEvidenceCount += 1;
+    }
+
+    const doorWinner = Array.from(doorCounts.entries()).sort(
+      (a, b) => b[1] - a[1],
+    )[0];
+
+    if (
+      doorWinner &&
+      doorEvidenceCount >= 2 &&
+      doorWinner[1] >= 2 &&
+      doorWinner[1] / doorEvidenceCount >= 0.75
+    ) {
+      resolvedDoors = doorWinner[0];
+    }
+  }
+
+  if (!resolvedTrim && !resolvedDoors) {
+    return { target, resolution: null as TargetIdentityResolution | null };
+  }
+
+  const effectiveTarget = {
+    ...target,
+    trim: resolvedTrim || target.trim,
+    doors: resolvedDoors || target.doors || null,
+  };
+
+  const resolution: TargetIdentityResolution = {
+    source: "marketcheck-vin-match-consensus",
+    originalTrim: target.trim,
+    resolvedTrim,
+    resolvedDoors,
+    trimEvidenceCount,
+    trimAgreement,
+    doorEvidenceCount,
+    note:
+      "Lot Logic used strong agreement among MarketCheck's native VIN-match results to resolve ambiguous target identity before final comp qualification.",
+  };
+
+  return { target: effectiveTarget, resolution };
 }
 
 type CandidateVinIdentity = {
@@ -864,14 +1015,23 @@ export async function POST(request: Request) {
       ) || null,
   };
 
-  const identityEnrichment = await enrichAmbiguousCompsByVin({
+  const targetResolution = resolveTargetIdentityFromVinMatch({
     payload,
     target: targetIdentity,
   });
-  const rankedPayload = rerankByCompFit(
-    identityEnrichment.payload,
-    targetIdentity,
-  );
+  const effectiveTargetIdentity = targetResolution.target;
+
+  const identityEnrichment = await enrichAmbiguousCompsByVin({
+    payload,
+    target: effectiveTargetIdentity,
+  });
+  const rankedPayload = {
+    ...rerankByCompFit(
+      identityEnrichment.payload,
+      effectiveTargetIdentity,
+    ),
+    targetIdentityResolution: targetResolution.resolution,
+  };
 
   const rankedRecord = asRecord(rankedPayload);
   const usage = asRecord(rankedRecord.apiUsage);
@@ -915,6 +1075,7 @@ export async function POST(request: Request) {
       usableCompCount: rankedRecord.usableCompCount ?? null,
       candidateVinVerificationAttempted: identityEnrichment.attempted,
       candidateVinVerificationVerified: identityEnrichment.verified,
+      targetIdentityResolution: targetResolution.resolution,
       searchStage: String(normalizedBody.searchStage || "initial"),
       searchLog: usage.searchLog || null,
     },
@@ -939,6 +1100,7 @@ export async function POST(request: Request) {
       usableCompCount: rankedRecord.usableCompCount ?? null,
       candidateVinVerificationAttempted: identityEnrichment.attempted,
       candidateVinVerificationVerified: identityEnrichment.verified,
+      targetIdentityResolution: targetResolution.resolution,
       autoIncludedCount: equivalence.autoIncludedCount ?? null,
       directCount: equivalence.directCount ?? null,
       nearCount: equivalence.nearCount ?? null,
