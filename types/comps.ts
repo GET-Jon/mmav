@@ -50,6 +50,16 @@ export type MarketComp = {
     targetFuelType?: string | null;
     targetMileage?: number | null;
     listingConfidence?: "Low" | "Medium" | "High";
+    identityVerification?: {
+      source: "marketcheck" | "nhtsa-vin";
+      status: "verified" | "partial" | "unavailable";
+      model?: string | null;
+      trim?: string | null;
+      fuelType?: string | null;
+      drivetrain?: string | null;
+      bodyType?: string | null;
+      note?: string | null;
+    };
     compFitFactors?: {
       yearDelta?: number | null;
       yearPreference?: string | null;
