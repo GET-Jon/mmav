@@ -117,16 +117,20 @@ function modelCandidateIsSafe(
   const normalizedBaseline = normalizeVehicleText(baseline.modelFamily);
   if (!normalizedCandidate) return false;
 
-  const candidateCompact = normalizedCandidate.replace(/\s+/g, "");
-  const baselineCompact = normalizedBaseline.replace(/\s+/g, "");
+  if (normalizedCandidate === normalizedBaseline) {
+    return true;
+  }
 
-  // Decoder annotations often add a redundant descriptor to the same provider
-  // model (for example "RAV4 Prime (PHEV)" vs "RAV4 Prime").
+  // Parenthetical VIN-decoder annotations are safe to remove when the remaining
+  // model name is unchanged. This handles cases such as
+  // "RAV4 Prime (PHEV)" -> "RAV4 Prime" without allowing the AI to collapse
+  // "RAV4 Prime" all the way to ordinary "RAV4".
+  const decodedWithoutAnnotations = normalizeVehicleText(
+    String(decoded.model || "").replace(/\([^)]*\)/g, " "),
+  );
   if (
-    candidateCompact &&
-    baselineCompact &&
-    (candidateCompact.includes(baselineCompact) ||
-      baselineCompact.includes(candidateCompact))
+    decodedWithoutAnnotations &&
+    normalizedCandidate === decodedWithoutAnnotations
   ) {
     return true;
   }
