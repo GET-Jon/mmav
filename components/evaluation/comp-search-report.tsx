@@ -78,6 +78,8 @@ export function CompSearchReport({
   recommendation,
   improving,
   activityStatus,
+  errorCode,
+  errorMessage,
   onImprove,
 }: {
   vehicleLabel: string;
@@ -92,6 +94,8 @@ export function CompSearchReport({
   recommendation: CompSearchRecommendation;
   improving: boolean;
   activityStatus?: string;
+  errorCode?: string;
+  errorMessage?: string;
   onImprove: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -108,18 +112,26 @@ export function CompSearchReport({
   );
   const rejectionCounts = filterDiagnostics?.rejectionCounts || {};
 
-  const headline =
-    usableListings > 0 ? "Market evidence found" : "No reliable comps yet";
+  const searchWasBlocked = Boolean(errorMessage);
+  const headline = searchWasBlocked
+    ? errorCode === "PER_EVALUATION_USAGE_LIMIT"
+      ? "Search allowance reached"
+      : "Market search couldn't run"
+    : usableListings > 0
+      ? "Market evidence found"
+      : "No reliable comps yet";
 
-  const summary =
-    usableListings > 0
+  const summary = searchWasBlocked
+    ? errorMessage || "The market search did not run."
+    : usableListings > 0
       ? `${regionsChecked.length} market${regionsChecked.length === 1 ? "" : "s"} searched · ${candidateListings} listing${candidateListings === 1 ? "" : "s"} reviewed · ${usableListings} qualified`
       : candidateListings > 0
         ? `${regionsChecked.length} market${regionsChecked.length === 1 ? "" : "s"} searched · ${candidateListings} possible match${candidateListings === 1 ? "" : "es"} reviewed · 0 qualified`
         : `${regionsChecked.length} market${regionsChecked.length === 1 ? "" : "s"} searched · no reliable matches found yet`;
 
-  const explanation =
-    usableListings > 0
+  const explanation = searchWasBlocked
+    ? "No MarketCheck geography was searched in this attempt, so this is not a no-comps result."
+    : usableListings > 0
       ? "Lot Logic found evidence that is strong enough to support the valuation."
       : Number(rejectionCounts.modelMismatch || 0) > 0
         ? "The matches we found were not close enough to the target vehicle to trust for valuation."
@@ -151,7 +163,7 @@ export function CompSearchReport({
           </button>
         </div>
 
-        {recommendation.action !== "complete" ? (
+        {!searchWasBlocked && recommendation.action !== "complete" ? (
           <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
             <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">
               Next: {actionLabel(recommendation.action)}
