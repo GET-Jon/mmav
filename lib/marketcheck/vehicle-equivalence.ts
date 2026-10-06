@@ -313,7 +313,7 @@ const broncoU725Rule: VehicleTaxonomyRule = {
   ],
   classify(vehicle) {
     const text = vehicleText(vehicle);
-    const trimMatches: Array<[string, string]> = [
+    const broncoTrimLabels: Array<[string, string]> = [
       ["heritage-limited", "heritage limited"],
       ["black-diamond", "black diamond"],
       ["outer-banks", "outer banks"],
@@ -324,7 +324,10 @@ const broncoU725Rule: VehicleTaxonomyRule = {
       ["heritage", "heritage"],
       ["raptor", "raptor"],
       ["base", "base"],
-    ].filter(([, label]) => phraseMatches(text, label));
+    ];
+    const trimMatches = broncoTrimLabels.filter(([, label]) =>
+      phraseMatches(text, label),
+    );
 
     // NHTSA/vPIC can return a Series field containing several possible Bronco
     // trims (for example "Base, Big Bend, Black Diamond, Outer Banks"). That is
