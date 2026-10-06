@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
-import { checkUsageAllowance, recordUsageEvent, vehicleUsageSubject } from "@/lib/billing/usage";
+import { checkUsageAllowance, evaluationUsageSubject, recordUsageEvent } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 import { findGenerationCompRule } from "@/lib/marketcheck/generation-comps";
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
   };
   const user = await getCurrentUser(); if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   if (!year || !make || !model) return NextResponse.json({ error: "Year, make, and model are required for national discovery." }, { status: 400 });
-  const admin = createSupabaseAdminClient(); const subjectKey = vehicleUsageSubject({ vin: body.vin, year, make, model, trim });
+  const admin = createSupabaseAdminClient(); const subjectKey = evaluationUsageSubject({ evaluationUsageId: body.evaluationUsageId, vin: body.vin, year, make, model, trim });
   const discoveryAllowance = await checkUsageAllowance({ supabase: admin, userId: user.id, kind: "auto_dev_discovery", subjectKey });
   if (!discoveryAllowance.allowed) return NextResponse.json({ error: discoveryAllowance.message, code: discoveryAllowance.code, usage: discoveryAllowance.summary }, { status: discoveryAllowance.status });
 
