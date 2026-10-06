@@ -2310,7 +2310,6 @@ export function EvaluationWorkspace({
           Accept: "application/json",
         },
         body: JSON.stringify({
-          evaluationUsageId,
           year,
           make,
           model,
@@ -2550,6 +2549,7 @@ export function EvaluationWorkspace({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          evaluationUsageId,
           year,
           make,
           model,
