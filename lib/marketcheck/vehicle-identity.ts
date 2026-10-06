@@ -151,6 +151,16 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
     return canonicalMercedesFamily(model, modelCompact) || model;
   }
 
+  if (make === "toyota") {
+    // MarketCheck commonly reports RAV4 Prime/PHEV listings under the base
+    // "RAV4" model and carries the electrified derivative in fuel/build data.
+    // Keep RAV4 as the family; the equivalence taxonomy below decides whether
+    // a listing is Prime/PHEV, Hybrid, gasoline, or unresolved.
+    if (startsWithAny(modelCompact, ["rav4prime", "rav4phev", "rav4hybrid", "rav4"])) {
+      return "rav4";
+    }
+  }
+
   if (make === "ford") {
     if (
       startsWithAny(modelCompact, [
