@@ -292,6 +292,94 @@ const rav4Xa50Rule: VehicleTaxonomyRule = {
     "Treats RAV4 as the model family and uses powertrain plus trim to distinguish Prime/PHEV, Hybrid, and gasoline listings when provider model naming collapses them.",
 };
 
+const broncoU725Rule: VehicleTaxonomyRule = {
+  id: "ford-bronco-u725-trim-body",
+  make: "Ford",
+  model: "Bronco",
+  yearStart: 2021,
+  yearEnd: 2026,
+  generation: "U725 / 6th gen",
+  families: [
+    { id: "base", labels: ["base"] },
+    { id: "big-bend", labels: ["big bend"] },
+    { id: "black-diamond", labels: ["black diamond"] },
+    { id: "outer-banks", labels: ["outer banks"] },
+    { id: "badlands", labels: ["badlands"] },
+    { id: "wildtrak", labels: ["wildtrak"] },
+    { id: "everglades", labels: ["everglades"] },
+    { id: "heritage", labels: ["heritage"] },
+    { id: "heritage-limited", labels: ["heritage limited"] },
+    { id: "raptor", labels: ["raptor"] },
+  ],
+  classify(vehicle) {
+    const text = vehicleText(vehicle);
+    const trimMatches: Array<[string, string]> = [
+      ["heritage-limited", "heritage limited"],
+      ["black-diamond", "black diamond"],
+      ["outer-banks", "outer banks"],
+      ["big-bend", "big bend"],
+      ["wildtrak", "wildtrak"],
+      ["everglades", "everglades"],
+      ["badlands", "badlands"],
+      ["heritage", "heritage"],
+      ["raptor", "raptor"],
+      ["base", "base"],
+    ].filter(([, label]) => phraseMatches(text, label));
+
+    // NHTSA/vPIC can return a Series field containing several possible Bronco
+    // trims (for example "Base, Big Bend, Black Diamond, Outer Banks"). That is
+    // not a real compound trim. Keep it unresolved until stronger evidence
+    // identifies the target variant.
+    const uniqueTrimIds = Array.from(new Set(trimMatches.map(([id]) => id)));
+    const trim = uniqueTrimIds.length === 1 ? uniqueTrimIds[0] : "unknown";
+
+    const modelText = normalize([vehicle.model, vehicle.configuration].filter(Boolean).join(" "));
+    const doors =
+      vehicle.doors === 2 || /\b2\s*door\b/.test(modelText)
+        ? "2-door"
+        : vehicle.doors === 4 || /\b4\s*door\b/.test(modelText)
+          ? "4-door"
+          : "unknown-door";
+
+    return `${trim}|${doors}`;
+  },
+  compare(targetFamily, candidateFamily) {
+    if (!targetFamily || !candidateFamily) return "supporting";
+
+    const [targetTrim = "unknown", targetDoors = "unknown-door"] =
+      targetFamily.split("|");
+    const [candidateTrim = "unknown", candidateDoors = "unknown-door"] =
+      candidateFamily.split("|");
+
+    if (targetTrim === "unknown" || candidateTrim === "unknown") {
+      return "supporting";
+    }
+
+    // Bronco Raptor occupies a materially different performance/value market.
+    if ((targetTrim === "raptor") !== (candidateTrim === "raptor")) {
+      return "reject";
+    }
+
+    // Different ordinary Bronco trims are useful context, but they should not
+    // be auto-treated as equal-value comps without a trim-value adjustment.
+    if (targetTrim !== candidateTrim) {
+      return "supporting";
+    }
+
+    if (
+      targetDoors !== "unknown-door" &&
+      candidateDoors !== "unknown-door" &&
+      targetDoors !== candidateDoors
+    ) {
+      return "supporting";
+    }
+
+    return "direct";
+  },
+  notes:
+    "Normalizes Bronco/Bronco 4-Door/Bronco 2-Door as one model family while preserving trim, door-count, and Raptor valuation differences.",
+};
+
 const wranglerTjRule: VehicleTaxonomyRule = {
   id: "jeep-wrangler-tj-lj",
   make: "Jeep",
@@ -334,6 +422,7 @@ const wranglerTjRule: VehicleTaxonomyRule = {
 };
 
 export const vehicleTaxonomyRules: VehicleTaxonomyRule[] = [
+  broncoU725Rule,
   wranglerTjRule,
   rav4Xa50Rule,
 ];
@@ -559,6 +648,8 @@ export function evaluateVehicleEquivalence({
     tier === "supporting" &&
     (!normalize(target.trim) ||
       !normalize(candidate.trim) ||
+      String(targetClassification || "").includes("unknown") ||
+      String(candidateClassification || "").includes("unknown") ||
       reasons.some((reason) => reason.includes("incomplete")));
 
   const properties = tierProperties(tier);
