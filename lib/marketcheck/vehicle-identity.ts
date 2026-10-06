@@ -271,6 +271,14 @@ export function isLikelyVariantEnumeration({
   if (canonicalVehicleMake(make) === "ford" && family === "bronco") {
     const matches = BRONCO_MARKETING_TRIMS.filter((candidate) =>
       ` ${normalizedTrim} `.includes(` ${candidate} `),
+    ).filter(
+      (candidate, _index, allMatches) =>
+        !allMatches.some(
+          (other) =>
+            other !== candidate &&
+            other.length > candidate.length &&
+            other.includes(candidate),
+        ),
     );
     if (new Set(matches).size > 1) return true;
   }
