@@ -77,6 +77,29 @@ function isPaidStatus(status: string) {
   return status === "active" || status === "past_due" || status === "comped";
 }
 
+export function evaluationUsageSubject(input: {
+  evaluationUsageId?: unknown;
+  vin?: unknown;
+  year?: unknown;
+  make?: unknown;
+  model?: unknown;
+  trim?: unknown;
+}) {
+  const rawId = String(input.evaluationUsageId || "").trim();
+  const safeId = rawId.replace(/[^a-zA-Z0-9:_-]+/g, "").slice(0, 120);
+
+  if (safeId) {
+    return safeId.startsWith("evaluation:")
+      ? safeId
+      : `evaluation:${safeId}`;
+  }
+
+  // Backwards compatibility for older clients/saved evaluations. New evaluator
+  // sessions should always send evaluationUsageId so per-evaluation limits are
+  // never accidentally accumulated forever against one VIN.
+  return vehicleUsageSubject(input);
+}
+
 export function vehicleUsageSubject(input: {
   vin?: unknown;
   year?: unknown;
