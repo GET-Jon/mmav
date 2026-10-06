@@ -103,6 +103,17 @@ function tierTone(comp: MarketComp) {
   return "bg-red-100 text-red-800";
 }
 
+function tableRelationshipLabel(comp: MarketComp) {
+  if (
+    comp.equivalenceTier === "supporting" &&
+    String(comp.candidateClassification || "").toLowerCase().includes("unknown")
+  ) {
+    return "Powertrain unverified";
+  }
+
+  return tierLabel(comp);
+}
+
 function CompFitExplanation({
   comp,
   targetMileage,
@@ -304,7 +315,7 @@ export function MarketCompsTable({
             <span
               className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-black ${tierTone(row.original)}`}
             >
-              {tierLabel(row.original)}
+              {tableRelationshipLabel(row.original)}
             </span>
           </div>
         ),
@@ -604,6 +615,17 @@ export function MarketCompsTable({
                 <h3 className="text-sm font-black text-slate-950">Market and Lot Logic</h3>
                 <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <DetailItem label="Vehicle Relationship" value={tierLabel(selectedComp)} />
+                  <DetailItem
+                    label="Identity Verification"
+                    value={
+                      selectedComp.marketCheckDetails?.identityVerification?.source ===
+                      "nhtsa-vin"
+                        ? "Verified from listing VIN"
+                        : selectedComp.needsClassificationReview
+                          ? "Needs verification"
+                          : "Provider data"
+                    }
+                  />
                   <DetailItem label="Equivalence Reasons" value={selectedComp.equivalenceReasons} />
                   <DetailItem label="Target Classification" value={selectedComp.targetClassification} />
                   <DetailItem label="Candidate Classification" value={selectedComp.candidateClassification} />
