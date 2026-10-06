@@ -755,7 +755,7 @@ export async function POST(request: Request) {
   }
 
   const payload = (await response.json()) as Record<string, unknown>;
-  const rankedPayload = rerankByCompFit(payload, {
+  const targetIdentity: TargetIdentity = {
     year: Number(
       normalizedBody.qualificationYear ||
         normalizedBody.year ||
@@ -784,14 +784,33 @@ export async function POST(request: Request) {
         nestedVehicle.trim ||
         "",
     ).trim(),
-    fuelType: canonicalFuelIdentity(
-      normalizedBody.qualificationFuelType ||
+    fuelType: resolveSemanticFuelType({
+      make:
+        normalizedBody.qualificationMake ||
+        normalizedBody.make ||
+        decodedVehicle.make ||
+        nestedVehicle.make ||
+        "",
+      model:
+        normalizedBody.qualificationModel ||
+        normalizedBody.model ||
+        decodedVehicle.model ||
+        nestedVehicle.model ||
+        "",
+      trim:
+        normalizedBody.qualificationTrim ||
+        normalizedBody.trim ||
+        decodedVehicle.trim ||
+        nestedVehicle.trim ||
+        "",
+      fuelType:
+        normalizedBody.qualificationFuelType ||
         normalizedBody.fuelType ||
         normalizedBody.targetFuelType ||
         decodedVehicle.fuelType ||
         nestedVehicle.fuelType ||
         "",
-    ),
+    }),
     mileage: Number(
       normalizedBody.targetMileage ||
         normalizedBody.mileage ||
@@ -824,16 +843,30 @@ export async function POST(request: Request) {
         nestedVehicle.transmission ||
         "",
     ).trim(),
-    doors: Number(
-      normalizedBody.doors || decodedVehicle.doors || nestedVehicle.doors || 0,
-    ) || null,
-    cylinders: Number(
-      normalizedBody.cylinders ||
-        decodedVehicle.cylinders ||
-        nestedVehicle.cylinders ||
-        0,
-    ) || null,
+    doors:
+      Number(
+        normalizedBody.doors ||
+          decodedVehicle.doors ||
+          nestedVehicle.doors ||
+          0,
+      ) || null,
+    cylinders:
+      Number(
+        normalizedBody.cylinders ||
+          decodedVehicle.cylinders ||
+          nestedVehicle.cylinders ||
+          0,
+      ) || null,
+  };
+
+  const identityEnrichment = await enrichAmbiguousCompsByVin({
+    payload,
+    target: targetIdentity,
   });
+  const rankedPayload = rerankByCompFit(
+    identityEnrichment.payload,
+    targetIdentity,
+  );
 
   const rankedRecord = asRecord(rankedPayload);
   const usage = asRecord(rankedRecord.apiUsage);
@@ -875,6 +908,8 @@ export async function POST(request: Request) {
       durationMs: Date.now() - startedAt,
       candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
       usableCompCount: rankedRecord.usableCompCount ?? null,
+      candidateVinVerificationAttempted: identityEnrichment.attempted,
+      candidateVinVerificationVerified: identityEnrichment.verified,
       searchStage: String(normalizedBody.searchStage || "initial"),
       searchLog: usage.searchLog || null,
     },
@@ -897,6 +932,8 @@ export async function POST(request: Request) {
       targetMileage: normalizedBody.targetMileage || normalizedBody.mileage || decodedVehicle.mileage || nestedVehicle.mileage || null,
       candidateCompCount: usage.candidateCompCount ?? usage.usableCompCount ?? null,
       usableCompCount: rankedRecord.usableCompCount ?? null,
+      candidateVinVerificationAttempted: identityEnrichment.attempted,
+      candidateVinVerificationVerified: identityEnrichment.verified,
       autoIncludedCount: equivalence.autoIncludedCount ?? null,
       directCount: equivalence.directCount ?? null,
       nearCount: equivalence.nearCount ?? null,
