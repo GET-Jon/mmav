@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     const admin = createSupabaseAdminClient();
-    const subjectKey = vehicleUsageSubject(body);
+    const subjectKey = evaluationUsageSubject(body);
     const allowance = await checkUsageAllowance({
       supabase: admin,
       userId: user.id,
