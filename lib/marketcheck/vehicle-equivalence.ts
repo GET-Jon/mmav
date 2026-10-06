@@ -330,7 +330,18 @@ const broncoU725Rule: VehicleTaxonomyRule = {
     // trims (for example "Base, Big Bend, Black Diamond, Outer Banks"). That is
     // not a real compound trim. Keep it unresolved until stronger evidence
     // identifies the target variant.
-    const uniqueTrimIds = Array.from(new Set(trimMatches.map(([id]) => id)));
+    const filteredTrimMatches = trimMatches.filter(
+      ([, label], _index, allMatches) =>
+        !allMatches.some(
+          ([, otherLabel]) =>
+            otherLabel !== label &&
+            otherLabel.length > label.length &&
+            otherLabel.includes(label),
+        ),
+    );
+    const uniqueTrimIds = Array.from(
+      new Set(filteredTrimMatches.map(([id]) => id)),
+    );
     const trim = uniqueTrimIds.length === 1 ? uniqueTrimIds[0] : "unknown";
 
     const modelText = normalize([vehicle.model, vehicle.configuration].filter(Boolean).join(" "));
