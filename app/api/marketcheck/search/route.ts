@@ -1001,15 +1001,19 @@ export async function POST(request: Request) {
     ).trim(),
     doors:
       Number(
-        normalizedBody.doors ||
+        normalizedBody.qualificationDoors ||
+          normalizedBody.doors ||
           decodedVehicle.doors ||
           nestedVehicle.doors ||
           0,
       ) || null,
     cylinders:
       Number(
-        normalizedBody.cylinders ||
+        normalizedBody.qualificationCylinders ||
+          normalizedBody.cylinders ||
+          decodedVehicle.engineCylinders ||
           decodedVehicle.cylinders ||
+          nestedVehicle.engineCylinders ||
           nestedVehicle.cylinders ||
           0,
       ) || null,
