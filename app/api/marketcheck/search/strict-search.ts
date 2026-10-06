@@ -577,7 +577,14 @@ function mapListingToComp({
       listing,
     })
   ) {
-    return null;
+    const candidateVin = String(listing.vin || "").trim().toUpperCase();
+    // A conflicting provider fuel label can itself be taxonomy noise. If the
+    // listing has a real VIN, keep it long enough for the outer qualification
+    // layer to verify the vehicle directly. Without a VIN, preserve the hard
+    // rejection here.
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(candidateVin)) {
+      return null;
+    }
   }
 
   if (
