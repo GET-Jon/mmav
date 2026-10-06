@@ -727,6 +727,10 @@ export function EvaluationWorkspace({
   const [marketCheckLoading, setMarketCheckLoading] = useState(false);
   const [evaluationRunning, setEvaluationRunning] = useState(false);
   const [marketCheckStatus, setMarketCheckStatus] = useState("");
+  const [marketCheckError, setMarketCheckError] = useState<{
+    code: string;
+    message: string;
+  } | null>(null);
   const [autoDevDiscoveryLoading, setAutoDevDiscoveryLoading] = useState(false);
   const [autoDevDiscoveryStatus, setAutoDevDiscoveryStatus] = useState("");
   const [autoDevDiscovery, setAutoDevDiscovery] = useState<{
@@ -2042,6 +2046,7 @@ export function EvaluationWorkspace({
     setComps([]);
     setSelectedConditions([]);
     setMarketCheckStatus("");
+    setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
     setCompSearchHistory([]);
@@ -2089,6 +2094,7 @@ export function EvaluationWorkspace({
     setComps([]);
     setSelectedConditions([]);
     setMarketCheckStatus("");
+    setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
     setSavedEvaluationId(null);
@@ -2488,6 +2494,7 @@ export function EvaluationWorkspace({
     }
 
     setMarketCheckLoading(true);
+    setMarketCheckError(null);
     setMarketCheckStatus(
       "Searching MarketCheck comps...",
     );
@@ -2568,8 +2575,15 @@ export function EvaluationWorkspace({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "MarketCheck search failed.");
+        const message = data.error || "MarketCheck search failed.";
+        setMarketCheckError({
+          code: String(data.code || "MARKET_SEARCH_FAILED"),
+          message,
+        });
+        throw new Error(message);
       }
+
+      setMarketCheckError(null);
 
       if (!data.comps || data.comps.length === 0) {
         if (!options?.mergeResults) {
@@ -3679,6 +3693,7 @@ export function EvaluationWorkspace({
 
     setComps(initialComps);
     setMarketCheckStatus("");
+    setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
     setMarketCheckApiUsage(null);
     setMarketCheckLoading(false);
@@ -7303,6 +7318,8 @@ export function EvaluationWorkspace({
                     recommendation={compSearchRecommendation}
                     improving={compSearchImproving}
                     activityStatus={compSearchImprovementStatus}
+                    errorCode={marketCheckError?.code || ""}
+                    errorMessage={marketCheckError?.message || ""}
                     onImprove={() => void improveCompSearch()}
                   />
                 </div>
