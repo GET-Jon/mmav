@@ -240,7 +240,7 @@ function makeStableSearchKey({
       .filter(Boolean)
       .sort(),
     searchType: "used-active-comps",
-    cacheVersion: "progressive-regions-v19-identity-profile",
+    cacheVersion: "progressive-regions-v20-semantic-identity",
   });
 }
 
