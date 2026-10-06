@@ -2956,12 +2956,28 @@ export function EvaluationWorkspace({
         },
         body: JSON.stringify({
           year: Number(vehicleYear),
-          make: vehicleMake,
-          model: vehicleModel,
-          trim: vehicleTrim,
+          make: vehicleIdentityProfile?.make || vehicleMake,
+          model: vehicleIdentityProfile?.modelFamily || vehicleModel,
+          trim: vehicleIdentityProfile?.variant || vehicleTrim,
           vin: String(decodedVehicle?.vin || vin || "").trim().toUpperCase(),
-          providerAliases: vehicleIdentityProfile?.providerAliases || [],
-          bodyClass: vehicleBodyClass,
+          providerAliases: [
+            String(vehicleModel || "")
+              .replace(/\([^)]*\)/g, " ")
+              .replace(/\s+/g, " ")
+              .trim(),
+            ...(vehicleIdentityProfile?.providerAliases || []),
+          ].filter(Boolean),
+          fuelType:
+            vehicleIdentityProfile?.fuelType ||
+            decodedVehicle?.fuelType ||
+            "",
+          drivetrain:
+            vehicleIdentityProfile?.drivetrain ||
+            decodedVehicle?.driveType ||
+            "",
+          bodyClass:
+            vehicleIdentityProfile?.bodyClass ||
+            vehicleBodyClass,
         }),
       });
 
