@@ -584,6 +584,14 @@ function StaticField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function createEvaluationUsageId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `eval-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 type ThesisMode = "financial" | "enthusiast" | "balanced";
 type ConditionReviewStatus =
   | "unreviewed"
@@ -592,6 +600,7 @@ type ConditionReviewStatus =
   | "unknown";
 
 type SavedEvaluationPayload = {
+  evaluationUsageId?: string;
   vin?: string;
   auctionSite?: string;
   finalTargetOverride?: number | null;
@@ -675,6 +684,11 @@ export function EvaluationWorkspace({
 }) {
   const [evaluation, setEvaluation] = useState<ValuationInput>(
     initialSavedPayload?.evaluation || initialEvaluation,
+  );
+
+  const [evaluationUsageId, setEvaluationUsageId] = useState(
+    initialSavedPayload?.evaluationUsageId ||
+      (initialSavedEvaluationId ? `saved-${initialSavedEvaluationId}` : ""),
   );
 
   const [vin, setVin] = useState(
@@ -1201,6 +1215,13 @@ export function EvaluationWorkspace({
 
   useEffect(() => {
     if (initialSavedEvaluationId || initialSavedPayload) {
+      if (!evaluationUsageId) {
+        setEvaluationUsageId(
+          initialSavedEvaluationId
+            ? `saved-${initialSavedEvaluationId}`
+            : createEvaluationUsageId(),
+        );
+      }
       setDraftReady(true);
       return;
     }
@@ -1212,11 +1233,18 @@ export function EvaluationWorkspace({
           : null;
 
       if (!rawDraft) {
+        setEvaluationUsageId(createEvaluationUsageId());
         setDraftReady(true);
         return;
       }
 
       const draft = JSON.parse(rawDraft);
+
+      setEvaluationUsageId(
+        typeof draft.evaluationUsageId === "string" && draft.evaluationUsageId.trim()
+          ? draft.evaluationUsageId
+          : createEvaluationUsageId(),
+      );
 
       if (typeof draft.vin === "string") {
         setVin(draft.vin);
@@ -1362,6 +1390,7 @@ export function EvaluationWorkspace({
       window.localStorage.setItem(
         draftStorageKey,
         JSON.stringify({
+          evaluationUsageId,
           vin,
           auctionSite,
           finalTargetOverride,
@@ -1392,6 +1421,7 @@ export function EvaluationWorkspace({
       console.error("Failed to save local evaluator draft:", error);
     }
   }, [
+    evaluationUsageId,
     vin,
     auctionSite,
     finalTargetOverride,
@@ -1871,7 +1901,7 @@ export function EvaluationWorkspace({
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({ decodedVehicle: decoded }),
+        body: JSON.stringify({ decodedVehicle: decoded, evaluationUsageId }),
       });
       const data = await response.json();
 
@@ -1994,6 +2024,13 @@ export function EvaluationWorkspace({
   }
 
   function handleDecodedVinAndReset(decoded: VinDecodeResult) {
+    if (
+      String(decoded.vin || "").trim().toUpperCase() !==
+      String(decodedVehicle?.vin || "").trim().toUpperCase()
+    ) {
+      setEvaluationUsageId(createEvaluationUsageId());
+    }
+
     setDecodedVehicle(decoded);
     setVehicleIdentityProfile(
       buildDeterministicVehicleIdentityProfile(decoded),
@@ -2160,6 +2197,7 @@ export function EvaluationWorkspace({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          evaluationUsageId,
           thesisMode,
           vehicleTitle,
           vin: vin || decodedVehicle?.vin || null,
@@ -2272,6 +2310,7 @@ export function EvaluationWorkspace({
           Accept: "application/json",
         },
         body: JSON.stringify({
+          evaluationUsageId,
           year,
           make,
           model,
@@ -2964,6 +3003,7 @@ export function EvaluationWorkspace({
           Accept: "application/json",
         },
         body: JSON.stringify({
+          evaluationUsageId,
           year: Number(vehicleYear),
           make: vehicleIdentityProfile?.make || vehicleMake,
           model: vehicleIdentityProfile?.modelFamily || vehicleModel,
@@ -3430,6 +3470,7 @@ export function EvaluationWorkspace({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          evaluationUsageId,
           vehicle: {
             year: vehicleYear || null,
             make: vehicleMake || null,
@@ -3606,6 +3647,7 @@ export function EvaluationWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          evaluationUsageId,
           vin,
           year: vehicleYear,
           make: vehicleMake,
@@ -3656,6 +3698,7 @@ export function EvaluationWorkspace({
         },
         body: JSON.stringify({
           id: savedEvaluationId,
+          evaluationUsageId,
           status: "watching",
           vehicleTitle,
           vin,
@@ -3784,6 +3827,8 @@ export function EvaluationWorkspace({
   }
 
   function clearLocalDraft() {
+    setEvaluationUsageId(createEvaluationUsageId());
+
     try {
       window.localStorage.removeItem(draftStorageKey);
     } catch (error) {
