@@ -12,6 +12,7 @@ import {
   canonicalModelFamily,
   canonicalVehicleMake,
   compactVehicleText,
+  resolveSemanticFuelType,
 } from "@/lib/marketcheck/vehicle-identity";
 
 type MarketCheckListing = Record<string, any>;
@@ -141,18 +142,26 @@ function normalizeFuelType(value: unknown) {
 
 function getListingFuelType(listing: MarketCheckListing) {
   const build = listing.build || {};
-
-  return normalizeFuelType(
+  const make = build.make || listing.make || "";
+  const model = build.model || listing.model || "";
+  const trim = build.trim || listing.trim || "";
+  const fuelType =
     build.fuel_type ||
-      build.fuelType ||
-      build.fuel ||
-      listing.fuel_type ||
-      listing.fuelType ||
-      listing.fuel ||
-      listing.engine?.fuel_type ||
-      listing.engine?.fuelType ||
-      listing.engine?.fuel,
-  );
+    build.fuelType ||
+    build.fuel ||
+    listing.fuel_type ||
+    listing.fuelType ||
+    listing.fuel ||
+    listing.engine?.fuel_type ||
+    listing.engine?.fuelType ||
+    listing.engine?.fuel;
+
+  return resolveSemanticFuelType({
+    make,
+    model,
+    trim,
+    fuelType,
+  });
 }
 
 function fuelTypesMatch({
@@ -726,14 +735,7 @@ function mapListingToComp({
             listing.transmission ||
             "",
         ) || null,
-      fuelType:
-        String(
-          build.fuel_type ||
-            build.fuel ||
-            listing.fuel_type ||
-            listing.fuel ||
-            "",
-        ) || null,
+      fuelType: getListingFuelType(listing) || null,
       engine:
         String(
           build.engine ||
