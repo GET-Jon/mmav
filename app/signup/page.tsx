@@ -38,7 +38,7 @@ export default function SignupPage() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/onboarding`,
           data: {
             full_name: name.trim(),
             company_name: companyName.trim(),
