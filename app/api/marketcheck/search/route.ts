@@ -15,6 +15,7 @@ import {
   evaluateVehicleEquivalence,
   type VehicleIdentity,
 } from "@/lib/marketcheck/vehicle-equivalence";
+import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 
 function normalizeIdentity(value: unknown) {
   return String(value || "")
@@ -152,7 +153,12 @@ function buildTargetVehicle(target: TargetIdentity): VehicleIdentity {
     make: target.make,
     model: target.model,
     trim: target.trim,
-    fuelType: canonicalFuelIdentity(target.fuelType),
+    fuelType: resolveSemanticFuelType({
+      make: target.make,
+      model: target.model,
+      trim: target.trim,
+      fuelType: target.fuelType,
+    }),
     drivetrain: target.drivetrain,
     bodyType: target.bodyType,
     engine: target.engine,
@@ -169,28 +175,53 @@ function buildCandidateVehicle(
   const details = comp.marketCheckDetails || {};
   const raw = asRecord(details.raw);
   const build = asRecord(raw.build);
+  const verification = asRecord(details.identityVerification);
 
-  const make = String(build.make || raw.make || target.make || "").trim();
+  const make = String(
+    verification.make || build.make || raw.make || target.make || "",
+  ).trim();
   const rawModel =
+    verification.model ||
     build.model ||
     raw.model ||
     stripMakeFromModel(comp.model, make || target.make) ||
     target.model;
+  const trim = String(
+    verification.trim || comp.trim || build.trim || raw.trim || "",
+  ).trim();
 
   return {
-    year: Number(comp.year || build.year || raw.year || 0),
+    year: Number(
+      verification.year || comp.year || build.year || raw.year || 0,
+    ),
     make,
     model: String(rawModel || "").trim(),
-    trim: String(comp.trim || build.trim || raw.trim || "").trim(),
+    trim,
     bodyType: String(
-      details.bodyType || build.body_type || build.body_style || "",
+      verification.bodyType ||
+        details.bodyType ||
+        build.body_type ||
+        build.body_style ||
+        "",
     ).trim(),
     drivetrain: String(
-      details.drivetrain || build.drivetrain || build.drive_type || "",
+      verification.drivetrain ||
+        details.drivetrain ||
+        build.drivetrain ||
+        build.drive_type ||
+        "",
     ).trim(),
-    fuelType: canonicalFuelIdentity(
-      details.fuelType || build.fuel_type || build.fuel || "",
-    ),
+    fuelType: resolveSemanticFuelType({
+      make,
+      model: rawModel,
+      trim,
+      fuelType:
+        verification.fuelType ||
+        details.fuelType ||
+        build.fuel_type ||
+        build.fuel ||
+        "",
+    }),
     engine: String(
       details.engine || build.engine || build.engine_description || "",
     ).trim(),
@@ -198,7 +229,195 @@ function buildCandidateVehicle(
       details.transmission || build.transmission || "",
     ).trim(),
     doors: Number(details.doors || build.doors || 0) || null,
-    cylinders: Number(details.cylinders || build.cylinders || 0) || null,
+    cylinders:
+      Number(
+        verification.cylinders ||
+          details.cylinders ||
+          build.cylinders ||
+          0,
+      ) || null,
+  };
+}
+
+type CandidateVinIdentity = {
+  year: number | null;
+  make: string;
+  model: string;
+  trim: string;
+  bodyType: string;
+  drivetrain: string;
+  fuelType: string;
+  cylinders: number | null;
+};
+
+async function decodeCandidateVinIdentity(
+  vin: string,
+): Promise<CandidateVinIdentity | null> {
+  const normalizedVin = vin.trim().toUpperCase();
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(normalizedVin)) return null;
+
+  try {
+    const response = await fetch(
+      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(
+        normalizedVin,
+      )}?format=json`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as {
+      Results?: Array<Record<string, string>>;
+    };
+    const row = payload.Results?.[0];
+    if (!row) return null;
+
+    const make = String(row.Make || "").trim();
+    const model = String(row.Model || "").trim();
+    const trim = String(row.Trim || row.Series || "").trim();
+
+    return {
+      year: Number(row.ModelYear || 0) || null,
+      make,
+      model,
+      trim,
+      bodyType: String(row.BodyClass || "").trim(),
+      drivetrain: String(row.DriveType || "").trim(),
+      fuelType: resolveSemanticFuelType({
+        make,
+        model,
+        trim,
+        fuelType: row.FuelTypePrimary || "",
+      }),
+      cylinders: Number(row.EngineCylinders || 0) || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function compNeedsVinIdentityVerification(comp: RankedComp) {
+  if (comp.equivalenceTier !== "supporting") return false;
+
+  const classification = String(comp.candidateClassification || "").toLowerCase();
+  const reasons = (comp.equivalenceReasons || []).join(" ").toLowerCase();
+
+  return (
+    comp.needsClassificationReview === true ||
+    classification.includes("unknown") ||
+    reasons.includes("unknown") ||
+    reasons.includes("incomplete")
+  );
+}
+
+async function enrichAmbiguousCompsByVin({
+  payload,
+  target,
+  maxCandidates = 6,
+}: {
+  payload: Record<string, unknown>;
+  target: TargetIdentity;
+  maxCandidates?: number;
+}) {
+  if (!Array.isArray(payload.comps)) {
+    return { payload, attempted: 0, verified: 0 };
+  }
+
+  const preliminary = rerankByCompFit(payload, target);
+  const preliminaryComps = Array.isArray(asRecord(preliminary).comps)
+    ? (asRecord(preliminary).comps as RankedComp[])
+    : [];
+
+  const candidates = preliminaryComps
+    .filter(compNeedsVinIdentityVerification)
+    .filter((comp) => {
+      const vin = String(comp.marketCheckDetails?.vin || "").trim();
+      return /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin);
+    })
+    .sort((a, b) => {
+      const scoreDelta =
+        Number(b.qualityScore || 0) - Number(a.qualityScore || 0);
+      if (scoreDelta) return scoreDelta;
+      return Number(a.distance || 0) - Number(b.distance || 0);
+    });
+
+  const uniqueCandidates: RankedComp[] = [];
+  const seenVins = new Set<string>();
+  for (const comp of candidates) {
+    const vin = String(comp.marketCheckDetails?.vin || "")
+      .trim()
+      .toUpperCase();
+    if (!vin || seenVins.has(vin)) continue;
+    seenVins.add(vin);
+    uniqueCandidates.push(comp);
+    if (uniqueCandidates.length >= maxCandidates) break;
+  }
+
+  if (!uniqueCandidates.length) {
+    return { payload, attempted: 0, verified: 0 };
+  }
+
+  const results = await Promise.all(
+    uniqueCandidates.map(async (comp) => {
+      const vin = String(comp.marketCheckDetails?.vin || "")
+        .trim()
+        .toUpperCase();
+      return {
+        id: String(comp.id || ""),
+        vin,
+        identity: await decodeCandidateVinIdentity(vin),
+      };
+    }),
+  );
+
+  const byId = new Map(
+    results
+      .filter((result) => result.identity && result.id)
+      .map((result) => [result.id, result.identity as CandidateVinIdentity]),
+  );
+
+  const comps = (payload.comps as RankedComp[]).map((comp) => {
+    const identity = byId.get(String(comp.id || ""));
+    if (!identity) return comp;
+
+    const details = comp.marketCheckDetails || {};
+    return {
+      ...comp,
+      marketCheckDetails: {
+        ...details,
+        fuelType: identity.fuelType || details.fuelType || null,
+        drivetrain: identity.drivetrain || details.drivetrain || null,
+        bodyType: identity.bodyType || details.bodyType || null,
+        cylinders: identity.cylinders || details.cylinders || null,
+        identityVerification: {
+          source: "nhtsa-vin",
+          status: identity.model ? "verified" : "partial",
+          year: identity.year,
+          make: identity.make || null,
+          model: identity.model || null,
+          trim: identity.trim || null,
+          fuelType: identity.fuelType || null,
+          drivetrain: identity.drivetrain || null,
+          bodyType: identity.bodyType || null,
+          cylinders: identity.cylinders,
+          note:
+            "Candidate identity verified from the listing VIN before final comp qualification.",
+        },
+      },
+    };
+  });
+
+  return {
+    payload: {
+      ...payload,
+      comps,
+      identityVerification: {
+        attempted: uniqueCandidates.length,
+        verified: byId.size,
+        source: "nhtsa-vin",
+      },
+    },
+    attempted: uniqueCandidates.length,
+    verified: byId.size,
   };
 }
 
