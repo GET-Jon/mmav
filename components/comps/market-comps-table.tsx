@@ -116,6 +116,7 @@ function CompFitExplanation({
   const targetYear = comp.marketCheckDetails?.targetYear;
   const mileageDelta = factors?.mileageDelta;
   const confidence = inferredListingConfidence(comp);
+  const rejected = comp.equivalenceTier === "reject";
   const mileage = calculateMileageAdjustment({
     comp,
     targetMileage,
@@ -131,10 +132,10 @@ function CompFitExplanation({
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-950">
-              {comp.qualityScore}
+              {rejected ? "Rejected" : comp.qualityScore}
             </span>
             <span className="text-sm font-black text-slate-500">
-              / 100 Match Score
+              {rejected ? "from valuation" : "/ 100 Match Score"}
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -142,7 +143,7 @@ function CompFitExplanation({
               {tierLabel(comp)}
             </span>
             <span className="text-sm font-bold text-blue-900">
-              {fitLabel(comp.qualityScore)}
+              {rejected ? "Vehicle identity rule failed" : fitLabel(comp.qualityScore)}
             </span>
           </div>
         </div>
@@ -376,8 +377,10 @@ export function MarketCompsTable({
         header: "Match Score",
         cell: ({ row }) => {
           const score = row.original.qualityScore;
-          const tone =
-            score >= 85
+          const rejected = row.original.equivalenceTier === "reject";
+          const tone = rejected
+            ? "bg-red-100 text-red-700"
+            : score >= 85
               ? "bg-emerald-100 text-emerald-700"
               : score >= 70
                 ? "bg-blue-100 text-blue-700"
@@ -387,10 +390,14 @@ export function MarketCompsTable({
           return (
             <div className="min-w-[88px]">
               <span
-                title="Open Details to see why this comp received its score"
+                title={
+                  rejected
+                    ? "This listing failed a hard vehicle-identity rule; open Details to see why."
+                    : "Open Details to see why this comp received its score"
+                }
                 className={`inline-flex min-w-9 justify-center rounded-full px-2 py-1 text-xs font-black ${tone}`}
               >
-                {score}
+                {rejected ? "Rejected" : score}
               </span>
               <div className="mt-1 text-[9px] font-bold text-slate-400">
                 {inferredListingConfidence(row.original)} data
@@ -604,7 +611,14 @@ export function MarketCompsTable({
                   <DetailItem label="Market Days" value={selectedComp.marketDays} />
                   <DetailItem label="Listing Date" value={selectedComp.marketCheckDetails?.listingDate} />
                   <DetailItem label="Last Seen" value={selectedComp.marketCheckDetails?.lastSeenDate} />
-                  <DetailItem label="Match Score" value={selectedComp.qualityScore} />
+                  <DetailItem
+                    label="Match Score"
+                    value={
+                      selectedComp.equivalenceTier === "reject"
+                        ? "Rejected by vehicle identity"
+                        : selectedComp.qualityScore
+                    }
+                  />
                   <DetailItem label="Listing Confidence" value={inferredListingConfidence(selectedComp)} />
                   <DetailItem label="Included" value={selectedComp.included} />
                   <DetailItem
