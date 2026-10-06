@@ -162,6 +162,22 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   }
 
   if (make === "ford") {
+    // Bronco providers commonly move the door count between model and body
+    // fields ("Bronco", "Bronco 4-Door", "Bronco 2-Door"). Those are one
+    // model family; Bronco Sport is a separate vehicle and must stay separate.
+    if (startsWithAny(modelCompact, ["broncosport"])) {
+      return "bronco sport";
+    }
+    if (
+      startsWithAny(modelCompact, [
+        "bronco4door",
+        "bronco2door",
+        "bronco",
+      ])
+    ) {
+      return "bronco";
+    }
+
     if (
       startsWithAny(modelCompact, [
         "f150raptorr",
@@ -220,6 +236,53 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   return model;
 }
 
+const BRONCO_MARKETING_TRIMS = [
+  "heritage limited",
+  "black diamond",
+  "outer banks",
+  "big bend",
+  "wildtrak",
+  "everglades",
+  "badlands",
+  "heritage",
+  "raptor",
+  "base",
+];
+
+export function isLikelyVariantEnumeration({
+  make,
+  model,
+  trim,
+}: {
+  make?: unknown;
+  model?: unknown;
+  trim?: unknown;
+}) {
+  const normalizedTrim = normalizeVehicleText(trim);
+  if (!normalizedTrim) return false;
+
+  const family = canonicalModelFamily({
+    year: 0,
+    make: String(make || ""),
+    model: String(model || ""),
+    trim: String(trim || ""),
+  });
+
+  if (canonicalVehicleMake(make) === "ford" && family === "bronco") {
+    const matches = BRONCO_MARKETING_TRIMS.filter((candidate) =>
+      ` ${normalizedTrim} `.includes(` ${candidate} `),
+    );
+    if (new Set(matches).size > 1) return true;
+  }
+
+  // Some decoders put a list of possible series/trims in one field. Do not
+  // pretend that an option list is one literal trim.
+  return String(trim || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean).length >= 3;
+}
+
 function stripDrivetrainBranding(value: unknown) {
   return String(value || "")
     .replace(/\b(?:xdrive|sdrive|quattro|4matic|4motion|awd|4wd|fwd|rwd|4x4)\b/gi, " ")
@@ -233,7 +296,10 @@ export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
   const normalizedFamily = normalizeVehicleText(modelFamily);
   const normalizedModel = normalizeVehicleText(vehicle.model);
 
-  const cleanedTrim = stripDrivetrainBranding(vehicle.trim);
+  const rawCleanedTrim = stripDrivetrainBranding(vehicle.trim);
+  const cleanedTrim = isLikelyVariantEnumeration(vehicle)
+    ? ""
+    : rawCleanedTrim;
   const normalizedTrim = normalizeVehicleText(cleanedTrim);
 
   // Prefer a substantive trim/derivative once drivetrain branding is removed.
