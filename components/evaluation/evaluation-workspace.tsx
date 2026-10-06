@@ -2453,9 +2453,11 @@ export function EvaluationWorkspace({
       vehicleOverride &&
       Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
         ? String(vehicleOverride.trim || "")
-        : profileVariant ||
-          String(vehicleOverride?.trim || "") ||
-          vehicleTrim;
+        : useSemanticIdentity && activeVehicleIdentityProfile
+          ? profileVariant
+          : profileVariant ||
+            String(vehicleOverride?.trim || "") ||
+            vehicleTrim;
     const fuelType = useSemanticIdentity
       ? activeVehicleIdentityProfile?.fuelType ||
         vehicleOverride?.fuelType ||
@@ -2524,7 +2526,9 @@ export function EvaluationWorkspace({
           qualificationModel:
             activeVehicleIdentityProfile?.modelFamily || vehicleModel,
           qualificationTrim:
-            activeVehicleIdentityProfile?.variant || vehicleTrim,
+            activeVehicleIdentityProfile
+              ? activeVehicleIdentityProfile.variant
+              : vehicleTrim,
           qualificationFuelType:
             activeVehicleIdentityProfile?.fuelType ||
             decodedVehicle?.fuelType ||
