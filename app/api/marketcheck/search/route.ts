@@ -640,6 +640,7 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
         targetMileage: target.mileage,
         listingConfidence: listingConfidence(comp),
         compFitFactors: {
+          ...(details.compFitFactors || {}),
           yearDelta: delta === 99 ? null : delta,
           yearPreference:
             delta === 0
@@ -654,6 +655,8 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
           distanceMiles: Number(comp.distance || 0),
           trimAvailable: Boolean(String(comp.trim || "").trim()),
           originalScore: currentScore,
+          equivalenceModifier: equivalence.scoreModifier,
+          finalScore: fitScore,
           equivalenceTier: equivalence.tier,
           equivalenceReasons: equivalence.reasons,
           autoIncludeEligible: equivalence.autoIncludeEligible,
