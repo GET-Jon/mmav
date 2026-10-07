@@ -6,17 +6,11 @@ type UsageStatus = {
   canStartEvaluation?: boolean;
 };
 
-function isVehicleNext(element: HTMLElement) {
-  if (element.tagName !== "BUTTON") return false;
-  if (!element.textContent?.trim().startsWith("Next")) return false;
-
-  let current: HTMLElement | null = element;
-  for (let depth = 0; current && depth < 7; depth += 1) {
-    if (current.textContent?.includes("1 · VEHICLE")) return true;
-    current = current.parentElement;
-  }
-
-  return false;
+function isEvaluationEntryAction(element: HTMLElement) {
+  return (
+    element.tagName === "BUTTON" &&
+    element.dataset.evaluationEntryAction === "true"
+  );
 }
 
 export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
@@ -62,7 +56,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
 
       actions.forEach((action) => {
         const insidePlanDialog = Boolean(action.closest("dialog[open]"));
-        const shouldDisable = exhausted && !insidePlanDialog && !isVehicleNext(action);
+        const shouldDisable = exhausted && !insidePlanDialog && !isEvaluationEntryAction(action);
 
         if (shouldDisable) {
           action.dataset.evaluationLimitDisabled = "true";
@@ -90,7 +84,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
   function shouldBlock(target: EventTarget | null) {
     if (!exhausted || !(target instanceof Element)) return false;
     const action = target.closest<HTMLElement>("button, a[href]");
-    return Boolean(action && !action.closest("dialog[open]") && !isVehicleNext(action));
+    return Boolean(action && !action.closest("dialog[open]") && !isEvaluationEntryAction(action));
   }
 
   function blockMouseAction(event: MouseEvent<HTMLDivElement>) {
