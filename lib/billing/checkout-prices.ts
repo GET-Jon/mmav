@@ -4,14 +4,38 @@ export const monthlyCheckoutPlans = {
   dealer_pro: { name: "Dealer Pro", amount: 14900 },
 } as const;
 
-export function addCheckoutPrice(params: URLSearchParams, planKey: keyof typeof monthlyCheckoutPlans, priceId?: string) {
-  if (priceId) {
-    params.set("line_items[0][price]", priceId);
-    return;
+export type BillingPlanKey = keyof typeof monthlyCheckoutPlans;
+
+export function stripePriceIdForPlan(planKey: BillingPlanKey) {
+  if (planKey === "dealer") {
+    return process.env.STRIPE_DEALER_PRICE_ID || "";
   }
-  const plan = monthlyCheckoutPlans[planKey];
-  params.set("line_items[0][price_data][currency]", "usd");
-  params.set("line_items[0][price_data][unit_amount]", String(plan.amount));
-  params.set("line_items[0][price_data][recurring][interval]", "month");
-  params.set("line_items[0][price_data][product_data][name]", `Lot Logic ${plan.name}`);
+
+  if (planKey === "dealer_pro") {
+    return process.env.STRIPE_DEALER_PRO_PRICE_ID || "";
+  }
+
+  return (
+    process.env.STRIPE_STARTER_PRICE_ID ||
+    process.env.STRIPE_DEFAULT_PRICE_ID ||
+    ""
+  );
+}
+
+export function isStripePlanConfigured(planKey: BillingPlanKey) {
+  return Boolean(process.env.STRIPE_SECRET_KEY && stripePriceIdForPlan(planKey));
+}
+
+export function addCheckoutPrice(
+  params: URLSearchParams,
+  planKey: BillingPlanKey,
+  priceId = stripePriceIdForPlan(planKey),
+) {
+  if (!priceId) {
+    throw new Error(
+      `Stripe price is not configured for the ${monthlyCheckoutPlans[planKey].name} plan.`,
+    );
+  }
+
+  params.set("line_items[0][price]", priceId);
 }
