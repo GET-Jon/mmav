@@ -6890,6 +6890,7 @@ export function EvaluationWorkspace({
 
                   <button
                     type="button"
+                    data-evaluation-entry-action="true"
                     onClick={() => void runPrimaryEvaluation()}
                     disabled={
                       evaluationRunning ||
