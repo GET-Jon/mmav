@@ -7523,7 +7523,7 @@ export function EvaluationWorkspace({
                     </div>
                   ) : null}
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}
