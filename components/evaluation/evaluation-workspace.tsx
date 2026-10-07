@@ -3897,6 +3897,7 @@ export function EvaluationWorkspace({
   const profitabilityScore = calculateDealEconomicsScore(
     valuation.expectedGrossProfit,
     valuation.allInCost,
+    valuation.desiredProfitTarget,
   );
 
   const profitabilityLabel =
@@ -4143,31 +4144,34 @@ export function EvaluationWorkspace({
         ? money(suggestedBid)
         : "No Bid";
 
-  const currentBidDifference =
-    valuationInput.currentBid > 0 && suggestedBid > 0
-      ? valuationInput.currentBid - suggestedBid
+  const recommendedAllInCost =
+    suggestedBid > 0 ? suggestedBid + valuation.totalCostAdders : 0;
+
+  const currentAllInDifference =
+    valuation.allInCost > 0 && recommendedAllInCost > 0
+      ? valuation.allInCost - recommendedAllInCost
       : 0;
 
-  const currentBidPosition =
-    valuationInput.currentBid <= 0 || suggestedBid <= 0
+  const currentCostPosition =
+    valuation.allInCost <= 0 || recommendedAllInCost <= 0
       ? null
-      : currentBidDifference > 0
+      : currentAllInDifference > 0
         ? {
             tone: "over" as const,
-            text: `Current bid is ${money(
-              currentBidDifference,
-            )} above the Recommended Max Buy.`,
+            text: `Current all-in cost is ${money(
+              currentAllInDifference,
+            )} above the recommended all-in target.`,
           }
-        : currentBidDifference < 0
+        : currentAllInDifference < 0
           ? {
               tone: "under" as const,
-              text: `${money(
-                Math.abs(currentBidDifference),
-              )} remains before reaching the Recommended Max Buy.`,
+              text: `Current all-in cost is ${money(
+                Math.abs(currentAllInDifference),
+              )} below the recommended all-in target.`,
             }
           : {
               tone: "at" as const,
-              text: "Current bid is at the Recommended Max Buy.",
+              text: "Current all-in cost is at the recommended all-in target.",
             };
 
   const hasManualQuickEvalBasics =
@@ -4591,7 +4595,7 @@ export function EvaluationWorkspace({
       conditionUnknown);
 
   const reviewReasons = [
-    isAboveRecommendedBuy ? "the current bid is above the Recommended Max Buy" : null,
+    isAboveRecommendedBuy ? "the current all-in cost is above Lot Logic's recommended all-in target" : null,
     hasLimitedMarketEvidence
       ? "market evidence is limited; strengthen the comp set before treating the recommendation as high-confidence"
       : null,
@@ -4610,7 +4614,7 @@ export function EvaluationWorkspace({
         : hasHardPass
           ? "PASS"
         : isAboveRecommendedBuy
-          ? "ABOVE TARGET PRICE"
+          ? "ABOVE TARGET COST"
           : requiresReview
               ? "REVIEW REQUIRED"
               : "WORTH PURSUING";
@@ -7440,8 +7444,8 @@ export function EvaluationWorkspace({
                   {presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
-                  {!needsCompSearch && currentBidPosition ? (
-                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentBidPosition.tone === "over" ? "bg-red-100 text-red-700" : currentBidPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentBidPosition.text}</div>
+                  {!needsCompSearch && currentCostPosition ? (
+                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-red-100 text-red-700" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
                   ) : null}
                   <div className="mt-auto pt-5">
                     <button
