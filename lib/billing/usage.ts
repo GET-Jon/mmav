@@ -59,7 +59,11 @@ export const TRIAL_LIMITS = {
   autoDevPerEvaluation: 1,
   conditionAnalysesPerEvaluation: 3,
   evaluationSummariesPerEvaluation: 3,
-  // Per-evaluation feature limits are the user-facing trial guardrails.\n  // Keep this workspace-wide provider ceiling high enough that a user can\n  // actually use all 5 trial evaluations without normal MarketCheck/VIN/AI\n  // calls unexpectedly blocking a later evaluation.\n  providerCallsTotal: 150,
+  // Per-evaluation feature limits are the user-facing trial guardrails.
+  // Keep this workspace-wide provider ceiling high enough that a user can
+  // actually use all 5 trial evaluations without normal MarketCheck/VIN/AI
+  // calls unexpectedly blocking a later evaluation.
+  providerCallsTotal: 150,
 };
 
 function normalizePlanKey(value: unknown): PlanKey {
