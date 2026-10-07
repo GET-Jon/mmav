@@ -484,45 +484,43 @@ function calculateQualityScore({
     listing.miles ?? listing.mileage ?? listing.odometer,
   );
   const year = toNumber(build.year ?? listing.year, searchYear);
+  const variantMatched = preferredTrim
+    ? variantMatchesListing({
+        listing,
+        preferredVariant: preferredTrim,
+      })
+    : true;
 
-  let score = 100;
+  const retrievalYearPenalty = searchYear && year !== searchYear ? 20 : 0;
+  const variantPenalty = preferredTrim && !variantMatched ? 28 : 0;
+  const mileagePenalty =
+    targetMileage && mileage
+      ? Math.min(22, Math.round(Math.abs(mileage - targetMileage) / 3000))
+      : 10;
+  const distancePenalty = distance
+    ? Math.min(8, Math.round(distance / 30))
+    : 2;
+  const missingPricePenalty =
+    !listing.price && !listing.list_price && !listing.msrp ? 20 : 0;
 
-  if (searchYear && year !== searchYear) {
-    score -= 20;
-  }
+  const rawScore =
+    100 -
+    retrievalYearPenalty -
+    variantPenalty -
+    mileagePenalty -
+    distancePenalty -
+    missingPricePenalty;
 
-  if (
-    preferredTrim &&
-    !variantMatchesListing({
-      listing,
-      preferredVariant: preferredTrim,
-    })
-  ) {
-    // Variant fidelity is intentionally more important than a moderate
-    // distance advantage. Look across model/trim/title because providers
-    // frequently split derivative and drivetrain labels differently.
-    score -= 28;
-  }
-
-  if (targetMileage && mileage) {
-    const mileageDelta = Math.abs(mileage - targetMileage);
-    score -= Math.min(22, Math.round(mileageDelta / 3000));
-  } else {
-    score -= 10;
-  }
-
-  if (distance) {
-    // Geography matters, but it should not overpower an exact configuration.
-    score -= Math.min(8, Math.round(distance / 30));
-  } else {
-    score -= 2;
-  }
-
-  if (!listing.price && !listing.list_price && !listing.msrp) {
-    score -= 20;
-  }
-
-  return Math.max(40, Math.min(100, score));
+  return {
+    score: Math.max(40, Math.min(100, rawScore)),
+    preferredTrim: preferredTrim || null,
+    variantMatched: preferredTrim ? variantMatched : null,
+    retrievalYearPenalty,
+    variantPenalty,
+    mileagePenalty,
+    distancePenalty,
+    missingPricePenalty,
+  };
 }
 
 function getListingImageUrl(listing: MarketCheckListing) {
@@ -611,6 +609,12 @@ function mapListingToComp({
 
   const make = build.make || searchMake;
   const model = build.model || searchModel;
+  const quality = calculateQualityScore({
+    listing,
+    searchYear,
+    targetMileage,
+    preferredTrim,
+  });
 
   return {
     id: String(listing.id || listing.vin || `marketcheck-${index}`),
@@ -624,12 +628,7 @@ function mapListingToComp({
     trim: build.trim || listing.trim || "",
     mileage,
     askingPrice,
-    qualityScore: calculateQualityScore({
-      listing,
-      searchYear,
-      targetMileage,
-      preferredTrim,
-    }),
+    qualityScore: quality.score,
     imageUrl: getListingImageUrl(listing),
 
     dealerDays:
@@ -774,6 +773,16 @@ function mapListingToComp({
         ) || null,
       retrievalAttempt:
         String(listing.__searchAttemptName || "") || null,
+      compFitFactors: {
+        preferredTrim: quality.preferredTrim,
+        variantMatched: quality.variantMatched,
+        retrievalYearPenalty: quality.retrievalYearPenalty,
+        variantPenalty: quality.variantPenalty,
+        mileagePenalty: quality.mileagePenalty,
+        distancePenalty: quality.distancePenalty,
+        missingPricePenalty: quality.missingPricePenalty,
+        originalScore: quality.score,
+      },
 
       // Preserve the complete MarketCheck object for the raw-data section
       // of the internal details modal.
