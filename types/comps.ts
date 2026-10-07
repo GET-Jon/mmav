@@ -75,6 +75,15 @@ export type MarketComp = {
       distanceMiles?: number | null;
       trimAvailable?: boolean;
       originalScore?: number | null;
+      preferredTrim?: string | null;
+      variantMatched?: boolean | null;
+      retrievalYearPenalty?: number | null;
+      variantPenalty?: number | null;
+      mileagePenalty?: number | null;
+      distancePenalty?: number | null;
+      missingPricePenalty?: number | null;
+      equivalenceModifier?: number | null;
+      finalScore?: number | null;
       equivalenceTier?: "direct" | "near" | "supporting" | "reject";
       equivalenceReasons?: string[];
       autoIncludeEligible?: boolean;
