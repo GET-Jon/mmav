@@ -47,7 +47,15 @@ function Check() {
 
 export type PricingPlan = (typeof pricingPlans)[number];
 
-export function PricingPlanCards({ renderAction, showWeeklyOption = true }: { renderAction?: (plan: PricingPlan) => ReactNode; showWeeklyOption?: boolean }) {
+export function PricingPlanCards({
+  renderAction,
+  showWeeklyOption = true,
+  showBestValueBadge = false,
+}: {
+  renderAction?: (plan: PricingPlan) => ReactNode;
+  showWeeklyOption?: boolean;
+  showBestValueBadge?: boolean;
+}) {
   return <div className="grid gap-5 lg:grid-cols-3">
           {pricingPlans.map((plan) => (
             <article
@@ -59,6 +67,11 @@ export function PricingPlanCards({ renderAction, showWeeklyOption = true }: { re
               {plan.featured ? (
                 <span className="absolute -top-3 left-6 rounded-full bg-blue-600 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white">
                   Most popular
+                </span>
+              ) : null}
+              {showBestValueBadge && plan.key === "dealer_pro" ? (
+                <span className="absolute -top-3 right-6 rounded-full bg-emerald-600 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+                  Best value
                 </span>
               ) : null}
               <h3 className="text-xl font-black text-slate-950">{plan.name}</h3>
