@@ -600,11 +600,8 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
     const compYear = Number(comp.year || 0);
     const delta = compYear && target.year ? Math.abs(compYear - target.year) : 99;
     const currentScore = Number(comp.qualityScore || 40);
-    const previousYearPenalty = delta === 0 ? 0 : 20;
-    const yearAdjustedScore = Math.max(
-      30,
-      Math.min(100, Math.round(currentScore + previousYearPenalty - yearPenalty(delta))),
-    );
+    const details = comp.marketCheckDetails || {};
+    const retrievalFactors = details.compFitFactors || {};
 
     const candidateVehicle = buildCandidateVehicle(comp, target);
     const equivalence = evaluateVehicleEquivalence({
@@ -612,14 +609,34 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
       candidate: candidateVehicle,
     });
 
+    // Retrieval scoring is intentionally permissive and can penalize raw
+    // provider trim strings before our semantic identity layer has resolved
+    // aliases/taxonomy. Final Match Score is therefore rebuilt from the
+    // non-identity deductions, then applies the authoritative equivalence tier.
+    // This prevents the same trim/configuration difference from being counted
+    // twice (once by provider text and again by semantic equivalence).
+    const finalYearPenalty = yearPenalty(delta);
+    const mileagePenalty = Number(retrievalFactors.mileagePenalty || 0);
+    const distancePenalty = Number(retrievalFactors.distancePenalty || 0);
+    const missingPricePenalty = Number(
+      retrievalFactors.missingPricePenalty || 0,
+    );
+    const scoreBeforeEquivalence =
+      100 -
+      finalYearPenalty -
+      mileagePenalty -
+      distancePenalty -
+      missingPricePenalty;
     const fitScore = Math.max(
       0,
-      Math.min(100, Math.round(yearAdjustedScore + equivalence.scoreModifier)),
+      Math.min(
+        100,
+        Math.round(scoreBeforeEquivalence + equivalence.scoreModifier),
+      ),
     );
 
     const mileage = Number(comp.mileage || 0);
     const mileageDelta = target.mileage && mileage ? Math.abs(mileage - target.mileage) : null;
-    const details = comp.marketCheckDetails || {};
 
     return {
       ...comp,
@@ -650,7 +667,7 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
                 : delta === 2
                   ? "Within 2 model years"
                   : `${delta} model years away`,
-          yearPenalty: yearPenalty(delta),
+          yearPenalty: finalYearPenalty,
           mileageDelta,
           distanceMiles: Number(comp.distance || 0),
           trimAvailable: Boolean(String(comp.trim || "").trim()),
