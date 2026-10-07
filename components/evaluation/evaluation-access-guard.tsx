@@ -6,10 +6,11 @@ type UsageStatus = {
   canStartEvaluation?: boolean;
 };
 
-function isEvaluationEntryAction(element: HTMLElement) {
+function isEvaluationLimitAllowedAction(element: HTMLElement) {
   return (
-    element.tagName === "BUTTON" &&
-    element.dataset.evaluationEntryAction === "true"
+    (element.tagName === "BUTTON" &&
+      element.dataset.evaluationEntryAction === "true") ||
+    element.dataset.evaluationLimitAllowed === "true"
   );
 }
 
@@ -56,7 +57,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
 
       actions.forEach((action) => {
         const insidePlanDialog = Boolean(action.closest("dialog"));
-        const shouldDisable = exhausted && !insidePlanDialog && !isEvaluationEntryAction(action);
+        const shouldDisable = exhausted && !insidePlanDialog && !isEvaluationLimitAllowedAction(action);
 
         if (shouldDisable) {
           action.dataset.evaluationLimitDisabled = "true";
@@ -84,7 +85,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
   function shouldBlock(target: EventTarget | null) {
     if (!exhausted || !(target instanceof Element)) return false;
     const action = target.closest<HTMLElement>("button, a[href]");
-    return Boolean(action && !action.closest("dialog") && !isEvaluationEntryAction(action));
+    return Boolean(action && !action.closest("dialog") && !isEvaluationLimitAllowedAction(action));
   }
 
   function blockMouseAction(event: MouseEvent<HTMLDivElement>) {
