@@ -22,6 +22,19 @@ type AppTopNavProps = {
   onNewEvaluation?: () => void;
 };
 
+type UsageStatus = {
+  internalUnlimited?: boolean;
+  trialActive?: boolean;
+  paidActive?: boolean;
+  trialEvaluationsUsed?: number;
+  trialEvaluationsRemaining?: number | null;
+  monthlyEvaluationsUsed?: number;
+  monthlyEvaluationsRemaining?: number | null;
+  limits?: {
+    evaluationsPerMonth?: number;
+  };
+};
+
 function navClass(isActive: boolean) {
   return isActive
     ? "rounded-lg bg-slate-950 px-3 py-2 text-sm font-extrabold text-white"
@@ -35,6 +48,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const [resolvedRole, setResolvedRole] = useState<string | null>(userRole);
   const [resolvedCompanyName, setResolvedCompanyName] = useState<string | null>(null);
   const [resolvedCompanySlug, setResolvedCompanySlug] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageStatus | null>(null);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
   const isAdmin = resolvedRole === "company_admin";
   const isMindfulAdmin =
@@ -47,6 +61,47 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     .map((part) => part.charAt(0))
     .join("")
     .toUpperCase() || "MM";
+
+  const evaluationUsage = (() => {
+    if (!usage || usage.internalUnlimited) return null;
+
+    if (usage.trialActive && !usage.paidActive) {
+      const used = Number(usage.trialEvaluationsUsed || 0);
+      const total = used + Number(usage.trialEvaluationsRemaining || 0) || 5;
+      return {
+        used,
+        total,
+        label: `${used}/${total} free evals`,
+      };
+    }
+
+    const total = Number(usage.limits?.evaluationsPerMonth || 0);
+    if (!total) return null;
+
+    const used = Number(usage.monthlyEvaluationsUsed || 0);
+    return {
+      used,
+      total,
+      label: `${used}/${total} evals`,
+    };
+  })();
+
+  const evaluationUsageTone = (() => {
+    if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
+
+    const remainingRatio = Math.max(
+      0,
+      (evaluationUsage.total - evaluationUsage.used) / evaluationUsage.total,
+    );
+
+    if (remainingRatio === 0) {
+      return "border-red-200 bg-red-50 text-red-700";
+    }
+    if (remainingRatio <= 0.2) {
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    }
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  })();
 
   useEffect(() => {
     if (!userEmail) return;
@@ -84,6 +139,33 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     })();
     return () => { cancelled = true; };
   }, [resolvedRole, userEmail]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+
+    let cancelled = false;
+
+    async function loadUsage() {
+      try {
+        const response = await fetch("/api/usage/status", { cache: "no-store" });
+        const payload = (await response.json()) as UsageStatus;
+        if (!cancelled && response.ok) setUsage(payload);
+      } catch {
+        // Usage is supplemental navigation context. Do not interrupt the app
+        // if it cannot be loaded.
+      }
+    }
+
+    void loadUsage();
+    window.addEventListener("focus", loadUsage);
+    window.addEventListener("pageshow", loadUsage);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", loadUsage);
+      window.removeEventListener("pageshow", loadUsage);
+    };
+  }, [userEmail]);
 
   useEffect(() => {
     function closeOnOutsideClick(event: MouseEvent) {
@@ -129,6 +211,17 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center gap-3">
+          {evaluationUsage ? (
+            <Link
+              href="/settings?tab=billing"
+              data-evaluation-limit-allowed="true"
+              title="View evaluation usage and plan options"
+              className={`hidden rounded-xl border px-3 py-2 text-xs font-black transition hover:brightness-95 lg:block ${evaluationUsageTone}`}
+            >
+              {evaluationUsage.label}
+            </Link>
+          ) : null}
+
           {onNewEvaluation ? (
             <button type="button" onClick={onNewEvaluation} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</button>
           ) : (
