@@ -35,10 +35,9 @@ function subscriptionPeriodEnd(subscription: JsonRecord) {
 
 
 function planKeyForSubscription(subscription: JsonRecord) {
-  const metadata = record(subscription.metadata);
-  const metadataPlan = stringValue(metadata.plan_key);
-  if (metadataPlan === "dealer" || metadataPlan === "dealer_pro") return metadataPlan;
-
+  // The active Stripe price is authoritative. Customer Portal plan changes do
+  // not reliably rewrite custom subscription metadata, so reading metadata
+  // first can leave Lot Logic on the old entitlement after an upgrade.
   const priceId = firstSubscriptionPriceId(subscription);
   if (priceId && priceId === process.env.STRIPE_DEALER_PRICE_ID) return "dealer";
   if (priceId && priceId === process.env.STRIPE_DEALER_PRO_PRICE_ID) return "dealer_pro";
@@ -50,9 +49,17 @@ function planKeyForSubscription(subscription: JsonRecord) {
     return "starter";
   }
 
-  // Checkout and portal-created subscriptions should carry plan_key metadata.
-  // If an unknown Stripe price arrives without metadata, defaulting to Starter
-  // is intentionally conservative for entitlement limits.
+  const metadata = record(subscription.metadata);
+  const metadataPlan = stringValue(metadata.plan_key);
+  if (
+    metadataPlan === "starter" ||
+    metadataPlan === "dealer" ||
+    metadataPlan === "dealer_pro"
+  ) {
+    return metadataPlan;
+  }
+
+  // Unknown prices should not accidentally grant a higher entitlement.
   return "starter";
 }
 
