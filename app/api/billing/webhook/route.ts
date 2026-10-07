@@ -42,6 +42,17 @@ function planKeyForSubscription(subscription: JsonRecord) {
   const priceId = firstSubscriptionPriceId(subscription);
   if (priceId && priceId === process.env.STRIPE_DEALER_PRICE_ID) return "dealer";
   if (priceId && priceId === process.env.STRIPE_DEALER_PRO_PRICE_ID) return "dealer_pro";
+  if (
+    priceId &&
+    (priceId === process.env.STRIPE_STARTER_PRICE_ID ||
+      priceId === process.env.STRIPE_DEFAULT_PRICE_ID)
+  ) {
+    return "starter";
+  }
+
+  // Checkout and portal-created subscriptions should carry plan_key metadata.
+  // If an unknown Stripe price arrives without metadata, defaulting to Starter
+  // is intentionally conservative for entitlement limits.
   return "starter";
 }
 
