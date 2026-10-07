@@ -61,7 +61,11 @@ export function PricingPlanCards({
             <article
               key={plan.name}
               className={`relative rounded-[26px] border bg-white p-7 shadow-[0_16px_45px_rgba(15,23,42,0.06)] ${
-                plan.featured ? "border-blue-400 ring-4 ring-blue-100/60" : "border-slate-200"
+                plan.featured
+                  ? "border-blue-400 ring-4 ring-blue-100/60"
+                  : showBestValueBadge && plan.key === "dealer_pro"
+                    ? "border-emerald-400 ring-4 ring-emerald-100/70"
+                    : "border-slate-200"
               }`}
             >
               {plan.featured ? (
