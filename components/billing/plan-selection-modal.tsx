@@ -62,11 +62,33 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
         <button type="button" onClick={onClose} aria-label="Close plan selection" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600">Close</button>
       </div>
       <div className="mt-8">
-        <PricingPlanCards showWeeklyOption={false} renderAction={plan => (
-          <button type="button" disabled={!data || !isAdmin || busy !== null || (existingSubscription ? !data.portalConfigured : !data.configuredPlans?.[plan.key])} onClick={() => void choose(plan)} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-            {busy === plan.key ? "Opening…" : existingSubscription ? "Manage subscription" : `Choose ${plan.name} →`}
-          </button>
-        )} />
+        <PricingPlanCards
+          showWeeklyOption={false}
+          showBestValueBadge
+          renderAction={plan => {
+            const explicitlyUnavailable =
+              Boolean(data) &&
+              (!isAdmin ||
+                (existingSubscription
+                  ? !data?.portalConfigured
+                  : !data?.configuredPlans?.[plan.key]));
+
+            return (
+              <button
+                type="button"
+                disabled={busy !== null || explicitlyUnavailable}
+                onClick={() => void choose(plan)}
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100"
+              >
+                {busy === plan.key
+                  ? "Opening…"
+                  : existingSubscription
+                    ? "Manage subscription"
+                    : `Choose ${plan.name} →`}
+              </button>
+            );
+          }}
+        />
       </div>
       {data && !isAdmin ? <p className="mt-5 text-sm font-bold text-amber-800">Ask your dealership administrator to choose or upgrade your plan.</p> : null}
       {data && isAdmin && !existingSubscription && !Object.values(data.configuredPlans || {}).some(Boolean) ? <p className="mt-5 text-sm font-bold text-amber-800">Paid checkout is not available yet. Your vehicle draft is saved.</p> : null}
