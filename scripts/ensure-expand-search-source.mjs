@@ -23,7 +23,9 @@ const evaluatorChanged = updateFile(evaluatorPath, (source) => {
   const editCompsFlow =
     source.includes('Dealer Profile & Preferences →') &&
     (source.includes('Edit Comp Markets') || source.includes('Edit Comps') || source.includes('Expand / Improve Comps')) &&
-    source.includes('Search Selected Markets') &&
+    (source.includes('Search Selected Markets') ||
+      source.includes('Select Markets to Search') ||
+      source.includes('Selected Market')) &&
     source.includes('Vehicle Match');
 
   if (editCompsFlow || source.includes(strongCompGate) || source.includes(correctedGate)) {
