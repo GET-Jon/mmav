@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getUsageSummary } from "@/lib/billing/usage";
+import { isStripePlanConfigured } from "@/lib/billing/checkout-prices";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
 
@@ -52,12 +53,22 @@ export async function GET() {
     },
     entitlements,
     usage,
-    checkoutConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+    checkoutConfigured:
+      isStripePlanConfigured("starter") ||
+      isStripePlanConfigured("dealer") ||
+      isStripePlanConfigured("dealer_pro"),
     configuredPlans: {
-      starter: Boolean(process.env.STRIPE_SECRET_KEY),
-      dealer: Boolean(process.env.STRIPE_SECRET_KEY),
-      dealer_pro: Boolean(process.env.STRIPE_SECRET_KEY),
+      starter: isStripePlanConfigured("starter"),
+      dealer: isStripePlanConfigured("dealer"),
+      dealer_pro: isStripePlanConfigured("dealer_pro"),
     },
     portalConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+    stripeSetup: {
+      secretKey: Boolean(process.env.STRIPE_SECRET_KEY),
+      webhookSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+      starterPrice: isStripePlanConfigured("starter"),
+      dealerPrice: isStripePlanConfigured("dealer"),
+      dealerProPrice: isStripePlanConfigured("dealer_pro"),
+    },
   });
 }
