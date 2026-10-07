@@ -4415,7 +4415,6 @@ export function EvaluationWorkspace({
     }
 
     setCompSearchHandedOff(true);
-    setCompSectionExpanded(true);
     setCompMarketEditorOpen(false);
     setCompSearchImproving(true);
     setAutomaticCompSearchCompleted(false);
