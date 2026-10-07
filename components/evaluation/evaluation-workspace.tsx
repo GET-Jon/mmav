@@ -2919,15 +2919,30 @@ export function EvaluationWorkspace({
       return;
     }
 
+    setMarketCheckStatus(
+      `Searching ${regions.length} selected market${regions.length === 1 ? "" : "s"}...`,
+    );
     setCompMarketEditorOpen(false);
-    await pullMarketCheckComps(null, {
-      searchStage: 'expanded',
+
+    const outcome = await pullMarketCheckComps(null, {
+      searchStage: "expanded",
       regions,
       mergeResults: true,
       useVinMatch: !compTrimRelaxed,
       preferTaxonomyFallback: compTrimRelaxed,
       useTaxonomyFallbackTrim: !compTrimRelaxed,
+      maxApiCallsPerSearch: Math.min(3, regions.length),
     });
+
+    if (!outcome) {
+      // A blocked/failed request previously looked like the markets had been
+      // searched because the editor simply disappeared. Re-open it so the
+      // user can see that the selected markets are still pending.
+      setCompMarketEditorOpen(true);
+      return;
+    }
+
+    setSelectedCompMarketZips([]);
   }
 
   function getPreviouslySearchedCompRegions() {
@@ -6080,23 +6095,39 @@ export function EvaluationWorkspace({
                             })}
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() => { setCompMarketEditorOpen(false); void searchMajorMetropolitanAreas(); }}
-                            disabled={marketCheckLoading}
-                            className="text-xs font-black text-slate-500 hover:text-blue-700 disabled:text-slate-300"
-                          >
-                            Search reference markets
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void searchSelectedCompMarkets()}
-                            disabled={!selectedCompMarketZips.length || marketCheckLoading}
-                            className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                          >
-                            Search Selected Markets
-                          </button>
+                        <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                          <div className="mb-3 text-[11px] font-semibold leading-5 text-slate-500">
+                            Selecting or adding a market stages it here. The search runs when you press the blue button.
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setCompMarketEditorOpen(false); void searchMajorMetropolitanAreas(); }}
+                              disabled={marketCheckLoading}
+                              className="text-xs font-black text-slate-500 hover:text-blue-700 disabled:text-slate-300"
+                            >
+                              Search reference markets
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void searchSelectedCompMarkets()}
+                              disabled={
+                                selectedCompMarketZips.filter(
+                                  (zip) => !(marketCheckSearchMeta?.searchedZips || []).includes(zip),
+                                ).length === 0 || marketCheckLoading
+                              }
+                              className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              {(() => {
+                                const count = selectedCompMarketZips.filter(
+                                  (zip) => !(marketCheckSearchMeta?.searchedZips || []).includes(zip),
+                                ).length;
+                                return count > 0
+                                  ? `Search ${count} Selected Market${count === 1 ? "" : "s"} →`
+                                  : "Select Markets to Search";
+                              })()}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ) : (
