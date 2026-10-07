@@ -7026,6 +7026,33 @@ export function EvaluationWorkspace({
                           <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
                             <div className="text-sm font-black text-slate-950">{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length} issue{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length === 1 ? "" : "s"} identified</div>
                             <div className="mt-1 text-xs font-semibold text-slate-500">Planning reserve ≈ {money(getEffectiveConditionPlanningEstimate())}</div>
+
+                            {conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length ? (
+                              <div className="mt-3 space-y-1.5">
+                                {conditionAnalysis.issues
+                                  .filter((issue) => issue.includeInValuation)
+                                  .slice(0, 2)
+                                  .map((issue) => (
+                                    <div
+                                      key={issue.id}
+                                      className="flex items-center justify-between gap-3 rounded-lg bg-white/80 px-3 py-2"
+                                    >
+                                      <div className="min-w-0 truncate text-xs font-bold text-slate-700">
+                                        {issue.description}
+                                      </div>
+                                      <div className="shrink-0 text-xs font-black text-violet-700">
+                                        {money(issue.planningEstimate)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                {conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length > 2 ? (
+                                  <div className="px-1 text-[10px] font-bold text-slate-400">
+                                    +{conditionAnalysis.issues.filter((issue) => issue.includeInValuation).length - 2} more in details
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+
                             <div className="mt-3">
                               <button type="button" onClick={openConditionAnalysis} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700">Review details</button>
                             </div>
