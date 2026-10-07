@@ -55,7 +55,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
       const actions = root.querySelectorAll<HTMLElement>("button, a[href]");
 
       actions.forEach((action) => {
-        const insidePlanDialog = Boolean(action.closest("dialog[open]"));
+        const insidePlanDialog = Boolean(action.closest("dialog"));
         const shouldDisable = exhausted && !insidePlanDialog && !isEvaluationEntryAction(action);
 
         if (shouldDisable) {
@@ -84,7 +84,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
   function shouldBlock(target: EventTarget | null) {
     if (!exhausted || !(target instanceof Element)) return false;
     const action = target.closest<HTMLElement>("button, a[href]");
-    return Boolean(action && !action.closest("dialog[open]") && !isEvaluationEntryAction(action));
+    return Boolean(action && !action.closest("dialog") && !isEvaluationEntryAction(action));
   }
 
   function blockMouseAction(event: MouseEvent<HTMLDivElement>) {
