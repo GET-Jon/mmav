@@ -601,7 +601,11 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
     const delta = compYear && target.year ? Math.abs(compYear - target.year) : 99;
     const currentScore = Number(comp.qualityScore || 40);
     const details = comp.marketCheckDetails || {};
-    const retrievalFactors = details.compFitFactors || {};
+    const retrievalFactors = (details.compFitFactors || {}) as {
+      mileagePenalty?: number | null;
+      distancePenalty?: number | null;
+      missingPricePenalty?: number | null;
+    };
 
     const candidateVehicle = buildCandidateVehicle(comp, target);
     const equivalence = evaluateVehicleEquivalence({
