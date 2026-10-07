@@ -59,7 +59,7 @@ export const TRIAL_LIMITS = {
   autoDevPerEvaluation: 1,
   conditionAnalysesPerEvaluation: 3,
   evaluationSummariesPerEvaluation: 3,
-  providerCallsTotal: 30,
+  // Per-evaluation feature limits are the user-facing trial guardrails.\n  // Keep this workspace-wide provider ceiling high enough that a user can\n  // actually use all 5 trial evaluations without normal MarketCheck/VIN/AI\n  // calls unexpectedly blocking a later evaluation.\n  providerCallsTotal: 150,
 };
 
 function normalizePlanKey(value: unknown): PlanKey {
@@ -328,7 +328,7 @@ export async function checkUsageAllowance(args: {
         code: "PROVIDER_SAFETY_LIMIT",
         status: 429,
         message:
-          "This workspace has reached its current extended data-search allowance. Existing evaluations remain available.",
+          "This workspace has reached an internal provider safety limit. Existing evaluations remain available.",
         summary,
       };
     }
