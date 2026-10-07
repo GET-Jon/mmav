@@ -966,7 +966,6 @@ export function EvaluationWorkspace({
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
-  const [compSectionExpanded, setCompSectionExpanded] = useState(true);
   const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
   const [automaticCompSearchCompleted, setAutomaticCompSearchCompleted] =
     useState(false);
@@ -991,7 +990,6 @@ export function EvaluationWorkspace({
   );
   const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
     useState(0);
-  const [verdictCompsExpanded, setVerdictCompsExpanded] = useState(false);
   const [allInCostOpen, setAllInCostOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
@@ -6598,8 +6596,6 @@ export function EvaluationWorkspace({
           userEmail={userEmail}
           onNewEvaluation={() => {
             setActiveStage("vehicle");
-            setCompSectionExpanded(false);
-            setVerdictCompsExpanded(false);
             clearLocalDraft();
             setVehicleStepConfirmed(false);
             setConditionStepConfirmed(false);
@@ -7182,7 +7178,25 @@ export function EvaluationWorkspace({
               ) : (
                 <div className="mt-4">
                   {evaluationRunning || marketCheckLoading ? (
-                    <div className="rounded-xl bg-blue-50 px-4 py-4 text-sm font-black text-blue-700">Checking the market…</div>
+                    <div className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm font-black text-blue-700">
+                          Checking the market…
+                        </div>
+                        <div className="flex items-center gap-1.5" aria-hidden="true">
+                          {[0, 1, 2].map((index) => (
+                            <span
+                              key={index}
+                              className="h-2 w-2 animate-bounce rounded-full bg-blue-600"
+                              style={{ animationDelay: `${index * 140}ms` }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                        <div className="h-full w-2/3 animate-pulse rounded-full bg-blue-600" />
+                      </div>
+                    </div>
                   ) : compSummary.includedCount > 0 ? (
                     <>
                       <div className="grid grid-cols-2 gap-3">
@@ -7193,7 +7207,6 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{marketEvidenceStrength}</div>
-                          <div className="mt-0.5 text-[10px] font-bold text-slate-400">Evidence strength</div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
@@ -7202,25 +7215,29 @@ export function EvaluationWorkspace({
                           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                             <div className="text-xs font-black text-amber-900">Recommended next step: {compSearchRecommendation.title}</div>
                             <div className="mt-1 text-[11px] font-semibold leading-5 text-amber-800">{compSearchRecommendation.reason}</div>
-                            <button
-                              type="button"
-                              onClick={() => void improveCompSearch()}
-                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
-                              className="mt-2 rounded-lg bg-blue-700 px-3 py-2 text-[11px] font-black text-white disabled:bg-slate-300"
-                            >
-                              {compSearchImproving ? "Running Search…" : "Run Recommended Search"}
-                            </button>
                           </div>
                         ) : null}
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button type="button" onClick={() => setCompSectionExpanded((open) => !open)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
-                            {compSectionExpanded ? "Hide comps" : "Review comps"}
-                          </button>
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                          {hasLimitedMarketEvidence ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void improveCompSearch()}
+                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                                className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
+                              >
+                                {compSearchImproving ? "Running Search…" : "Run Recommended Search"}
+                              </button>
+                              <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                                or
+                              </span>
+                            </>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => void continueToVerdict()}
                             disabled={verdictTransitioning}
-                            className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70"
+                            className="flex-1 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-black text-blue-700 transition hover:bg-blue-50 disabled:cursor-wait disabled:opacity-70"
                           >
                             {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
                           </button>
@@ -7301,7 +7318,7 @@ export function EvaluationWorkspace({
             </div>
           )}
 
-          {activeStage === "market" && (needsCompSearch || compSectionExpanded) ? (
+          {activeStage === "market" && (comps.length > 0 || needsCompSearch) ? (
             <section ref={compSectionRef} className="mt-4 scroll-mt-4">
               <SectionCard
                 title="Comparable Vehicles"
@@ -7314,7 +7331,7 @@ export function EvaluationWorkspace({
               >
                 <div className="space-y-4">
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                    <MarketCompsTable comps={comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
                   ) : null}
                   <CompSearchReport
                     vehicleLabel={[vehicleYear, vehicleMake, vehicleModel, vehicleTrim].filter(Boolean).join(" ") || "Current vehicle"}
@@ -7459,15 +7476,9 @@ export function EvaluationWorkspace({
                   title="Comparable Vehicles"
                   action={
                     <div className="flex items-center gap-3">
-                      {comps.length > 5 ? (
-                        <button
-                          type="button"
-                          onClick={() => setVerdictCompsExpanded((open) => !open)}
-                          className="text-xs font-black text-blue-700 hover:text-blue-900"
-                        >
-                          {verdictCompsExpanded ? "Show fewer" : `Show all ${comps.length}`}
-                        </button>
-                      ) : null}
+                      <span className="text-xs font-bold text-slate-400">
+                        Full comp set · {comps.length}
+                      </span>
                       <button type="button" onClick={openCompMarketEditor} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
                     </div>
                   }
@@ -7498,7 +7509,7 @@ export function EvaluationWorkspace({
                     </div>
                   ) : null}
                   {comps.length ? (
-                    <MarketCompsTable comps={verdictCompsExpanded ? comps : comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}
