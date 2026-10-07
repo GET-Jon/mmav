@@ -14,7 +14,6 @@ import {
   type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
-import { CompSearchReport } from "@/components/evaluation/comp-search-report";
 import {
   describeMarketCheckAttempt,
   recommendCompSearchAction,
@@ -791,7 +790,7 @@ export function EvaluationWorkspace({
       latitude: number | null;
     }>;
   } | null>(null);
-  const [compSearchHistory, setCompSearchHistory] = useState<CompSearchReportEntry[]>([]);
+  const [, setCompSearchHistory] = useState<CompSearchReportEntry[]>([]);
   const [compSearchImproving, setCompSearchImproving] = useState(false);
   const [compSearchImprovementStatus, setCompSearchImprovementStatus] = useState("");
 
@@ -7332,35 +7331,47 @@ export function EvaluationWorkspace({
                   </div>
                 }
               >
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {comps.length ? (
-                    <MarketCompsTable comps={comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                        <div className="text-xs font-bold text-slate-500">
+                          {Math.min(5, comps.length)} of {Number(
+                            marketCheckApiUsage?.filterDiagnostics?.usableListings ||
+                              comps.length,
+                          )} qualifying comp{Number(
+                            marketCheckApiUsage?.filterDiagnostics?.usableListings ||
+                              comps.length,
+                          ) === 1 ? "" : "s"} shown
+                        </div>
+                        <div className="text-[11px] font-semibold text-slate-400">
+                          Full comp set appears after Continue to Verdict.
+                        </div>
+                      </div>
+                      <MarketCompsTable comps={comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                    </>
                   ) : null}
-                  <CompSearchReport
-                    vehicleLabel={[vehicleYear, vehicleMake, vehicleModel, vehicleTrim].filter(Boolean).join(" ") || "Current vehicle"}
-                    regionsChecked={marketCheckSearchMeta?.regionsChecked || []}
-                    retrievalLabel={
-                      compTrimRelaxed
-                        ? compRetrievalLabel
-                        : marketCheckSearchMeta?.lowConfidenceFallback
-                          ? "Low-confidence fallback retrieval"
-                          : "Exact vehicle with strict qualification"
-                    }
-                    apiCallsMade={Number(marketCheckApiUsage?.apiCallsMade || 0)}
-                    searchLog={marketCheckApiUsage?.searchLog || []}
-                    filterDiagnostics={marketCheckApiUsage?.filterDiagnostics || null}
-                    entries={compSearchHistory}
-                    nationalDiscoveryStatus={autoDevDiscoveryStatus}
-                    nationalDiscoveryTotal={
-                      autoDevDiscovery ? Number(autoDevDiscovery.total || 0) : null
-                    }
-                    recommendation={compSearchRecommendation}
-                    improving={compSearchImproving}
-                    activityStatus={compSearchImprovementStatus}
-                    errorCode={marketCheckError?.code || ""}
-                    errorMessage={marketCheckError?.message || ""}
-                    onImprove={() => void improveCompSearch()}
-                  />
+
+                  {marketCheckSearchMeta?.regionsChecked?.length ||
+                  marketCheckApiUsage?.filterDiagnostics?.returnedListings ? (
+                    <details className="group">
+                      <summary className="cursor-pointer list-none text-xs font-black text-slate-400 hover:text-slate-700">
+                        View search details
+                        <span className="ml-1 inline-block transition-transform group-open:rotate-180">↓</span>
+                      </summary>
+                      <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-500">
+                        {marketCheckSearchMeta?.regionsChecked?.length
+                          ? `${marketCheckSearchMeta.regionsChecked.length} market${marketCheckSearchMeta.regionsChecked.length === 1 ? "" : "s"} searched`
+                          : "Market search completed"}
+                        {Number(marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0) > 0
+                          ? ` · ${Number(marketCheckApiUsage?.filterDiagnostics?.returnedListings || 0)} listings reviewed`
+                          : ""}
+                        {Number(marketCheckApiUsage?.filterDiagnostics?.usableListings || 0) > 0
+                          ? ` · ${Number(marketCheckApiUsage?.filterDiagnostics?.usableListings || 0)} qualified`
+                          : ""}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               </SectionCard>
             </section>
