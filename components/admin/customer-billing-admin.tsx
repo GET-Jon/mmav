@@ -200,11 +200,12 @@ export function CustomerBillingAdmin({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {[
           ["Customers", customers.length],
           ["Paid", paid],
           ["Trialing", trials],
+          ["Active users", activeUsers],
           ["Evaluations this month", evaluationsThisMonth],
           ["Gifted credits outstanding", giftedOutstanding],
         ].map(([label, value]) => (
