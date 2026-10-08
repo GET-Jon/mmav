@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -16,6 +17,9 @@ export type PlatformCustomerBillingRow = {
   includedUsed: number;
   includedLimit: number;
   includedRemaining: number;
+  monthlyEvaluationsUsed: number;
+  activeUsers: number;
+  seatsLimit: number;
   giftedRemaining: number;
   totalRemaining: number;
   stripeCustomerId: string | null;
@@ -181,18 +185,28 @@ export function CustomerBillingAdmin({
   const trials = customers.filter(
     (item) => item.billingStatus === "trialing",
   ).length;
-  const exhausted = customers.filter(
-    (item) => item.totalRemaining <= 0,
-  ).length;
+  const evaluationsThisMonth = customers.reduce(
+    (sum, item) => sum + item.monthlyEvaluationsUsed,
+    0,
+  );
+  const activeUsers = customers.reduce(
+    (sum, item) => sum + item.activeUsers,
+    0,
+  );
+  const giftedOutstanding = customers.reduce(
+    (sum, item) => sum + item.giftedRemaining,
+    0,
+  );
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ["Customers", customers.length],
           ["Paid", paid],
           ["Trialing", trials],
-          ["No evaluations left", exhausted],
+          ["Evaluations this month", evaluationsThisMonth],
+          ["Gifted credits outstanding", giftedOutstanding],
         ].map(([label, value]) => (
           <div
             key={String(label)}
@@ -223,6 +237,7 @@ export function CustomerBillingAdmin({
                 <th className="px-5 py-3">Customer</th>
                 <th className="px-5 py-3">Plan</th>
                 <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Users</th>
                 <th className="px-5 py-3">Included usage</th>
                 <th className="px-5 py-3">Gifted</th>
                 <th className="px-5 py-3">Total left</th>
@@ -263,6 +278,14 @@ export function CustomerBillingAdmin({
                   </td>
                   <td className="px-5 py-4">
                     <div className="font-black text-slate-900">
+                      {customer.activeUsers} / {customer.seatsLimit}
+                    </div>
+                    <div className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                      active users / seats
+                    </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="font-black text-slate-900">
                       {customer.includedUsed} / {customer.includedLimit}
                     </div>
                     <div className="mt-0.5 text-[11px] font-semibold text-slate-400">
@@ -297,14 +320,22 @@ export function CustomerBillingAdmin({
                       : dateLabel(customer.currentPeriodEnd)}
                   </td>
                   <td className="px-5 py-4">
-                    <GiftCredits customer={customer} />
+                    <div className="space-y-2">
+                      <GiftCredits customer={customer} />
+                      <Link
+                        href={`/admin/customers/${customer.companyId}`}
+                        className="inline-flex text-xs font-black text-blue-700 hover:underline"
+                      >
+                        View account & users →
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
               {customers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-5 py-12 text-center font-semibold text-slate-400"
                   >
                     No customer companies found.
