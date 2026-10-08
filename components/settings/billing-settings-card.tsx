@@ -186,12 +186,18 @@ export function BillingSettingsCard() {
 
         {usage?.trialActive && !usage?.paidActive ? (
           <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
-            Free trial active: {usage.trialEvaluationsRemaining ?? 0} of 5 evaluations remaining
-            {usage.giftedEvaluationsRemaining
-              ? ` · ${usage.giftedEvaluationsRemaining} gifted evaluation${usage.giftedEvaluationsRemaining === 1 ? "" : "s"} available`
-              : ""}
-            {usage.trialEndsAt ? ` · through ${dateLabel(usage.trialEndsAt)}` : ""}.
-            No credit card is required until you choose a paid plan.
+            <div>
+              Free trial active: {usage.trialEvaluationsRemaining ?? 0} of 5 evaluations remaining
+              {usage.trialEndsAt ? ` through ${dateLabel(usage.trialEndsAt)}` : ""}.
+            </div>
+            {usage.giftedEvaluationsRemaining ? (
+              <div className="mt-1 text-amber-800">
+                Gifted evaluations: {usage.giftedEvaluationsRemaining} available · these do not expire.
+              </div>
+            ) : null}
+            <div className="mt-1 font-semibold text-blue-800">
+              No credit card is required until you choose a paid plan.
+            </div>
           </div>
         ) : null}
 
@@ -262,10 +268,13 @@ export function BillingSettingsCard() {
                 : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this month`}
             </div>
           </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-            <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Gifted evaluations</div>
+          <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">Gifted evaluations</div>
             <div className="mt-2 text-lg font-black text-slate-950">
               {usage?.giftedEvaluationsRemaining || 0}
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-amber-700">
+              Do not expire
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
