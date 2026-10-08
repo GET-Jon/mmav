@@ -66,8 +66,37 @@ export async function POST(request: Request) {
       idempotencyKey: `evaluation_completed:${subjectKey}`,
       metadata: {
         valuationCompCount: Number(body.valuationCompCount || 0),
+        giftedEvaluation:
+          "consumesGiftedEvaluation" in allowance
+            ? Boolean(allowance.consumesGiftedEvaluation)
+            : false,
       },
     });
+
+    if (
+      "consumesGiftedEvaluation" in allowance &&
+      allowance.consumesGiftedEvaluation
+    ) {
+      const { data: consumed, error: consumeError } = await admin.rpc(
+        "consume_company_evaluation_credit",
+        {
+          p_company_id: allowance.summary.company.companyId,
+          p_subject_key: subjectKey,
+        },
+      );
+
+      if (consumeError) throw new Error(consumeError.message);
+      if (!consumed) {
+        return NextResponse.json(
+          {
+            error:
+              "The gifted evaluation credit was no longer available. Refresh your usage and try again.",
+            code: "GIFTED_EVALUATION_UNAVAILABLE",
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     return NextResponse.json({
       counted: true,
