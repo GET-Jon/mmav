@@ -158,16 +158,31 @@ export async function getCompanyUsageContext(
   userId: string,
 ) {
   const company = await getCurrentCompanyForUser(supabase, userId);
-  const { data: billing, error } = await supabase
-    .from("company_billing_accounts")
-    .select("status,plan_key,trial_ends_at")
-    .eq("company_id", company.companyId)
-    .maybeSingle();
+  const [
+    { data: billing, error: billingError },
+    { data: entitlements, error: entitlementError },
+  ] = await Promise.all([
+    supabase
+      .from("company_billing_accounts")
+      .select("status,plan_key,trial_ends_at")
+      .eq("company_id", company.companyId)
+      .maybeSingle(),
+    supabase
+      .from("company_entitlements")
+      .select("gifted_evaluations")
+      .eq("company_id", company.companyId)
+      .maybeSingle(),
+  ]);
 
-  if (error) throw new Error(error.message);
+  if (billingError) throw new Error(billingError.message);
+  if (entitlementError) throw new Error(entitlementError.message);
 
   const status = String(billing?.status || "not_configured");
   const planKey = normalizePlanKey(billing?.plan_key);
+  const giftedEvaluations = Math.max(
+    0,
+    Number(entitlements?.gifted_evaluations || 0),
+  );
   const internalUnlimited = company.companySlug === "mindful-motor-co";
   const trialEndsAt = billing?.trial_ends_at ? new Date(billing.trial_ends_at) : null;
   const trialActive =
@@ -182,6 +197,7 @@ export async function getCompanyUsageContext(
     internalUnlimited,
     trialEndsAt: trialEndsAt?.toISOString() || null,
     trialActive,
+    giftedEvaluations,
     paidActive: internalUnlimited || isPaidStatus(status),
   };
 }
@@ -191,7 +207,14 @@ export async function getUsageSummary(
   userId: string,
 ) {
   const context = await getCompanyUsageContext(supabase, userId);
-  const { company, planKey, internalUnlimited, trialActive, paidActive } = context;
+  const {
+    company,
+    planKey,
+    internalUnlimited,
+    trialActive,
+    paidActive,
+    giftedEvaluations,
+  } = context;
 
   const [trialEvaluationsUsed, monthlyEvaluationsUsed, monthlyProviderCalls] =
     await Promise.all([
@@ -216,12 +239,21 @@ export async function getUsageSummary(
     monthlyEvaluationsRemaining: internalUnlimited
       ? null
       : Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed),
+    giftedEvaluationsRemaining: internalUnlimited ? null : giftedEvaluations,
+    effectiveEvaluationsRemaining: internalUnlimited
+      ? null
+      : paidActive
+        ? Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed) +
+          giftedEvaluations
+        : Math.max(0, TRIAL_LIMITS.evaluationsTotal - trialEvaluationsUsed) +
+          giftedEvaluations,
     monthlyProviderCalls,
     limits,
     trialLimits: TRIAL_LIMITS,
     canUsePaidProviders:
       internalUnlimited ||
       paidActive ||
+      giftedEvaluations > 0 ||
       (trialActive && trialEvaluationsUsed < TRIAL_LIMITS.evaluationsTotal),
   };
 }
@@ -241,7 +273,14 @@ export async function checkUsageAllowance(args: {
     return { allowed: true as const, summary };
   }
 
-  if (!summary.paidActive && !summary.trialActive) {
+  const giftedCreditsAvailable =
+    Number(summary.giftedEvaluationsRemaining || 0) > 0;
+
+  if (
+    !summary.paidActive &&
+    !summary.trialActive &&
+    !giftedCreditsAvailable
+  ) {
     return {
       allowed: false as const,
       code: "TRIAL_EXPIRED",
@@ -253,7 +292,8 @@ export async function checkUsageAllowance(args: {
 
   if (
     !summary.paidActive &&
-    summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal
+    summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal &&
+    !giftedCreditsAvailable
   ) {
     return {
       allowed: false as const,
@@ -267,7 +307,8 @@ export async function checkUsageAllowance(args: {
   if (
     kind === "evaluation_completed" &&
     summary.paidActive &&
-    summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
+    summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth &&
+    !giftedCreditsAvailable
   ) {
     return {
       allowed: false as const,
@@ -338,7 +379,20 @@ export async function checkUsageAllowance(args: {
     }
   }
 
-  return { allowed: true as const, summary };
+  const consumesGiftedEvaluation =
+    kind === "evaluation_completed" &&
+    !summary.internalUnlimited &&
+    giftedCreditsAvailable &&
+    (summary.paidActive
+      ? summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
+      : !summary.trialActive ||
+        summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal);
+
+  return {
+    allowed: true as const,
+    summary,
+    consumesGiftedEvaluation,
+  };
 }
 
 export async function recordUsageEvent(args: {
