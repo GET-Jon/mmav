@@ -142,13 +142,14 @@ export default async function AdminCustomersPage() {
         : trialActive
           ? TRIAL_LIMITS.evaluationsTotal
           : TRIAL_LIMITS.evaluationsTotal;
-      const includedUsed = paid
+      const rawIncludedUsage = paid
         ? Number(monthlyCompleted || 0)
         : Number(totalCompleted || 0);
+      const includedUsed = Math.min(includedLimit, rawIncludedUsage);
       const includedRemaining = paid
-        ? Math.max(0, includedLimit - includedUsed)
+        ? Math.max(0, includedLimit - rawIncludedUsage)
         : trialActive
-          ? Math.max(0, includedLimit - includedUsed)
+          ? Math.max(0, includedLimit - rawIncludedUsage)
           : 0;
       const giftedRemaining = Math.max(
         0,
