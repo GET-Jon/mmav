@@ -27,7 +27,7 @@ export async function GET() {
       admin
         .from("company_entitlements")
         .select(
-          "plan_key,evaluations_per_month,seats_limit,auto_dev_enabled,inventory_enabled,insights_enabled,advanced_market_expansion_enabled",
+          "plan_key,evaluations_per_month,seats_limit,gifted_evaluations,auto_dev_enabled,inventory_enabled,insights_enabled,advanced_market_expansion_enabled",
         )
         .eq("company_id", company.companyId)
         .maybeSingle(),
