@@ -71,13 +71,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const evaluationUsage = (() => {
     if (!usage || usage.internalUnlimited) return null;
 
+    const gifted = Number(usage.giftedEvaluationsRemaining || 0);
+
     if (!usage.paidActive) {
       const used = Number(usage.trialEvaluationsUsed || 0);
       const total = 5;
-      const gifted = Number(usage.giftedEvaluationsRemaining || 0);
       return {
         used,
         total,
+        gifted,
         label:
           gifted > 0
             ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
@@ -92,7 +94,11 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     return {
       used,
       total,
-      label: `${used}/${total} evals`,
+      gifted,
+      label:
+        gifted > 0
+          ? `${used}/${total} evals · ${gifted} gifted`
+          : `${used}/${total} evals`,
     };
   })();
 
@@ -103,6 +109,10 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
 
   const evaluationUsageTone = (() => {
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
+
+    if (Number(evaluationUsage.gifted || 0) > 0) {
+      return "border-amber-400 bg-amber-100 text-amber-900 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]";
+    }
 
     const remainingRatio = Math.max(
       0,
