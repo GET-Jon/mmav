@@ -54,6 +54,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const [resolvedCompanySlug, setResolvedCompanySlug] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageStatus | null>(null);
   const [planSelectionOpen, setPlanSelectionOpen] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
   const isAdmin = resolvedRole === "company_admin";
   const isMindfulAdmin =
@@ -159,6 +160,34 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
 
     let cancelled = false;
 
+    async function loadPlatformAdminStatus() {
+      try {
+        const response = await fetch("/api/admin/platform-status", {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as {
+          isPlatformAdmin?: boolean;
+        };
+        if (!cancelled && response.ok) {
+          setIsPlatformAdmin(Boolean(payload.isPlatformAdmin));
+        }
+      } catch {
+        if (!cancelled) setIsPlatformAdmin(false);
+      }
+    }
+
+    void loadPlatformAdminStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+
+    let cancelled = false;
+
     async function loadUsage() {
       try {
         const response = await fetch("/api/usage/status", { cache: "no-store" });
@@ -221,6 +250,11 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
           <Link href="/evaluate" className={navClass(active === "evaluator")}>Evaluator</Link>
           <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
           <Link href="/insights" className={navClass(active === "insights")}>Insights</Link>
+          {isPlatformAdmin ? (
+            <Link href="/admin/customers" className={navClass(active === "admin")}>
+              Platform Admin
+            </Link>
+          ) : null}
           {isMindfulAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
           {isMindfulAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
         </nav>
@@ -269,11 +303,37 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
               <div role="menu" className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 <div className="border-b border-slate-100 px-4 py-3">
                   <div className="truncate text-xs font-black text-slate-950">{userEmail || userLabel}</div>
-                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{isMindfulAdmin ? "Mindful Admin" : isAdmin ? "Company Admin" : "User"}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    {isPlatformAdmin
+                      ? "Platform Admin"
+                      : isMindfulAdmin
+                        ? "Mindful Admin"
+                        : isAdmin
+                          ? "Company Admin"
+                          : "User"}
+                  </div>
                 </div>
                 <div className="p-1.5">
                   <Link role="menuitem" href="/settings" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Settings</Link>
-                  {isMindfulAdmin ? <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Admin</Link> : null}
+                  {isPlatformAdmin ? (
+                    <Link
+                      role="menuitem"
+                      href="/admin/customers"
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                    >
+                      Platform Admin
+                    </Link>
+                  ) : isMindfulAdmin ? (
+                    <Link
+                      role="menuitem"
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                    >
+                      Admin
+                    </Link>
+                  ) : null}
                 </div>
                 {userEmail ? (
                   <div className="border-t border-slate-100 p-1.5">
