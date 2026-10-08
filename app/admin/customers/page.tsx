@@ -38,7 +38,7 @@ export default async function AdminCustomersPage() {
     { data: companies, error: companiesError },
     { data: billingRows, error: billingError },
     { data: entitlementRows, error: entitlementError },
-    { data: adminMemberships, error: membershipError },
+    { data: memberships, error: membershipError },
   ] = await Promise.all([
     admin
       .from("companies")
@@ -58,7 +58,6 @@ export default async function AdminCustomersPage() {
     admin
       .from("company_memberships")
       .select("company_id,user_id,role,status,created_at")
-      .eq("role", "company_admin")
       .eq("status", "active")
       .order("created_at", { ascending: true }),
   ]);
@@ -75,10 +74,19 @@ export default async function AdminCustomersPage() {
     (entitlementRows || []).map((row) => [String(row.company_id), row]),
   );
   const firstAdminMembershipByCompany = new Map<string, { user_id: string }>();
+  const activeUsersByCompany = new Map<string, number>();
 
-  for (const membership of adminMemberships || []) {
+  for (const membership of memberships || []) {
     const companyId = String(membership.company_id);
-    if (!firstAdminMembershipByCompany.has(companyId)) {
+    activeUsersByCompany.set(
+      companyId,
+      (activeUsersByCompany.get(companyId) || 0) + 1,
+    );
+
+    if (
+      membership.role === "company_admin" &&
+      !firstAdminMembershipByCompany.has(companyId)
+    ) {
       firstAdminMembershipByCompany.set(companyId, {
         user_id: String(membership.user_id),
       });
@@ -171,6 +179,11 @@ export default async function AdminCustomersPage() {
         includedUsed,
         includedLimit,
         includedRemaining,
+        monthlyEvaluationsUsed: Number(monthlyCompleted || 0),
+        activeUsers: activeUsersByCompany.get(companyId) || 0,
+        seatsLimit:
+          Number(entitlement?.seats_limit || 0) ||
+          PLAN_LIMITS[planKey].seats,
         giftedRemaining,
         totalRemaining: includedRemaining + giftedRemaining,
         stripeCustomerId: billing?.stripe_customer_id
