@@ -69,9 +69,7 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
             const explicitlyUnavailable =
               Boolean(data) &&
               (!isAdmin ||
-                (existingSubscription
-                  ? !data?.portalConfigured
-                  : !data?.configuredPlans?.[plan.key]));
+                (existingSubscription && !data?.portalConfigured));
 
             return (
               <button
