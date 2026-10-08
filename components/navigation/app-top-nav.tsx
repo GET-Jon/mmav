@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
+import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export type AppTopNavPage =
@@ -30,6 +31,9 @@ type UsageStatus = {
   trialEvaluationsRemaining?: number | null;
   monthlyEvaluationsUsed?: number;
   monthlyEvaluationsRemaining?: number | null;
+  giftedEvaluationsRemaining?: number | null;
+  effectiveEvaluationsRemaining?: number | null;
+  canUsePaidProviders?: boolean;
   limits?: {
     evaluationsPerMonth?: number;
   };
@@ -49,6 +53,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const [resolvedCompanyName, setResolvedCompanyName] = useState<string | null>(null);
   const [resolvedCompanySlug, setResolvedCompanySlug] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageStatus | null>(null);
+  const [planSelectionOpen, setPlanSelectionOpen] = useState(false);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
   const isAdmin = resolvedRole === "company_admin";
   const isMindfulAdmin =
@@ -65,13 +70,17 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const evaluationUsage = (() => {
     if (!usage || usage.internalUnlimited) return null;
 
-    if (usage.trialActive && !usage.paidActive) {
+    if (!usage.paidActive) {
       const used = Number(usage.trialEvaluationsUsed || 0);
-      const total = used + Number(usage.trialEvaluationsRemaining || 0) || 5;
+      const total = 5;
+      const gifted = Number(usage.giftedEvaluationsRemaining || 0);
       return {
         used,
         total,
-        label: `${used}/${total} free evals`,
+        label:
+          gifted > 0
+            ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
+            : `${Math.min(used, total)}/${total} free evals`,
       };
     }
 
@@ -85,6 +94,11 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
       label: `${used}/${total} evals`,
     };
   })();
+
+  const trialPaywallReached =
+    Boolean(usage) &&
+    !usage?.paidActive &&
+    usage?.canUsePaidProviders === false;
 
   const evaluationUsageTone = (() => {
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
@@ -195,7 +209,8 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <>
+      <header className="border-b border-slate-200 bg-white">
       <div className="relative mx-auto flex max-w-[1480px] items-center px-5 py-3 lg:px-7">
         <Link href="/" aria-label="Lot Logic home" className="shrink-0 text-slate-950 transition-opacity hover:opacity-75">
           <div className="sm:hidden"><LotLogicLogo compact /></div>
@@ -212,14 +227,26 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
 
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {evaluationUsage ? (
-            <Link
-              href="/settings?tab=billing"
-              data-evaluation-limit-allowed="true"
-              title="View evaluation usage and plan options"
-              className={`hidden rounded-xl border px-3 py-2 text-xs font-black transition hover:brightness-95 lg:block ${evaluationUsageTone}`}
-            >
-              {evaluationUsage.label}
-            </Link>
+            trialPaywallReached ? (
+              <button
+                type="button"
+                data-evaluation-limit-allowed="true"
+                title="Choose a plan to keep evaluating"
+                onClick={() => setPlanSelectionOpen(true)}
+                className={`hidden rounded-xl border px-3 py-2 text-xs font-black transition hover:brightness-95 lg:block ${evaluationUsageTone}`}
+              >
+                {evaluationUsage.label}
+              </button>
+            ) : (
+              <Link
+                href="/settings?tab=billing"
+                data-evaluation-limit-allowed="true"
+                title="View evaluation usage and plan options"
+                className={`hidden rounded-xl border px-3 py-2 text-xs font-black transition hover:brightness-95 lg:block ${evaluationUsageTone}`}
+              >
+                {evaluationUsage.label}
+              </Link>
+            )
           ) : null}
 
           {onNewEvaluation ? (
@@ -258,6 +285,13 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
           </div>
         </div>
       </div>
-    </header>
+      </header>
+      {planSelectionOpen ? (
+        <PlanSelectionModal
+          message="You’ve used your free evaluations. Choose a plan to continue."
+          onClose={() => setPlanSelectionOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }
