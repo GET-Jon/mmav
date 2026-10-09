@@ -1,3 +1,4 @@
+import { buildDiscoveryModels } from "./discovery-models";
 import { buildAutoDevCompCandidates, mergeCompCandidates } from "./qualified-comps";
 import type { VehicleIdentity } from "../marketcheck/vehicle-equivalence";
 import type { MarketComp } from "../../types/comps";
@@ -22,6 +23,8 @@ export function assertAutoDevCompRegressionCases() {
   let passed = 0;
   const test = (condition: unknown, message: string) => { check(condition, message); passed++; };
 
+  const order = buildDiscoveryModels("Audi", "TTS", "quattro Prestige", ["TT", "TTS"]);
+  test(order[0] === "TTS" && order[1] === "TT", "exact TTS searched before broad TT provider aliases");
   const data = buildAutoDevCompCandidates([
     row,
     { ...row, vin: "TRUK1AFK2B1016841", trim: "Premium Plus" },
