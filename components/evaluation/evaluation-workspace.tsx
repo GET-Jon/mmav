@@ -4464,13 +4464,25 @@ export function EvaluationWorkspace({
       ).length,
   });
 
-  const compSearchRecommendation =
-    automaticCompSearchCompleted && compSummary.includedCount < 4
+  // Completion of one automatic pass is not proof that all useful search
+  // paths are exhausted. In particular, national discovery may still contain
+  // unsearched markets even after an API-limited or interrupted pass.
+  const remainingNationalMarketCount = (autoDevDiscovery?.recommendedMarkets || [])
+    .filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip))
+    .length;
+  const canContinueNationalSearch =
+    compSummary.includedCount < 4 && remainingNationalMarketCount > 0;
+  const compSearchRecommendation = canContinueNationalSearch
+    ? {
+        action: "discovered-markets" as const,
+        title: `Check ${remainingNationalMarketCount} remaining national market${remainingNationalMarketCount === 1 ? "" : "s"}`,
+        reason: "National inventory discovery identified markets that have not yet been checked against strict vehicle-match rules.",
+      }
+    : automaticCompSearchCompleted && compSummary.includedCount < 4
       ? {
           action: "manual-review" as const,
-          title: "Automatic search complete",
-          reason:
-            "Lot Logic finished the strongest automatic search paths and the evidence is still thin. Use Expand / Improve Comps in Comparable Vehicles to search specific markets or adjust the vehicle match.",
+          title: "Automatic market checks finished",
+          reason: "No unsearched national discovery markets remain. Review the search evidence below, then consider other markets or supporting vehicles without changing strict direct-comp rules.",
         }
       : rawCompSearchRecommendation;
 
@@ -4508,7 +4520,7 @@ export function EvaluationWorkspace({
       compSearchImproving ||
       marketCheckLoading ||
       autoDevDiscoveryLoading ||
-      automaticCompSearchCompleted ||
+      (automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review") ||
       compSearchRecommendation.action === "complete"
     ) {
       return;
@@ -4590,11 +4602,11 @@ export function EvaluationWorkspace({
           return;
         }
 
-        setAutomaticCompSearchCompleted(true);
+        setAutomaticCompSearchCompleted(remainingNationalMarkets.length === 0);
         setCompSearchImprovementStatus(
           remainingNationalMarkets.length
-            ? "Automatic search reached its safe search limit. Use Expand / Improve Comps for additional markets or vehicle-match controls."
-            : "Automatic search complete. All recommended national markets were checked, but the evidence is still thin.",
+            ? `This pass reached its search limit; ${remainingNationalMarkets.length} discovered market(s) remain. Run Recommended Search again to continue.`
+            : "All recommended national markets have been checked. Review rejection reasons or adjust the manual search.",
         );
         return;
       }
@@ -4700,11 +4712,15 @@ export function EvaluationWorkspace({
         }
       }
 
-      setAutomaticCompSearchCompleted(true);
+      const remainingDiscovered = (discovery?.recommendedMarkets || [])
+        .filter((market) => !latestSearchedZips.includes(market.zip)).length;
+      setAutomaticCompSearchCompleted(remainingDiscovered === 0);
       setCompSearchImprovementStatus(
-        discovery
-          ? "Automatic search complete. Lot Logic checked regional and national inventory but did not establish a reliable direct comp set."
-          : "Automatic search complete. No reliable direct comp set was established.",
+        remainingDiscovered
+          ? `${remainingDiscovered} discovered national market(s) still need validation. Run Recommended Search again to continue.`
+          : discovery
+            ? "All discovered national markets checked; review evidence and filtering before widening vehicle similarity."
+            : "National discovery did not provide more markets. Review evidence and try a different geographic search.",
       );
     } finally {
       setCompSearchImproving(false);
@@ -6090,7 +6106,7 @@ export function EvaluationWorkspace({
                     <button
                       type="button"
                       onClick={() => void improveCompSearch()}
-                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
+                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
                       className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
                     >
                       {compSearchImproving
@@ -6105,6 +6121,24 @@ export function EvaluationWorkspace({
                       {compSearchImprovementStatus}
                     </div>
                   ) : null}
+                </div>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                  <div className="font-black text-slate-900">Search evidence</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
+                    <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
+                    <span>Provider-usable: <b>{compUsableListings}</b></span>
+                    <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
+                    <span>Markets checked: <b>{compSearchRegions}</b></span>
+                    <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
+                  </div>
+                  <div className="mt-2 font-semibold text-slate-600">
+                    Rejections (latest provider diagnostics):
+                    {" "}model {compModelMismatchCount},
+                    {" "}generation {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.generationMismatch || 0},
+                    {" "}quality {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.qualityBelowThreshold || 0}.
+                  </div>
+                  <p className="mt-2 text-slate-500">National listings and MarketCheck candidates are different data sets; discovery does not guarantee that the same listings can be retrieved as comps. These counts may represent the latest provider response, not cumulative totals.</p>
                 </div>
 
                 <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
