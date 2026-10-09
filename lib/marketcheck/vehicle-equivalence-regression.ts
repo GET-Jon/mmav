@@ -108,6 +108,18 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
     expected: "direct",
   },
   {
+    name: "Audi TTS Prestige and quattro Prestige are the same equipment trim",
+    target: {
+      year: 2011, make: "Audi", model: "TTS", trim: "quattro Prestige",
+      bodyType: "Coupe", drivetrain: "AWD", fuelType: "Gasoline",
+    },
+    candidate: {
+      year: 2011, make: "Audi", model: "TTS", trim: "Prestige",
+      bodyType: "Coupe", drivetrain: "AWD", fuelType: "Gasoline",
+    },
+    expected: "direct",
+  },
+  {
     name: "Audi TTS vs standard TT preserves performance distinction",
     target: {
       year: 2020,
