@@ -293,7 +293,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             )
           ) : null}
 
-          {onNewEvaluation ? (
+          {trialPaywallReached ? (
+            <button
+              type="button"
+              onClick={() => setPlanSelectionOpen(true)}
+              className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block"
+            >
+              New Evaluation
+            </button>
+          ) : onNewEvaluation ? (
             <button type="button" onClick={onNewEvaluation} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</button>
           ) : (
             <Link href="/evaluate/new" prefetch={false} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
