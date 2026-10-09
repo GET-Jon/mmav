@@ -10,6 +10,7 @@ import {
   type VehicleEquivalenceTier,
 } from "@/lib/marketcheck/vehicle-equivalence";
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
+import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
 
 export const dynamic = "force-dynamic";
 
@@ -250,5 +251,10 @@ export async function POST(request: Request) {
   const byState = listings.reduce((acc: Record<string, number>, listing) => { const state = String(listing.state || "Unknown"); acc[state] = (acc[state] || 0) + 1; return acc; }, {});
   const total = selectedPayload && typeof selectedPayload.total === "number" ? selectedPayload.total : listings.length;
   await recordApiUsageEvent({ companyId: discoveryAllowance.summary.company.companyId, userId: user.id, provider: "auto_dev", endpoint: "/listings", vehicleYear: year, vehicleMake: make, vehicleModel: selectedAttempt?.model || model, apiCallsMade: callsMade, status: 200, stopReason: listings.length ? "Auto.dev national discovery found inventory." : "Auto.dev national discovery exhausted exact and normalized vehicle identities.", metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, returned: listings.length, total, attemptResults } });
-  return NextResponse.json({ source: "auto.dev", role: "discovery-only", query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 8), listings });
+  const candidateEvidence = buildAutoDevCompCandidates(
+    listings,
+    target,
+    Number(body.targetMileage || 0),
+  );
+  return NextResponse.json({ source: "auto.dev", role: "discovery-and-qualified-candidates", candidateComps: candidateEvidence.comps, candidateDiagnostics: candidateEvidence.diagnostics, query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 8), listings });
 }
