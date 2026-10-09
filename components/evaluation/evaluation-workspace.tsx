@@ -4714,6 +4714,31 @@ export function EvaluationWorkspace({
       const discovery: typeof autoDevDiscovery =
         autoDevDiscovery || (await runAutoDevDiscovery());
 
+      // Include strictly qualified national listings in the search decision
+      // immediately, without waiting for a React state re-render. Avoid
+      // buying more provider searches if the independent source already
+      // established the target number of trusted comparisons.
+      if (discovery?.candidateComps?.length) {
+        const checkedCandidates = discovery.candidateComps.map((candidate) => ({
+          ...candidate,
+          included: candidate.included === true &&
+            candidate.qualityScore >= activeAssumptions.compSettings.minimumQualityScore,
+        }));
+        const provisional = mergeCompCandidates(comps, checkedCandidates);
+        latestIncludedCount = Math.max(
+          latestIncludedCount,
+          calculateCompSummary({
+            comps: provisional,
+            targetMileage,
+            assumptions: activeAssumptions,
+          }).includedCount,
+        );
+        if (latestIncludedCount >= 4) {
+          setCompSearchImprovementStatus("National retail evidence is now sufficient for review. You can continue to Verdict or refine the comp set.");
+          return;
+        }
+      }
+
       if (discovery?.recommendedMarkets?.length) {
         let nationalBatches = 0;
         let remainingNationalMarkets = discovery.recommendedMarkets.filter(
@@ -6179,6 +6204,9 @@ export function EvaluationWorkspace({
                     <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
                     <span>Markets checked: <b>{compSearchRegions}</b></span>
                     <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
+                  </div>
+                  <div className="mt-2 font-semibold text-slate-600">
+                    Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPriceOrMileage ?? 0} missing price/mileage, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
                   </div>
                   <div className="mt-2 font-semibold text-slate-600">
                     Rejections (latest provider diagnostics):
