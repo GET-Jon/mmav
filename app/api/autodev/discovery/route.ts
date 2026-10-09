@@ -11,39 +11,14 @@ import {
 } from "@/lib/marketcheck/vehicle-equivalence";
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
+import { buildDiscoveryModels } from "@/lib/autodev/discovery-models";
 
 export const dynamic = "force-dynamic";
 
 type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
 type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number };
 
-function toNumber(value: unknown): number | null { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
-function normalizeText(value: unknown) { return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
-function uniqueStrings(values: Array<string | null | undefined>) { return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))); }
-
-function buildDiscoveryModels(
-  make: string,
-  model: string,
-  trim: string,
-  providerAliases: string[] = [],
-) {
-  const models = [...providerAliases, model];
-  const normalizedMake = normalizeText(make);
-  const normalizedModel = normalizeText(model);
-  const normalizedTrim = normalizeText(trim);
-  if (normalizedMake.includes("mercedes")) {
-    const eqBadge = normalizedTrim.match(/\b(eq[a-z]*\d*)/i)?.[1] || normalizedModel.match(/\b(eq[a-z]*)/i)?.[1];
-    if (eqBadge) {
-      const family = eqBadge.replace(/\d+$/g, "").toUpperCase();
-      models.push(family);
-      if (normalizedModel.includes("suv")) models.push(`${family} SUV`);
-    }
-    const withoutClass = model.replace(/[-\s]*class\b/gi, "").replace(/\s+/g, " ").trim();
-    if (withoutClass && withoutClass !== model) models.push(withoutClass);
-  }
-  return uniqueStrings(models).slice(0, 4);
-}
-
+function toNumber(value: unknown): number | null { if (value === null || value === undefined || String(value).trim() === "") return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
 function haversineMiles(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
   const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
   const earthRadiusMiles = 3958.8;
