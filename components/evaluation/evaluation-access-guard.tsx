@@ -1,22 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 type UsageStatus = {
   canStartEvaluation?: boolean;
+  evaluationAccessMessage?: string | null;
 };
 
-function isEvaluationLimitAllowedAction(element: HTMLElement) {
-  return (
-    (element.tagName === "BUTTON" &&
-      element.dataset.evaluationEntryAction === "true") ||
-    element.dataset.evaluationLimitAllowed === "true"
-  );
-}
-
 export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const [exhausted, setExhausted] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,13 +24,14 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
       try {
         const response = await fetch("/api/usage/status", { cache: "no-store" });
         const data = (await response.json()) as UsageStatus;
+
         if (!cancelled && response.ok) {
           setExhausted(data.canStartEvaluation === false);
+          setMessage(data.evaluationAccessMessage || null);
         }
       } catch {
-        // The workspace performs its own authoritative allowance check before
-        // any paid market/AI request. If this cosmetic guard cannot load, do
-        // not lock the evaluator based on an uncertain network state.
+        // Server-side usage checks remain authoritative. A failed cosmetic
+        // access check should never freeze an existing evaluation.
       }
     }
 
@@ -46,67 +46,47 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
+  function entryAction(target: EventTarget | null) {
+    if (!exhausted || !(target instanceof Element)) return null;
+    return target.closest<HTMLElement>(
+      "[data-evaluation-entry-action='true']",
+    );
+  }
 
-    function syncDisabledActions() {
-      if (!root) return;
-
-      const actions = root.querySelectorAll<HTMLElement>("button, a[href]");
-
-      actions.forEach((action) => {
-        const insidePlanDialog = Boolean(action.closest("dialog"));
-        const shouldDisable = exhausted && !insidePlanDialog && !isEvaluationLimitAllowedAction(action);
-
-        if (shouldDisable) {
-          action.dataset.evaluationLimitDisabled = "true";
-          action.setAttribute("aria-disabled", "true");
-        } else if (action.dataset.evaluationLimitDisabled === "true") {
-          delete action.dataset.evaluationLimitDisabled;
-          action.removeAttribute("aria-disabled");
-        }
-      });
-    }
-
-    syncDisabledActions();
-    const observer = new MutationObserver(syncDisabledActions);
-    observer.observe(root, { childList: true, subtree: true });
-
-    return () => {
-      observer.disconnect();
-      root.querySelectorAll<HTMLElement>("[data-evaluation-limit-disabled='true']").forEach((action) => {
-        delete action.dataset.evaluationLimitDisabled;
-        action.removeAttribute("aria-disabled");
-      });
-    };
-  }, [exhausted]);
-
-  function shouldBlock(target: EventTarget | null) {
-    if (!exhausted || !(target instanceof Element)) return false;
-    const action = target.closest<HTMLElement>("button, a[href]");
-    return Boolean(action && !action.closest("dialog") && !isEvaluationLimitAllowedAction(action));
+  function showPricing() {
+    window.dispatchEvent(
+      new CustomEvent("lotlogic:evaluation-limit-reached", {
+        detail: {
+          message:
+            message ||
+            "You’ve used your available evaluations. Choose a plan to start another.",
+        },
+      }),
+    );
   }
 
   function blockMouseAction(event: MouseEvent<HTMLDivElement>) {
-    if (!shouldBlock(event.target)) return;
+    if (!entryAction(event.target)) return;
     event.preventDefault();
     event.stopPropagation();
+    showPricing();
   }
 
   function blockKeyboardAction(event: KeyboardEvent<HTMLDivElement>) {
-    if ((event.key !== "Enter" && event.key !== " ") || !shouldBlock(event.target)) return;
+    if (
+      (event.key !== "Enter" && event.key !== " ") ||
+      !entryAction(event.target)
+    ) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
+    showPricing();
   }
 
   return (
-    <div
-      ref={rootRef}
-      onClickCapture={blockMouseAction}
-      onKeyDownCapture={blockKeyboardAction}
-      className="[&_button[data-evaluation-limit-disabled='true']]:cursor-not-allowed [&_button[data-evaluation-limit-disabled='true']]:opacity-35 [&_a[data-evaluation-limit-disabled='true']]:cursor-not-allowed [&_a[data-evaluation-limit-disabled='true']]:opacity-35"
-    >
+    <div onClickCapture={blockMouseAction} onKeyDownCapture={blockKeyboardAction}>
       {children}
     </div>
   );
