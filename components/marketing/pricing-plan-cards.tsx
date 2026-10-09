@@ -7,7 +7,6 @@ export const pricingPlans = [
     name: "Starter",
     price: `$${monthlyCheckoutPlans.starter.amount / 100}`,
     cadence: "/month",
-    alternate: "or $9/week",
     evaluations: "20 evaluations / month",
     seats: "1 user",
     note: "Best for small independents",
@@ -18,7 +17,6 @@ export const pricingPlans = [
     name: "Dealer",
     price: `$${monthlyCheckoutPlans.dealer.amount / 100}`,
     cadence: "/month",
-    alternate: "",
     evaluations: "75 evaluations / month",
     seats: "3 users",
     note: "Best for active dealerships",
@@ -29,7 +27,6 @@ export const pricingPlans = [
     name: "Dealer Pro",
     price: `$${monthlyCheckoutPlans.dealer_pro.amount / 100}`,
     cadence: "/month",
-    alternate: "",
     evaluations: "200 evaluations / month",
     seats: "5 users",
     note: "Best for higher-volume teams",
@@ -49,11 +46,9 @@ export type PricingPlan = (typeof pricingPlans)[number];
 
 export function PricingPlanCards({
   renderAction,
-  showWeeklyOption = true,
   showBestValueBadge = false,
 }: {
   renderAction?: (plan: PricingPlan) => ReactNode;
-  showWeeklyOption?: boolean;
   showBestValueBadge?: boolean;
 }) {
   return <div className="grid gap-5 lg:grid-cols-3">
@@ -83,7 +78,6 @@ export function PricingPlanCards({
                 <span className="text-4xl font-black tracking-tight text-slate-950">{plan.price}</span>
                 <span className="pb-1 text-sm font-black text-slate-500">{plan.cadence}</span>
               </div>
-              <div className="mt-1 min-h-5 text-sm font-semibold text-slate-400">{showWeeklyOption ? plan.alternate : ""}</div>
               <div className="my-6 h-px bg-slate-200" />
               <div className="space-y-3 text-sm font-bold text-slate-700">
                 <div className="flex items-center gap-2"><Check />{plan.evaluations}</div>
