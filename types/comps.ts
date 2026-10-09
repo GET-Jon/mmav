@@ -83,6 +83,7 @@ export type MarketComp = {
       distancePenalty?: number | null;
       missingPricePenalty?: number | null;
       equivalenceModifier?: number | null;
+      sourceReliabilityPenalty?: number | null;
       finalScore?: number | null;
       equivalenceTier?: "direct" | "near" | "supporting" | "reject";
       equivalenceReasons?: string[];
