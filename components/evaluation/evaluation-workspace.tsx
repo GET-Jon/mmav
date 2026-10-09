@@ -3953,6 +3953,8 @@ export function EvaluationWorkspace({
     comps.length > 0,
   );
 
+  const hasAcquisitionPrice = valuationInput.currentBid > 0;
+
   const vehicleStepComplete = Boolean(
     vehicleYear &&
       vehicleMake &&
@@ -4720,8 +4722,10 @@ export function EvaluationWorkspace({
 
   const lotLogicLabel = !hasEvaluationData
     ? "AWAITING EVALUATION"
-    : evaluationRunning || marketCheckLoading
-      ? "CHECKING MARKET"
+    : !hasAcquisitionPrice
+      ? "PURCHASE PRICE NEEDED"
+      : evaluationRunning || marketCheckLoading
+        ? "CHECKING MARKET"
       : needsCompSearch
         ? "COMP SEARCH NEEDED"
         : conditionReviewPending
@@ -4735,7 +4739,7 @@ export function EvaluationWorkspace({
               : "WORTH PURSUING";
 
   const presentationDecision =
-    !hasEvaluationData
+    !hasEvaluationData || !hasAcquisitionPrice
       ? "awaiting"
       : evaluationRunning || marketCheckLoading
         ? "searching"
@@ -6396,7 +6400,7 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Expected profit</dt>
                       <dd className="mt-1 font-black text-emerald-700">
-                        {!needsCompSearch ? money(valuation.expectedGrossProfit) : "—"}
+                        {!needsCompSearch && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}
                       </dd>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
@@ -7634,7 +7638,7 @@ export function EvaluationWorkspace({
                     </div>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
                       <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Estimated Profit</div>
-                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{money(valuation.expectedGrossProfit)}</div>
+                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</div>
                     </div>
                   </div>
                   {presentationDecision === "review" && reviewReasons.length ? (
@@ -7647,7 +7651,7 @@ export function EvaluationWorkspace({
                     <button
                       type="button"
                       onClick={saveEvaluation}
-                      disabled={saveLoading || !hasEvaluationData}
+                      disabled={saveLoading || !hasEvaluationData || !hasAcquisitionPrice}
                       className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
                       {saveLoading ? "Saving..." : savedEvaluationId ? "Update Pipeline" : "Save to Pipeline"}
