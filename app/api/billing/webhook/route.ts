@@ -49,6 +49,11 @@ function planKeyForSubscription(subscription: JsonRecord) {
     return "starter";
   }
 
+  // A present but unknown Stripe Price ID must never inherit a higher plan
+  // from stale metadata. Fail closed to Starter until the price is explicitly
+  // configured in Lot Logic.
+  if (priceId) return "starter";
+
   const metadata = record(subscription.metadata);
   const metadataPlan = stringValue(metadata.plan_key);
   if (
