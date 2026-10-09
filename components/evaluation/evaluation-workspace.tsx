@@ -4613,7 +4613,7 @@ export function EvaluationWorkspace({
         "Regional search is complete. Locating matching inventory nationwide…",
       );
 
-      const discovery =
+      const discovery: typeof autoDevDiscovery =
         autoDevDiscovery || (await runAutoDevDiscovery());
 
       if (discovery?.recommendedMarkets?.length) {
