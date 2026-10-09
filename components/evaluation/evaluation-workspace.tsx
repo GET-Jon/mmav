@@ -7515,23 +7515,18 @@ export function EvaluationWorkspace({
                     <button
                       type="button"
                       onClick={() => setAllInCostOpen(true)}
-                      disabled={valuationInput.currentBid <= 0}
+                      disabled={!hasEvaluationData}
                       className="rounded-xl bg-white/60 px-3 py-3 text-center transition hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-default disabled:bg-white/30 sm:bg-transparent sm:px-0 sm:py-0 sm:hover:bg-white/40"
                     >
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">All-In Cost</span>
-                        {valuationInput.currentBid > 0 ? (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.05em] text-blue-700">
-                            Edit
-                          </span>
-                        ) : null}
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">
+                        All-In Cost
                       </div>
                       <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">
-                        {valuationInput.currentBid > 0 ? money(displayedCurrentCost) : "—"}
+                        {hasEvaluationData ? money(displayedCurrentCost) : "—"}
                       </div>
-                      {valuationInput.currentBid > 0 ? (
+                      {hasEvaluationData ? (
                         <div className="mt-1 text-[10px] font-black text-blue-700">
-                          Edit or remove costs →
+                          Edit Costs
                         </div>
                       ) : null}
                     </button>
@@ -7678,15 +7673,33 @@ export function EvaluationWorkspace({
                               className="min-w-0 w-full rounded-lg bg-transparent px-2 py-2 text-right text-sm font-black text-slate-950 outline-none"
                             />
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => updateAllInCostAmount(item.key, 0)}
-                            className="shrink-0 rounded-md px-2 py-1 text-[10px] font-black text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            title={`Remove ${item.label} from the estimate`}
-                            aria-label={`Remove ${item.label} from the estimate`}
-                          >
-                            Remove
-                          </button>
+                          {item.key !== "currentBid" ? (
+                            <button
+                              type="button"
+                              onClick={() => updateAllInCostAmount(item.key, 0)}
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              title={`Remove ${item.label} from the estimate`}
+                              aria-label={`Remove ${item.label} from the estimate`}
+                            >
+                              <svg
+                                aria-hidden="true"
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v5M14 11v5" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <span className="h-8 w-8 shrink-0" aria-hidden="true" />
+                          )}
                         </div>
                       </div>
                     ))}
