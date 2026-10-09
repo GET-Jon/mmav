@@ -341,7 +341,11 @@ export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
     if (compactTrim) return normalizeVehicleText(compactTrim);
   }
 
-  return normalizedTrim || normalizedModel || normalizedFamily;
+  // If model already collapsed to the same family and no trim remains, there
+  // is no variant evidence. Returning the model family here would make a
+  // missing trim look like a real trim and could auto-include an incomplete
+  // comp.
+  return normalizedTrim || (normalizedModel !== normalizedFamily ? normalizedModel : "");
 }
 
 function classifyBodyText(value: unknown) {
