@@ -1869,6 +1869,27 @@ export function EvaluationWorkspace({
     updateCost(key, normalizedValue);
   }
 
+  function updateAllInCostText(
+    key:
+      | "currentBid"
+      | "auctionFee"
+      | "transport"
+      | "reconCombined"
+      | "detailAdmin"
+      | "generalRiskReserve"
+      | "brandRiskAdd",
+    rawValue: string,
+  ) {
+    const digits = rawValue.replace(/[^0-9]/g, "");
+
+    // The purchase price is required deal data. When a user selects the field
+    // and briefly clears it while typing, do not turn the live evaluation into
+    // a $0 acquisition and manufacture a huge profit.
+    if (key === "currentBid" && !digits) return;
+
+    updateAllInCostAmount(key, digits ? Number(digits) : 0);
+  }
+
   function toggleCondition(conditionName: string) {
     setSelectedConditions((previous) =>
       previous.includes(conditionName)
@@ -2874,6 +2895,20 @@ export function EvaluationWorkspace({
     setSelectedCompMarketZips(suggested);
     setCustomCompZip("");
     setCompMarketEditorOpen(true);
+  }
+
+  function scrollToCompEvidence() {
+    setWhyLotLogicOpen(false);
+
+    // The decision-details dialog locks body scrolling. Wait until React has
+    // unmounted it and restored normal page scrolling, then position the comp
+    // card just below the app navigation.
+    window.setTimeout(() => {
+      const target = compSectionRef.current;
+      if (!target) return;
+      const top = target.getBoundingClientRect().top + window.scrollY - 88;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }, 100);
   }
 
   function suggestMoreCompMarkets() {
@@ -4419,7 +4454,7 @@ export function EvaluationWorkspace({
           action: "manual-review" as const,
           title: "Automatic search complete",
           reason:
-            "Lot Logic finished the strongest automatic search paths and the evidence is still thin. Use Expand / Improve Comps to adjust geography or vehicle matching manually.",
+            "Lot Logic finished the strongest automatic search paths and the evidence is still thin. Use Expand / Improve Comps in Comparable Vehicles to search specific markets or adjust the vehicle match.",
         }
       : rawCompSearchRecommendation;
 
@@ -4569,16 +4604,39 @@ export function EvaluationWorkspace({
         autoDevDiscovery || (await runAutoDevDiscovery());
 
       if (discovery?.recommendedMarkets?.length) {
-        setCompSearchImprovementStatus(
-          "National inventory found. Verifying the strongest markets with MarketCheck…",
+        let nationalBatches = 0;
+        let remainingNationalMarkets = discovery.recommendedMarkets.filter(
+          (market) => !latestSearchedZips.includes(market.zip),
         );
-        const validation = await searchAutoDevRecommendedMarkets(
-          discovery,
-          latestSearchedZips,
-        );
-        latestIncludedCount = Number(
-          validation?.includedCount || latestIncludedCount,
-        );
+
+        while (
+          latestIncludedCount < 4 &&
+          remainingNationalMarkets.length > 0 &&
+          nationalBatches < 3
+        ) {
+          setCompSearchImprovementStatus(
+            nationalBatches === 0
+              ? "National inventory found. Verifying the strongest markets with MarketCheck…"
+              : `Still thin. Verifying ${Math.min(3, remainingNationalMarkets.length)} more national market${Math.min(3, remainingNationalMarkets.length) === 1 ? "" : "s"}…`,
+          );
+
+          const validation = await searchAutoDevRecommendedMarkets(
+            discovery,
+            latestSearchedZips,
+          );
+          nationalBatches += 1;
+
+          if (!validation) break;
+
+          latestIncludedCount = Number(
+            validation.includedCount || latestIncludedCount,
+          );
+          latestSearchedZips =
+            validation.searchedZips || latestSearchedZips;
+          remainingNationalMarkets = discovery.recommendedMarkets.filter(
+            (market) => !latestSearchedZips.includes(market.zip),
+          );
+        }
 
         if (latestIncludedCount >= 4) {
           setCompSearchImprovementStatus(
@@ -6291,17 +6349,7 @@ export function EvaluationWorkspace({
                   </dl>
                   <button
                     type="button"
-                    onClick={() => {
-                      setWhyLotLogicOpen(false);
-                      window.requestAnimationFrame(() => {
-                        window.requestAnimationFrame(() => {
-                          compSectionRef.current?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
-                        });
-                      });
-                    }}
+                    onClick={scrollToCompEvidence}
                     className="mt-4 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     View comp evidence ↓
@@ -7325,7 +7373,8 @@ export function EvaluationWorkspace({
                                 type="button"
                                 onClick={() => void improveCompSearch()}
                                 disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
-                                className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
+                                title={automaticCompSearchCompleted ? "Automatic search is complete. Use Expand / Improve Comps below for manual search controls." : undefined}
+                                className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                               >
                                 {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
                               </button>
@@ -7448,6 +7497,31 @@ export function EvaluationWorkspace({
                         </div>
                       </div>
                       <MarketCompsTable comps={comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                      {marketCheckSearchMeta?.regionsChecked?.length ? (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
+                          <span className="font-black text-slate-800">Search coverage:</span>{" "}
+                          {marketCheckSearchMeta.regionsChecked.join(" → ")}
+                          {Array.from(
+                            new Set(
+                              comps
+                                .filter((comp) => comp.included && comp.region)
+                                .map((comp) => comp.region),
+                            ),
+                          ).length ? (
+                            <>
+                              {" · "}
+                              <span className="font-black text-slate-800">Qualifying comps found in:</span>{" "}
+                              {Array.from(
+                                new Set(
+                                  comps
+                                    .filter((comp) => comp.included && comp.region)
+                                    .map((comp) => comp.region),
+                                ),
+                              ).join(", ")}
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </>
                   ) : null}
 
@@ -7529,9 +7603,9 @@ export function EvaluationWorkspace({
                         All-In Cost
                       </div>
                       <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">
-                        {hasEvaluationData ? money(displayedCurrentCost) : "—"}
+                        {displayedCurrentCost > 0 ? money(displayedCurrentCost) : "—"}
                       </div>
-                      {hasEvaluationData ? (
+                      {hasEvaluationData || displayedCurrentCost > 0 ? (
                         <div className="mt-1 text-[10px] font-black text-blue-700">
                           Edit Costs
                         </div>
@@ -7674,7 +7748,7 @@ export function EvaluationWorkspace({
                               value={formatNumberInput(item.amount)}
                               onFocus={(event) => event.currentTarget.select()}
                               onChange={(event) =>
-                                updateAllInCostAmount(item.key, toNumber(event.target.value))
+                                updateAllInCostText(item.key, event.target.value)
                               }
                               aria-label={`Edit ${item.label}`}
                               className="min-w-0 w-full rounded-lg bg-transparent px-2 py-2 text-right text-sm font-black text-slate-950 outline-none"
