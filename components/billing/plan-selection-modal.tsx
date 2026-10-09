@@ -63,7 +63,6 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
       </div>
       <div className="mt-8">
         <PricingPlanCards
-          showWeeklyOption={false}
           showBestValueBadge
           renderAction={plan => {
             const explicitlyUnavailable =
