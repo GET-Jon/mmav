@@ -112,11 +112,14 @@ export function buildAutoDevCompCandidates(
 
     const yearGap = Math.abs(year - target.year);
     const milesGap = Math.abs(miles - targetMileage);
+    const yearPenalty = yearGap * 5;
+    const mileagePenalty = targetMileage > 0 ? Math.min(12, Math.round(milesGap / 8000)) : 0;
+    const completenessPenalty = (validVin ? 0 : 12) + (url ? 0 : 8);
+    const baseScore = match.tier === "direct" ? 92 : match.tier === "near" ? 81 : 62;
+    const sourcePenalty = match.tier === "direct" ? 8 : match.tier === "near" ? 11 : 3;
     const qualityScore = Math.max(
       40,
-      Math.min(96, (match.tier === "direct" ? 92 : match.tier === "near" ? 81 : 62)
-        - yearGap * 5 - Math.min(12, Math.round(milesGap / 8000))
-        - (validVin ? 0 : 12) - (url ? 0 : 8)),
+      Math.min(96, baseScore - yearPenalty - mileagePenalty - completenessPenalty),
     );
     // Only well-documented Direct/Near retail listings may be selected without
     // a dealer action; Supporting stays optional evidence.
@@ -153,6 +156,9 @@ export function buildAutoDevCompCandidates(
         heading: [year, listing.make, listing.model, listing.trim].filter(Boolean).join(" "),
         listingUrl: url || null,
         dealerName: listing.dealer || null,
+        bodyType: listing.bodyType || null,
+        drivetrain: listing.drivetrain || null,
+        fuelType: listing.fuelType || null,
         city: listing.city || null,
         state: listing.state || null,
         zip: listing.zip || null,
@@ -161,11 +167,15 @@ export function buildAutoDevCompCandidates(
         targetModel: target.model,
         targetTrim: target.trim || null,
         targetMileage,
-        listingConfidence: autoInclude ? "High" : "Medium",
+        listingConfidence: autoInclude ? "Medium" : "Low",
         retrievalAttempt: "auto-dev-national-discovery",
         compFitFactors: {
           yearDelta: year - target.year,
+          yearPenalty,
           mileageDelta: miles - targetMileage,
+          mileagePenalty,
+          sourceReliabilityPenalty: sourcePenalty + completenessPenalty,
+          equivalenceModifier: match.tier === "near" ? -8 : match.tier === "supporting" ? -35 : 0,
           finalScore: qualityScore,
           equivalenceTier: match.tier,
           equivalenceReasons: match.reasons,
