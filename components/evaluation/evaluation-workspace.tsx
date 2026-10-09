@@ -2905,12 +2905,17 @@ export function EvaluationWorkspace({
     // The decision-details dialog locks body scrolling. Wait until React has
     // unmounted it and restored normal page scrolling, then position the comp
     // card just below the app navigation.
+    // Wait for the modal scroll lock to release, then retry after layout.
     window.setTimeout(() => {
-      const target = compSectionRef.current;
-      if (!target) return;
-      const top = target.getBoundingClientRect().top + window.scrollY - 88;
-      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    }, 100);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const target = compSectionRef.current;
+          if (!target) return;
+          const top = target.getBoundingClientRect().top + window.scrollY - 88;
+          window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        });
+      });
+    }, 180);
   }
 
   function suggestMoreCompMarkets() {
