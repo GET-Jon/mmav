@@ -297,7 +297,8 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             <button
               type="button"
               onClick={() => setPlanSelectionOpen(true)}
-              className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block"
+              title="Choose a plan to start a new evaluation"
+              className="hidden rounded-xl bg-blue-700 px-3 py-2 text-sm font-black text-white shadow-sm transition-colors hover:bg-blue-800 lg:block"
             >
               New Evaluation
             </button>
