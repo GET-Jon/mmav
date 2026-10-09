@@ -57,26 +57,15 @@ export async function POST(request: Request) {
       );
     }
 
-    await recordUsageEvent({
-      supabase: admin,
-      companyId: allowance.summary.company.companyId,
-      userId: user.id,
-      kind: "evaluation_completed",
-      subjectKey,
-      idempotencyKey: `evaluation_completed:${subjectKey}`,
-      metadata: {
-        valuationCompCount: Number(body.valuationCompCount || 0),
-        giftedEvaluation:
-          "consumesGiftedEvaluation" in allowance
-            ? Boolean(allowance.consumesGiftedEvaluation)
-            : false,
-      },
-    });
-
-    if (
+    const consumesGiftedEvaluation =
       "consumesGiftedEvaluation" in allowance &&
-      allowance.consumesGiftedEvaluation
-    ) {
+      allowance.consumesGiftedEvaluation;
+
+    // Consume the bonus atomically before recording the completed evaluation.
+    // This prevents two simultaneous evaluations from both spending the last
+    // gifted credit. A rare downstream recording failure can undercount by one
+    // credit, which is safer than allowing an overage.
+    if (consumesGiftedEvaluation) {
       const { data: consumed, error: consumeError } = await admin.rpc(
         "consume_company_evaluation_credit",
         {
@@ -97,6 +86,19 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    await recordUsageEvent({
+      supabase: admin,
+      companyId: allowance.summary.company.companyId,
+      userId: user.id,
+      kind: "evaluation_completed",
+      subjectKey,
+      idempotencyKey: `evaluation_completed:${subjectKey}`,
+      metadata: {
+        valuationCompCount: Number(body.valuationCompCount || 0),
+        giftedEvaluation: consumesGiftedEvaluation,
+      },
+    });
 
     return NextResponse.json({
       counted: true,
