@@ -185,7 +185,7 @@ export async function POST(request: Request) {
   const attemptResults: Array<{ label: string; model: string; returned: number; total: number; directNear: number; supporting: number }> = [];
 
   for (const attempt of attempts) {
-    const providerAllowance = await checkUsageAllowance({ supabase: admin, userId: user.id, kind: "provider_api_call", expectedUnits: 1 });
+    const providerAllowance = await checkUsageAllowance({ supabase: admin, userId: user.id, kind: "provider_api_call", subjectKey, expectedUnits: 1 });
     if (!providerAllowance.allowed) { if (callsMade === 0) return NextResponse.json({ error: providerAllowance.message, code: providerAllowance.code, usage: providerAllowance.summary }, { status: providerAllowance.status }); break; }
     const params = new URLSearchParams({ "vehicle.make": attempt.make, "vehicle.model": attempt.model, "vehicle.year": attempt.yearMin === attempt.yearMax ? String(attempt.yearMin) : `${attempt.yearMin}-${attempt.yearMax}`, "retailListing.used": "true", includes: "total", limit: "20", sort: "updatedAt.desc" });
     const upstream = await fetch(`https://api.auto.dev/listings?${params.toString()}`, { method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }, cache: "no-store" }); callsMade += 1;
