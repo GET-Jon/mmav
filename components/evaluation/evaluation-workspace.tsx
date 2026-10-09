@@ -7462,7 +7462,7 @@ export function EvaluationWorkspace({
                               <button
                                 type="button"
                                 onClick={() => void improveCompSearch()}
-                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review")}
+                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch)}
                                 title={automaticCompSearchCompleted && !canContinueNationalSearch ? "Automatic national market checks are finished. Review or adjust vehicle match." : undefined}
                                 className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:border disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                               >
