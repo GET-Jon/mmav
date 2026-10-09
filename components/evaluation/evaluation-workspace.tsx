@@ -3142,7 +3142,13 @@ export function EvaluationWorkspace({
       // applies strict identity/data qualification to Auto.dev candidates and
       // the client preserves manual dealer choices when merging both sources.
       if (Array.isArray(data.candidateComps)) {
-        setComps((current) => mergeCompCandidates(current, data.candidateComps));
+        const qualifiedCandidates: MarketComp[] = (data.candidateComps as MarketComp[])
+          .map((candidate) => ({
+            ...candidate,
+            included: candidate.included === true &&
+              candidate.qualityScore >= activeAssumptions.compSettings.minimumQualityScore,
+          }));
+        setComps((current) => mergeCompCandidates(current, qualifiedCandidates));
       }
 
       const total = Number(data.total || 0);
@@ -6167,7 +6173,7 @@ export function EvaluationWorkspace({
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
                     <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
-                    <span>Auto.dev auto-selected: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
+                    <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
                     <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
                     <span>Provider-usable: <b>{compUsableListings}</b></span>
                     <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
@@ -7642,7 +7648,7 @@ export function EvaluationWorkspace({
                           Full comp set appears after Continue to Verdict.
                         </div>
                       </div>
-                      <MarketCompsTable comps={comps.slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
                       {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
