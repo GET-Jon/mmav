@@ -294,6 +294,10 @@ export function calculateCompSummary({
   const supportingCount = validComps.filter(
     (comp) => comp.equivalenceTier === "supporting",
   ).length;
+  const independentlySourcedCount = validComps.filter(
+    (comp) => comp.source === "Auto.dev",
+  ).length;
+  const marketCheckVerifiedCount = includedCount - independentlySourcedCount;
   const dealerOverrideCount = validComps.filter(
     (comp) => comp.dealerDecision === "include",
   ).length;
@@ -318,6 +322,9 @@ export function calculateCompSummary({
     : 1;
 
   const confidenceReasons: string[] = [];
+  if (independentlySourcedCount > 0 && marketCheckVerifiedCount < 2) {
+    confidenceReasons.push("national retail evidence has limited independent provider corroboration");
+  }
   if (includedCount < assumptions.compSettings.minimumCompsForMediumConfidence) {
     confidenceReasons.push("too few reliable comps");
   }
@@ -349,6 +356,7 @@ export function calculateCompSummary({
   }
 
   const highConfidence =
+    marketCheckVerifiedCount >= 2 &&
     includedCount >= assumptions.compSettings.minimumCompsForHighConfidence &&
     directRatio >= 0.5 &&
     supportingCount === 0 &&
