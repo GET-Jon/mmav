@@ -129,7 +129,7 @@ export function buildAutoDevCompCandidates(
       match.autoIncludeEligible &&
       !match.needsClassificationReview &&
       Boolean(String(listing.trim || "").trim()) &&
-      validVin && Boolean(url) && qualityScore >= (match.tier === "direct" ? 60 : 75);
+      validVin && Boolean(url) && qualityScore >= (match.tier === "direct" ? 60 : 70);
 
     if (autoInclude) diagnostics.autoIncluded += 1;
     comps.push({
