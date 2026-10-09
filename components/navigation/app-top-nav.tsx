@@ -212,11 +212,13 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     void loadUsage();
     window.addEventListener("focus", loadUsage);
     window.addEventListener("pageshow", loadUsage);
+    window.addEventListener("lotlogic:usage-changed", loadUsage);
 
     return () => {
       cancelled = true;
       window.removeEventListener("focus", loadUsage);
       window.removeEventListener("pageshow", loadUsage);
+      window.removeEventListener("lotlogic:usage-changed", loadUsage);
     };
   }, [userEmail]);
 
