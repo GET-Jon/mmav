@@ -3791,6 +3791,10 @@ export function EvaluationWorkspace({
         throw new Error(payload.error || "This evaluation cannot continue yet.");
       }
 
+      // Usage is recorded server-side on priced Verdict only. Refresh all
+      // billing indicators immediately instead of waiting for focus/reload.
+      window.dispatchEvent(new Event("lotlogic:usage-changed"));
+
       trackEvent("evaluation_verdict_viewed", {
         valuation_comp_count: compSummary.includedCount,
         comp_confidence: compSummary.confidence,
