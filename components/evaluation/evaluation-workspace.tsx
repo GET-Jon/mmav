@@ -2477,9 +2477,10 @@ export function EvaluationWorkspace({
     const profileModel = String(
       activeVehicleIdentityProfile?.modelFamily || "",
     ).trim();
-    const model = useSemanticIdentity
-      ? profileModel || vehicleOverride?.model || vehicleModel
-      : vehicleOverride?.model || profileModel || vehicleModel;
+    const exactVehicleModel = String(
+      vehicleOverride?.model || vehicleModel || "",
+    ).trim();
+    const model = exactVehicleModel || profileModel;
     const profileVariant = String(
       activeVehicleIdentityProfile?.variant || "",
     ).trim();
@@ -2559,8 +2560,10 @@ export function EvaluationWorkspace({
             activeVehicleIdentityProfile?.year || vehicleYear,
           qualificationMake:
             activeVehicleIdentityProfile?.make || vehicleMake,
+          // Preserve the decoded/entered derivative as the final comp target.
+          // Canonical model families and aliases broaden retrieval only.
           qualificationModel:
-            activeVehicleIdentityProfile?.modelFamily || vehicleModel,
+            vehicleModel || activeVehicleIdentityProfile?.modelFamily,
           qualificationTrim:
             activeVehicleIdentityProfile
               ? activeVehicleIdentityProfile.variant
@@ -3018,10 +3021,13 @@ export function EvaluationWorkspace({
           evaluationUsageId,
           year: Number(vehicleYear),
           make: vehicleIdentityProfile?.make || vehicleMake,
-          model: vehicleIdentityProfile?.modelFamily || vehicleModel,
+          // Search the exact derivative first (TTS, M4, RAV4 Prime, etc.).
+          // The canonical model family remains an alternate provider alias.
+          model: vehicleModel || vehicleIdentityProfile?.modelFamily,
           trim: vehicleIdentityProfile?.variant || vehicleTrim,
           vin: String(decodedVehicle?.vin || vin || "").trim().toUpperCase(),
           providerAliases: [
+            vehicleIdentityProfile?.modelFamily || "",
             String(vehicleModel || "")
               .replace(/\([^)]*\)/g, " ")
               .replace(/\s+/g, " ")
@@ -3177,7 +3183,7 @@ export function EvaluationWorkspace({
       searchStage: "expanded",
       regions,
       mergeResults: true,
-      useVinMatch: !compTrimRelaxed,
+      useVinMatch: false,
       preferTaxonomyFallback: compTrimRelaxed,
       useTaxonomyFallbackTrim: !compTrimRelaxed,
       maxApiCallsPerSearch: regions.length,
@@ -4380,16 +4386,19 @@ export function EvaluationWorkspace({
     ),
     nationalDiscoveryTotal: Number(autoDevDiscovery?.total || 0),
     nationalRecommendedMarkets:
-      autoDevDiscovery?.recommendedMarkets?.length || 0,
+      (autoDevDiscovery?.recommendedMarkets || []).filter(
+        (market) =>
+          !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip),
+      ).length,
   });
 
   const compSearchRecommendation =
-    automaticCompSearchCompleted && compSummary.includedCount === 0
+    automaticCompSearchCompleted && compSummary.includedCount < 4
       ? {
           action: "manual-review" as const,
-          title: "No trusted comps found automatically",
+          title: "Automatic search complete",
           reason:
-            "Lot Logic finished the exact, regional, and national search. Review related vehicles below, or manually select any listing you believe belongs in the valuation.",
+            "Lot Logic finished the strongest automatic search paths and the evidence is still thin. Use Expand / Improve Comps to adjust geography or vehicle matching manually.",
         }
       : rawCompSearchRecommendation;
 
@@ -4427,6 +4436,7 @@ export function EvaluationWorkspace({
       compSearchImproving ||
       marketCheckLoading ||
       autoDevDiscoveryLoading ||
+      automaticCompSearchCompleted ||
       compSearchRecommendation.action === "complete"
     ) {
       return;
@@ -5945,7 +5955,7 @@ export function EvaluationWorkspace({
                     <button
                       type="button"
                       onClick={() => void improveCompSearch()}
-                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
                       className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
                     >
                       {compSearchImproving
@@ -7284,10 +7294,10 @@ export function EvaluationWorkspace({
                               <button
                                 type="button"
                                 onClick={() => void improveCompSearch()}
-                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
                                 className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
                               >
-                                {compSearchImproving ? "Running Search…" : "Run Recommended Search"}
+                                {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
                               </button>
                               <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
                                 or
@@ -7358,10 +7368,10 @@ export function EvaluationWorkspace({
                             <button
                               type="button"
                               onClick={() => void improveCompSearch()}
-                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
                               className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
                             >
-                              {compSearchImproving ? "Running Search…" : "Run Recommended Search"}
+                              {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
                             </button>
                           )}
                           <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
