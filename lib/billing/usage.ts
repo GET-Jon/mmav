@@ -276,10 +276,25 @@ export async function checkUsageAllowance(args: {
   const giftedCreditsAvailable =
     Number(summary.giftedEvaluationsRemaining || 0) > 0;
 
+  // Exhausting a trial prevents starting another evaluation; it should not
+  // lock the dealer out of work they already completed. A subject with a
+  // recorded completion may continue using review/refinement tools, while a
+  // fresh evaluationUsageId still hits the paywall below.
+  const existingCompletedEvaluation =
+    Boolean(subjectKey) &&
+    kind !== "evaluation_completed" &&
+    (await countUsage(
+      supabase,
+      summary.company.companyId,
+      "evaluation_completed",
+      { subjectKey },
+    )) > 0;
+
   if (
     !summary.paidActive &&
     !summary.trialActive &&
-    !giftedCreditsAvailable
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
   ) {
     return {
       allowed: false as const,
@@ -293,7 +308,8 @@ export async function checkUsageAllowance(args: {
   if (
     !summary.paidActive &&
     summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal &&
-    !giftedCreditsAvailable
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
   ) {
     return {
       allowed: false as const,
@@ -327,7 +343,7 @@ export async function checkUsageAllowance(args: {
       { subjectKey },
     );
 
-    const perVehicleLimit = summary.trialActive && !summary.paidActive
+    const perVehicleLimit = !summary.paidActive
       ? kind === "market_search"
         ? TRIAL_LIMITS.marketSearchesPerEvaluation
         : kind === "auto_dev_discovery"
@@ -363,7 +379,7 @@ export async function checkUsageAllowance(args: {
 
   if (kind === "provider_api_call") {
     const providerLimit =
-      summary.trialActive && !summary.paidActive
+      !summary.paidActive
         ? TRIAL_LIMITS.providerCallsTotal
         : summary.limits.providerCallsPerMonth;
 
