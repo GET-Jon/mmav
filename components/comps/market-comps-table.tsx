@@ -587,11 +587,6 @@ export function MarketCompsTable({
 
   return (
     <>
-      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold leading-5 text-slate-600">
-        <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
-        Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
-      </div>
-
       <div
         className="overflow-auto rounded-2xl border border-slate-200"
         style={
@@ -655,6 +650,11 @@ export function MarketCompsTable({
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold leading-5 text-slate-600">
+        <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
+        Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
       </div>
 
       {selectedComp && typeof document !== "undefined"
