@@ -33,7 +33,7 @@ export function assertAutoDevCompRegressionCases() {
     row,
   ], target, 140000);
 
-  test(data.comps.length === 5, "valid national evidence and VIN deduplication");
+  test(data.comps.length === 6, "valid national evidence and VIN deduplication");
   const exact = data.comps.find(x => x.marketCheckDetails?.vin === row.vin);
   test(exact?.equivalenceTier === "direct", "exact derivative is direct");
   test(exact?.included === true, "documented exact retail listing auto-included");
@@ -56,9 +56,9 @@ export function assertAutoDevCompRegressionCases() {
   test(merged.length === 1 && merged[0].source === "MarketCheck" && !merged[0].included && merged[0].dealerDecision === "exclude", "MarketCheck replaces Auto.dev while preserving dealer exclusion");
 
   const bronco = buildAutoDevCompCandidates([
-    { ...row, make: "Ford", model: "Bronco Sport", trim: "Big Bend", vin: "1FMEE5BPXPLB55559" },
-    { ...row, make: "Ford", model: "Bronco 4-Door", trim: "Big Bend", vin: "1FMEE5BPXPLB55550" },
+    { ...row, year: 2023, make: "Ford", model: "Bronco Sport", trim: "Big Bend", bodyType: "SUV", drivetrain: "4WD", vin: "1FMEE5BPXPLB55559" },
+    { ...row, year: 2023, make: "Ford", model: "Bronco 4-Door", trim: "Big Bend", bodyType: "SUV", drivetrain: "4WD", vin: "1FMEE5BPXPLB55550" },
   ], { year: 2023, make: "Ford", model: "Bronco", trim: "Big Bend", drivetrain: "4WD", bodyType: "SUV", fuelType: "Gasoline", doors: 4 }, 31500);
-  test(bronco.comps.every(x=>!x.model.toLowerCase().includes("sport")), "Bronco Sport is excluded from standard Bronco");
+  test(bronco.comps.length === 1 && bronco.comps[0].model === "Bronco 4-Door", "Bronco Sport is excluded and Bronco 4-Door survives");
   return { passed };
 }
