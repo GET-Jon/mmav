@@ -1849,6 +1849,9 @@ export function EvaluationWorkspace({
     const normalizedValue = Math.max(0, Number.isFinite(value) ? value : 0);
 
     if (key === "currentBid") {
+      // Purchase price is required deal data. Do not let the cost editor
+      // accidentally zero it while selecting/clearing/retyping the field.
+      if (normalizedValue <= 0) return;
       updateEvaluationField("currentBid", normalizedValue);
       return;
     }
@@ -4541,14 +4544,44 @@ export function EvaluationWorkspace({
         setCompSearchImprovementStatus(
           "Verifying the strongest markets found by national discovery…",
         );
-        const validation = await searchAutoDevRecommendedMarkets(
-          autoDevDiscovery,
-          marketCheckSearchMeta?.searchedZips || [],
-          searchOperationId,
-        );
-        latestIncludedCount = Number(
-          validation?.includedCount || latestIncludedCount,
-        );
+
+        const discovery = autoDevDiscovery;
+        let nationalBatches = 0;
+        let remainingNationalMarkets =
+          discovery?.recommendedMarkets?.filter(
+            (market) => !latestSearchedZips.includes(market.zip),
+          ) || [];
+
+        while (
+          latestIncludedCount < 4 &&
+          remainingNationalMarkets.length > 0 &&
+          nationalBatches < 3
+        ) {
+          const validation = await searchAutoDevRecommendedMarkets(
+            discovery,
+            latestSearchedZips,
+            `${searchOperationId}-national-${nationalBatches + 1}`,
+          );
+          nationalBatches += 1;
+
+          if (!validation) break;
+
+          latestIncludedCount = Number(
+            validation.includedCount || latestIncludedCount,
+          );
+          latestSearchedZips =
+            validation.searchedZips || latestSearchedZips;
+          remainingNationalMarkets =
+            discovery?.recommendedMarkets?.filter(
+              (market) => !latestSearchedZips.includes(market.zip),
+            ) || [];
+
+          if (latestIncludedCount < 4 && remainingNationalMarkets.length > 0) {
+            setCompSearchImprovementStatus(
+              `Still thin. Verifying ${Math.min(3, remainingNationalMarkets.length)} more national market${Math.min(3, remainingNationalMarkets.length) === 1 ? "" : "s"}…`,
+            );
+          }
+        }
 
         if (latestIncludedCount >= 4) {
           setCompSearchImprovementStatus(
@@ -4559,7 +4592,9 @@ export function EvaluationWorkspace({
 
         setAutomaticCompSearchCompleted(true);
         setCompSearchImprovementStatus(
-          "Automatic search complete. No reliable direct comp set was established.",
+          remainingNationalMarkets.length
+            ? "Automatic search reached its safe search limit. Use Expand / Improve Comps for additional markets or vehicle-match controls."
+            : "Automatic search complete. All recommended national markets were checked, but the evidence is still thin.",
         );
         return;
       }
@@ -4641,7 +4676,7 @@ export function EvaluationWorkspace({
           const validation = await searchAutoDevRecommendedMarkets(
             discovery,
             latestSearchedZips,
-            searchOperationId,
+            `${searchOperationId}-national-${nationalBatches + 1}`,
           );
           nationalBatches += 1;
 
@@ -7395,7 +7430,7 @@ export function EvaluationWorkspace({
                                 onClick={() => void improveCompSearch()}
                                 disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
                                 title={automaticCompSearchCompleted ? "Automatic search is complete. Use Expand / Improve Comps below for manual search controls." : undefined}
-                                className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:border disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                               >
                                 {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
                               </button>
@@ -7415,7 +7450,7 @@ export function EvaluationWorkspace({
                         </div>
                         {automaticCompSearchCompleted && hasLimitedMarketEvidence ? (
                           <div className="mt-2 text-[11px] font-bold leading-4 text-slate-500">
-                            Automatic search is complete. Use <span className="text-slate-800">Expand / Improve Comps</span> in Comparable Vehicles below to search specific markets or adjust the vehicle match.
+                            Automatic search is complete. Use <span className="text-slate-800">Expand / Improve Comps</span> at the top of Comparable Vehicles to search specific markets or adjust the vehicle match.
                           </div>
                         ) : null}
                         {usageLimitMessage ? (
@@ -7548,6 +7583,10 @@ export function EvaluationWorkspace({
                           ) : null}
                         </div>
                       ) : null}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold leading-5 text-slate-600">
+                        <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
+                        Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
+                      </div>
                     </>
                   ) : null}
 
@@ -7719,6 +7758,12 @@ export function EvaluationWorkspace({
                           ).join(", ")}
                         </>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {comps.length ? (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold leading-5 text-slate-600">
+                      <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
+                      Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
                     </div>
                   ) : null}
                 </SectionCard>
