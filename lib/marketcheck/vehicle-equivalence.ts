@@ -564,8 +564,12 @@ export function evaluateVehicleEquivalence({
         // Matching the performance derivative (e.g. TTS) does not establish
         // identical equipment/trim. Prestige and Premium Plus are different
         // retail variants even though both are TTS, so use Near evidence.
-        const targetTrim = normalize(target.trim);
-        const candidateTrim = normalize(candidate.trim);
+        const targetTrim = normalize(target.trim)
+          ? canonicalVehicleVariant(target)
+          : "";
+        const candidateTrim = normalize(candidate.trim)
+          ? canonicalVehicleVariant(candidate)
+          : "";
         if (!targetTrim || !candidateTrim) {
           tier = "supporting";
           reasons.push("special derivative aligned but trim is incomplete");
