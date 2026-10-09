@@ -172,7 +172,7 @@ export function BillingSettingsCard() {
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Seats</div>
-            <div className="mt-2 text-lg font-black text-slate-950">{billing?.seats || 1}</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{entitlements?.seats_limit ?? usage?.limits?.seats ?? billing?.seats ?? 1}</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trial ends</div>
