@@ -139,6 +139,15 @@ function scoreImpactRows(comp: MarketComp) {
     });
   }
 
+  const sourceReliabilityPenalty = Number(factors.sourceReliabilityPenalty || 0);
+  if (sourceReliabilityPenalty > 0) {
+    rows.push({
+      label: "Retail-source verification",
+      detail: "Independent retail source; listing identity/data completeness is less certain than VIN-verified MarketCheck evidence.",
+      points: sourceReliabilityPenalty,
+    });
+  }
+
   const mileagePenalty = Number(factors.mileagePenalty || 0);
   if (mileagePenalty > 0) {
     rows.push({
@@ -729,7 +738,7 @@ export function MarketCompsTable({
                   <DetailItem label="City" value={selectedComp.marketCheckDetails?.city} />
                   <DetailItem label="State" value={selectedComp.marketCheckDetails?.state} />
                   <DetailItem label="ZIP" value={selectedComp.marketCheckDetails?.zip} />
-                  <DetailItem label="Distance" value={`${formatNumber(selectedComp.distance)} mi`} />
+                  <DetailItem label="Distance" value={selectedComp.source === "Auto.dev" ? "Not verified" : `${formatNumber(selectedComp.distance)} mi`} />
                   <DetailItem label="Search Region" value={selectedComp.region} />
                 </dl>
                 {selectedComp.marketCheckDetails?.listingUrl ? (
