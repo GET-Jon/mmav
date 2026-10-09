@@ -101,6 +101,7 @@ export async function POST(request: Request) {
       supabase: admin,
       userId: user.id,
       kind: "provider_api_call",
+      subjectKey,
       expectedUnits: 1,
     });
     if (!providerAllowance.allowed) {
