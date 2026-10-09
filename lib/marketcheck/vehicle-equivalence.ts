@@ -463,18 +463,9 @@ function genericTrimTier(target: VehicleIdentity, candidate: VehicleIdentity) {
   if (!targetVariant || !candidateVariant) return "supporting" as const;
   if (targetVariant === candidateVariant) return "direct" as const;
 
-  const targetCompact = compactVehicleText(targetVariant);
-  const candidateCompact = compactVehicleText(candidateVariant);
-
-  if (
-    targetCompact &&
-    candidateCompact &&
-    (targetCompact.includes(candidateCompact) ||
-      candidateCompact.includes(targetCompact))
-  ) {
-    return "direct" as const;
-  }
-
+  // Distinct trim strings remain Near even when one contains the other.
+  // Containment is unsafe for automotive derivatives: XL vs XLT, Premium vs
+  // Premium Plus, and similar names can represent materially different trims.
   return "near" as const;
 }
 
