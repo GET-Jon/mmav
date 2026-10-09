@@ -268,12 +268,12 @@ export function BillingSettingsCard() {
                 : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this month`}
             </div>
           </div>
-          <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4">
-            <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">Gifted evaluations</div>
+          <div className="rounded-xl border border-[#D4AF37] bg-[#FFF8E1] p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-[#8A6500]">Gifted evaluations</div>
             <div className="mt-2 text-lg font-black text-slate-950">
               {usage?.giftedEvaluationsRemaining || 0}
             </div>
-            <div className="mt-1 text-[10px] font-bold text-amber-700">
+            <div className="mt-1 text-[10px] font-bold text-[#8A6500]">
               Do not expire
             </div>
           </div>
