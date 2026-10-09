@@ -7462,11 +7462,11 @@ export function EvaluationWorkspace({
                               <button
                                 type="button"
                                 onClick={() => void improveCompSearch()}
-                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
-                                title={automaticCompSearchCompleted ? "Automatic search is complete. Use Expand / Improve Comps below for manual search controls." : undefined}
+                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review")}
+                                title={automaticCompSearchCompleted && !canContinueNationalSearch ? "Automatic national market checks are finished. Review or adjust vehicle match." : undefined}
                                 className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:border disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                               >
-                                {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
+                                {compSearchImproving ? "Running Search…" : compSearchRecommendation.action === "manual-review" ? "Review Vehicle Match" : "Run Recommended Search"}
                               </button>
                               <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
                                 or
@@ -7542,7 +7542,7 @@ export function EvaluationWorkspace({
                             <button
                               type="button"
                               onClick={() => void improveCompSearch()}
-                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || automaticCompSearchCompleted}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review")}
                               className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
                             >
                               {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
