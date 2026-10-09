@@ -69,15 +69,9 @@ Lot Logic Checkout:
 - starts a subscription using the selected fixed Price ID;
 - attaches `company_id` and `plan_key` metadata;
 - allows promotion codes;
+- enables Stripe Automatic Tax and keeps the Stripe customer address current;
 - returns the customer to the evaluator or Billing page;
 - relies on Stripe webhooks to synchronize subscription status and entitlements.
-
-## Weekly Starter note
-
-The public pricing component currently contains the display copy
-`or $9/week`, but the in-app purchase flow is monthly-only. Do not advertise
-or activate a weekly checkout until a separate weekly Stripe Price and cadence
-selection are intentionally implemented.
 
 ## No evaluation top-ups yet
 
