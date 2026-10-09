@@ -26,6 +26,7 @@ import {
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
+import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
@@ -748,7 +749,18 @@ export function EvaluationWorkspace({
   const [autoDevDiscoveryStatus, setAutoDevDiscoveryStatus] = useState("");
   const [autoDevDiscovery, setAutoDevDiscovery] = useState<{
     source: "auto.dev";
-    role: "discovery-only";
+    role: "discovery-only" | "discovery-and-qualified-candidates";
+    candidateComps?: MarketComp[];
+    candidateDiagnostics?: {
+      listingsReviewed: number;
+      missingPriceOrMileage: number;
+      identityRejected: number;
+      outOfYearRange: number;
+      direct: number;
+      near: number;
+      supporting: number;
+      autoIncluded: number;
+    };
     query: {
       year: number;
       make: string;
@@ -2797,7 +2809,10 @@ export function EvaluationWorkspace({
           ]
         : normalizedComps;
 
-      setComps(mergedComps);
+      setComps((current) => options?.mergeResults
+        ? mergeCompCandidates(current, normalizedComps)
+        : normalizedComps,
+      );
       setMarketCheckApiUsage(data.apiUsage || null);
 
       if (data.apiUsage) {
@@ -3086,6 +3101,7 @@ export function EvaluationWorkspace({
         },
         body: JSON.stringify({
           evaluationUsageId,
+          targetMileage,
           year: Number(vehicleYear),
           make: vehicleIdentityProfile?.make || vehicleMake,
           // Search the exact derivative first (TTS, M4, RAV4 Prime, etc.).
@@ -3122,6 +3138,12 @@ export function EvaluationWorkspace({
       }
 
       setAutoDevDiscovery(data);
+      // Auto.dev and MarketCheck are independent listing sources. The server
+      // applies strict identity/data qualification to Auto.dev candidates and
+      // the client preserves manual dealer choices when merging both sources.
+      if (Array.isArray(data.candidateComps)) {
+        setComps((current) => mergeCompCandidates(current, data.candidateComps));
+      }
 
       const total = Number(data.total || 0);
       const attempts = Array.isArray(data.discovery?.attempts)
@@ -6140,6 +6162,8 @@ export function EvaluationWorkspace({
                   <div className="font-black text-slate-900">Search evidence</div>
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
+                    <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
+                    <span>Auto.dev auto-selected: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
                     <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
                     <span>Provider-usable: <b>{compUsableListings}</b></span>
                     <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
