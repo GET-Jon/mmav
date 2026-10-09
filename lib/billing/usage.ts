@@ -276,6 +276,22 @@ export async function checkUsageAllowance(args: {
   const giftedCreditsAvailable =
     Number(summary.giftedEvaluationsRemaining || 0) > 0;
 
+  // Reopening or re-saving a completion must be idempotent, including after
+  // the dealership has spent its final gifted credit. This subject already
+  // counted; charging or paywalling it again would be incorrect.
+  if (
+    kind === "evaluation_completed" &&
+    subjectKey &&
+    (await countUsage(
+      supabase,
+      summary.company.companyId,
+      "evaluation_completed",
+      { subjectKey },
+    )) > 0
+  ) {
+    return { allowed: true as const, summary, consumesGiftedEvaluation: false };
+  }
+
   // Exhausting a trial prevents starting another evaluation; it should not
   // lock the dealer out of work they already completed. A subject with a
   // recorded completion may continue using review/refinement tools, while a
