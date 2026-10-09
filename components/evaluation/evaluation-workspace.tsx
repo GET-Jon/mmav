@@ -7392,6 +7392,11 @@ export function EvaluationWorkspace({
                             {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
                           </button>
                         </div>
+                        {automaticCompSearchCompleted && hasLimitedMarketEvidence ? (
+                          <div className="mt-2 text-[11px] font-bold leading-4 text-slate-500">
+                            Automatic search is complete. Use <span className="text-slate-800">Expand / Improve Comps</span> in Comparable Vehicles below to search specific markets or adjust the vehicle match.
+                          </div>
+                        ) : null}
                         {usageLimitMessage ? (
                           <div className="mt-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
                             <span>{usageLimitMessage}</span>
