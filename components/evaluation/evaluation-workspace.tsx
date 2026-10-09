@@ -984,6 +984,27 @@ export function EvaluationWorkspace({
   const [usageLimitMessage, setUsageLimitMessage] = useState("");
   const [evaluationAccessError, setEvaluationAccessError] = useState("");
   const [planSelectionMessage, setPlanSelectionMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleEvaluationLimit = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      setPlanSelectionMessage(
+        detail?.message ||
+          "You’ve used your available evaluations. Choose a plan to start another.",
+      );
+    };
+
+    window.addEventListener(
+      "lotlogic:evaluation-limit-reached",
+      handleEvaluationLimit,
+    );
+    return () => {
+      window.removeEventListener(
+        "lotlogic:evaluation-limit-reached",
+        handleEvaluationLimit,
+      );
+    };
+  }, []);
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
@@ -6659,6 +6680,7 @@ export function EvaluationWorkspace({
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
                   <button
                     type="button"
+                    data-evaluation-entry-action="true"
                     onClick={() => {
                       setQuickEvalMode(vin ? "vin" : "manual");
                       setQuickEvalOpen(true);
@@ -6789,6 +6811,7 @@ export function EvaluationWorkspace({
                 {hasEvaluationData ? (
                   <button
                     type="button"
+                    data-evaluation-entry-action="true"
                     onClick={() => setActiveStage("vehicle")}
                     className="text-xs font-black text-blue-700 hover:text-blue-900"
                   >
