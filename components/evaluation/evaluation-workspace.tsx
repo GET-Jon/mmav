@@ -3731,6 +3731,20 @@ export function EvaluationWorkspace({
     setVerdictTransitioning(true);
 
     try {
+      // Reviewing an unpriced result is not a completed valuation and must
+      // never consume a trial, monthly, or gifted evaluation credit.
+      if (compSummary.includedCount === 0) {
+        trackEvent("evaluation_verdict_viewed", {
+          valuation_comp_count: 0,
+          comp_confidence: "Low",
+          condition_review_status: conditionReviewStatus,
+          unpriced: true,
+        });
+        setActiveStage("verdict");
+        setVerdictTransitioning(false);
+        return;
+      }
+
       const response = await fetch("/api/usage/evaluation-complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -7516,9 +7530,7 @@ export function EvaluationWorkspace({
                             {compSearchImproving
                               ? compSearchImprovementStatus ||
                                 "Lot Logic is running the recommended search step…"
-                              : automaticCompSearchCompleted
-                                ? `${compSearchRegions || 0} market${compSearchRegions === 1 ? "" : "s"} checked${autoDevDiscovery ? " plus national inventory" : ""}. ${comps.length} candidate${comps.length === 1 ? "" : "s"} reviewed · ${compSummary.includedCount} trusted comp${compSummary.includedCount === 1 ? "" : "s"} selected.`
-                                : "Review the current evidence and next recommended step in Comparable Vehicles."}
+                              : `${compSearchRegions || 0} market${compSearchRegions === 1 ? "" : "s"} checked${autoDevDiscovery ? " plus national discovery" : ""} · ${comps.length} visible candidate${comps.length === 1 ? "" : "s"} · ${compSummary.includedCount} trusted selected. ${canContinueNationalSearch ? `${remainingNationalMarketCount} national markets still available.` : "Review further options below."}`}
                           </div>
                         </div>
                         <button
@@ -7528,6 +7540,18 @@ export function EvaluationWorkspace({
                         >
                           View comp results ↓
                         </button>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => compSearchRecommendation.action === "manual-review" ? openCompVehicleMatchEditor() : void improveCompSearch()}
+                            disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                            className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                            {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Review Vehicle Match" : "Run Recommended Search"}
+                          </button>
+                          <button type="button" onClick={() => void continueToVerdict()} disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
+                            className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-black text-blue-700 disabled:opacity-50">
+                            {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict (Unpriced) →"}
+                          </button>
+                        </div>
+                        <p className="mt-2 text-[11px] font-semibold text-amber-800">You can review an unpriced verdict without spending an evaluation credit; no reliable sale or profit estimate will be presented.</p>
                       </>
                     ) : (
                       <>
@@ -7549,7 +7573,12 @@ export function EvaluationWorkspace({
                             </button>
                           )}
                           <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
+                          <button type="button" onClick={() => void continueToVerdict()} disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
+                            className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-50">
+                            Continue to Verdict (Unpriced) →
+                          </button>
                         </div>
+                        <p className="mt-2 text-[11px] font-semibold text-amber-800">No trusted comps selected. An unpriced verdict will not consume a credit.</p>
                       </>
                     )
                   ) : (
@@ -7579,13 +7608,7 @@ export function EvaluationWorkspace({
                     <>
                       <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
                         <div className="text-xs font-bold text-slate-500">
-                          {Math.min(5, comps.length)} of {Number(
-                            marketCheckApiUsage?.filterDiagnostics?.usableListings ||
-                              comps.length,
-                          )} qualifying comp{Number(
-                            marketCheckApiUsage?.filterDiagnostics?.usableListings ||
-                              comps.length,
-                          ) === 1 ? "" : "s"} shown
+                          {Math.min(5, comps.length)} of {comps.length} candidate listing{comps.length === 1 ? "" : "s"} shown · {compSummary.includedCount} trusted selected
                         </div>
                         <div className="text-[11px] font-semibold text-slate-400">
                           Full comp set appears after Continue to Verdict.
@@ -7651,6 +7674,12 @@ export function EvaluationWorkspace({
 
           {activeStage === "verdict" ? (
             <>
+              {compSummary.includedCount === 0 ? (
+                <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950" role="status">
+                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. No evaluation credit was consumed for entering this unpriced verdict.
+                  <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
+                </div>
+              ) : null}
               <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[1.05fr_1.1fr_1fr] ${
                 verdictEntered
                   ? "translate-y-0 opacity-100"
@@ -7712,11 +7741,11 @@ export function EvaluationWorkspace({
                     </button>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
                       <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Sale Estimate</div>
-                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                     </div>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
                       <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Estimated Profit</div>
-                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</div>
+                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice && compSummary.includedCount > 0 ? money(valuation.expectedGrossProfit) : "—"}</div>
                     </div>
                   </div>
                   {presentationDecision === "review" && reviewReasons.length ? (
