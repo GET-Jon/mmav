@@ -111,7 +111,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
 
     if (Number(evaluationUsage.gifted || 0) > 0) {
-      return "border-amber-400 bg-amber-100 text-amber-900 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]";
+      return "border-[#D4AF37] bg-[#FFF8E1] text-[#7A5A00] shadow-[0_0_0_1px_rgba(212,175,55,0.12)]";
     }
 
     const remainingRatio = Math.max(
