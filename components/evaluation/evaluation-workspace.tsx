@@ -4520,7 +4520,7 @@ export function EvaluationWorkspace({
       compSearchImproving ||
       marketCheckLoading ||
       autoDevDiscoveryLoading ||
-      (automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review") ||
+      (automaticCompSearchCompleted && !canContinueNationalSearch) ||
       compSearchRecommendation.action === "complete"
     ) {
       return;
@@ -7542,7 +7542,7 @@ export function EvaluationWorkspace({
                             <button
                               type="button"
                               onClick={() => void improveCompSearch()}
-                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review")}
+                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch)}
                               className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
                             >
                               {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
