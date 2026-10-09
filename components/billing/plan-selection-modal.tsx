@@ -57,7 +57,7 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
           <p className="text-xs font-black uppercase tracking-wide text-blue-700">Keep evaluating with Lot Logic</p>
           <h2 id="plan-selection-title" className="mt-2 text-3xl font-black tracking-tight text-slate-950">Choose the plan that fits your dealership.</h2>
           <p className="mt-3 text-sm font-semibold text-slate-600">{message}</p>
-          <p className="mt-1 text-sm text-slate-500">Your vehicle details are saved. Pick a plan, then continue your evaluation.</p>
+          <p className="mt-1 text-sm text-slate-500">Your existing evaluations, comps, and pipeline remain available. Choose a plan when you’re ready to start another evaluation.</p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close plan selection" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600">Close</button>
       </div>
