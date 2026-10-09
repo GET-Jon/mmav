@@ -34,11 +34,11 @@ export default function MotorMatchPage(){
     try{
       const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
       const payload=await response.json();
+      setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
       if(!response.ok)throw new Error(payload?.error||"We could not check the market.");
       if(id===requestId.current){
         setResult(payload);
         setStarted(true);
-        setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
       }
     }catch(cause){if(id===requestId.current)setError(cause instanceof Error?cause.message:"We could not check the market.");}
     finally{if(id===requestId.current)setLoading(false);}
