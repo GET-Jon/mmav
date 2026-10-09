@@ -9,6 +9,8 @@ const PUBLIC_PATHS = [
   "/pricing",
   "/terms",
   "/cookies",
+  "/motor_match",
+  "/api/motor_match",
   "/auth/callback",
   "/auth/confirm",
   "/auth/partner-invite",
