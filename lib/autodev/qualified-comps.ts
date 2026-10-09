@@ -118,15 +118,15 @@ export function buildAutoDevCompCandidates(
         - yearGap * 5 - Math.min(12, Math.round(milesGap / 8000))
         - (validVin ? 0 : 12) - (url ? 0 : 8)),
     );
-    // Only clearly identified Direct retail listings may be selected without
-    // a dealer action; Near/Supporting still appear as optional evidence.
+    // Only well-documented Direct/Near retail listings may be selected without
+    // a dealer action; Supporting stays optional evidence.
     // An absent trim is not evidence of a verified derivative.
     const autoInclude =
-      match.tier === "direct" &&
+      (match.tier === "direct" || match.tier === "near") &&
       match.autoIncludeEligible &&
       !match.needsClassificationReview &&
       Boolean(String(listing.trim || "").trim()) &&
-      validVin && Boolean(url) && qualityScore >= 60;
+      validVin && Boolean(url) && qualityScore >= (match.tier === "direct" ? 60 : 75);
 
     if (autoInclude) diagnostics.autoIncluded += 1;
     comps.push({
@@ -181,17 +181,37 @@ export function buildAutoDevCompCandidates(
 // Cross-provider identity is the VIN, not provider row ID. Prefer an existing
 // dealer choice and existing MarketCheck evidence when both describe one car.
 export function mergeCompCandidates(existing: MarketComp[], additional: MarketComp[]) {
-  const seenVins = new Set(
-    existing.map((comp) => String(comp.marketCheckDetails?.vin || "").trim().toUpperCase()).filter(Boolean),
-  );
-  const ids = new Set(existing.map((comp) => comp.id));
   const merged = [...existing];
-  for (const comp of additional) {
+  const seenIds = new Set(merged.map((comp) => comp.id));
+  const vinIndex = new Map<string, number>();
+  merged.forEach((comp, index) => {
     const vin = String(comp.marketCheckDetails?.vin || "").trim().toUpperCase();
-    if (ids.has(comp.id) || (vin && seenVins.has(vin))) continue;
+    if (vin && !vinIndex.has(vin)) vinIndex.set(vin, index);
+  });
+
+  for (const comp of additional) {
+    if (seenIds.has(comp.id)) continue;
+    const vin = String(comp.marketCheckDetails?.vin || "").trim().toUpperCase();
+    const index = vin ? vinIndex.get(vin) : undefined;
+    if (index !== undefined) {
+      const old = merged[index];
+      // Prefer MarketCheck's detailed listing evidence, but never discard the
+      // dealer's explicitly recorded include/exclude choice.
+      if (old.source === "Auto.dev" && comp.source !== "Auto.dev") {
+        merged[index] = {
+          ...comp,
+          dealerDecision: old.dealerDecision || comp.dealerDecision,
+          dealerDecisionAt: old.dealerDecisionAt || comp.dealerDecisionAt,
+          included: old.dealerDecision ? old.included : comp.included,
+        };
+        seenIds.delete(old.id);
+        seenIds.add(comp.id);
+      }
+      continue;
+    }
     merged.push(comp);
-    ids.add(comp.id);
-    if (vin) seenVins.add(vin);
+    seenIds.add(comp.id);
+    if (vin) vinIndex.set(vin, merged.length - 1);
   }
   return merged;
 }
