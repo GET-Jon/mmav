@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 type Listing={vin:string|null;year:number|null;make:string|null;model:string|null;trim:string|null;price:number|null;miles:number|null;dealer:string|null;city:string|null;state:string|null;url:string|null};
+type ApiCall={label:string;purpose:string};
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:null};
 const s=(v:unknown)=>String(v||"").trim();
 
@@ -30,15 +31,21 @@ export async function POST(request:Request){
   if(trim)base["vehicle.trim"]=trim;
   if(zip){base.zip=zip;base.distance=distance}
 
+  const calls:ApiCall[]=[];
+  const run=async(label:string,purpose:string,params:Record<string,string|number|boolean|null|undefined>)=>{
+    calls.push({label,purpose});
+    return query(apiKey,params);
+  };
+
   try{
-    const exact=await query(apiKey,{...base,"retailListing.price":"1-"+Math.round(budget),"retailListing.miles":"1-"+Math.round(mileage),includes:"total",limit:20,sort:"price.asc"});
+    const exact=await run("Exact match","Check all current limits together",{...base,"retailListing.price":"1-"+Math.round(budget),"retailListing.miles":"1-"+Math.round(mileage),includes:"total",limit:20,sort:"price.asc"});
     let priceNeeded:number|null=null,mileageNeeded:number|null=null,yearNeeded:number|null=null;
 
     if(exact.total<5){
       const [p,m,y]=await Promise.all([
-        query(apiKey,{...base,"retailListing.miles":"1-"+Math.round(mileage),limit:20,sort:"price.asc"}),
-        query(apiKey,{...base,"retailListing.price":"1-"+Math.round(budget),limit:20,sort:"miles.asc"}),
-        query(apiKey,{...base,"vehicle.year":Math.max(1990,year-6)+"-"+(year-1),"retailListing.price":"1-"+Math.round(budget),"retailListing.miles":"1-"+Math.round(mileage),limit:100,sort:"year.desc"})
+        run("Price target","Find the budget needed while keeping mileage",{...base,"retailListing.miles":"1-"+Math.round(mileage),limit:20,sort:"price.asc"}),
+        run("Mileage target","Find the mileage needed while keeping budget",{...base,"retailListing.price":"1-"+Math.round(budget),limit:20,sort:"miles.asc"}),
+        run("Year target","Find an older year that fits budget and mileage",{...base,"vehicle.year":Math.max(1990,year-6)+"-"+(year-1),"retailListing.price":"1-"+Math.round(budget),"retailListing.miles":"1-"+Math.round(mileage),limit:100,sort:"year.desc"})
       ]);
       priceNeeded=fifth(p.listings,"price");
       mileageNeeded=fifth(m.listings,"miles");
@@ -50,8 +57,13 @@ export async function POST(request:Request){
     const state=exact.total>=5?"green":exact.total>0?"yellow":"red";
     const message=state==="green"?"There is enough current inventory to call this a realistic target.":state==="yellow"?"A few cars fit, but the market is thin. A small adjustment gives you more room for color, condition and options.":"We could not find a current listing satisfying all of those limits at once. Change one constraint and the market can open back up.";
 
-    return NextResponse.json({state,message,matchCount:exact.total,market:{priceNeeded,mileageNeeded,yearNeeded},listings:exact.listings});
+    return NextResponse.json({
+      state,message,matchCount:exact.total,
+      market:{priceNeeded,mileageNeeded,yearNeeded},
+      listings:exact.listings,
+      apiUsage:{callsThisUpdate:calls.length,breakdown:calls}
+    });
   }catch(cause){
-    return NextResponse.json({error:cause instanceof Error?cause.message:"Motor Match market check failed."},{status:502});
+    return NextResponse.json({error:cause instanceof Error?cause.message:"Motor Match market check failed.",apiUsage:{callsThisUpdate:calls.length,breakdown:calls}},{status:502});
   }
 }
