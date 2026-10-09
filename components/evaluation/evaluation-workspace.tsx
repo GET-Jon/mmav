@@ -2483,6 +2483,7 @@ export function EvaluationWorkspace({
       useVinMatch?: boolean;
       preferTaxonomyFallback?: boolean;
       useTaxonomyFallbackTrim?: boolean;
+      searchOperationId?: string;
     },
   ) {
     if (needsDealershipZip) {
@@ -2659,6 +2660,7 @@ export function EvaluationWorkspace({
           includeMarketLiquidity: !options?.mergeResults,
           preferTaxonomyFallback: options?.preferTaxonomyFallback === true,
           useTaxonomyFallbackTrim: options?.useTaxonomyFallbackTrim !== false,
+          searchOperationId: options?.searchOperationId || null,
         }),
       });
 
@@ -3020,7 +3022,7 @@ export function EvaluationWorkspace({
     });
   }
 
-  async function broadenCompVehicleMatch() {
+  async function broadenCompVehicleMatch(searchOperationId?: string) {
     if (!vehicleMake || !vehicleModel || !vehicleTrim) {
       setMarketCheckStatus("There is no trim-level specificity to relax for this vehicle.");
       return;
@@ -3054,6 +3056,7 @@ export function EvaluationWorkspace({
         preferTaxonomyFallback: true,
         useTaxonomyFallbackTrim: false,
         maxApiCallsPerSearch: Math.min(3, Math.max(1, regions.length)),
+        searchOperationId,
       },
     );
   }
@@ -3203,6 +3206,7 @@ export function EvaluationWorkspace({
   async function searchAutoDevRecommendedMarkets(
     discoveryOverride: typeof autoDevDiscovery = autoDevDiscovery,
     searchedZipsOverride?: string[],
+    searchOperationId?: string,
   ) {
     const discovery = discoveryOverride;
 
@@ -3243,6 +3247,7 @@ export function EvaluationWorkspace({
       preferTaxonomyFallback: compTrimRelaxed,
       useTaxonomyFallbackTrim: !compTrimRelaxed,
       maxApiCallsPerSearch: regions.length,
+      searchOperationId,
     });
 
     setAutoDevDiscoveryStatus(
@@ -3258,7 +3263,7 @@ export function EvaluationWorkspace({
     return outcome;
   }
 
-  async function expandMarketCheckSearch() {
+  async function expandMarketCheckSearch(searchOperationId?: string) {
     const searchedZips = new Set(marketCheckSearchMeta?.searchedZips || []);
 
     // Use the same expansion engine that powers the UI recommendations so the
@@ -3291,6 +3296,7 @@ export function EvaluationWorkspace({
       preferTaxonomyFallback: compTrimRelaxed,
       useTaxonomyFallbackTrim: !compTrimRelaxed,
       maxApiCallsPerSearch: Math.min(3, nextRegions.length),
+      searchOperationId,
     });
   }
 
@@ -4502,6 +4508,7 @@ export function EvaluationWorkspace({
     setCompMarketEditorOpen(false);
     setCompSearchImproving(true);
     setAutomaticCompSearchCompleted(false);
+    const searchOperationId = `recommended-${evaluationUsageId || "evaluation"}-${Date.now()}`;
 
     window.setTimeout(() => {
       compSectionRef.current?.scrollIntoView({
@@ -4527,7 +4534,11 @@ export function EvaluationWorkspace({
         setCompSearchImprovementStatus(
           "Verifying the strongest markets found by national discovery…",
         );
-        const validation = await searchAutoDevRecommendedMarkets();
+        const validation = await searchAutoDevRecommendedMarkets(
+          autoDevDiscovery,
+          marketCheckSearchMeta?.searchedZips || [],
+          searchOperationId,
+        );
         latestIncludedCount = Number(
           validation?.includedCount || latestIncludedCount,
         );
@@ -4556,7 +4567,7 @@ export function EvaluationWorkspace({
             : "Normalizing provider naming while keeping final comp rules strict…",
         );
 
-        const broadened = await broadenCompVehicleMatch();
+        const broadened = await broadenCompVehicleMatch(searchOperationId);
         latestIncludedCount = Number(
           broadened?.includedCount || latestIncludedCount,
         );
@@ -4578,7 +4589,7 @@ export function EvaluationWorkspace({
         setCompSearchImprovementStatus(
           "Checking the next best nearby markets before going national…",
         );
-        const expanded = await expandMarketCheckSearch();
+        const expanded = await expandMarketCheckSearch(searchOperationId);
         latestIncludedCount = Number(
           expanded?.includedCount || latestIncludedCount,
         );
@@ -4623,6 +4634,7 @@ export function EvaluationWorkspace({
           const validation = await searchAutoDevRecommendedMarkets(
             discovery,
             latestSearchedZips,
+            searchOperationId,
           );
           nationalBatches += 1;
 
