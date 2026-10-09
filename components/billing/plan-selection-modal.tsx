@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PricingPlanCards, type PricingPlan } from "@/components/marketing/pricing-plan-cards";
 
 type BillingAccess = {
@@ -11,13 +11,11 @@ type BillingAccess = {
 };
 
 export function PlanSelectionModal({ message, onClose }: { message: string; onClose: () => void }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const [data, setData] = useState<BillingAccess | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    dialogRef.current?.showModal();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     let cancelled = false;
@@ -51,7 +49,19 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
   }
 
   return (
-    <dialog ref={dialogRef} aria-labelledby="plan-selection-title" onCancel={onClose} className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-6xl overflow-y-auto rounded-[28px] bg-[#f6f8fb] p-5 shadow-2xl backdrop:bg-slate-950/50 sm:p-8">
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plan-selection-title"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] bg-[#f6f8fb] p-5 shadow-2xl sm:p-8"
+      >
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-blue-700">Keep evaluating with Lot Logic</p>
@@ -93,6 +103,7 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
       <div className="mt-6 grid gap-2 border-t border-slate-200 pt-5 text-xs font-bold text-slate-600 sm:grid-cols-3">
         <span>✓ Only completed valuations count</span><span>✓ Re-open existing evaluations anytime</span><span>✓ Drafts and edits don’t use another evaluation</span>
       </div>
-    </dialog>
+      </section>
+    </div>
   );
 }
