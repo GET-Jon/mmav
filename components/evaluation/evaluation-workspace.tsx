@@ -6293,7 +6293,14 @@ export function EvaluationWorkspace({
                     type="button"
                     onClick={() => {
                       setWhyLotLogicOpen(false);
-                      compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      window.requestAnimationFrame(() => {
+                        window.requestAnimationFrame(() => {
+                          compSectionRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                        });
+                      });
                     }}
                     className="mt-4 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
@@ -7570,7 +7577,7 @@ export function EvaluationWorkspace({
                 </article>
               </section>
 
-              <section className={`mt-4 transition-all delay-100 duration-300 ease-out ${
+              <section ref={compSectionRef} className={`mt-4 scroll-mt-4 transition-all delay-100 duration-300 ease-out ${
                 verdictEntered ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
               }`}>
                 <SectionCard
@@ -7584,8 +7591,13 @@ export function EvaluationWorkspace({
                     </div>
                   }
                 >
+                  {comps.length ? (
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
+                  )}
                   {comps.length && marketCheckSearchMeta?.regionsChecked?.length ? (
-                    <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                       <span className="font-black text-slate-800">Search coverage:</span>{" "}
                       {marketCheckSearchMeta.regionsChecked.join(" → ")}
                       {Array.from(
@@ -7609,11 +7621,6 @@ export function EvaluationWorkspace({
                       ) : null}
                     </div>
                   ) : null}
-                  {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
-                  ) : (
-                    <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
-                  )}
                 </SectionCard>
               </section>
 
