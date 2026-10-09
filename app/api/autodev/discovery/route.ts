@@ -64,7 +64,7 @@ function buildRecommendedMarkets(
   target: VehicleIdentity,
   maxMarkets = 3,
 ) {
-  const candidates = listings
+  const eligibleCandidates = listings
     .map((listing) => {
       const candidate: VehicleIdentity = {
         year: Number(listing.year || 0),
@@ -97,6 +97,20 @@ function buildRecommendedMarkets(
         typeof listing.latitude === "number" &&
         typeof listing.longitude === "number",
     );
+
+  // If Auto.dev found any Direct/Near inventory, build geography from those
+  // cars only. Related Supporting vehicles are useful fallback evidence, but
+  // they should not steer a TTS search toward ordinary TT inventory when true
+  // TTS listings are available nationally.
+  const highConfidenceCandidates = eligibleCandidates.filter(
+    (listing) =>
+      listing.equivalenceTier === "direct" ||
+      listing.equivalenceTier === "near",
+  );
+  const candidates =
+    highConfidenceCandidates.length > 0
+      ? highConfidenceCandidates
+      : eligibleCandidates;
   const remaining = new Set(candidates.map((_, index) => index));
   const recommendations: Array<{ market: string; zip: string; latitude: number; longitude: number; coverageCount: number; directCount: number; nearCount: number; supportingCount: number; qualityWeight: number; states: string[]; vins: string[] }> = [];
   while (remaining.size && recommendations.length < maxMarkets) {
@@ -236,5 +250,5 @@ export async function POST(request: Request) {
   const byState = listings.reduce((acc: Record<string, number>, listing) => { const state = String(listing.state || "Unknown"); acc[state] = (acc[state] || 0) + 1; return acc; }, {});
   const total = selectedPayload && typeof selectedPayload.total === "number" ? selectedPayload.total : listings.length;
   await recordApiUsageEvent({ companyId: discoveryAllowance.summary.company.companyId, userId: user.id, provider: "auto_dev", endpoint: "/listings", vehicleYear: year, vehicleMake: make, vehicleModel: selectedAttempt?.model || model, apiCallsMade: callsMade, status: 200, stopReason: listings.length ? "Auto.dev national discovery found inventory." : "Auto.dev national discovery exhausted exact and normalized vehicle identities.", metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, returned: listings.length, total, attemptResults } });
-  return NextResponse.json({ source: "auto.dev", role: "discovery-only", query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 3), listings });
+  return NextResponse.json({ source: "auto.dev", role: "discovery-only", query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 8), listings });
 }
