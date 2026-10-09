@@ -7,6 +7,7 @@ import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import {
   checkUsageAllowance,
   evaluationUsageSubject,
+  getUsageSummary,
   recordUsageEvent,
 } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -840,12 +841,47 @@ export async function POST(request: Request) {
       nestedVehicle.trim,
   });
 
-  const searchAllowance = await checkUsageAllowance({
-    supabase: admin,
-    userId: user.id,
-    kind: "market_search",
-    subjectKey,
-  });
+  const searchOperationId = String(
+    normalizedBody.searchOperationId || "",
+  )
+    .replace(/[^a-zA-Z0-9:_-]+/g, "")
+    .slice(0, 120);
+  const searchUsageIdempotencyKey = searchOperationId
+    ? `market_search:${subjectKey}:${searchOperationId}`.slice(0, 240)
+    : null;
+
+  let searchAlreadyCounted = false;
+  if (searchUsageIdempotencyKey) {
+    const { data: existingSearchUsage, error: existingSearchUsageError } =
+      await admin
+        .from("company_usage_events")
+        .select("id")
+        .eq("company_id", company.companyId)
+        .eq("event_type", "market_search")
+        .eq("subject_key", subjectKey)
+        .eq("idempotency_key", searchUsageIdempotencyKey)
+        .maybeSingle();
+
+    if (existingSearchUsageError) {
+      return Response.json(
+        { error: existingSearchUsageError.message },
+        { status: 500 },
+      );
+    }
+    searchAlreadyCounted = Boolean(existingSearchUsage?.id);
+  }
+
+  const searchAllowance = searchAlreadyCounted
+    ? {
+        allowed: true as const,
+        summary: await getUsageSummary(admin, user.id),
+      }
+    : await checkUsageAllowance({
+        supabase: admin,
+        userId: user.id,
+        kind: "market_search",
+        subjectKey,
+      });
 
   if (!searchAllowance.allowed) {
     return Response.json(
@@ -892,6 +928,7 @@ export async function POST(request: Request) {
         userId: user.id,
         kind: "market_search",
         subjectKey,
+        idempotencyKey: searchUsageIdempotencyKey,
         metadata: { failed: true, searchStage: String(normalizedBody.searchStage || "initial") },
       }),
       recordUsageEvent({
