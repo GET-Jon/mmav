@@ -18,6 +18,8 @@ jobs:
       - run: npm ci
       - name: Apply repository prebuild checks
         run: npm run prebuild
+      - name: Comp regression suite
+        run: npx --yes tsx@4.20.6 scripts/run-comp-regressions.ts
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build
