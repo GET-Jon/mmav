@@ -108,6 +108,8 @@ export async function POST(request: NextRequest) {
   addCheckoutPrice(params, requestedPlan, priceId);
   params.set("line_items[0][quantity]", "1");
   params.set("allow_promotion_codes", "true");
+  params.set("automatic_tax[enabled]", "true");
+  params.set("customer_update[address]", "auto");
   params.set("client_reference_id", company.companyId);
   params.set("metadata[company_id]", company.companyId);
   params.set("subscription_data[metadata][company_id]", company.companyId);
