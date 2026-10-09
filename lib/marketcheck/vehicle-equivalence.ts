@@ -561,7 +561,20 @@ export function evaluateVehicleEquivalence({
 
     if (targetSpecial || candidateSpecial) {
       if (targetSpecial && candidateSpecial && targetSpecial === candidateSpecial) {
-        tier = "direct";
+        // Matching the performance derivative (e.g. TTS) does not establish
+        // identical equipment/trim. Prestige and Premium Plus are different
+        // retail variants even though both are TTS, so use Near evidence.
+        const targetTrim = normalize(target.trim);
+        const candidateTrim = normalize(candidate.trim);
+        if (!targetTrim || !candidateTrim) {
+          tier = "supporting";
+          reasons.push("special derivative aligned but trim is incomplete");
+        } else if (targetTrim !== candidateTrim) {
+          tier = "near";
+          reasons.push(`special derivative aligned; trim differs: ${targetTrim} vs ${candidateTrim}`);
+        } else {
+          tier = "direct";
+        }
       } else {
         tier = "supporting";
         reasons.push(
