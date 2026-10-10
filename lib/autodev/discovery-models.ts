@@ -1,5 +1,13 @@
 function normalizeText(value: unknown) { return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
-function uniqueStrings(values: Array<string | null | undefined>) { return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))); }
+function uniqueStrings(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  return values.map(value => String(value || "").trim()).filter(value => {
+    const key = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export function buildDiscoveryModels(
   make: string,
