@@ -20,6 +20,8 @@ export type MarketComp = {
   targetClassification?: string | null;
   candidateClassification?: string | null;
   needsClassificationReview?: boolean;
+  dealerDecision?: "include" | "exclude" | null;
+  dealerDecisionAt?: string | null;
 
   marketCheckDetails?: {
     vin?: string | null;
@@ -43,6 +45,7 @@ export type MarketComp = {
     cylinders?: number | null;
     listingDate?: string | null;
     lastSeenDate?: string | null;
+    retrievalAttempt?: string | null;
     targetYear?: number | null;
     targetMake?: string | null;
     targetModel?: string | null;
@@ -60,6 +63,7 @@ export type MarketComp = {
       fuelType?: string | null;
       drivetrain?: string | null;
       bodyType?: string | null;
+      doors?: number | null;
       cylinders?: number | null;
       note?: string | null;
     };
@@ -71,6 +75,16 @@ export type MarketComp = {
       distanceMiles?: number | null;
       trimAvailable?: boolean;
       originalScore?: number | null;
+      preferredTrim?: string | null;
+      variantMatched?: boolean | null;
+      retrievalYearPenalty?: number | null;
+      variantPenalty?: number | null;
+      mileagePenalty?: number | null;
+      distancePenalty?: number | null;
+      missingPricePenalty?: number | null;
+      equivalenceModifier?: number | null;
+      sourceReliabilityPenalty?: number | null;
+      finalScore?: number | null;
       equivalenceTier?: "direct" | "near" | "supporting" | "reject";
       equivalenceReasons?: string[];
       autoIncludeEligible?: boolean;
@@ -101,5 +115,7 @@ export type CompSummary = {
   supportingCount?: number;
   cappedAdjustmentCount?: number;
   lowReliabilityAdjustmentCount?: number;
+  dealerOverrideCount?: number;
+  dealerHardOverrideCount?: number;
   confidenceReasons?: string[];
 };

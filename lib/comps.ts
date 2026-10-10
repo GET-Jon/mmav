@@ -230,15 +230,19 @@ export function calculateCompSummary({
 }): CompSummary {
   const rawIncludedComps = comps.filter((comp) => comp.included === true);
 
-  // Supporting comps are never auto-included by the search pipeline, but a
-  // manager can still deliberately check one. Reject-tier vehicles remain hard
-  // exclusions because they are a different vehicle/fuel/model family.
-  const qualityPassingComps = rawIncludedComps.filter(
-    (comp) =>
+  // Automatic selections must pass the model's identity and quality rules.
+  // A dealer may deliberately include any visible listing as an override; that
+  // decision is preserved and lowers confidence rather than being silently
+  // ignored by the valuation engine.
+  const qualityPassingComps = rawIncludedComps.filter((comp) => {
+    if (comp.dealerDecision === "include") return true;
+
+    return (
       !isHardRejected(comp) &&
       (typeof comp.qualityScore !== "number" ||
-        comp.qualityScore >= assumptions.compSettings.minimumQualityScore),
-  );
+        comp.qualityScore >= assumptions.compSettings.minimumQualityScore)
+    );
+  });
 
   const prepared: ValuationComp[] = qualityPassingComps.map((comp) => ({
     comp,
@@ -290,6 +294,20 @@ export function calculateCompSummary({
   const supportingCount = validComps.filter(
     (comp) => comp.equivalenceTier === "supporting",
   ).length;
+  const independentlySourcedCount = validComps.filter(
+    (comp) => comp.source === "Auto.dev",
+  ).length;
+  const marketCheckVerifiedCount = includedCount - independentlySourcedCount;
+  const dealerOverrideCount = validComps.filter(
+    (comp) => comp.dealerDecision === "include",
+  ).length;
+  const dealerHardOverrideCount = validComps.filter(
+    (comp) =>
+      comp.dealerDecision === "include" &&
+      (isHardRejected(comp) ||
+        (typeof comp.qualityScore === "number" &&
+          comp.qualityScore < assumptions.compSettings.minimumQualityScore)),
+  ).length;
   const directRatio = includedCount > 0 ? directCount / includedCount : 0;
   const supportingRatio = includedCount > 0 ? supportingCount / includedCount : 0;
   const averageQuality = includedCount
@@ -304,6 +322,9 @@ export function calculateCompSummary({
     : 1;
 
   const confidenceReasons: string[] = [];
+  if (independentlySourcedCount > 0 && marketCheckVerifiedCount < 2) {
+    confidenceReasons.push("national retail evidence has limited independent provider corroboration");
+  }
   if (includedCount < assumptions.compSettings.minimumCompsForMediumConfidence) {
     confidenceReasons.push("too few reliable comps");
   }
@@ -312,6 +333,11 @@ export function calculateCompSummary({
   }
   if (supportingCount > 0) {
     confidenceReasons.push(`${supportingCount} Supporting comp${supportingCount === 1 ? " is" : "s are"} manually included`);
+  }
+  if (dealerHardOverrideCount > 0) {
+    confidenceReasons.push(
+      `${dealerHardOverrideCount} dealer-selected comp${dealerHardOverrideCount === 1 ? " bypasses" : "s bypass"} Lot Logic's normal identity or quality rule`,
+    );
   }
   if (spread > assumptions.compSettings.maxSpreadForHighConfidence) {
     confidenceReasons.push("adjusted prices have a wide spread");
@@ -330,9 +356,11 @@ export function calculateCompSummary({
   }
 
   const highConfidence =
+    marketCheckVerifiedCount >= 2 &&
     includedCount >= assumptions.compSettings.minimumCompsForHighConfidence &&
     directRatio >= 0.5 &&
     supportingCount === 0 &&
+    dealerHardOverrideCount === 0 &&
     averageQuality >= 75 &&
     spread <= assumptions.compSettings.maxSpreadForHighConfidence &&
     cappedRatio <= 0.25 &&
@@ -343,7 +371,8 @@ export function calculateCompSummary({
     averageQuality >= 60 &&
     spread <= 0.35 &&
     cappedRatio <= 0.5 &&
-    supportingRatio <= 0.5;
+    supportingRatio <= 0.5 &&
+    dealerHardOverrideCount === 0;
 
   const confidence = highConfidence
     ? "High"
@@ -370,6 +399,8 @@ export function calculateCompSummary({
     supportingCount,
     cappedAdjustmentCount,
     lowReliabilityAdjustmentCount,
+    dealerOverrideCount,
+    dealerHardOverrideCount,
     confidenceReasons,
   };
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
+import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export type AppTopNavPage =
@@ -22,6 +23,22 @@ type AppTopNavProps = {
   onNewEvaluation?: () => void;
 };
 
+type UsageStatus = {
+  internalUnlimited?: boolean;
+  trialActive?: boolean;
+  paidActive?: boolean;
+  trialEvaluationsUsed?: number;
+  trialEvaluationsRemaining?: number | null;
+  monthlyEvaluationsUsed?: number;
+  monthlyEvaluationsRemaining?: number | null;
+  giftedEvaluationsRemaining?: number | null;
+  effectiveEvaluationsRemaining?: number | null;
+  canUsePaidProviders?: boolean;
+  limits?: {
+    evaluationsPerMonth?: number;
+  };
+};
+
 function navClass(isActive: boolean) {
   return isActive
     ? "rounded-lg bg-slate-950 px-3 py-2 text-sm font-extrabold text-white"
@@ -35,6 +52,9 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const [resolvedRole, setResolvedRole] = useState<string | null>(userRole);
   const [resolvedCompanyName, setResolvedCompanyName] = useState<string | null>(null);
   const [resolvedCompanySlug, setResolvedCompanySlug] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageStatus | null>(null);
+  const [planSelectionOpen, setPlanSelectionOpen] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const userLabel = userEmail?.split("@")[0] || "Mindful Motors";
   const isAdmin = resolvedRole === "company_admin";
   const isMindfulAdmin =
@@ -47,6 +67,66 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     .map((part) => part.charAt(0))
     .join("")
     .toUpperCase() || "MM";
+
+  const evaluationUsage = (() => {
+    if (!usage || usage.internalUnlimited) return null;
+
+    const gifted = Number(usage.giftedEvaluationsRemaining || 0);
+
+    if (!usage.paidActive) {
+      const used = Number(usage.trialEvaluationsUsed || 0);
+      const total = 5;
+      return {
+        used,
+        total,
+        gifted,
+        label:
+          gifted > 0
+            ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
+            : `${Math.min(used, total)}/${total} free evals`,
+      };
+    }
+
+    const total = Number(usage.limits?.evaluationsPerMonth || 0);
+    if (!total) return null;
+
+    const used = Number(usage.monthlyEvaluationsUsed || 0);
+    return {
+      used,
+      total,
+      gifted,
+      label:
+        gifted > 0
+          ? `${used}/${total} evals · ${gifted} gifted`
+          : `${used}/${total} evals`,
+    };
+  })();
+
+  const trialPaywallReached =
+    Boolean(usage) &&
+    !usage?.paidActive &&
+    usage?.canUsePaidProviders === false;
+
+  const evaluationUsageTone = (() => {
+    if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
+
+    if (Number(evaluationUsage.gifted || 0) > 0) {
+      return "border-[#D4AF37] bg-[#FFF8E1] text-[#7A5A00] shadow-[0_0_0_1px_rgba(212,175,55,0.12)]";
+    }
+
+    const remainingRatio = Math.max(
+      0,
+      (evaluationUsage.total - evaluationUsage.used) / evaluationUsage.total,
+    );
+
+    if (remainingRatio === 0) {
+      return "border-red-200 bg-red-50 text-red-700";
+    }
+    if (remainingRatio <= 0.2) {
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    }
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  })();
 
   useEffect(() => {
     if (!userEmail) return;
@@ -86,6 +166,63 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   }, [resolvedRole, userEmail]);
 
   useEffect(() => {
+    if (!userEmail) return;
+
+    let cancelled = false;
+
+    async function loadPlatformAdminStatus() {
+      try {
+        const response = await fetch("/api/admin/platform-status", {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as {
+          isPlatformAdmin?: boolean;
+        };
+        if (!cancelled && response.ok) {
+          setIsPlatformAdmin(Boolean(payload.isPlatformAdmin));
+        }
+      } catch {
+        if (!cancelled) setIsPlatformAdmin(false);
+      }
+    }
+
+    void loadPlatformAdminStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+
+    let cancelled = false;
+
+    async function loadUsage() {
+      try {
+        const response = await fetch("/api/usage/status", { cache: "no-store" });
+        const payload = (await response.json()) as UsageStatus;
+        if (!cancelled && response.ok) setUsage(payload);
+      } catch {
+        // Usage is supplemental navigation context. Do not interrupt the app
+        // if it cannot be loaded.
+      }
+    }
+
+    void loadUsage();
+    window.addEventListener("focus", loadUsage);
+    window.addEventListener("pageshow", loadUsage);
+    window.addEventListener("lotlogic:usage-changed", loadUsage);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", loadUsage);
+      window.removeEventListener("pageshow", loadUsage);
+      window.removeEventListener("lotlogic:usage-changed", loadUsage);
+    };
+  }, [userEmail]);
+
+  useEffect(() => {
     function closeOnOutsideClick(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
     }
@@ -113,7 +250,8 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <>
+      <header className="border-b border-slate-200 bg-white">
       <div className="relative mx-auto flex max-w-[1480px] items-center px-5 py-3 lg:px-7">
         <Link href="/" aria-label="Lot Logic home" className="shrink-0 text-slate-950 transition-opacity hover:opacity-75">
           <div className="sm:hidden"><LotLogicLogo compact /></div>
@@ -124,12 +262,49 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
           <Link href="/evaluate" className={navClass(active === "evaluator")}>Evaluator</Link>
           <Link href="/deals" className={navClass(active === "pipeline")}>Pipeline</Link>
           <Link href="/insights" className={navClass(active === "insights")}>Insights</Link>
+          {isPlatformAdmin ? (
+            <Link href="/admin/customers" className={navClass(active === "admin")}>
+              Platform Admin
+            </Link>
+          ) : null}
           {isMindfulAdmin ? <Link href="/mindful/inventory" className={navClass(active === "inventory")}>Inventory</Link> : null}
           {isMindfulAdmin ? <Link href="/mindful/inventory/schedule" className={navClass(active === "schedule")}>Schedule</Link> : null}
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center gap-3">
-          {onNewEvaluation ? (
+          {evaluationUsage ? (
+            trialPaywallReached ? (
+              <button
+                type="button"
+                data-evaluation-limit-allowed="true"
+                title="Choose a plan to keep evaluating"
+                onClick={() => setPlanSelectionOpen(true)}
+                className={`hidden rounded-xl border px-3 py-2 text-xs font-black transition hover:brightness-95 lg:block ${evaluationUsageTone}`}
+              >
+                {evaluationUsage.label}
+              </button>
+            ) : (
+              <Link
+                href="/settings?tab=billing"
+                data-evaluation-limit-allowed="true"
+                title="View evaluation usage and plan options"
+                className={`hidden rounded-xl border px-3 py-2 text-xs font-black transition hover:brightness-95 lg:block ${evaluationUsageTone}`}
+              >
+                {evaluationUsage.label}
+              </Link>
+            )
+          ) : null}
+
+          {trialPaywallReached ? (
+            <button
+              type="button"
+              onClick={() => setPlanSelectionOpen(true)}
+              title="Choose a plan to start a new evaluation"
+              className="hidden rounded-xl bg-blue-700 px-3 py-2 text-sm font-black text-white shadow-sm transition-colors hover:bg-blue-800 lg:block"
+            >
+              New Evaluation
+            </button>
+          ) : onNewEvaluation ? (
             <button type="button" onClick={onNewEvaluation} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</button>
           ) : (
             <Link href="/evaluate/new" prefetch={false} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
@@ -149,11 +324,37 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
               <div role="menu" className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 <div className="border-b border-slate-100 px-4 py-3">
                   <div className="truncate text-xs font-black text-slate-950">{userEmail || userLabel}</div>
-                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{isMindfulAdmin ? "Mindful Admin" : isAdmin ? "Company Admin" : "User"}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    {isPlatformAdmin
+                      ? "Platform Admin"
+                      : isMindfulAdmin
+                        ? "Mindful Admin"
+                        : isAdmin
+                          ? "Company Admin"
+                          : "User"}
+                  </div>
                 </div>
                 <div className="p-1.5">
                   <Link role="menuitem" href="/settings" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Settings</Link>
-                  {isMindfulAdmin ? <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">Admin</Link> : null}
+                  {isPlatformAdmin ? (
+                    <Link
+                      role="menuitem"
+                      href="/admin/customers"
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                    >
+                      Platform Admin
+                    </Link>
+                  ) : isMindfulAdmin ? (
+                    <Link
+                      role="menuitem"
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                    >
+                      Admin
+                    </Link>
+                  ) : null}
                 </div>
                 {userEmail ? (
                   <div className="border-t border-slate-100 p-1.5">
@@ -165,6 +366,13 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
           </div>
         </div>
       </div>
-    </header>
+      </header>
+      {planSelectionOpen ? (
+        <PlanSelectionModal
+          message="You’ve used your free evaluations. Choose a plan to continue."
+          onClose={() => setPlanSelectionOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }

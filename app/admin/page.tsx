@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { getMindfulInventoryAccess } from "@/lib/mindful-inventory/access";
+import { getPlatformAdminAccess } from "@/lib/admin/platform-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,20 +16,51 @@ const sections = [
 ];
 
 export default async function AdminPage() {
-  const access = await getMindfulInventoryAccess();
-  if (!access || access.company.role !== "company_admin") notFound();
+  const [mindfulAccess, platformAccess] = await Promise.all([
+    getMindfulInventoryAccess(),
+    getPlatformAdminAccess(),
+  ]);
+
+  const mindfulAdmin =
+    Boolean(mindfulAccess) && mindfulAccess?.company.role === "company_admin";
+  const platformAdmin = Boolean(platformAccess);
+
+  if (!mindfulAdmin && !platformAdmin) notFound();
+
+  const visibleSections = [
+    ...(platformAdmin
+      ? [
+          {
+            href: "/admin/customers",
+            title: "Customers & Billing",
+            description:
+              "See every Lot Logic customer, subscription plan, usage, users, remaining evaluations, and gift evaluation credits.",
+            ready: true,
+          },
+        ]
+      : []),
+    ...(mindfulAdmin ? sections : []),
+  ];
+
+  const navEmail =
+    platformAccess?.userEmail || mindfulAccess?.userEmail || null;
+  const navRole = mindfulAccess?.company.role || "company_admin";
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <AppTopNav active="admin" userEmail={access.userEmail} userRole={access.company.role} />
+      <AppTopNav active="admin" userEmail={navEmail} userRole={navRole} />
       <div className="mx-auto w-full max-w-[1480px] px-4 py-6 sm:px-5 lg:px-7">
         <div className="mb-6">
           <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Administration</div>
           <h1 className="mt-1 text-[30px] font-black tracking-[-0.035em]">Manage how Lot Logic operates</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">Configure the people, places, resources, integrations, and access rules that the operating workflows depend on.</p>
+          <p className="mt-2 max-w-3xl text-slate-600">
+            {platformAdmin
+              ? "Manage Lot Logic customers, billing, usage, credits, and platform operations."
+              : "Configure the people, places, resources, integrations, and access rules that the operating workflows depend on."}
+          </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {sections.map((section) => section.ready ? (
+          {visibleSections.map((section) => section.ready ? (
             <Link key={section.title} href={section.href} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-slate-400">
               <div className="text-xl font-black">{section.title}</div><p className="mt-2 text-sm leading-6 text-slate-600">{section.description}</p><div className="mt-5 text-sm font-black text-slate-950">Manage {section.title} →</div>
             </Link>

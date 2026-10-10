@@ -162,6 +162,22 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   }
 
   if (make === "ford") {
+    // Bronco providers commonly move the door count between model and body
+    // fields ("Bronco", "Bronco 4-Door", "Bronco 2-Door"). Those are one
+    // model family; Bronco Sport is a separate vehicle and must stay separate.
+    if (startsWithAny(modelCompact, ["broncosport"])) {
+      return "bronco sport";
+    }
+    if (
+      startsWithAny(modelCompact, [
+        "bronco4door",
+        "bronco2door",
+        "bronco",
+      ])
+    ) {
+      return "bronco";
+    }
+
     if (
       startsWithAny(modelCompact, [
         "f150raptorr",
@@ -220,6 +236,61 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   return model;
 }
 
+const BRONCO_MARKETING_TRIMS = [
+  "heritage limited",
+  "black diamond",
+  "outer banks",
+  "big bend",
+  "wildtrak",
+  "everglades",
+  "badlands",
+  "heritage",
+  "raptor",
+  "base",
+];
+
+export function isLikelyVariantEnumeration({
+  make,
+  model,
+  trim,
+}: {
+  make?: unknown;
+  model?: unknown;
+  trim?: unknown;
+}) {
+  const normalizedTrim = normalizeVehicleText(trim);
+  if (!normalizedTrim) return false;
+
+  const family = canonicalModelFamily({
+    year: 0,
+    make: String(make || ""),
+    model: String(model || ""),
+    trim: String(trim || ""),
+  });
+
+  if (canonicalVehicleMake(make) === "ford" && family === "bronco") {
+    const matches = BRONCO_MARKETING_TRIMS.filter((candidate) =>
+      ` ${normalizedTrim} `.includes(` ${candidate} `),
+    ).filter(
+      (candidate, _index, allMatches) =>
+        !allMatches.some(
+          (other) =>
+            other !== candidate &&
+            other.length > candidate.length &&
+            other.includes(candidate),
+        ),
+    );
+    if (new Set(matches).size > 1) return true;
+  }
+
+  // Some decoders put a list of possible series/trims in one field. Do not
+  // pretend that an option list is one literal trim.
+  return String(trim || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean).length >= 3;
+}
+
 function stripDrivetrainBranding(value: unknown) {
   return String(value || "")
     .replace(/\b(?:xdrive|sdrive|quattro|4matic|4motion|awd|4wd|fwd|rwd|4x4)\b/gi, " ")
@@ -232,6 +303,11 @@ export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
   const modelFamily = canonicalModelFamily(vehicle);
   const normalizedFamily = normalizeVehicleText(modelFamily);
   const normalizedModel = normalizeVehicleText(vehicle.model);
+
+  const ambiguousTrim = isLikelyVariantEnumeration(vehicle);
+  if (ambiguousTrim) {
+    return "";
+  }
 
   const cleanedTrim = stripDrivetrainBranding(vehicle.trim);
   const normalizedTrim = normalizeVehicleText(cleanedTrim);
@@ -265,7 +341,11 @@ export function canonicalVehicleVariant(vehicle: VehicleIdentity) {
     if (compactTrim) return normalizeVehicleText(compactTrim);
   }
 
-  return normalizedTrim || normalizedModel || normalizedFamily;
+  // If model already collapsed to the same family and no trim remains, there
+  // is no variant evidence. Returning the model family here would make a
+  // missing trim look like a real trim and could auto-include an incomplete
+  // comp.
+  return normalizedTrim || (normalizedModel !== normalizedFamily ? normalizedModel : "");
 }
 
 function classifyBodyText(value: unknown) {
@@ -453,6 +533,7 @@ export function canonicalIdentitySnapshot(vehicle: VehicleIdentity) {
   return {
     make: canonicalVehicleMake(vehicle.make),
     modelFamily: canonicalModelFamily(vehicle),
+    variant: canonicalVehicleVariant(vehicle),
     bodyClass: canonicalBodyClass(vehicle),
     drivetrain: canonicalDrivetrain(vehicle.drivetrain),
     tractionClass: canonicalTractionClass(vehicle.drivetrain),

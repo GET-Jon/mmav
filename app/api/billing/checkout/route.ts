@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getBillingSiteUrl, stripePost } from "@/lib/billing/stripe";
-import { addCheckoutPrice } from "@/lib/billing/checkout-prices";
+import { addCheckoutPrice, isStripePlanConfigured, stripePriceIdForPlan } from "@/lib/billing/checkout-prices";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -35,16 +35,13 @@ export async function POST(request: NextRequest) {
     requestedPlan = "starter";
   }
 
-  const priceId =
-    requestedPlan === "dealer"
-      ? process.env.STRIPE_DEALER_PRICE_ID
-      : requestedPlan === "dealer_pro"
-        ? process.env.STRIPE_DEALER_PRO_PRICE_ID
-        : process.env.STRIPE_STARTER_PRICE_ID || process.env.STRIPE_DEFAULT_PRICE_ID;
+  const priceId = stripePriceIdForPlan(requestedPlan);
 
-  if (!process.env.STRIPE_SECRET_KEY) {
+  if (!isStripePlanConfigured(requestedPlan)) {
     return NextResponse.json(
-      { error: "That paid plan is not configured for checkout yet." },
+      {
+        error: `The ${requestedPlan === "dealer_pro" ? "Dealer Pro" : requestedPlan === "dealer" ? "Dealer" : "Starter"} Stripe price is not configured yet.`,
+      },
       { status: 503 },
     );
   }
@@ -111,6 +108,8 @@ export async function POST(request: NextRequest) {
   addCheckoutPrice(params, requestedPlan, priceId);
   params.set("line_items[0][quantity]", "1");
   params.set("allow_promotion_codes", "true");
+  params.set("automatic_tax[enabled]", "true");
+  params.set("customer_update[address]", "auto");
   params.set("client_reference_id", company.companyId);
   params.set("metadata[company_id]", company.companyId);
   params.set("subscription_data[metadata][company_id]", company.companyId);

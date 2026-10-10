@@ -6,6 +6,7 @@ export type VinDecodeResult = {
   model: string;
   trim: string;
   bodyClass: string;
+  doors?: string;
   engineCylinders: string;
   displacementL: string;
   driveType: string;

@@ -9,6 +9,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   calculateAdjustedCompPrice,
   calculateMileageAdjustment,
@@ -114,6 +115,72 @@ function tableRelationshipLabel(comp: MarketComp) {
   return tierLabel(comp);
 }
 
+function scoreImpactRows(comp: MarketComp) {
+  const factors = comp.marketCheckDetails?.compFitFactors;
+  if (!factors) return [];
+
+  const rows: Array<{ label: string; detail: string; points: number }> = [];
+
+  const yearPenalty = Number(factors.yearPenalty || 0);
+  if (yearPenalty > 0) {
+    rows.push({
+      label: "Model year",
+      detail: factors.yearPreference || "Model year differs from the subject.",
+      points: yearPenalty,
+    });
+  }
+
+  const equivalenceModifier = Number(factors.equivalenceModifier || 0);
+  if (equivalenceModifier < 0 && comp.equivalenceTier !== "reject") {
+    rows.push({
+      label: "Vehicle configuration",
+      detail: (comp.equivalenceReasons || ["Configuration is not a direct match."]).join("; "),
+      points: Math.abs(equivalenceModifier),
+    });
+  }
+
+  const sourceReliabilityPenalty = Number(factors.sourceReliabilityPenalty || 0);
+  if (sourceReliabilityPenalty > 0) {
+    rows.push({
+      label: "Retail-source verification",
+      detail: "Independent retail source; listing identity/data completeness is less certain than VIN-verified MarketCheck evidence.",
+      points: sourceReliabilityPenalty,
+    });
+  }
+
+  const mileagePenalty = Number(factors.mileagePenalty || 0);
+  if (mileagePenalty > 0) {
+    rows.push({
+      label: "Mileage difference",
+      detail:
+        factors.mileageDelta === null || factors.mileageDelta === undefined
+          ? "Mileage evidence is incomplete."
+          : `${formatNumber(factors.mileageDelta)} mi from the subject.`,
+      points: mileagePenalty,
+    });
+  }
+
+  const distancePenalty = Number(factors.distancePenalty || 0);
+  if (distancePenalty > 0) {
+    rows.push({
+      label: "Market distance",
+      detail: `${formatNumber(Number(factors.distanceMiles || comp.distance || 0))} mi from the target market.`,
+      points: distancePenalty,
+    });
+  }
+
+  const missingPricePenalty = Number(factors.missingPricePenalty || 0);
+  if (missingPricePenalty > 0) {
+    rows.push({
+      label: "Price data",
+      detail: "The source listing did not provide a usable asking price.",
+      points: missingPricePenalty,
+    });
+  }
+
+  return rows;
+}
+
 function CompFitExplanation({
   comp,
   targetMileage,
@@ -171,6 +238,70 @@ function CompFitExplanation({
           </div>
         </div>
       </div>
+
+      {rejected ? (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.1em] text-red-700">
+            Why Lot Logic rejected it
+          </div>
+          <div className="mt-1 text-sm font-bold leading-6 text-red-900">
+            {(comp.equivalenceReasons || ["A hard vehicle-identity rule failed."]).join("; ")}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-amber-700">
+                What lowered this score
+              </div>
+              <div className="mt-0.5 text-xs font-semibold text-amber-900">
+                Match Score starts at 100. Only the deductions below reduce it.
+              </div>
+            </div>
+            <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700">
+              Final {comp.qualityScore}/100
+            </div>
+          </div>
+
+          {scoreImpactRows(comp).length ? (
+            <div className="mt-3 divide-y divide-amber-200/70 rounded-xl border border-amber-200 bg-white/80">
+              {scoreImpactRows(comp).map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-start justify-between gap-4 px-3 py-2.5"
+                >
+                  <div>
+                    <div className="text-xs font-black text-slate-900">
+                      {item.label}
+                    </div>
+                    <div className="mt-0.5 text-[11px] font-semibold leading-4 text-slate-500">
+                      {item.detail}
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">
+                    -{item.points} pts
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-bold text-emerald-800">
+              No material match deductions were identified.
+            </div>
+          )}
+
+          {Number(factors?.variantPenalty || 0) > 0 &&
+          (comp.equivalenceTier === "direct" ||
+            comp.equivalenceTier === "near") ? (
+            <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-[11px] font-semibold leading-4 text-blue-800">
+              Provider trim naming initially looked different, but Lot Logic&apos;s
+              semantic identity check resolved the vehicles as equivalent. That
+              provider-text penalty is not counted in the final score.
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl bg-white px-3 py-3">
@@ -246,11 +377,13 @@ export function MarketCompsTable({
   targetMileage,
   assumptions,
   onToggleIncluded,
+  maxVisibleRows,
 }: {
   comps: MarketComp[];
   targetMileage: number;
   assumptions: Assumptions;
   onToggleIncluded: (id: string) => void;
+  maxVisibleRows?: number;
 }) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "qualityScore", desc: true },
@@ -268,18 +401,17 @@ export function MarketCompsTable({
             <input
               type="checkbox"
               checked={row.original.included}
-              disabled={rejected}
               title={
                 rejected
-                  ? "Rejected vehicle identities cannot be used in valuation."
+                  ? "Lot Logic rejected this match automatically. You can still include it as a dealer override; valuation confidence will be reduced."
                   : row.original.equivalenceTier === "supporting"
-                    ? "Supporting comps are manual overrides and reduce valuation confidence."
+                    ? "Include this Supporting comp as a dealer selection."
                     : "Include this comp in valuation."
               }
               onClick={(event) => event.stopPropagation()}
               onChange={() => onToggleIncluded(row.original.id)}
               aria-label={`Include ${row.original.year} ${row.original.model}`}
-              className="h-4 w-4 rounded border-slate-300 accent-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-4 w-4 rounded border-slate-300 accent-blue-700"
             />
           );
         },
@@ -312,11 +444,18 @@ export function MarketCompsTable({
             <span className="block truncate font-semibold text-slate-700">
               {row.original.trim || "Unavailable"}
             </span>
-            <span
-              className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-black ${tierTone(row.original)}`}
-            >
-              {tableRelationshipLabel(row.original)}
-            </span>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-black ${tierTone(row.original)}`}
+              >
+                {tableRelationshipLabel(row.original)}
+              </span>
+              {row.original.dealerDecision === "include" ? (
+                <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black text-blue-800">
+                  Dealer selected
+                </span>
+              ) : null}
+            </div>
           </div>
         ),
       },
@@ -457,14 +596,16 @@ export function MarketCompsTable({
 
   return (
     <>
-      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold leading-5 text-slate-600">
-        <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
-        Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps stay visible but require a manual check. Reject comps cannot establish value. Mileage normalization is nonlinear and capped.
-      </div>
-
-      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+      <div
+        className="overflow-auto rounded-2xl border border-slate-200"
+        style={
+          maxVisibleRows && comps.length > maxVisibleRows
+            ? { maxHeight: `${48 + maxVisibleRows * 62}px` }
+            : undefined
+        }
+      >
         <table className="min-w-[1180px] w-full text-left text-sm">
-          <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 shadow-[0_1px_0_rgba(148,163,184,0.25)]">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -520,11 +661,12 @@ export function MarketCompsTable({
         </table>
       </div>
 
-      {selectedComp ? (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm"
-          onClick={() => setSelectedComp(null)}
-        >
+      {selectedComp && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 py-[5vh] backdrop-blur-sm"
+              onClick={() => setSelectedComp(null)}
+            >
           <div
             role="dialog"
             aria-modal="true"
@@ -532,7 +674,7 @@ export function MarketCompsTable({
             className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+            <div className="sticky top-0 z-20 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
                   MarketCheck Comparable
@@ -596,7 +738,7 @@ export function MarketCompsTable({
                   <DetailItem label="City" value={selectedComp.marketCheckDetails?.city} />
                   <DetailItem label="State" value={selectedComp.marketCheckDetails?.state} />
                   <DetailItem label="ZIP" value={selectedComp.marketCheckDetails?.zip} />
-                  <DetailItem label="Distance" value={`${formatNumber(selectedComp.distance)} mi`} />
+                  <DetailItem label="Distance" value={selectedComp.source === "Auto.dev" ? "Not verified" : `${formatNumber(selectedComp.distance)} mi`} />
                   <DetailItem label="Search Region" value={selectedComp.region} />
                 </dl>
                 {selectedComp.marketCheckDetails?.listingUrl ? (
@@ -668,8 +810,10 @@ export function MarketCompsTable({
               ) : null}
             </div>
           </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

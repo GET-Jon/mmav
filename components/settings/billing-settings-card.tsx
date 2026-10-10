@@ -24,6 +24,7 @@ type BillingStatus = {
     plan_key?: string;
     evaluations_per_month?: number | null;
     seats_limit?: number | null;
+    gifted_evaluations?: number | null;
     auto_dev_enabled?: boolean;
     inventory_enabled?: boolean;
     insights_enabled?: boolean;
@@ -39,6 +40,8 @@ type BillingStatus = {
     trialEvaluationsRemaining?: number | null;
     monthlyEvaluationsUsed?: number;
     monthlyEvaluationsRemaining?: number | null;
+    giftedEvaluationsRemaining?: number | null;
+    effectiveEvaluationsRemaining?: number | null;
     monthlyProviderCalls?: number;
     limits?: {
       evaluationsPerMonth?: number;
@@ -169,7 +172,7 @@ export function BillingSettingsCard() {
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Seats</div>
-            <div className="mt-2 text-lg font-black text-slate-950">{billing?.seats || 1}</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{entitlements?.seats_limit ?? usage?.limits?.seats ?? billing?.seats ?? 1}</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trial ends</div>
@@ -183,9 +186,18 @@ export function BillingSettingsCard() {
 
         {usage?.trialActive && !usage?.paidActive ? (
           <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
-            Free trial active: {usage.trialEvaluationsRemaining ?? 0} of 5 evaluations remaining
-            {usage.trialEndsAt ? ` · through ${dateLabel(usage.trialEndsAt)}` : ""}.
-            No credit card is required until you choose a paid plan.
+            <div>
+              Free trial active: {usage.trialEvaluationsRemaining ?? 0} of 5 evaluations remaining
+              {usage.trialEndsAt ? ` through ${dateLabel(usage.trialEndsAt)}` : ""}.
+            </div>
+            {usage.giftedEvaluationsRemaining ? (
+              <div className="mt-1 text-amber-800">
+                Gifted evaluations: {usage.giftedEvaluationsRemaining} available · these do not expire.
+              </div>
+            ) : null}
+            <div className="mt-1 font-semibold text-blue-800">
+              No credit card is required until you choose a paid plan.
+            </div>
           </div>
         ) : null}
 
@@ -194,21 +206,18 @@ export function BillingSettingsCard() {
             <div className="text-xs font-black uppercase tracking-wide text-slate-400">Choose a paid plan</div>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               {[
-                { key: "starter" as const, label: "Starter · $29/mo", configured: data?.configuredPlans?.starter },
-                { key: "dealer" as const, label: "Dealer · $79/mo", configured: data?.configuredPlans?.dealer },
-                { key: "dealer_pro" as const, label: "Dealer Pro · $149/mo", configured: data?.configuredPlans?.dealer_pro },
+                { key: "starter" as const, label: "Starter · $29/mo" },
+                { key: "dealer" as const, label: "Dealer · $79/mo" },
+                { key: "dealer_pro" as const, label: "Dealer Pro · $149/mo" },
               ].map((plan) => (
                 <button
                   key={plan.key}
                   type="button"
-                  disabled={!isAdmin || !plan.configured || actionLoading !== null}
+                  disabled={!isAdmin || actionLoading !== null}
                   onClick={() => void launch("checkout", plan.key)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-black text-slate-900 shadow-sm hover:border-blue-300 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-black text-slate-900 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 >
                   {actionLoading === "checkout" ? "Opening checkout…" : plan.label}
-                  {!plan.configured ? (
-                    <span className="mt-1 block text-[10px] font-bold uppercase text-slate-400">Not configured yet</span>
-                  ) : null}
                 </button>
               ))}
             </div>
@@ -250,13 +259,22 @@ export function BillingSettingsCard() {
         <p className="mt-1 text-sm font-semibold text-slate-500">
           Only completed valuations count toward your evaluation allowance. Drafts, edits, reopened evaluations, and comp refreshes do not consume another evaluation.
         </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Evaluations used</div>
             <div className="mt-2 text-lg font-black text-slate-950">
               {usage?.trialActive && !usage?.paidActive
                 ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
                 : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this month`}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#D4AF37] bg-[#FFF8E1] p-4">
+            <div className="text-[10px] font-black uppercase tracking-wide text-[#8A6500]">Gifted evaluations</div>
+            <div className="mt-2 text-lg font-black text-slate-950">
+              {usage?.giftedEvaluationsRemaining || 0}
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-[#8A6500]">
+              Do not expire
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">

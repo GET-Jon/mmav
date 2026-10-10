@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 import {
   checkUsageAllowance,
+  evaluationUsageSubject,
   recordUsageEvent,
-  vehicleUsageSubject,
 } from "@/lib/billing/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       make?: unknown;
       model?: unknown;
       trim?: unknown;
+      evaluationUsageId?: unknown;
       hasUsableValuation?: boolean;
       valuationCompCount?: number;
     };
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     const admin = createSupabaseAdminClient();
-    const subjectKey = vehicleUsageSubject(body);
+    const subjectKey = evaluationUsageSubject(body);
     const allowance = await checkUsageAllowance({
       supabase: admin,
       userId: user.id,
@@ -56,6 +57,36 @@ export async function POST(request: Request) {
       );
     }
 
+    const consumesGiftedEvaluation =
+      "consumesGiftedEvaluation" in allowance &&
+      allowance.consumesGiftedEvaluation;
+
+    // Consume the bonus atomically before recording the completed evaluation.
+    // This prevents two simultaneous evaluations from both spending the last
+    // gifted credit. A rare downstream recording failure can undercount by one
+    // credit, which is safer than allowing an overage.
+    if (consumesGiftedEvaluation) {
+      const { data: consumed, error: consumeError } = await admin.rpc(
+        "consume_company_evaluation_credit",
+        {
+          p_company_id: allowance.summary.company.companyId,
+          p_subject_key: subjectKey,
+        },
+      );
+
+      if (consumeError) throw new Error(consumeError.message);
+      if (!consumed) {
+        return NextResponse.json(
+          {
+            error:
+              "The gifted evaluation credit was no longer available. Refresh your usage and try again.",
+            code: "GIFTED_EVALUATION_UNAVAILABLE",
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     await recordUsageEvent({
       supabase: admin,
       companyId: allowance.summary.company.companyId,
@@ -65,6 +96,7 @@ export async function POST(request: Request) {
       idempotencyKey: `evaluation_completed:${subjectKey}`,
       metadata: {
         valuationCompCount: Number(body.valuationCompCount || 0),
+        giftedEvaluation: consumesGiftedEvaluation,
       },
     });
 

@@ -35,19 +35,25 @@ function interpolateScore(
 export function calculateDealEconomicsScore(
   expectedGrossProfit: number,
   allInCost: number,
+  desiredProfitTarget: number,
 ) {
-  const absoluteProfitScore = interpolateScore(expectedGrossProfit, [
-    [0, 20],
-    [500, 35],
-    [1000, 48],
-    [1500, 60],
-    [2000, 70],
-    [2500, 77],
-    [3000, 82],
-    [4000, 89],
-    [5000, 95],
-    [6000, 98],
-    [7000, 100],
+  // Deal Economics should answer whether the deal works at the CURRENT cost,
+  // not merely whether the raw dollar profit looks large. The Recommended Max
+  // Buy is derived from desiredProfitTarget, so the score must use the same
+  // economic target or the verdict and score can contradict each other.
+  const targetAttainment =
+    desiredProfitTarget > 0 ? expectedGrossProfit / desiredProfitTarget : 0;
+
+  const targetAttainmentScore = interpolateScore(targetAttainment, [
+    [0, 0],
+    [0.25, 20],
+    [0.5, 40],
+    [0.75, 60],
+    [0.9, 72],
+    [1, 82],
+    [1.1, 90],
+    [1.25, 97],
+    [1.4, 100],
   ]);
 
   const returnOnCapital =
@@ -62,9 +68,15 @@ export function calculateDealEconomicsScore(
     [0.3, 100],
   ]);
 
-  return Math.max(0, Math.min(100, Math.round(
-    absoluteProfitScore * 0.85 + capitalEfficiencyScore * 0.15,
-  )));
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        targetAttainmentScore * 0.8 + capitalEfficiencyScore * 0.2,
+      ),
+    ),
+  );
 }
 
 function calculatePreReconFixedCosts(input: ValuationInput) {

@@ -59,7 +59,11 @@ export const TRIAL_LIMITS = {
   autoDevPerEvaluation: 1,
   conditionAnalysesPerEvaluation: 3,
   evaluationSummariesPerEvaluation: 3,
-  providerCallsTotal: 30,
+  // Per-evaluation feature limits are the user-facing trial guardrails.
+  // Keep this workspace-wide provider ceiling high enough that a user can
+  // actually use all 5 trial evaluations without normal MarketCheck/VIN/AI
+  // calls unexpectedly blocking a later evaluation.
+  providerCallsTotal: 150,
 };
 
 function normalizePlanKey(value: unknown): PlanKey {
@@ -75,6 +79,29 @@ function monthStartIso() {
 
 function isPaidStatus(status: string) {
   return status === "active" || status === "past_due" || status === "comped";
+}
+
+export function evaluationUsageSubject(input: {
+  evaluationUsageId?: unknown;
+  vin?: unknown;
+  year?: unknown;
+  make?: unknown;
+  model?: unknown;
+  trim?: unknown;
+}) {
+  const rawId = String(input.evaluationUsageId || "").trim();
+  const safeId = rawId.replace(/[^a-zA-Z0-9:_-]+/g, "").slice(0, 120);
+
+  if (safeId) {
+    return safeId.startsWith("evaluation:")
+      ? safeId
+      : `evaluation:${safeId}`;
+  }
+
+  // Backwards compatibility for older clients/saved evaluations. New evaluator
+  // sessions should always send evaluationUsageId so per-evaluation limits are
+  // never accidentally accumulated forever against one VIN.
+  return vehicleUsageSubject(input);
 }
 
 export function vehicleUsageSubject(input: {
@@ -131,16 +158,31 @@ export async function getCompanyUsageContext(
   userId: string,
 ) {
   const company = await getCurrentCompanyForUser(supabase, userId);
-  const { data: billing, error } = await supabase
-    .from("company_billing_accounts")
-    .select("status,plan_key,trial_ends_at")
-    .eq("company_id", company.companyId)
-    .maybeSingle();
+  const [
+    { data: billing, error: billingError },
+    { data: entitlements, error: entitlementError },
+  ] = await Promise.all([
+    supabase
+      .from("company_billing_accounts")
+      .select("status,plan_key,trial_ends_at")
+      .eq("company_id", company.companyId)
+      .maybeSingle(),
+    supabase
+      .from("company_entitlements")
+      .select("gifted_evaluations")
+      .eq("company_id", company.companyId)
+      .maybeSingle(),
+  ]);
 
-  if (error) throw new Error(error.message);
+  if (billingError) throw new Error(billingError.message);
+  if (entitlementError) throw new Error(entitlementError.message);
 
   const status = String(billing?.status || "not_configured");
   const planKey = normalizePlanKey(billing?.plan_key);
+  const giftedEvaluations = Math.max(
+    0,
+    Number(entitlements?.gifted_evaluations || 0),
+  );
   const internalUnlimited = company.companySlug === "mindful-motor-co";
   const trialEndsAt = billing?.trial_ends_at ? new Date(billing.trial_ends_at) : null;
   const trialActive =
@@ -155,6 +197,7 @@ export async function getCompanyUsageContext(
     internalUnlimited,
     trialEndsAt: trialEndsAt?.toISOString() || null,
     trialActive,
+    giftedEvaluations,
     paidActive: internalUnlimited || isPaidStatus(status),
   };
 }
@@ -164,7 +207,14 @@ export async function getUsageSummary(
   userId: string,
 ) {
   const context = await getCompanyUsageContext(supabase, userId);
-  const { company, planKey, internalUnlimited, trialActive, paidActive } = context;
+  const {
+    company,
+    planKey,
+    internalUnlimited,
+    trialActive,
+    paidActive,
+    giftedEvaluations,
+  } = context;
 
   const [trialEvaluationsUsed, monthlyEvaluationsUsed, monthlyProviderCalls] =
     await Promise.all([
@@ -189,12 +239,21 @@ export async function getUsageSummary(
     monthlyEvaluationsRemaining: internalUnlimited
       ? null
       : Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed),
+    giftedEvaluationsRemaining: internalUnlimited ? null : giftedEvaluations,
+    effectiveEvaluationsRemaining: internalUnlimited
+      ? null
+      : paidActive
+        ? Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed) +
+          giftedEvaluations
+        : Math.max(0, TRIAL_LIMITS.evaluationsTotal - trialEvaluationsUsed) +
+          giftedEvaluations,
     monthlyProviderCalls,
     limits,
     trialLimits: TRIAL_LIMITS,
     canUsePaidProviders:
       internalUnlimited ||
       paidActive ||
+      giftedEvaluations > 0 ||
       (trialActive && trialEvaluationsUsed < TRIAL_LIMITS.evaluationsTotal),
   };
 }
@@ -214,7 +273,45 @@ export async function checkUsageAllowance(args: {
     return { allowed: true as const, summary };
   }
 
-  if (!summary.paidActive && !summary.trialActive) {
+  const giftedCreditsAvailable =
+    Number(summary.giftedEvaluationsRemaining || 0) > 0;
+
+  // Reopening or re-saving a completion must be idempotent, including after
+  // the dealership has spent its final gifted credit. This subject already
+  // counted; charging or paywalling it again would be incorrect.
+  if (
+    kind === "evaluation_completed" &&
+    subjectKey &&
+    (await countUsage(
+      supabase,
+      summary.company.companyId,
+      "evaluation_completed",
+      { subjectKey },
+    )) > 0
+  ) {
+    return { allowed: true as const, summary, consumesGiftedEvaluation: false };
+  }
+
+  // Exhausting a trial prevents starting another evaluation; it should not
+  // lock the dealer out of work they already completed. A subject with a
+  // recorded completion may continue using review/refinement tools, while a
+  // fresh evaluationUsageId still hits the paywall below.
+  const existingCompletedEvaluation =
+    Boolean(subjectKey) &&
+    kind !== "evaluation_completed" &&
+    (await countUsage(
+      supabase,
+      summary.company.companyId,
+      "evaluation_completed",
+      { subjectKey },
+    )) > 0;
+
+  if (
+    !summary.paidActive &&
+    !summary.trialActive &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
     return {
       allowed: false as const,
       code: "TRIAL_EXPIRED",
@@ -226,7 +323,9 @@ export async function checkUsageAllowance(args: {
 
   if (
     !summary.paidActive &&
-    summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal
+    summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
   ) {
     return {
       allowed: false as const,
@@ -240,7 +339,8 @@ export async function checkUsageAllowance(args: {
   if (
     kind === "evaluation_completed" &&
     summary.paidActive &&
-    summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
+    summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth &&
+    !giftedCreditsAvailable
   ) {
     return {
       allowed: false as const,
@@ -259,7 +359,7 @@ export async function checkUsageAllowance(args: {
       { subjectKey },
     );
 
-    const perVehicleLimit = summary.trialActive && !summary.paidActive
+    const perVehicleLimit = !summary.paidActive
       ? kind === "market_search"
         ? TRIAL_LIMITS.marketSearchesPerEvaluation
         : kind === "auto_dev_discovery"
@@ -295,7 +395,7 @@ export async function checkUsageAllowance(args: {
 
   if (kind === "provider_api_call") {
     const providerLimit =
-      summary.trialActive && !summary.paidActive
+      !summary.paidActive
         ? TRIAL_LIMITS.providerCallsTotal
         : summary.limits.providerCallsPerMonth;
 
@@ -305,13 +405,26 @@ export async function checkUsageAllowance(args: {
         code: "PROVIDER_SAFETY_LIMIT",
         status: 429,
         message:
-          "This workspace has reached its current extended data-search allowance. Existing evaluations remain available.",
+          "This workspace has reached an internal provider safety limit. Existing evaluations remain available.",
         summary,
       };
     }
   }
 
-  return { allowed: true as const, summary };
+  const consumesGiftedEvaluation =
+    kind === "evaluation_completed" &&
+    !summary.internalUnlimited &&
+    giftedCreditsAvailable &&
+    (summary.paidActive
+      ? summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
+      : !summary.trialActive ||
+        summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal);
+
+  return {
+    allowed: true as const,
+    summary,
+    consumesGiftedEvaluation,
+  };
 }
 
 export async function recordUsageEvent(args: {
