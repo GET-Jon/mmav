@@ -303,8 +303,7 @@ export async function POST(request: Request) {
     // Continue to the next provider alias when the exact model matches but
     // fails to supply four usable price/mileage candidates. Matching a name
     // is not proof that valuation evidence is sufficient.
-    if (combined.comps.filter(comp => comp.equivalenceTier === "direct" ||
-      comp.equivalenceTier === "near").length >= 4) break;
+    if (combined.diagnostics.autoIncluded >= 4) break;
   }
 
   const byState = listings.reduce((acc: Record<string, number>, listing) => {
