@@ -3158,8 +3158,11 @@ export function EvaluationWorkspace({
       const usedNormalizedIdentity = Boolean(
         data.discovery?.normalizedIdentityUsed,
       );
+      const usableNationalCandidates = Number(data.candidateComps?.length || 0);
       const status =
-        total > 0
+        total > 0 && usableNationalCandidates === 0
+          ? `Identified ${total} national listing(s), but none have passed all valuation-data checks. Review discovery evidence and filtering reasons.`
+          : total > 0
           ? "Found " +
             total +
             " matching active listing" +
@@ -3195,7 +3198,7 @@ export function EvaluationWorkspace({
             ),
             apiCalls: Math.max(1, attempts.length),
             candidateListings: Number(data.returned || 0),
-            usableComps: 0,
+            usableComps: usableNationalCandidates,
             regions: Array.isArray(data.recommendedMarkets)
               ? data.recommendedMarkets
                   .map((market: any) =>
@@ -7614,26 +7617,19 @@ export function EvaluationWorkspace({
                       </>
                     ) : (
                       <>
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
                           <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
-                          <div className="mt-1 text-xs font-semibold leading-5 text-amber-800">{compNextStep.reason || "Adjust the comp search before continuing."}</div>
+                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Improve comps or review the unpriced verdict.</div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {compSearchRecommendation.action === "manual-review" ? (
-                            <button type="button" onClick={openCompVehicleMatchEditor} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white">Review Vehicle Match →</button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void improveCompSearch()}
-                              disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch)}
-                              className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
-                            >
-                              {automaticCompSearchCompleted ? "Automatic search complete" : compSearchImproving ? "Running Search…" : "Run Recommended Search"}
-                            </button>
-                          )}
-                          <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
-                          <button type="button" onClick={() => void continueToVerdict()} disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
-                            className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-50">
+                          <button type="button" onClick={openCompMarketEditor}
+                            disabled={marketCheckLoading}
+                            className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                            Improve results →
+                          </button>
+                          <button type="button" onClick={() => void continueToVerdict()}
+                            disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
+                            className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-black text-blue-700 disabled:opacity-50">
                             Continue to Verdict →
                           </button>
                         </div>
@@ -7713,6 +7709,36 @@ export function EvaluationWorkspace({
                         Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
                       </div>
                     </>
+                  ) : null}
+
+                  {autoDevDiscovery?.listings?.length ? (
+                    <details className="rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
+                      <summary className="cursor-pointer text-xs font-black text-blue-800">
+                        National discovery: {autoDevDiscovery.listings.length} identified listing{autoDevDiscovery.listings.length === 1 ? "" : "s"} · view source evidence ↓
+                      </summary>
+                      <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+                        National inventory discovery is not the same as a usable valuation comparison.
+                        Listings missing trustworthy vehicle identity, price, or mileage are shown for investigation, not automatically priced.
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {autoDevDiscovery.listings.slice(0, 20).map((listing, i) => (
+                          <div key={listing.vin || i} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                            <div className="min-w-0">
+                              <span className="font-black text-slate-900">{[listing.year, listing.make, listing.model, listing.trim].filter(Boolean).join(" ")}</span>
+                              <span className="ml-2 text-slate-500">{[listing.city, listing.state].filter(Boolean).join(", ")}</span>
+                            </div>
+                            <div className="flex items-center gap-3 font-semibold text-slate-700">
+                              <span>{typeof listing.price === "number" && listing.price > 0 ? money(listing.price) : "Price unavailable"}</span>
+                              <span>{typeof listing.miles === "number" ? `${formatNumberInput(listing.miles)} mi` : "Mileage unavailable"}</span>
+                              {listing.url && /^https?:\/\//i.test(listing.url) ? (
+                                <a href={listing.url} target="_blank" rel="noreferrer"
+                                   className="font-black text-blue-700 hover:underline">Listing ↗</a>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   ) : null}
 
                   {marketCheckSearchMeta?.regionsChecked?.length ||
