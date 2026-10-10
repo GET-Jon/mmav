@@ -147,11 +147,24 @@ export function LotLogicIntelligenceCard({
     }
   }
 
-  function startEditingSource(source: IntelligenceKnowledgeSource) {
-    setEditingSourceId(source.id);
-    setEditingTitle(source.title);
-    setEditingText(source.extracted_text || "");
+  async function startEditingSource(source: IntelligenceKnowledgeSource) {
     setMessage(null);
+    setUpdatingSource(true);
+    try {
+      const response = await fetch(`/api/intelligence/knowledge?id=${encodeURIComponent(source.id)}`, {
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to load manager note.");
+      setEditingSourceId(source.id);
+      setEditingTitle(data.title || source.title);
+      setEditingText(data.extracted_text || "");
+    } catch (error) {
+      setEditingSourceId(null);
+      setMessage(error instanceof Error ? error.message : "Unable to load manager note.");
+    } finally {
+      setUpdatingSource(false);
+    }
   }
 
   async function updateKnowledgeSource(event: React.FormEvent) {
@@ -301,8 +314,8 @@ export function LotLogicIntelligenceCard({
                     <div className="flex shrink-0 flex-col items-end gap-2">
                       <span className="text-xs text-slate-400">{formatDate(source.updated_at)}</span>
                       {canReview && source.source_type === "manager_note" && editingSourceId !== source.id ? (
-                        <button type="button" onClick={() => startEditingSource(source)}
-                          className="text-xs font-black text-blue-700 hover:underline">Edit note</button>
+                        <button type="button" onClick={() => void startEditingSource(source)} disabled={updatingSource}
+                          className="text-xs font-black text-blue-700 hover:underline disabled:opacity-40">Edit note</button>
                       ) : null}
                     </div>
                   </div>
