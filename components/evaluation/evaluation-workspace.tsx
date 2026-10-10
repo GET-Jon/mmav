@@ -754,6 +754,10 @@ export function EvaluationWorkspace({
     candidateDiagnostics?: {
       listingsReviewed: number;
       missingPriceOrMileage: number;
+      missingPrice?: number;
+      missingMileage?: number;
+      missingVin?: number;
+      missingListingUrl?: number;
       identityRejected: number;
       outOfYearRange: number;
       direct: number;
@@ -6209,7 +6213,7 @@ export function EvaluationWorkspace({
                     <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
                   </div>
                   <div className="mt-2 font-semibold text-slate-600">
-                    Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPriceOrMileage ?? 0} missing price/mileage, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
+                    Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPrice ?? 0} missing price, {autoDevDiscovery?.candidateDiagnostics?.missingMileage ?? 0} missing mileage, {autoDevDiscovery?.candidateDiagnostics?.missingVin ?? 0} missing VIN, {autoDevDiscovery?.candidateDiagnostics?.missingListingUrl ?? 0} missing listing link, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
                   </div>
                   <div className="mt-2 font-semibold text-slate-600">
                     Rejections (latest provider diagnostics):
