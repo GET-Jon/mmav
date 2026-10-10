@@ -7553,17 +7553,21 @@ export function EvaluationWorkspace({
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                          {hasLimitedMarketEvidence ? (
+                          {(hasLimitedMarketEvidence || compSearchHandedOff) ? (
                             <>
                               <button
                                 type="button"
-                                onClick={() => void improveCompSearch()}
-                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch)}
-                                title={automaticCompSearchCompleted && !canContinueNationalSearch ? "Automatic national market checks are finished. Review or adjust vehicle match." : undefined}
+                                onClick={() => compSearchHandedOff
+                                  ? openCompMarketEditor()
+                                  : void improveCompSearch()}
+                                disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading ||
+                                  (!compSearchHandedOff && automaticCompSearchCompleted && !canContinueNationalSearch &&
+                                    compSearchRecommendation.action !== "manual-review")}
                                 className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:border disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                               >
-                                {compSearchImproving ? "Running Search…" : compSearchRecommendation.action === "manual-review" ? "Review Vehicle Match" : "Run Recommended Search"}
+                                {compSearchImproving ? "Running Search…" : compSearchHandedOff ? "Improve Search" : "Run Recommended Search"}
                               </button>
+                              <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">or</span>
                             </>
                           ) : null}
                           <button
@@ -7607,13 +7611,13 @@ export function EvaluationWorkspace({
                               : `${compSearchRegions || 0} market${compSearchRegions === 1 ? "" : "s"} checked${autoDevDiscovery ? " plus national discovery" : ""} · ${comps.length} visible candidate${comps.length === 1 ? "" : "s"} · ${compSummary.includedCount} trusted selected. ${canContinueNationalSearch ? `${remainingNationalMarketCount} national markets still available.` : "Review further options below."}`}
                           </div>
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <button type="button"
-                            onClick={() => compSearchRecommendation.action === "manual-review" ? openCompMarketEditor() : void improveCompSearch()}
+                        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <button type="button" onClick={openCompMarketEditor}
                             disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
-                            className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
-                            {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Improve results →" : "Run Recommended Search →"}
+                            className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                            {compSearchImproving ? "Searching…" : "Improve Search"}
                           </button>
+                          <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">or</span>
                           <button type="button" onClick={() => void continueToVerdict()}
                             disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
                             className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-black text-blue-700 disabled:opacity-50">
@@ -7627,12 +7631,13 @@ export function EvaluationWorkspace({
                           <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
                           <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Improve comps or review the unpriced verdict.</div>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button type="button" onClick={openCompMarketEditor}
-                            disabled={marketCheckLoading}
-                            className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
-                            Improve results →
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <button type="button" onClick={() => void improveCompSearch()}
+                            disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
+                            className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                            {compSearchImproving ? "Running Search…" : "Run Recommended Search"}
                           </button>
+                          <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">or</span>
                           <button type="button" onClick={() => void continueToVerdict()}
                             disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
                             className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-black text-blue-700 disabled:opacity-50">
