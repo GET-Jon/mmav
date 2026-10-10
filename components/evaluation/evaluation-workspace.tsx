@@ -1102,6 +1102,15 @@ export function EvaluationWorkspace({
   const [allInCostOpen, setAllInCostOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
+  // The collapsed vehicle editor never mutates active evaluation data until
+  // Save. Cancel/close must not wipe the bid, conditions, or valuation comps.
+  const [quickEditDraft, setQuickEditDraft] = useState<{
+    vin: string;
+    manualVehicle: ManualVehicleBasics;
+    mileage: number;
+    bid: number;
+    auctionSite: string;
+  } | null>(null);
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
   const [vehicleThumbnailUrl, setVehicleThumbnailUrl] = useState("");
   const [vehicleThumbnailLoading, setVehicleThumbnailLoading] = useState(false);
@@ -2079,6 +2088,7 @@ export function EvaluationWorkspace({
 
   async function decodeVinFromBasics(
     vinOverride?: string,
+    bidOverride?: number,
   ): Promise<VinDecodeResult | null> {
     const vinToDecode = (vinOverride ?? vin).trim().toUpperCase();
 
@@ -2134,7 +2144,15 @@ export function EvaluationWorkspace({
 
       const decoded = data as VinDecodeResult;
 
-      handleDecodedVinAndReset(decoded);
+      if (
+        activeStage === "verdict" &&
+        String(decodedVehicle?.vin || "").trim().toUpperCase() ===
+          String(decoded.vin || "").trim().toUpperCase()
+      ) {
+        setDecodedVehicle(decoded);
+      } else {
+        handleDecodedVinAndReset(decoded, bidOverride);
+      }
       startVehicleIdentityProfileEnrichment(decoded);
 
       window.setTimeout(() => {
@@ -2154,7 +2172,7 @@ export function EvaluationWorkspace({
     return null;
   }
 
-  function handleDecodedVinAndReset(decoded: VinDecodeResult) {
+  function handleDecodedVinAndReset(decoded: VinDecodeResult, bidOverride?: number) {
     if (
       String(decoded.vin || "").trim().toUpperCase() !==
       String(decodedVehicle?.vin || "").trim().toUpperCase()
@@ -2190,7 +2208,7 @@ export function EvaluationWorkspace({
 
     const baseEvaluation: ValuationInput = {
       ...initialEvaluation,
-      currentBid: valuationInput.currentBid,
+      currentBid: bidOverride ?? valuationInput.currentBid,
       targetResaleUsed: valuationInput.targetResaleUsed,
       targetProfit: valuation.desiredProfitTarget,
       hasAvoidFlag: false,
@@ -4392,45 +4410,76 @@ export function EvaluationWorkspace({
               text: "Current all-in cost is at the recommended all-in target.",
             };
 
+  const editingVehicle = quickEditDraft?.manualVehicle || manualVehicle;
+  const editingVin = quickEditDraft?.vin ?? vin;
   const hasManualQuickEvalBasics =
-    String(manualVehicle.year || "").trim().length > 0 &&
-    manualVehicle.make.trim().length > 0 &&
-    manualVehicle.model.trim().length > 0;
+    String(editingVehicle.year || "").trim().length > 0 &&
+    editingVehicle.make.trim().length > 0 &&
+    editingVehicle.model.trim().length > 0;
+  const hasQuickEvalBasics = quickEvalMode === "vin"
+    ? editingVin.trim().length === 17 : hasManualQuickEvalBasics;
 
-  const hasQuickEvalBasics =
-    quickEvalMode === "vin"
-      ? vin.trim().length >= 17
-      : hasManualQuickEvalBasics;
+  function openVehicleEdit() {
+    setQuickEditDraft({
+      vin,
+      manualVehicle: { ...manualVehicle },
+      mileage: targetMileage,
+      bid: valuationInput.currentBid,
+      auctionSite,
+    });
+    setQuickEvalMode(vin ? "vin" : "manual");
+    setQuickEvalOpen(true);
+  }
+
+  function closeVehicleEdit() {
+    setQuickEditDraft(null);
+    setQuickEvalOpen(false);
+  }
 
   function startQuickEvaluation() {
-    setNotes("");
-    setAiSummaryError("");
-    setAiSummaryLoadingMode(null);
-    setActiveThesisMode("financial");
+    const draft = quickEditDraft;
+    if (!draft) return closeVehicleEdit();
 
+    const nextVin = draft.vin.trim().toUpperCase();
+    const sameVin = quickEvalMode === "vin" &&
+      nextVin === String(decodedVehicle?.vin || vin).trim().toUpperCase();
+    const sameManual = quickEvalMode === "manual" && !decodedVehicle &&
+      (["year", "make", "model", "trim", "bodyClass"] as const).every((key) =>
+        String(draft.manualVehicle[key] || "").trim() ===
+        String(manualVehicle[key] || "").trim());
+
+    // Existing vehicle: update just the changed deal inputs, keeping all
+    // prior market evidence and usage accounting intact.
+    setEvaluation((old) => ({ ...old, currentBid: draft.bid }));
+    setTargetMileage(draft.mileage);
+    setAuctionSite(draft.auctionSite);
+    closeVehicleEdit();
+    if (sameVin || sameManual) return;
+
+    // Vehicle identity genuinely changed: start new evaluation, preserving
+    // the entered bid through the asynchronous VIN decoding step.
+    resetPreviousEvaluationResults({ preserveVehicleInfo: true });
+    setEvaluation((old) => ({ ...old, currentBid: draft.bid }));
+    setTargetMileage(draft.mileage);
+    setEvaluationUsageId(createEvaluationUsageId());
+    setActiveStage("vehicle");
+    setVehicleStepConfirmed(false);
+    setConditionStepConfirmed(false);
+    setVerdictEntered(false);
     if (quickEvalMode === "manual") {
       setDecodedVehicle(null);
       setVin("");
-      setManualVehicle((previous) => ({
-        ...previous,
-        year: String(previous.year || "").trim(),
-        make: previous.make.trim(),
-        model: previous.model.trim(),
-        trim: previous.trim.trim(),
-        bodyClass: previous.bodyClass.trim(),
-      }));
-      setQuickEvalOpen(false);
+      setManualVehicle({
+        year: String(draft.manualVehicle.year || "").trim(),
+        make: draft.manualVehicle.make.trim(),
+        model: draft.manualVehicle.model.trim(),
+        trim: draft.manualVehicle.trim.trim(),
+        bodyClass: draft.manualVehicle.bodyClass.trim(),
+      });
       return;
     }
-
-    const vinToDecode = vin.trim().toUpperCase();
-
-    setVin(vinToDecode);
-    setQuickEvalOpen(false);
-
-    if (vinToDecode.length >= 17) {
-      decodeVinFromBasics(vinToDecode);
-    }
+    setVin(nextVin);
+    void decodeVinFromBasics(nextVin, draft.bid);
   }
 
   async function runPrimaryEvaluation() {
@@ -6985,8 +7034,7 @@ export function EvaluationWorkspace({
                     type="button"
                     data-evaluation-entry-action="true"
                     onClick={() => {
-                      setQuickEvalMode(vin ? "vin" : "manual");
-                      setQuickEvalOpen(true);
+                      openVehicleEdit();
                     }}
                     className="text-xs font-black text-blue-700 hover:text-blue-900"
                   >
