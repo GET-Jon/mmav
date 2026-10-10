@@ -25,6 +25,8 @@ export function assertAutoDevCompRegressionCases() {
 
   const order = buildDiscoveryModels("Audi", "TTS", "quattro Prestige", ["TT", "TTS"]);
   test(order[0] === "TTS" && order[1] === "TT", "exact TTS searched before broad TT provider aliases");
+  test(buildDiscoveryModels("Audi", "TTS", "Prestige", ["tt", "TT", "TTS"]).length === 2,
+    "duplicate aliases cannot waste national provider calls");
   const data = buildAutoDevCompCandidates([
     row,
     { ...row, vin: "TRUK1AFK2B1016841", trim: "Premium Plus" },
@@ -48,6 +50,12 @@ export function assertAutoDevCompRegressionCases() {
   const rs = data.comps.find(x => x.marketCheckDetails?.vin === "TRUK1AFK2B1016843");
   test(rs?.equivalenceTier === "supporting" && !rs.included, "TT RS never auto-included");
   test(data.diagnostics.missingPriceOrMileage === 1, "missing sale data excluded");
+  test(data.diagnostics.missingPrice === 1 && data.diagnostics.missingMileage === 0, "price and mileage rejection reasons stay distinct");
+  const missingMileage = buildAutoDevCompCandidates([
+    { ...row, miles: null },
+  ], target, 140000);
+  test(missingMileage.comps.length === 0 && missingMileage.diagnostics.missingMileage === 1,
+    "missing mileage cannot manufacture a valuation comparison");
   test(data.comps.some(x => x.marketCheckDetails?.vin === "TRUK1AFK2B1016845" && !x.included), "missing listing URL needs dealer input");
   test(data.comps.some(x => x.marketCheckDetails?.vin === "TRUK1AFK2B1016846" && !x.included), "missing trim cannot auto-include");
 
