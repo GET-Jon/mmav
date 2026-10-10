@@ -135,7 +135,7 @@ export function LotLogicIntelligenceCard({
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Knowledge could not be added.");
-      setKnowledgeSources((current) => [payload, ...current]);
+      setKnowledgeSources((current) => [{ ...payload, extracted_text: text.trim() }, ...current]);
       setTitle("");
       setText("");
       setSelectedQuestion("");
