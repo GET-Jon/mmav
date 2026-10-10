@@ -7621,7 +7621,7 @@ export function EvaluationWorkspace({
                               <MarketConfidenceHelp
                                 confidence={marketEvidenceStrength}
                                 compCount={compSummary.includedCount}
-                                reasons={compSummary.confidenceReasons}
+                                reasons={compSummary.confidenceReasons || []}
                               />
                             ) : null}
                           </div>
