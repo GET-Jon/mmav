@@ -36,6 +36,10 @@ export function buildAutoDevCompCandidates(
   diagnostics: {
     listingsReviewed: number;
     missingPriceOrMileage: number;
+    missingPrice: number;
+    missingMileage: number;
+    missingVin: number;
+    missingListingUrl: number;
     identityRejected: number;
     outOfYearRange: number;
     direct: number;
@@ -47,6 +51,10 @@ export function buildAutoDevCompCandidates(
   const diagnostics = {
     listingsReviewed: listings.length,
     missingPriceOrMileage: 0,
+    missingPrice: 0,
+    missingMileage: 0,
+    missingVin: 0,
+    missingListingUrl: 0,
     identityRejected: 0,
     outOfYearRange: 0,
     direct: 0,
@@ -68,12 +76,16 @@ export function buildAutoDevCompCandidates(
     const year = Number(listing.year || 0);
     const price = Number(listing.price);
     const miles = Number(listing.miles);
-    if (
-      !Number.isFinite(price) || price < 500 || price > 1000000 ||
+    const priceInvalid =
+      listing.price === null || listing.price === undefined ||
+      !Number.isFinite(price) || price < 500 || price > 1000000;
+    const mileageInvalid =
       listing.miles === null || listing.miles === undefined ||
-      !Number.isFinite(miles) || miles < 0 || miles > 500000
-    ) {
+      !Number.isFinite(miles) || miles < 0 || miles > 500000;
+    if (priceInvalid || mileageInvalid) {
       diagnostics.missingPriceOrMileage += 1;
+      if (priceInvalid) diagnostics.missingPrice += 1;
+      if (mileageInvalid) diagnostics.missingMileage += 1;
       continue;
     }
     if (
@@ -106,6 +118,8 @@ export function buildAutoDevCompCandidates(
     const vin = String(listing.vin || "").trim().toUpperCase();
     const validVin = /^[A-HJ-NPR-Z0-9]{17}$/.test(vin);
     const url = String(listing.url || "").trim();
+    if (!validVin) diagnostics.missingVin += 1;
+    if (!url) diagnostics.missingListingUrl += 1;
     const key = validVin ? "vin:" + vin : [year, listing.model, listing.trim, miles, price, url].join("|").toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
