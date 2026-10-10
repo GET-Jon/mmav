@@ -257,9 +257,53 @@ export async function POST(request: Request) {
     }
 
     lastAttempt = attempt;
-    const batch = mapListings(payload);
+    let batch = mapListings(payload);
     const total = typeof payload?.total === "number" ? payload.total : batch.length;
     if (attemptIndex === 0) exactTotal = total;
+
+    // Auto.dev Free-plan pages may be capped at 20. When a broad provider
+    // alias contains more than one page, inspect page two only if page one
+    // has not established four qualified TTS candidates. Never bypass the
+    // provider usage allowance or add unrelated TT variants to valuation.
+    if (
+      total > batch.length && batch.length > 0 &&
+      buildAutoDevCompCandidates(batch, target, targetMileage)
+        .diagnostics.autoIncluded < 4 &&
+      callsMade < 6
+    ) {
+      const pageAllowance = await checkUsageAllowance({
+        supabase: admin, userId: user.id, kind: "provider_api_call",
+        subjectKey, expectedUnits: 1,
+      });
+      if (pageAllowance.allowed) {
+        const pageParams = new URLSearchParams(params);
+        pageParams.set("page", "2");
+        const pageResponse = await fetch(
+          `https://api.auto.dev/listings?${pageParams}`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          },
+        );
+        callsMade += 1;
+        await recordUsageEvent({
+          supabase: admin,
+          companyId: discoveryAllowance.summary.company.companyId,
+          userId: user.id, kind: "provider_api_call", subjectKey, units: 1,
+          metadata: {
+            provider: "auto_dev", discoveryModel: attempt.model,
+            page: 2, failed: !pageResponse.ok,
+          },
+        });
+        if (pageResponse.ok) {
+          const pageData = await pageResponse.json();
+          batch = [...batch, ...mapListings(pageData)];
+        }
+      }
+    }
     const tiers = batch.map((listing) => evaluateVehicleEquivalence({
       target,
       candidate: {
