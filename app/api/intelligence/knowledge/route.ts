@@ -13,6 +13,31 @@ const VALID_SOURCE_TYPES = new Set([
   "other",
 ]);
 
+// Fetch note body only when an administrator opens the inline editor.
+// Avoid delivering large document text as part of normal Settings page loads.
+export async function GET(request: Request) {
+  try {
+    const access = await getLotLogicIntelligenceAccess();
+    if (!access) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    if (!access.isAdmin) return NextResponse.json({ error: "Administrator access required." }, { status: 403 });
+    const id = new URL(request.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Note ID required." }, { status: 400 });
+    const { data, error } = await access.supabase
+      .from("lot_logic_intelligence_knowledge_sources")
+      .select("id,title,extracted_text,source_type")
+      .eq("company_id", access.company.companyId)
+      .eq("source_type", "manager_note")
+      .eq("id", id)
+      .single();
+    if (error || !data) return NextResponse.json({ error: "Editable manager note not found." }, { status: 404 });
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : "Unable to load manager note.",
+    }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const access = await getLotLogicIntelligenceAccess();
