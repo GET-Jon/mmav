@@ -4418,8 +4418,10 @@ export function EvaluationWorkspace({
     String(editingVehicle.year || "").trim().length > 0 &&
     editingVehicle.make.trim().length > 0 &&
     editingVehicle.model.trim().length > 0;
-  const hasQuickEvalBasics = quickEvalMode === "vin"
-    ? editingVin.trim().length === 17 : hasManualQuickEvalBasics;
+  const hasQuickEvalBasics = (quickEvalMode === "vin"
+    ? editingVin.trim().length === 17 : hasManualQuickEvalBasics) &&
+    (quickEditDraft?.bid ?? valuationInput.currentBid) > 0 &&
+    (quickEditDraft?.mileage ?? targetMileage) > 0;
 
   function openVehicleEdit() {
     setQuickEditDraft({
@@ -4443,8 +4445,8 @@ export function EvaluationWorkspace({
     if (!draft) return closeVehicleEdit();
 
     const nextVin = draft.vin.trim().toUpperCase();
-    const sameVin = quickEvalMode === "vin" &&
-      nextVin === String(decodedVehicle?.vin || vin).trim().toUpperCase();
+    const sameVin = quickEvalMode === "vin" && Boolean(decodedVehicle?.vin) &&
+      nextVin === String(decodedVehicle?.vin).trim().toUpperCase();
     const sameManual = quickEvalMode === "manual" && !decodedVehicle &&
       (["year", "make", "model", "trim", "bodyClass"] as const).every((key) =>
         String(draft.manualVehicle[key] || "").trim() ===
@@ -5126,11 +5128,11 @@ export function EvaluationWorkspace({
             <div className="flex items-start justify-between gap-4 px-6 py-5">
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
-                  Quick Start Evaluation
+                  Edit Vehicle Details
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Enter a VIN to start. Mileage and current bid can be added now
-                  or later.
+                  You can update the mileage, bid, or source without restarting your evaluation.
+                  Changing the vehicle identity begins a new evaluation.
                 </p>
               </div>
 
@@ -5320,7 +5322,7 @@ export function EvaluationWorkspace({
                 disabled={!hasQuickEvalBasics}
                 className="rounded-xl bg-slate-950 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                Start Evaluation
+                Save Changes
               </button>
             </div>
           </div>
