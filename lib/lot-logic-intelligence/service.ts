@@ -235,7 +235,7 @@ export async function listIntelligenceSettingsData(
   const [sources, insights, assertions] = await Promise.all([
     supabase
       .from("lot_logic_intelligence_knowledge_sources")
-      .select("id,source_type,title,version_label,active,metadata,created_at,updated_at")
+      .select("id,source_type,title,extracted_text,version_label,active,metadata,created_at,updated_at")
       .eq("company_id", companyId)
       .order("updated_at", { ascending: false }),
     supabase
