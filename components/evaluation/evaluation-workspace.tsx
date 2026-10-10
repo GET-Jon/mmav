@@ -4573,7 +4573,9 @@ export function EvaluationWorkspace({
       compSearchImproving ||
       marketCheckLoading ||
       autoDevDiscoveryLoading ||
-      (automaticCompSearchCompleted && !canContinueNationalSearch) ||
+      (automaticCompSearchCompleted &&
+        !canContinueNationalSearch &&
+        compSearchRecommendation.action !== "manual-review") ||
       compSearchRecommendation.action === "complete"
     ) {
       return;
