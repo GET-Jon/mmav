@@ -7138,15 +7138,15 @@ export function EvaluationWorkspace({
                   <path d="M101 31l20 37M205 28l-10 40M75 68h173" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
                 </svg>
               ) : null}
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">1 · Vehicle</div>
                     {activeStage === "vehicle" ? (
                       <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
                     ) : null}
                   </div>
-                  <h2 className="mt-1 text-lg font-black tracking-[-0.015em] text-slate-950">
+                  <h2 className="mt-1 break-words text-lg font-black leading-snug tracking-[-0.015em] text-slate-950 [overflow-wrap:anywhere]">
                     {hasEvaluationData ? vehicleTitle : "Identify the car"}
                   </h2>
                 </div>
@@ -7155,7 +7155,7 @@ export function EvaluationWorkspace({
                     type="button"
                     data-evaluation-entry-action="true"
                     onClick={() => setActiveStage("vehicle")}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                    className="shrink-0 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     Edit
                   </button>
@@ -7283,7 +7283,7 @@ export function EvaluationWorkspace({
                   <div className="grid gap-2 text-sm">
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Mileage</span><span className="font-black text-slate-900">{targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"}</span></div>
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Bid / Ask</span><span className="font-black text-slate-900">{valuationInput.currentBid > 0 ? money(valuationInput.currentBid) : "—"}</span></div>
-                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{vehicleTrim || "—"}</span></div>
+                    <div className="flex items-start justify-between gap-3"><span className="shrink-0 font-semibold text-slate-500">Trim</span><span className="min-w-0 flex-1 break-words text-right font-black leading-5 text-slate-900 [overflow-wrap:anywhere]">{vehicleTrim || "—"}</span></div>
                   </div>
                   <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Vehicle ready ✓</div>
                 </div>
