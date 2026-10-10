@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
@@ -267,6 +267,80 @@ function MetricCard({
       </div>
       <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
     </div>
+  );
+}
+
+function MarketConfidenceHelp({
+  confidence,
+  compCount,
+  reasons,
+}: {
+  confidence: "Strong" | "Moderate" | "Limited";
+  compCount: number;
+  reasons: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function dismissOnOutsideClick(event: PointerEvent) {
+      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function dismissOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", dismissOnOutsideClick);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOnOutsideClick);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <span ref={wrapperRef} className="group relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label={`Why is market confidence ${confidence.toLowerCase()}?`}
+        aria-describedby={id}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onFocus={() => setOpen(true)}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black text-slate-600 transition hover:border-blue-400 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
+        i
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className={`absolute right-0 top-full z-40 mt-2 w-[min(19rem,calc(100vw-3rem))] rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl transition-opacity ${open ? "visible opacity-100" : "invisible opacity-0 group-hover:visible group-hover:opacity-100"}`}
+      >
+        <span className="block text-xs font-black text-slate-950">
+          Why {confidence.toLowerCase()} confidence?
+        </span>
+        <span className="mt-1 block text-xs font-medium leading-5 text-slate-600">
+          {compCount} selected comp{compCount === 1 ? "" : "s"} provide useful pricing evidence, but confidence measures how well listings match and agree, not just how many were found.
+        </span>
+        {reasons.length > 0 ? (
+          <span className="mt-2 block border-t border-slate-100 pt-2">
+            {reasons.slice(0, 3).map((reason) => (
+              <span key={reason} className="mt-1 block text-xs font-semibold leading-4 text-slate-700">
+                • {reason.charAt(0).toUpperCase() + reason.slice(1)}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span className="mt-2 block text-xs font-semibold leading-5 text-slate-700">
+            Lot Logic also checks trim equivalence, mileage-adjustment reliability, price spread and independent market corroboration.
+          </span>
+        )}
+        <span className="mt-2 block text-[11px] font-medium leading-4 text-slate-500">
+          Expected retail is a working estimate based on advertised prices, not a guaranteed sale price.
+        </span>
+      </span>
+    </span>
   );
 }
 
@@ -7542,7 +7616,16 @@ export function EvaluationWorkspace({
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
-                          <div className="mt-1 text-xl font-black text-slate-950">{marketEvidenceStrength}</div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className="text-xl font-black text-slate-950">{marketEvidenceStrength}</span>
+                            {marketEvidenceStrength === "Limited" ? (
+                              <MarketConfidenceHelp
+                                confidence={marketEvidenceStrength}
+                                compCount={compSummary.includedCount}
+                                reasons={compSummary.confidenceReasons}
+                              />
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
