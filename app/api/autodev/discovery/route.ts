@@ -123,7 +123,32 @@ function buildRecommendedMarkets(
 
 function mapListings(payload: any): AutoDevListing[] {
   const rows = Array.isArray(payload?.data) ? payload.data : [];
-  return rows.map((row: any) => { const vehicle = row?.vehicle || {}; const retail = row?.retailListing || {}; const location = Array.isArray(row?.location) ? row.location : []; return { vin: String(vehicle.vin || row?.vin || "").trim() || null, year: toNumber(vehicle.year), make: String(vehicle.make || "").trim() || null, model: String(vehicle.model || "").trim() || null, trim: String(vehicle.trim || "").trim() || null, drivetrain: String(vehicle.drivetrain || "").trim() || null, fuelType: String(vehicle.fuelType || vehicle.fuel || vehicle.powertrain || "").trim() || null, bodyType: String(vehicle.bodyType || vehicle.bodyStyle || "").trim() || null, price: toNumber(retail.price), miles: toNumber(retail.miles ?? retail.mileage), dealer: String(retail.dealer || "").trim() || null, city: String(retail.city || "").trim() || null, state: String(retail.state || "").trim() || null, zip: String(retail.zip || "").trim() || null, url: String(retail.vdp || "").trim() || null, longitude: toNumber(location[0]), latitude: toNumber(location[1]) }; });
+  return rows.map((row: any) => {
+    // The default v2 response is nested. Accept documented and legacy
+    // mileage/price field aliases without inventing values when absent.
+    const vehicle = row?.vehicle || {};
+    const retail = row?.retailListing || {};
+    const location = Array.isArray(row?.location) ? row.location : [];
+    return {
+      vin: String(vehicle.vin || row?.vin || "").trim().toUpperCase() || null,
+      year: toNumber(vehicle.year ?? row?.year),
+      make: String(vehicle.make || row?.make || "").trim() || null,
+      model: String(vehicle.model || row?.model || "").trim() || null,
+      trim: String(vehicle.trim || row?.trim || "").trim() || null,
+      drivetrain: String(vehicle.drivetrain || row?.drivetrain || "").trim() || null,
+      fuelType: String(vehicle.fuelType || vehicle.fuel || vehicle.powertrain || row?.fuel || "").trim() || null,
+      bodyType: String(vehicle.bodyType || vehicle.bodyStyle || row?.bodyStyle || "").trim() || null,
+      price: toNumber(retail.price ?? row?.price),
+      miles: toNumber(retail.miles ?? retail.mileage ?? vehicle.miles ?? vehicle.mileage ?? row?.miles ?? row?.mileage),
+      dealer: String(retail.dealer || row?.dealer || "").trim() || null,
+      city: String(retail.city || row?.city || "").trim() || null,
+      state: String(retail.state || row?.state || "").trim() || null,
+      zip: String(retail.zip || row?.zip || "").trim() || null,
+      url: String(retail.vdp || retail.url || row?.vdpUrl || row?.url || "").trim() || null,
+      longitude: toNumber(location[0] ?? row?.longitude),
+      latitude: toNumber(location[1] ?? row?.latitude),
+    };
+  });
 }
 
 export async function POST(request: Request) {
@@ -170,66 +195,168 @@ export async function POST(request: Request) {
     yearMin,
     yearMax,
   }));
-  let selectedAttempt: DiscoveryAttempt | null = null; let selectedPayload: any = null; let listings: AutoDevListing[] = []; let callsMade = 0;
-  let fallbackAttempt: DiscoveryAttempt | null = null; let fallbackPayload: any = null; let fallbackListings: AutoDevListing[] = []; let fallbackScore = -1;
-  const attemptResults: Array<{ label: string; model: string; returned: number; total: number; directNear: number; supporting: number }> = [];
+  const attemptsResult: Array<{
+    label: string; model: string; returned: number; total: number;
+    directNear: number; supporting: number; qualifiedCandidates: number;
+    autoSelected: number; missingPriceOrMileage: number;
+    identityRejected: number; outOfYearRange: number;
+  }> = [];
+  let callsMade = 0;
+  let exactTotal = 0;
+  let listings: AutoDevListing[] = [];
+  const seenListings = new Set<string>();
+  let lastAttempt: DiscoveryAttempt | null = null;
+  const targetMileage = Number(body.targetMileage || 0);
 
-  for (const attempt of attempts) {
-    const providerAllowance = await checkUsageAllowance({ supabase: admin, userId: user.id, kind: "provider_api_call", subjectKey, expectedUnits: 1 });
-    if (!providerAllowance.allowed) { if (callsMade === 0) return NextResponse.json({ error: providerAllowance.message, code: providerAllowance.code, usage: providerAllowance.summary }, { status: providerAllowance.status }); break; }
-    const params = new URLSearchParams({ "vehicle.make": attempt.make, "vehicle.model": attempt.model, "vehicle.year": attempt.yearMin === attempt.yearMax ? String(attempt.yearMin) : `${attempt.yearMin}-${attempt.yearMax}`, "retailListing.used": "true", includes: "total", limit: "20", sort: "updatedAt.desc" });
-    const upstream = await fetch(`https://api.auto.dev/listings?${params.toString()}`, { method: "GET", headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }, cache: "no-store" }); callsMade += 1;
-    const raw = await upstream.text(); let payload: any = null; try { payload = raw ? JSON.parse(raw) : null; } catch { payload = { message: raw }; }
-    await recordUsageEvent({ supabase: admin, companyId: discoveryAllowance.summary.company.companyId, userId: user.id, kind: "provider_api_call", subjectKey, units: 1, metadata: { provider: "auto_dev", discoveryModel: attempt.model, failed: !upstream.ok } });
-    if (!upstream.ok) return NextResponse.json({ error: "Auto.dev national discovery failed.", status: upstream.status, details: typeof payload?.message === "string" ? payload.message : typeof payload?.error === "string" ? payload.error : undefined }, { status: upstream.status });
-    const attemptListings = mapListings(payload); const total = typeof payload?.total === "number" ? payload.total : attemptListings.length;
-    const tiers = attemptListings.map((listing) =>
-      evaluateVehicleEquivalence({
-        target,
-        candidate: {
-          year: Number(listing.year || 0),
-          make: listing.make || make,
-          model: listing.model || attempt.model,
-          trim: listing.trim || "",
-          drivetrain: listing.drivetrain || "",
-          fuelType: resolveSemanticFuelType({
-            make: listing.make || make,
-            model: listing.model || attempt.model,
-            trim: listing.trim || "",
-            fuelType: listing.fuelType || "",
-          }),
-          bodyType: listing.bodyType || "",
-        },
-      }).tier,
-    );
-    const directNear = tiers.filter((tier) => tier === "direct" || tier === "near").length;
-    const supporting = tiers.filter((tier) => tier === "supporting").length;
-    const attemptScore = tiers.reduce((sum, tier) => sum + discoveryTierWeight(tier), 0);
-    attemptResults.push({ label: attempt.label, model: attempt.model, returned: attemptListings.length, total, directNear, supporting });
-
-    if (directNear > 0) {
-      selectedAttempt = attempt; selectedPayload = payload; listings = attemptListings; break;
+  for (const [attemptIndex, attempt] of attempts.entries()) {
+    const providerAllowance = await checkUsageAllowance({
+      supabase: admin, userId: user.id, kind: "provider_api_call",
+      subjectKey, expectedUnits: 1,
+    });
+    if (!providerAllowance.allowed) {
+      if (callsMade === 0) {
+        return NextResponse.json({
+          error: providerAllowance.message, code: providerAllowance.code,
+          usage: providerAllowance.summary,
+        }, { status: providerAllowance.status });
+      }
+      break;
     }
 
-    if ((supporting > 0 || attemptListings.length > 0) && attemptScore > fallbackScore) {
-      fallbackAttempt = attempt; fallbackPayload = payload; fallbackListings = attemptListings; fallbackScore = attemptScore;
+    const params = new URLSearchParams({
+      "vehicle.make": attempt.make,
+      "vehicle.model": attempt.model,
+      "vehicle.year": attempt.yearMin === attempt.yearMax
+        ? String(attempt.yearMin) : `${attempt.yearMin}-${attempt.yearMax}`,
+      "retailListing.used": "true",
+      "includes": "total",
+      "limit": "20",
+      "sort": "updatedAt.desc",
+    });
+    const upstream = await fetch(`https://api.auto.dev/listings?${params}`, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    callsMade += 1;
+    const raw = await upstream.text();
+    let payload: any = null;
+    try { payload = raw ? JSON.parse(raw) : null; }
+    catch { payload = { message: raw }; }
+    await recordUsageEvent({
+      supabase: admin, companyId: discoveryAllowance.summary.company.companyId,
+      userId: user.id, kind: "provider_api_call", subjectKey, units: 1,
+      metadata: { provider: "auto_dev", discoveryModel: attempt.model, failed: !upstream.ok },
+    });
+    if (!upstream.ok) {
+      return NextResponse.json({
+        error: "Auto.dev national discovery failed.",
+        status: upstream.status,
+        details: typeof payload?.message === "string" ? payload.message :
+          typeof payload?.error === "string" ? payload.error : undefined,
+      }, { status: upstream.status });
     }
+
+    lastAttempt = attempt;
+    const batch = mapListings(payload);
+    const total = typeof payload?.total === "number" ? payload.total : batch.length;
+    if (attemptIndex === 0) exactTotal = total;
+    const tiers = batch.map((listing) => evaluateVehicleEquivalence({
+      target,
+      candidate: {
+        year: Number(listing.year || 0),
+        make: listing.make || make, model: listing.model || attempt.model,
+        trim: listing.trim || "", drivetrain: listing.drivetrain || "",
+        fuelType: resolveSemanticFuelType({
+          make: listing.make || make, model: listing.model || attempt.model,
+          trim: listing.trim || "", fuelType: listing.fuelType || "",
+        }),
+        bodyType: listing.bodyType || "",
+      },
+    }).tier);
+    for (const [index, listing] of batch.entries()) {
+      // A broader provider alias must not add standard TT/TT RS to a TTS
+      // valuation. Keep only Direct/Near for this national discovery pool.
+      if (!["direct", "near"].includes(tiers[index])) continue;
+      const key = listing.vin ||
+        [listing.year, listing.make, listing.model, listing.trim,
+          listing.miles, listing.price, listing.url].join("|").toLowerCase();
+      if (!seenListings.has(key)) {
+        seenListings.add(key);
+        listings.push(listing);
+      }
+    }
+
+    const checked = buildAutoDevCompCandidates(batch, target, targetMileage);
+    const combined = buildAutoDevCompCandidates(listings, target, targetMileage);
+    attemptsResult.push({
+      label: attempt.label, model: attempt.model,
+      returned: batch.length, total,
+      directNear: tiers.filter(t => t === "direct" || t === "near").length,
+      supporting: tiers.filter(t => t === "supporting").length,
+      qualifiedCandidates: checked.comps.length,
+      autoSelected: checked.diagnostics.autoIncluded,
+      missingPriceOrMileage: checked.diagnostics.missingPriceOrMileage,
+      identityRejected: checked.diagnostics.identityRejected,
+      outOfYearRange: checked.diagnostics.outOfYearRange,
+    });
+
+    // Continue to the next provider alias when the exact model matches but
+    // fails to supply four usable price/mileage candidates. Matching a name
+    // is not proof that valuation evidence is sufficient.
+    if (combined.comps.filter(comp => comp.equivalenceTier === "direct" ||
+      comp.equivalenceTier === "near").length >= 4) break;
   }
 
-  if (!selectedAttempt && fallbackAttempt) {
-    selectedAttempt = fallbackAttempt;
-    selectedPayload = fallbackPayload;
-    listings = fallbackListings;
-  }
+  const byState = listings.reduce((acc: Record<string, number>, listing) => {
+    const state = listing.state || "Unknown";
+    acc[state] = (acc[state] || 0) + 1;
+    return acc;
+  }, {});
+  const candidateEvidence = buildAutoDevCompCandidates(listings, target, targetMileage);
+  const total = Math.max(exactTotal, listings.length);
+  const metadata = {
+    callsMade, attemptResults: attemptsResult,
+    screening: candidateEvidence.diagnostics,
+    returned: listings.length, exactModelTotal: exactTotal, total,
+    sampleFieldCoverage: {
+      priced: listings.filter(x => x.price !== null && x.price !== undefined && x.price > 0).length,
+      withMileage: listings.filter(x => x.miles !== null && x.miles !== undefined).length,
+      withVin: listings.filter(x => Boolean(x.vin)).length,
+      withUrl: listings.filter(x => Boolean(x.url)).length,
+    },
+  };
+  await recordUsageEvent({
+    supabase: admin, companyId: discoveryAllowance.summary.company.companyId,
+    userId: user.id, kind: "auto_dev_discovery", subjectKey, metadata,
+  });
+  await recordApiUsageEvent({
+    companyId: discoveryAllowance.summary.company.companyId,
+    userId: user.id, provider: "auto_dev", endpoint: "/listings",
+    vehicleYear: year, vehicleMake: make, vehicleModel: model,
+    apiCallsMade: callsMade, status: 200,
+    stopReason: candidateEvidence.comps.length
+      ? "National discovery found qualifying retail candidates."
+      : listings.length
+        ? "National discovery found listings but they lacked qualifying valuation data."
+        : "No matching derivative listings in exact or provider-alias searches.",
+    metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, ...metadata },
+  });
 
-  await recordUsageEvent({ supabase: admin, companyId: discoveryAllowance.summary.company.companyId, userId: user.id, kind: "auto_dev_discovery", subjectKey, metadata: { callsMade, attemptResults } });
-  const byState = listings.reduce((acc: Record<string, number>, listing) => { const state = String(listing.state || "Unknown"); acc[state] = (acc[state] || 0) + 1; return acc; }, {});
-  const total = selectedPayload && typeof selectedPayload.total === "number" ? selectedPayload.total : listings.length;
-  await recordApiUsageEvent({ companyId: discoveryAllowance.summary.company.companyId, userId: user.id, provider: "auto_dev", endpoint: "/listings", vehicleYear: year, vehicleMake: make, vehicleModel: selectedAttempt?.model || model, apiCallsMade: callsMade, status: 200, stopReason: listings.length ? "Auto.dev national discovery found inventory." : "Auto.dev national discovery exhausted exact and normalized vehicle identities.", metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, returned: listings.length, total, attemptResults } });
-  const candidateEvidence = buildAutoDevCompCandidates(
+  return NextResponse.json({
+    source: "auto.dev", role: "discovery-and-qualified-candidates",
+    candidateComps: candidateEvidence.comps,
+    candidateDiagnostics: candidateEvidence.diagnostics,
+    query: {
+      year, make, model, trim: trim || null, yearMin, yearMax,
+      generation: generation?.generation || null, sampleLimit: 20,
+    },
+    discovery: {
+      strategy: lastAttempt?.label || "exhausted",
+      attempts: attemptsResult,
+      normalizedIdentityUsed: attemptsResult.some(a => a.model !== model),
+    },
+    total, returned: listings.length, sampleCapped: exactTotal > 20,
+    byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 8),
     listings,
-    target,
-    Number(body.targetMileage || 0),
-  );
-  return NextResponse.json({ source: "auto.dev", role: "discovery-and-qualified-candidates", candidateComps: candidateEvidence.comps, candidateDiagnostics: candidateEvidence.diagnostics, query: { year, make, model: selectedAttempt?.model || model, originalModel: model, trim: trim || null, yearMin, yearMax, generation: generation?.generation || null, sampleLimit: 20 }, discovery: { strategy: selectedAttempt?.label || "exhausted", attempts: attemptResults, normalizedIdentityUsed: Boolean(selectedAttempt && selectedAttempt.model !== model) }, total, returned: listings.length, sampleCapped: total > listings.length, byState, recommendedMarkets: buildRecommendedMarkets(listings, target, 8), listings });
+  });
 }
