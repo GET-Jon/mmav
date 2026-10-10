@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import {
@@ -271,74 +272,75 @@ function MetricCard({
 }
 
 function MarketConfidenceHelp({
-  confidence,
-  compCount,
-  reasons,
+  confidence, compCount, reasons,
 }: {
-  confidence: "Strong" | "Moderate" | "Limited";
+  confidence: "Strong" | "Moderate" | "Limited" | "Weak";
   compCount: number;
   reasons: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState({ top: 0, left: 0 });
   const id = useId();
-  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+
+  function show() {
+    const rect = button.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(320, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+    const top = window.innerHeight - rect.bottom < 280 && rect.top > 280
+      ? rect.top - 268
+      : Math.min(rect.bottom + 8, window.innerHeight - 120);
+    setPlacement({ top: Math.max(12, top), left });
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (!open) return;
-    function dismissOnOutsideClick(event: PointerEvent) {
-      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function dismissOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismissOnOutsideClick);
-    document.addEventListener("keydown", dismissOnEscape);
+    const outside = (event: PointerEvent) => {
+      if (!button.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const onScroll = () => setOpen(false);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
-      document.removeEventListener("pointerdown", dismissOnOutsideClick);
-      document.removeEventListener("keydown", dismissOnEscape);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
   }, [open]);
 
   return (
-    <span ref={wrapperRef} className="group relative inline-flex items-center">
-      <button
-        type="button"
+    <span className="relative inline-flex shrink-0 items-center">
+      <button ref={button} type="button"
         aria-label={`Why is market confidence ${confidence.toLowerCase()}?`}
-        aria-describedby={id}
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black text-slate-600 transition hover:border-blue-400 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-      >
-        i
-      </button>
-      <span
-        id={id}
-        role="tooltip"
-        className={`absolute right-0 top-full z-40 mt-2 w-[min(19rem,calc(100vw-3rem))] rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl transition-opacity ${open ? "visible opacity-100" : "invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"}`}
-      >
-        <span className="block text-xs font-black text-slate-950">
-          Why {confidence.toLowerCase()} confidence?
-        </span>
-        <span className="mt-1 block text-xs font-medium leading-5 text-slate-600">
-          {compCount} selected comp{compCount === 1 ? "" : "s"} provide useful pricing evidence, but confidence measures how well listings match and agree, not just how many were found.
-        </span>
-        {reasons.length > 0 ? (
-          <span className="mt-2 block border-t border-slate-100 pt-2">
-            {reasons.slice(0, 3).map((reason) => (
-              <span key={reason} className="mt-1 block text-xs font-semibold leading-4 text-slate-700">
-                • {reason.charAt(0).toUpperCase() + reason.slice(1)}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <span className="mt-2 block text-xs font-semibold leading-5 text-slate-700">
-            Lot Logic also checks trim equivalence, mileage-adjustment reliability, price spread and independent market corroboration.
-          </span>
-        )}
-        <span className="mt-2 block text-[11px] font-medium leading-4 text-slate-500">
-          Expected retail is a working estimate based on advertised prices, not a guaranteed sale price.
-        </span>
-      </span>
+        aria-describedby={open ? id : undefined} aria-expanded={open}
+        onMouseEnter={show} onMouseLeave={() => setOpen(false)}
+        onFocus={show} onBlur={() => setOpen(false)} onClick={show}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black text-slate-600 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">i</button>
+      {open && typeof document !== "undefined" ? createPortal(
+        <div id={id} role="tooltip" style={{ top: placement.top, left: placement.left, width: "min(320px, calc(100vw - 24px))" }}
+          className="pointer-events-none fixed z-[100] max-h-[min(300px,calc(100vh-24px))] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
+          <div className="text-xs font-black text-slate-950">Why {confidence.toLowerCase()} confidence?</div>
+          <p className="mt-1 text-xs font-medium leading-5 text-slate-600">
+            {compCount > 0
+              ? `${compCount} selected comps provide useful pricing evidence, but confidence also reflects vehicle fit, price agreement and adjustment reliability.`
+              : "No trusted comps are selected; a defensible sale-price estimate is not available."}
+          </p>
+          {reasons.length > 0 ? (
+            <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs font-semibold leading-5 text-slate-700">
+              {reasons.slice(0, 4).map(reason => <li key={reason}>• {reason.charAt(0).toUpperCase() + reason.slice(1)}</li>)}
+            </ul>
+          ) : null}
+          {compCount > 0 ? <p className="mt-2 text-[11px] font-medium leading-4 text-slate-500">
+            Expected retail is based on asking prices, not a guaranteed sale price.
+          </p> : null}
+        </div>, document.body,
+      ) : null}
     </span>
   );
 }
@@ -6228,7 +6230,7 @@ export function EvaluationWorkspace({
                   Vehicle Details
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Full decoded identity and applied vehicle profile.
+                  Full decoded vehicle identity and specifications.
                 </p>
               </div>
 
@@ -6246,8 +6248,6 @@ export function EvaluationWorkspace({
               decoded={decodedVehicle}
               manualVehicle={manualVehicle}
               onManualVehicleChange={updateManualVehicleField}
-              appliedVehicleProfile={appliedVehicleProfile}
-              onReapplyVehicleProfile={reapplyVehicleProfile}
             />
           </div>
         </div>
@@ -7009,7 +7009,7 @@ export function EvaluationWorkspace({
 
           {activeStage === "verdict" ? (
             <section className="grid gap-4 lg:grid-cols-3">
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <article className="relative min-h-[166px] rounded-[20px] border border-emerald-200 bg-white px-5 pt-5 pb-14 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
                   <button
@@ -7023,7 +7023,7 @@ export function EvaluationWorkspace({
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
+                <div className="mt-3 min-w-0 break-words text-lg font-black leading-snug text-slate-950 [overflow-wrap:anywhere]">{vehicleTitle}</div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
 
@@ -7059,10 +7059,19 @@ export function EvaluationWorkspace({
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-lg font-black leading-snug text-slate-950">
+                  <span>{compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}</span>
+                  {compSummary.confidence !== "High" ? (
+                    <MarketConfidenceHelp
+                      confidence={compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
+                      compCount={compSummary.includedCount}
+                      reasons={compSummary.confidenceReasons || []}
+                    />
+                  ) : null}
                 </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+                <div className={`absolute bottom-4 left-5 rounded-full px-3 py-1 text-[10px] font-black ${compSummary.includedCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                  {compSummary.includedCount > 0 ? "Ready ✓" : "Needs attention"}
+                </div>
               </article>
             </section>
           ) : (
