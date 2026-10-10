@@ -61,6 +61,11 @@ export function assertAutoDevCompRegressionCases() {
 
   const prior: MarketComp = { ...exact!, id: "mc-row", source: "MarketCheck", included: false, dealerDecision: "exclude" };
   test(mergeCompCandidates([prior], [exact!]).length === 1, "cross-provider VIN is not double counted");
+  const matchingProvider: MarketComp = { ...exact!, id: "mc-matched", source: "MarketCheck", included: false, qualityScore: 68 };
+  const acrossProviders = mergeCompCandidates([exact!], [matchingProvider]);
+  test(acrossProviders.length === 1 && acrossProviders[0].included === true &&
+    acrossProviders[0].source === "MarketCheck",
+    "valid national comp is not silently deselected during MarketCheck merge");
   const withChoice = { ...exact!, included: false, dealerDecision: "exclude" as const };
   const mc: MarketComp = { ...exact!, id: "mc-again", source: "MarketCheck", included: true };
   const merged = mergeCompCandidates([withChoice], [mc]);
