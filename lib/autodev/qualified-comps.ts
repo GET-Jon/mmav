@@ -226,7 +226,13 @@ export function mergeCompCandidates(existing: MarketComp[], additional: MarketCo
           ...comp,
           dealerDecision: old.dealerDecision || comp.dealerDecision,
           dealerDecisionAt: old.dealerDecisionAt || comp.dealerDecisionAt,
-          included: old.dealerDecision ? old.included : comp.included,
+          included: old.dealerDecision
+            ? old.included
+            : comp.included || (
+                old.included &&
+                (old.equivalenceTier === "direct" || old.equivalenceTier === "near") &&
+                (comp.equivalenceTier === "direct" || comp.equivalenceTier === "near")
+              ),
         };
         seenIds.delete(old.id);
         seenIds.add(comp.id);
