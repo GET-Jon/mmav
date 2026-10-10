@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/terms",
   "/cookies",
   "/motor_match",
+  "/motor_match_map",
   "/api/motor_match",
   "/auth/callback",
   "/auth/confirm",
