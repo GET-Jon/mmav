@@ -321,11 +321,11 @@ export function CustomerBillingAdmin({
                       : dateLabel(customer.currentPeriodEnd)}
                   </td>
                   <td className="px-5 py-4">
-                    <div className="space-y-2">
+                    <div className="flex flex-col items-start gap-3">
                       <GiftCredits customer={customer} />
                       <Link
                         href={`/admin/customers/${customer.companyId}`}
-                        className="inline-flex text-xs font-black text-blue-700 hover:underline"
+                        className="inline-flex whitespace-nowrap text-xs font-black text-blue-700 hover:underline"
                       >
                         View account & users →
                       </Link>
