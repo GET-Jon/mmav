@@ -307,7 +307,6 @@ function MarketConfidenceHelp({
         aria-describedby={id}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        onFocus={() => setOpen(true)}
         className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black text-slate-600 transition hover:border-blue-400 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
         i
@@ -315,7 +314,7 @@ function MarketConfidenceHelp({
       <span
         id={id}
         role="tooltip"
-        className={`absolute right-0 top-full z-40 mt-2 w-[min(19rem,calc(100vw-3rem))] rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl transition-opacity ${open ? "visible opacity-100" : "invisible opacity-0 group-hover:visible group-hover:opacity-100"}`}
+        className={`absolute right-0 top-full z-40 mt-2 w-[min(19rem,calc(100vw-3rem))] rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl transition-opacity ${open ? "visible opacity-100" : "invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"}`}
       >
         <span className="block text-xs font-black text-slate-950">
           Why {confidence.toLowerCase()} confidence?
