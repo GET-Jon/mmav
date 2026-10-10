@@ -5134,7 +5134,7 @@ export function EvaluationWorkspace({
 
               <button
                 type="button"
-                onClick={() => setQuickEvalOpen(false)}
+                onClick={closeVehicleEdit}
                 className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close quick evaluation"
               >
@@ -5172,9 +5172,9 @@ export function EvaluationWorkspace({
                 <>
                   <FormRow label="VIN">
                     <input
-                      value={vin}
+                      value={quickEditDraft?.vin ?? vin}
                       onChange={(event) =>
-                        setVin(event.target.value.toUpperCase())
+                        setQuickEditDraft((prev) => prev ? { ...prev, vin: event.target.value.toUpperCase() } : prev)
                       }
                       placeholder="e.g. 5UXCR6C00L9U123456"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5192,12 +5192,9 @@ export function EvaluationWorkspace({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormRow label="Year">
                       <input
-                        value={manualVehicle.year}
+                        value={quickEditDraft?.manualVehicle.year ?? manualVehicle.year}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            year: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, year: event.target.value } } : prev)
                         }
                         placeholder="e.g. 2003"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5206,12 +5203,9 @@ export function EvaluationWorkspace({
 
                     <FormRow label="Make">
                       <input
-                        value={manualVehicle.make}
+                        value={quickEditDraft?.manualVehicle.make ?? manualVehicle.make}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            make: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, make: event.target.value } } : prev)
                         }
                         placeholder="e.g. BMW"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5222,12 +5216,9 @@ export function EvaluationWorkspace({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormRow label="Model">
                       <input
-                        value={manualVehicle.model}
+                        value={quickEditDraft?.manualVehicle.model ?? manualVehicle.model}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            model: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, model: event.target.value } } : prev)
                         }
                         placeholder="e.g. M3"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5236,12 +5227,9 @@ export function EvaluationWorkspace({
 
                     <FormRow label="Trim">
                       <input
-                        value={manualVehicle.trim}
+                        value={quickEditDraft?.manualVehicle.trim ?? manualVehicle.trim}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            trim: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, trim: event.target.value } } : prev)
                         }
                         placeholder="e.g. Competition, 3.0i, G550"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5251,12 +5239,9 @@ export function EvaluationWorkspace({
 
                   <FormRow label="Body Style">
                     <input
-                      value={manualVehicle.bodyClass}
+                      value={quickEditDraft?.manualVehicle.bodyClass ?? manualVehicle.bodyClass}
                       onChange={(event) =>
-                        setManualVehicle((previous) => ({
-                          ...previous,
-                          bodyClass: event.target.value,
-                        }))
+                        setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, bodyClass: event.target.value } } : prev)
                       }
                       placeholder="e.g. Coupe, Sedan, Convertible, SUV"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5270,10 +5255,10 @@ export function EvaluationWorkspace({
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(targetMileage)}
+                    value={formatNumberInput(quickEditDraft?.mileage ?? targetMileage)}
                     onFocus={(event) => event.currentTarget.select()}
                     onChange={(event) =>
-                      setTargetMileage(toNumber(event.target.value))
+                      setQuickEditDraft((prev) => prev ? { ...prev, mileage: toNumber(event.target.value) } : prev)
                     }
                     placeholder="e.g. 68,450"
                     className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
@@ -5290,13 +5275,10 @@ export function EvaluationWorkspace({
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(valuationInput.currentBid)}
+                    value={formatNumberInput(quickEditDraft?.bid ?? valuationInput.currentBid)}
                     onFocus={(event) => event.currentTarget.select()}
                     onChange={(event) =>
-                      updateEvaluationField(
-                        "currentBid",
-                        toNumber(event.target.value),
-                      )
+                      setQuickEditDraft((prev) => prev ? { ...prev, bid: toNumber(event.target.value) } : prev)
                     }
                     placeholder="e.g. 16,250"
                     className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
@@ -5306,8 +5288,8 @@ export function EvaluationWorkspace({
 
               <FormRow label="Vehicle Source">
                 <select
-                  value={auctionSite}
-                  onChange={(event) => setAuctionSite(event.target.value)}
+                  value={quickEditDraft?.auctionSite ?? auctionSite}
+                  onChange={(event) => setQuickEditDraft((prev) => prev ? { ...prev, auctionSite: event.target.value } : prev)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                 >
                   <option>ACV Auctions</option>
@@ -5324,7 +5306,7 @@ export function EvaluationWorkspace({
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
               <button
                 type="button"
-                onClick={() => setQuickEvalOpen(false)}
+                onClick={closeVehicleEdit}
                 className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 Cancel
