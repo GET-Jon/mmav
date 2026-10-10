@@ -6,6 +6,7 @@ export type IntelligenceKnowledgeSource = {
   id: string;
   source_type: string;
   title: string;
+  extracted_text?: string | null;
   version_label: string | null;
   active: boolean;
   metadata: unknown;
@@ -51,6 +52,23 @@ type ResetMode = "learning" | "full";
 
 const RESET_CONFIRMATION = "RESET LOT LOGIC INTELLIGENCE";
 
+// Open-ended questions are suggestions only; they never become explicit company
+// facts until an administrator writes an answer and saves it.
+const COMPANY_DISCOVERY_PROMPTS = [
+  { title: "Ideal inventory sweet spot", question: "What vehicle types, model years, mileage and retail prices sell best for your dealership?" },
+  { title: "Hard-pass vehicles", question: "Which makes, models, engines, titles or histories would you never buy, even at a low price?" },
+  { title: "Maximum reconditioning exposure", question: "What's your typical recon budget per vehicle, and which repairs require explicit approval?" },
+  { title: "Target inventory hold time", question: "How many days should a car sell within, and when should Lot Logic recommend a price reduction?" },
+  { title: "Deal minimum profit", question: "What minimum gross profit and return on capital justify buying a vehicle?" },
+  { title: "Best-performing customer segments", question: "Who are your typical customers, and which vehicles or options do they come to you for?" },
+  { title: "Age and mileage exceptions", question: "Which older or high-mileage vehicles are still worth pursuing, and why?" },
+  { title: "Mechanical strengths and limitations", question: "What service work can you complete reliably in-house, and what should be outsourced?" },
+  { title: "Logistics and transport rules", question: "How far will you source vehicles, and when do transport costs make a purchase unattractive?" },
+  { title: "Auction preferences", question: "Which auctions, sellers or listing conditions have produced your best and worst results?" },
+  { title: "Price and market strategy", question: "How do you price for quick sale versus maximum margin, and which geographic markets matter?" },
+  { title: "Deal-breaker inspection findings", question: "Which mechanical, structural or electronic issues should trigger a pass or mandatory specialist inspection?" },
+];
+
 function confidenceLabel(value: number | null) {
   if (value == null) return "Not scored";
   if (value >= 0.8) return `High · ${Math.round(value * 100)}%`;
@@ -87,6 +105,11 @@ export function LotLogicIntelligenceCard({
   const [assertions, setAssertions] = useState(initialAssertions);
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [selectedQuestion, setSelectedQuestion] = useState("");
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingText, setEditingText] = useState("");
+  const [updatingSource, setUpdatingSource] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -115,11 +138,45 @@ export function LotLogicIntelligenceCard({
       setKnowledgeSources((current) => [payload, ...current]);
       setTitle("");
       setText("");
+      setSelectedQuestion("");
       setMessage("Knowledge added. It is now available to the Lot Logic Intelligence layer.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Knowledge could not be added.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startEditingSource(source: IntelligenceKnowledgeSource) {
+    setEditingSourceId(source.id);
+    setEditingTitle(source.title);
+    setEditingText(source.extracted_text || "");
+    setMessage(null);
+  }
+
+  async function updateKnowledgeSource(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingSourceId || !canReview || !editingTitle.trim() || !editingText.trim()) return;
+    setUpdatingSource(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/intelligence/knowledge", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingSourceId, title: editingTitle.trim(), text: editingText.trim(),
+        }),
+      });
+      const updated = await response.json();
+      if (!response.ok) throw new Error(updated.error || "Unable to update manager note.");
+      setKnowledgeSources(current => current.map(source => source.id === editingSourceId
+        ? { ...source, ...updated, extracted_text: editingText.trim() } : source));
+      setEditingSourceId(null);
+      setMessage("Manager note and linked intelligence updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update manager note.");
+    } finally {
+      setUpdatingSource(false);
     }
   }
 
@@ -213,8 +270,22 @@ export function LotLogicIntelligenceCard({
               <label className="mt-4 block text-xs font-black text-slate-600">Title</label>
               <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={180} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-700" placeholder="Example: Key programming preference" />
               <label className="mt-3 block text-xs font-black text-slate-600">Knowledge</label>
-              <textarea value={text} onChange={(event) => setText(event.target.value)} rows={7} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-700" placeholder="Example: Naif is our designated key-fob specialist, but use Devin when Naif is unavailable." />
+              {selectedQuestion ? <p className="mt-2 text-xs font-semibold leading-5 text-blue-700">{selectedQuestion}</p> : null}
+              <textarea value={text} onChange={(event) => setText(event.target.value)} rows={7} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-700" placeholder={selectedQuestion || "Example: We prefer compact performance cars under 90,000 miles, with under $1,500 recon."} />
               <button disabled={saving || !title.trim() || !text.trim()} className="mt-3 rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white disabled:opacity-40">{saving ? "Adding…" : "Add to Intelligence"}</button>
+              <details className="mt-5 border-t border-slate-200 pt-4">
+                <summary className="cursor-pointer text-sm font-black text-blue-700">Help Lot Logic learn more about your dealership ({COMPANY_DISCOVERY_PROMPTS.length} questions) ↓</summary>
+                <p className="mt-2 text-xs leading-5 text-slate-600">Choose a question to prefill the title above. Write your answer, then save it as explicit knowledge. Questions alone are never saved.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {COMPANY_DISCOVERY_PROMPTS.map(prompt => (
+                    <button key={prompt.title} type="button"
+                      onClick={() => { setTitle(prompt.title); setText(""); setSelectedQuestion(prompt.question); }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-bold leading-4 text-slate-700 hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-600">
+                      {prompt.title} →
+                    </button>
+                  ))}
+                </div>
+              </details>
             </form>
           ) : null}
           <div>
@@ -222,7 +293,37 @@ export function LotLogicIntelligenceCard({
             <div className="mt-3 space-y-2">
               {knowledgeSources.length ? knowledgeSources.map((source) => (
                 <div key={source.id} className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex items-start justify-between gap-3"><div><div className="font-black">{source.title}</div><div className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{source.source_type.replaceAll("_", " ")}</div></div><div className="text-xs text-slate-400">{formatDate(source.updated_at)}</div></div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="break-words font-black">{source.title}</div>
+                      <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{source.source_type.replaceAll("_", " ")}</div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <span className="text-xs text-slate-400">{formatDate(source.updated_at)}</span>
+                      {canReview && source.source_type === "manager_note" && editingSourceId !== source.id ? (
+                        <button type="button" onClick={() => startEditingSource(source)}
+                          className="text-xs font-black text-blue-700 hover:underline">Edit note</button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {editingSourceId === source.id ? (
+                    <form onSubmit={updateKnowledgeSource} className="mt-4 space-y-3 border-t border-slate-100 pt-3">
+                      <label className="block text-xs font-black text-slate-600">Title
+                        <input value={editingTitle} maxLength={180}
+                          onChange={event => setEditingTitle(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900" />
+                      </label>
+                      <label className="block text-xs font-black text-slate-600">Knowledge
+                        <textarea value={editingText} rows={5}
+                          onChange={event => setEditingText(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900" />
+                      </label>
+                      <div className="flex gap-2">
+                        <button disabled={updatingSource || !editingTitle.trim() || !editingText.trim()} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40">{updatingSource ? "Saving…" : "Save changes"}</button>
+                        <button type="button" disabled={updatingSource} onClick={() => setEditingSourceId(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-black">Cancel</button>
+                      </div>
+                    </form>
+                  ) : null}
                 </div>
               )) : <div className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No company knowledge sources have been added yet.</div>}
             </div>
