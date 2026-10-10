@@ -1231,13 +1231,6 @@ export function EvaluationWorkspace({
     "default" | "saved"
   >("default");
 
-  const [appliedVehicleProfile, setAppliedVehicleProfile] = useState<{
-    profile: string;
-    ruleName: string;
-    source: string;
-    reason: string;
-  } | null>(null);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -1267,17 +1260,6 @@ export function EvaluationWorkspace({
             );
 
             const matchingCostDefault = profileMatch?.costDefault;
-
-            setAppliedVehicleProfile(
-              profileMatch
-                ? {
-                    profile: profileMatch.profile,
-                    ruleName: profileMatch.ruleName,
-                    source: profileMatch.source,
-                    reason: profileMatch.reason,
-                  }
-                : null,
-            );
 
             if (matchingCostDefault) {
               setEvaluation((previous) =>
@@ -2001,33 +1983,6 @@ export function EvaluationWorkspace({
     );
   }
 
-  function reapplyVehicleProfile() {
-    const profileMatch = getAppliedVehicleProfile(
-      activeAssumptions,
-      decodedVehicle,
-      targetMileage,
-    );
-
-    if (!profileMatch) {
-      setAppliedVehicleProfile(null);
-      return;
-    }
-
-    setEvaluation((previous) =>
-      applyCostDefaultToEvaluation(
-        previous,
-        profileMatch.costDefault,
-        activeAssumptions,
-      ),
-    );
-
-    setAppliedVehicleProfile({
-      profile: profileMatch.profile,
-      ruleName: profileMatch.ruleName,
-      source: profileMatch.source,
-      reason: profileMatch.reason,
-    });
-  }
   async function enrichVehicleIdentityProfile(decoded: VinDecodeResult) {
     const requestVin = String(decoded.vin || "").trim().toUpperCase();
     const baseline = buildDeterministicVehicleIdentityProfile(decoded);
@@ -2196,17 +2151,6 @@ export function EvaluationWorkspace({
       0,
     );
     const matchingCostDefault = profileMatch?.costDefault;
-
-    setAppliedVehicleProfile(
-      profileMatch
-        ? {
-            profile: profileMatch.profile,
-            ruleName: profileMatch.ruleName,
-            source: profileMatch.source,
-            reason: profileMatch.reason,
-          }
-        : null,
-    );
 
     const baseEvaluation: ValuationInput = {
       ...initialEvaluation,
@@ -4040,7 +3984,6 @@ export function EvaluationWorkspace({
     setMethodologySaving(false);
     setMethodologyStatus("");
 
-    setAppliedVehicleProfile(null);
     setFinalTargetOverride(null);
 
     setSavedEvaluationId(null);
