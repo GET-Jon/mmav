@@ -7432,7 +7432,7 @@ export function EvaluationWorkspace({
               ) : null}
             </article>
 
-            <article className={`min-h-[360px] rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
+            <article className={`flex min-h-[360px] flex-col rounded-[20px] border p-6 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-300 ${
               activeStage === "market"
                 ? "z-10 min-h-[360px] border-2 border-blue-500 bg-white opacity-100 ring-4 ring-blue-100/80 shadow-[0_18px_40px_rgba(37,99,235,0.16)] -translate-y-0.5 scale-[1.01]"
                 : conditionStepConfirmed && !needsCompSearch && hasEvaluationData
@@ -7460,11 +7460,23 @@ export function EvaluationWorkspace({
                   </h2>
                 </div>
                 {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" ? (
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                  <div className="relative flex shrink-0 items-center gap-1.5">
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
                     needsCompSearch ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
                   }`}>
                     {needsCompSearch ? "Needs attention" : "Ready ✓"}
-                  </span>
+                    </span>
+                    {needsCompSearch ? (
+                      <span className="group relative inline-flex">
+                        <button type="button" aria-label="Why market evidence needs attention"
+                          title="No trusted comps yet. An unpriced Verdict does not charge a credit or provide a reliable sale or profit estimate."
+                          className="flex h-5 w-5 items-center justify-center rounded-full border border-amber-300 text-[11px] font-black text-amber-800 focus-visible:outline-2 focus-visible:outline-blue-600">!</button>
+                        <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                          No trusted comparisons yet. Continue to Verdict opens an unpriced review without using an evaluation credit. Sale and profit estimates remain unavailable.
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 
@@ -7491,7 +7503,7 @@ export function EvaluationWorkspace({
                   </div>
                 </div>
               ) : (
-                <div className="mt-4">
+                <div className="mt-4 flex-1">
                   {evaluationRunning || marketCheckLoading ? (
                     <div className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-4">
@@ -7527,9 +7539,8 @@ export function EvaluationWorkspace({
                       {activeStage === "market" ? (
                         <>
                         {hasLimitedMarketEvidence ? (
-                          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                            <div className="text-xs font-black text-amber-900">Recommended next step: {compSearchRecommendation.title}</div>
-                            <div className="mt-1 text-[11px] font-semibold leading-5 text-amber-800">{compSearchRecommendation.reason}</div>
+                          <div className="mt-3 text-xs font-semibold leading-5 text-amber-800">
+                            Limited evidence · {compSearchRecommendation.title}
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -7544,9 +7555,6 @@ export function EvaluationWorkspace({
                               >
                                 {compSearchImproving ? "Running Search…" : compSearchRecommendation.action === "manual-review" ? "Review Vehicle Match" : "Run Recommended Search"}
                               </button>
-                              <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
-                                or
-                              </span>
                             </>
                           ) : null}
                           <button
@@ -7558,11 +7566,6 @@ export function EvaluationWorkspace({
                             {verdictTransitioning ? "Building Verdict…" : "Continue to Verdict →"}
                           </button>
                         </div>
-                        {automaticCompSearchCompleted && hasLimitedMarketEvidence ? (
-                          <div className="mt-2 text-[11px] font-bold leading-4 text-slate-500">
-                            Automatic search is complete. Use <span className="text-slate-800">Expand / Improve Comps</span> at the top of Comparable Vehicles to search specific markets or adjust the vehicle match.
-                          </div>
-                        ) : null}
                         {usageLimitMessage ? (
                           <div className="mt-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
                             <span>{usageLimitMessage}</span>
@@ -7595,25 +7598,19 @@ export function EvaluationWorkspace({
                               : `${compSearchRegions || 0} market${compSearchRegions === 1 ? "" : "s"} checked${autoDevDiscovery ? " plus national discovery" : ""} · ${comps.length} visible candidate${comps.length === 1 ? "" : "s"} · ${compSummary.includedCount} trusted selected. ${canContinueNationalSearch ? `${remainingNationalMarketCount} national markets still available.` : "Review further options below."}`}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                          className="mt-3 text-xs font-black text-blue-700 hover:text-blue-900"
-                        >
-                          View comp results ↓
-                        </button>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button type="button" onClick={() => compSearchRecommendation.action === "manual-review" ? openCompVehicleMatchEditor() : void improveCompSearch()}
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button type="button"
+                            onClick={() => compSearchRecommendation.action === "manual-review" ? openCompMarketEditor() : void improveCompSearch()}
                             disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
                             className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
-                            {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Review Vehicle Match" : "Run Recommended Search"}
+                            {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Improve results →" : "Run Recommended Search →"}
                           </button>
-                          <button type="button" onClick={() => void continueToVerdict()} disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
+                          <button type="button" onClick={() => void continueToVerdict()}
+                            disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
                             className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-black text-blue-700 disabled:opacity-50">
-                            {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict (Unpriced) →"}
+                            {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
                           </button>
                         </div>
-                        <p className="mt-2 text-[11px] font-semibold text-amber-800">You can review an unpriced verdict without spending an evaluation credit; no reliable sale or profit estimate will be presented.</p>
                       </>
                     ) : (
                       <>
@@ -7637,10 +7634,9 @@ export function EvaluationWorkspace({
                           <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 disabled:text-slate-300">Expand / Improve Comps</button>
                           <button type="button" onClick={() => void continueToVerdict()} disabled={verdictTransitioning || compSearchImproving || marketCheckLoading}
                             className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-50">
-                            Continue to Verdict (Unpriced) →
+                            Continue to Verdict →
                           </button>
                         </div>
-                        <p className="mt-2 text-[11px] font-semibold text-amber-800">No trusted comps selected. An unpriced verdict will not consume a credit.</p>
                       </>
                     )
                   ) : (
@@ -7648,6 +7644,16 @@ export function EvaluationWorkspace({
                   )}
                 </div>
               )}
+              {activeStage === "market" && conditionStepConfirmed &&
+                (comps.length > 0 || needsCompSearch) ? (
+                <div className="mt-auto border-t border-slate-100 pt-4">
+                  <button type="button"
+                    onClick={() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:text-blue-900">
+                    View comp results ↓
+                  </button>
+                </div>
+              ) : null}
             </article>
           </section>
               </div>
