@@ -7006,59 +7006,66 @@ export function EvaluationWorkspace({
           {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
 
           {activeStage === "verdict" ? (
-            <section className="grid gap-4 lg:grid-cols-3">
-              <article className="relative min-h-[166px] rounded-[20px] border border-emerald-200 bg-white px-5 pt-5 pb-14 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <section className="grid items-stretch gap-3 lg:grid-cols-3">
+              <article className="min-w-0 rounded-[18px] border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</span>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black leading-none text-emerald-700">Ready ✓</span>
+                  </div>
                   <button
                     type="button"
                     data-evaluation-entry-action="true"
-                    onClick={() => {
-                      openVehicleEdit();
-                    }}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                    onClick={openVehicleEdit}
+                    className="shrink-0 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 min-w-0 break-words text-lg font-black leading-snug text-slate-950 [overflow-wrap:anywhere]">{vehicleTitle}</div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+                <div className="mt-2 min-w-0 break-words text-base font-black leading-snug text-slate-950 [overflow-wrap:anywhere] sm:text-lg">{vehicleTitle}</div>
               </article>
 
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <article className="min-w-0 rounded-[18px] border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</span>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black leading-none text-emerald-700">Ready ✓</span>
+                  </div>
                   <button
                     type="button"
                     onClick={openConditionAnalysis}
-                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                    className="shrink-0 text-xs font-black text-violet-700 hover:text-violet-900"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
+                <div className="mt-2 break-words text-base font-black leading-snug text-slate-950 sm:text-lg">
                   {conditionReviewStatus === "issues"
                     ? "Known issues"
                     : conditionReviewStatus === "unknown"
                       ? "Condition unknown"
                       : "No material issues"} · {money(displayedReconReserve)}
                 </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
 
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <article className="min-w-0 rounded-[18px] border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</span>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black leading-none ${compSummary.includedCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {compSummary.includedCount > 0 ? "Ready ✓" : "Needs attention"}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={openCompMarketEditor}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                    className="shrink-0 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-lg font-black leading-snug text-slate-950">
-                  <span>{compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}</span>
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-base font-black leading-snug text-slate-950 sm:text-lg">
+                  <span className="min-w-0 break-words">{compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}</span>
                   {compSummary.confidence !== "High" ? (
                     <MarketConfidenceHelp
                       confidence={compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
@@ -7066,9 +7073,6 @@ export function EvaluationWorkspace({
                       reasons={compSummary.confidenceReasons || []}
                     />
                   ) : null}
-                </div>
-                <div className={`absolute bottom-4 left-5 rounded-full px-3 py-1 text-[10px] font-black ${compSummary.includedCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                  {compSummary.includedCount > 0 ? "Ready ✓" : "Needs attention"}
                 </div>
               </article>
             </section>
