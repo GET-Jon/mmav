@@ -1,5 +1,6 @@
-import { DEALERSHIP_DISCOVERY_QUESTIONS } from "@/lib/lot-logic-intelligence/dealership-questions";
 "use client";
+
+import { DEALERSHIP_DISCOVERY_QUESTIONS } from "@/lib/lot-logic-intelligence/dealership-questions";
 
 import { useMemo, useState } from "react";
 
