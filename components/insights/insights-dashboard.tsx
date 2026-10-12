@@ -625,62 +625,24 @@ export function InsightsDashboard({
         </section>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-            Team activity
-          </div>
-          <h3 className="mt-1 text-xl font-black text-slate-950">
-            Who is evaluating what
-          </h3>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">Teach Lot Logic</div>
+        <h3 className="mt-1 text-xl font-black text-slate-950">Help Lot Logic understand your dealership</h3>
+        <p className="mt-2 max-w-4xl text-sm font-semibold leading-6 text-slate-600">
+          Your buying history tells one side of the story. Add your dealership’s expertise
+          to make recommendations more relevant to how you actually operate.
+        </p>
 
-          <div className="mt-4 space-y-2">
-            {buyerStats.length ? (
-              buyerStats.map((buyer) => (
-                <div
-                  key={buyer.label}
-                  className="grid grid-cols-[1fr_auto_auto] items-center gap-4 rounded-xl border border-slate-100 px-4 py-3"
-                >
-                  <div className="font-black text-slate-900">{buyer.label}</div>
-                  <div className="text-right">
-                    <div className="text-sm font-black text-slate-900">
-                      {buyer.count}
-                    </div>
-                    <div className="text-[9px] font-bold uppercase text-slate-400">
-                      evaluated
-                    </div>
-                  </div>
-                  <div className="min-w-[80px] text-right">
-                    <div className="text-sm font-black text-slate-900">
-                      {buyer.purchased}
-                    </div>
-                    <div className="text-[9px] font-bold uppercase text-slate-400">
-                      purchased
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-sm font-semibold text-slate-500">
-                No evaluator activity in this period.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
-            Teach Lot Logic
-          </div>
-          <h3 className="mt-1 text-xl font-black text-slate-950">
-            Help Lot Logic understand your dealership
-          </h3>
-          <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
-            Upload dealership knowledge or answer questions surfaced from your
-            evaluator behavior. Explicit knowledge becomes available to future
-            recommendations.
-          </p>
-
+        <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-base font-black text-slate-950">Upload dealer information</h4>
+              <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">Documents</span>
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+              Upload playbooks, acquisition rules, buying notes or recon guidelines.
+              Lot Logic learns only the explicit information your document supports.
+            </p>
           {canTeach ? (
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -758,24 +720,39 @@ export function InsightsDashboard({
               answer training questions.
             </div>
           )}
-
-          <div className="mt-5">
-            <div className="font-black text-slate-950">
-              Questions Lot Logic has for you
+            <div className="mt-4 rounded-xl border border-blue-100 bg-white p-4">
+              <div className="text-xs font-black text-slate-800">What’s useful to upload?</div>
+              <p className="mt-1 text-xs font-medium leading-5 text-slate-600">
+                Buying criteria, preferred models, inspection standards, repair capabilities,
+                or a written explanation of what makes a deal attractive to your store.
+              </p>
             </div>
-            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-              These are generated from patterns in your evaluator activity.
-            </p>
           </div>
 
-          {saveMessage ? (
-            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-800">
-              {saveMessage}
+          <div className="flex min-w-0 flex-col rounded-xl border border-blue-100 bg-blue-50/30 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-base font-black text-slate-950">Dealership questions</h4>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                  Questions from your activity, plus helpful dealership setup questions.
+                  Answer only what you know; you can always edit saved notes later.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full border border-blue-100 bg-white px-3 py-1.5 text-[11px] font-black text-blue-700">
+                {questions.length} to explore
+              </span>
             </div>
-          ) : null}
 
-          <div className="mt-4 space-y-3">
-            {questions.map((question) => (
+            {saveMessage ? (
+              <div role="status" className="mt-4 rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-bold text-blue-800">
+                {saveMessage}
+              </div>
+            ) : null}
+
+            <div className="mt-4 min-h-[260px] max-h-[440px] overflow-y-auto overscroll-contain pr-1">
+              {questions.length ? (
+          <div className="space-y-3">
+            {visibleQuestions.map((question) => (
               <div
                 key={question.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
@@ -828,44 +805,106 @@ export function InsightsDashboard({
               </div>
             ))}
           </div>
-
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <Link
-              href="/settings?tab=intelligence"
-              className="text-xs font-black text-blue-700 hover:text-blue-900"
-            >
+              ) : (
+                <div className="rounded-xl border border-emerald-200 bg-white p-5 text-sm font-semibold text-slate-700">
+                  You’ve answered all the current questions. New questions will appear as Lot Logic learns from evaluations.
+                </div>
+              )}
+            </div>
+            {questions.length > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-blue-100 pt-4">
+                <span className="text-xs font-bold text-slate-500">
+                  {currentQuestionPage * questionPageSize + 1}–{Math.min((currentQuestionPage + 1) * questionPageSize, questions.length)} of {questions.length} questions
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={currentQuestionPage === 0}
+                    onClick={() => setQuestionPage(page => Math.max(0, page - 1))}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:border-blue-300 disabled:cursor-not-allowed disabled:opacity-40">
+                    Previous
+                  </button>
+                  <button type="button" disabled={currentQuestionPage >= pageCount - 1}
+                    onClick={() => setQuestionPage(page => Math.min(Math.max(0, pageCount - 1), page + 1))}
+                    className="rounded-lg bg-blue-700 px-3.5 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
+                    Next questions →
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <Link href="/settings?tab=intelligence"
+              className="inline-flex text-xs font-black text-blue-700 hover:text-blue-900">
               View everything Lot Logic knows about your dealership →
             </Link>
+        </div>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            Team activity
+          </div>
+          <h3 className="mt-1 text-xl font-black text-slate-950">
+            Who is evaluating what
+          </h3>
+
+          <div className="mt-4 space-y-2">
+            {buyerStats.length ? (
+              buyerStats.map((buyer) => (
+                <div
+                  key={buyer.label}
+                  className="grid grid-cols-[1fr_auto_auto] items-center gap-4 rounded-xl border border-slate-100 px-4 py-3"
+                >
+                  <div className="font-black text-slate-900">{buyer.label}</div>
+                  <div className="text-right">
+                    <div className="text-sm font-black text-slate-900">
+                      {buyer.count}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase text-slate-400">
+                      evaluated
+                    </div>
+                  </div>
+                  <div className="min-w-[80px] text-right">
+                    <div className="text-sm font-black text-slate-900">
+                      {buyer.purchased}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase text-slate-400">
+                      purchased
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm font-semibold text-slate-500">
+                No evaluator activity in this period.
+              </div>
+            )}
           </div>
         </section>
-      </div>
-
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5">
-        <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-          Coming as outcomes accumulate
-        </div>
-        <div className="mt-2 grid gap-3 md:grid-cols-3">
-          <div>
-            <div className="font-black text-slate-900">Gross per day held</div>
-            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-              Requires confirmed sale price and sale date.
-            </p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+            Looking ahead
           </div>
-          <div>
-            <div className="font-black text-slate-900">Fastest-turning inventory</div>
-            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-              Requires reliable acquired-to-sold lifecycle history.
-            </p>
-          </div>
-          <div>
-            <div className="font-black text-slate-900">Prediction accuracy</div>
-            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-              Compare Lot Logic sale, recon, and timing predictions with actual
-              outcomes.
-            </p>
+          <h3 className="mt-1 text-xl font-black text-slate-950">What Lot Logic will measure next</h3>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+            These insights become available once actual vehicle outcomes are recorded.
+          </p>
+          <div className="mt-4 divide-y divide-slate-100">
+            {[
+              ["Gross per day held", "Confirmed sale price and sale date"],
+              ["Fastest-turning inventory", "Reliable purchase-to-sale lifecycle"],
+              ["Prediction accuracy", "Actual sale, recon and hold-time outcomes"],
+            ].map(([heading, requirement]) => (
+              <div key={heading} className="flex flex-wrap items-start justify-between gap-2 py-3 first:pt-0 last:pb-0">
+                <span className="text-sm font-black text-slate-900">{heading}</span>
+                <span className="max-w-xs text-right text-xs font-semibold text-slate-500">{requirement}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
+
     </div>
   );
 }
