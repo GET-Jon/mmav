@@ -67,6 +67,54 @@ const initialEvaluation: ValuationInput = {
 
 const initialSelectedConditions: string[] = [];
 
+// Quiet, outline-first visual cues shared by the initial choices and the
+// confirmed condition state. They supplement labels, never replace them.
+type ConditionOptionKind = "fine" | "issues" | "unknown";
+
+function ConditionOptionIcon({
+  kind,
+  muted = false,
+}: {
+  kind: ConditionOptionKind;
+  muted?: boolean;
+}) {
+  const tone = muted
+    ? "bg-slate-100 text-slate-400 ring-slate-200/70"
+    : kind === "fine"
+      ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+      : kind === "issues"
+        ? "bg-violet-50 text-violet-600 ring-violet-100"
+        : "bg-amber-50 text-amber-600 ring-amber-100";
+
+  return (
+    <span aria-hidden="true"
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 ${tone}`}>
+      <svg width="20" height="20" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="1.7"
+        strokeLinecap="round" strokeLinejoin="round">
+        {kind === "fine" ? (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="m8 12 2.5 2.5L16 9" />
+          </>
+        ) : kind === "issues" ? (
+          <>
+            <path d="M7 8V6h3m4 2V6h-2" />
+            <path d="M5 10H3v5h2m14-4h2v4h-2" />
+            <path d="M7 9h10l2 2v6l-2 2H8l-3-3v-5z" />
+          </>
+        ) : (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9a2.7 2.7 0 0 1 5 1.4c0 1.7-2.5 2-2.5 3.8" />
+            <path d="M12 17h.01" />
+          </>
+        )}
+      </svg>
+    </span>
+  );
+}
+
 const conditionAnalysisProgressSteps = [
   "Reviewing condition notes",
   "Identifying material issues",
@@ -7323,10 +7371,14 @@ export function EvaluationWorkspace({
               {!vehicleStepConfirmed ? (
                 <div className="mt-5">
                   <div className="space-y-2 opacity-55">
-                    {["No material issues", "Known issues", "Condition unknown"].map((label) => (
-                      <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
-                        {label}
+                    {([
+                      { label: "No material issues", kind: "fine" },
+                      { label: "Known issues", kind: "issues" },
+                      { label: "Condition unknown", kind: "unknown" },
+                    ] as const).map(({ label, kind }) => (
+                      <div key={kind} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs font-bold text-slate-400">
+                        <ConditionOptionIcon kind={kind} muted />
+                        <span>{label}</span>
                       </div>
                     ))}
                   </div>
@@ -7337,16 +7389,31 @@ export function EvaluationWorkspace({
                   {conditionReviewStatus === "unreviewed" ? (
                     <div className="space-y-2">
                       <button type="button" onClick={() => chooseConditionReview("no_material_issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50">
-                        <div className="text-sm font-black text-slate-900">No material issues apparent</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind="fine" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-slate-900">No material issues apparent</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                          </div>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-violet-300 hover:bg-violet-50">
-                        <div className="text-sm font-black text-slate-900">There are known issues</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind="issues" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-slate-900">There are known issues</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                          </div>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("unknown")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-amber-300 hover:bg-amber-50">
-                        <div className="text-sm font-black text-slate-900">Condition is unknown</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind="unknown" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-slate-900">Condition is unknown</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                          </div>
+                        </div>
                       </button>
                     </div>
                   ) : conditionReviewStatus === "issues" ? (
@@ -7435,8 +7502,11 @@ export function EvaluationWorkspace({
                           ? "border-amber-200 bg-amber-50"
                           : "border-emerald-200 bg-emerald-50"
                       }`}>
-                        <div className="text-sm font-black text-slate-900">
-                          {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind={conditionReviewStatus === "unknown" ? "unknown" : "fine"} />
+                          <div className="text-sm font-black text-slate-900">
+                            {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
+                          </div>
                         </div>
                         {conditionReviewStatus === "unknown" ? (
                           <div className="mt-3">
@@ -7480,12 +7550,15 @@ export function EvaluationWorkspace({
                 </div>
               ) : conditionReviewComplete ? (
                 <div className="mt-4">
-                  <div className="text-sm font-bold text-slate-700">
-                    {conditionReviewStatus === "issues"
-                      ? `${conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0} reviewed issue${(conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0) === 1 ? "" : "s"} · ≈ ${money(getEffectiveConditionPlanningEstimate())} reserve`
-                      : conditionReviewStatus === "unknown"
-                        ? "Condition unknown · final verdict will require review"
-                        : "No material issues apparent"}
+                  <div className="flex items-center gap-3">
+                    <ConditionOptionIcon kind={conditionReviewStatus === "issues" ? "issues" : conditionReviewStatus === "unknown" ? "unknown" : "fine"} />
+                    <div className="min-w-0 text-sm font-bold text-slate-700">
+                      {conditionReviewStatus === "issues"
+                        ? `${conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0} reviewed issue${(conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0) === 1 ? "" : "s"} · ≈ ${money(getEffectiveConditionPlanningEstimate())} reserve`
+                        : conditionReviewStatus === "unknown"
+                          ? "Condition unknown · final verdict will require review"
+                          : "No material issues apparent"}
+                    </div>
                   </div>
                   <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Condition reviewed ✓</div>
                 </div>
