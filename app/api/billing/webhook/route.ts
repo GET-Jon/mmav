@@ -6,6 +6,10 @@ import {
   verifyStripeWebhook,
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import {
+  configuredStripeLiveMode,
+  currentPreviewBillingIsolation,
+} from "@/lib/billing/preview-isolation";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -104,6 +108,14 @@ async function companyIdFromCustomer(
 }
 
 export async function POST(request: NextRequest) {
+  const isolation = currentPreviewBillingIsolation();
+  if (!isolation.safe) {
+    return NextResponse.json(
+      { error: isolation.reason || "Preview billing is not isolated." },
+      { status: 503 },
+    );
+  }
+
   const payload = await request.text();
   const signature = request.headers.get("stripe-signature");
 
@@ -119,6 +131,17 @@ export async function POST(request: NextRequest) {
   const eventType = stringValue(event.type);
   const eventData = record(event.data);
   const object = record(eventData.object);
+  const expectedLiveMode = configuredStripeLiveMode();
+  if (
+    expectedLiveMode === null ||
+    typeof event.livemode !== "boolean" ||
+    event.livemode !== expectedLiveMode
+  ) {
+    return NextResponse.json(
+      { error: "Stripe event mode does not match the configured billing environment." },
+      { status: 400 },
+    );
+  }
 
   if (!eventId || !eventType) {
     return NextResponse.json({ error: "Malformed Stripe event." }, { status: 400 });
