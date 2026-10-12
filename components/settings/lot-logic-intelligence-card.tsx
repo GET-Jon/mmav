@@ -79,16 +79,18 @@ function tabClass(active: boolean) {
 
 export function LotLogicIntelligenceCard({
   canReview,
+  initialSection = "validation",
   initialKnowledgeSources,
   initialInsights,
   initialAssertions,
 }: {
   canReview: boolean;
+  initialSection?: IntelligenceSection;
   initialKnowledgeSources: IntelligenceKnowledgeSource[];
   initialInsights: IntelligenceInsight[];
   initialAssertions: IntelligenceAssertion[];
 }) {
-  const [section, setSection] = useState<IntelligenceSection>("validation");
+  const [section, setSection] = useState<IntelligenceSection>(initialSection);
   const [knowledgeSources, setKnowledgeSources] = useState(initialKnowledgeSources);
   const [insights, setInsights] = useState(initialInsights);
   const [assertions, setAssertions] = useState(initialAssertions);
