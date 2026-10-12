@@ -36,6 +36,7 @@ type BillingStatus = {
     trialEndsAt?: string | null;
     trialActive?: boolean;
     paidActive?: boolean;
+    paidBillingPeriodReady?: boolean;
     trialEvaluationsUsed?: number;
     trialEvaluationsRemaining?: number | null;
     monthlyEvaluationsUsed?: number;
@@ -241,6 +242,12 @@ export function BillingSettingsCard() {
           </div>
         ) : null}
 
+        {usage?.paidActive && usage.paidBillingPeriodReady === false ? (
+          <div role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
+            We are waiting for Stripe to confirm this subscription's current billing period. Paid monthly allowance will resume after synchronization; gifted evaluations remain available.
+          </div>
+        ) : null}
+
         {billing?.cancel_at_period_end ? (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
             This subscription is scheduled to cancel at the end of the current billing period.
@@ -265,8 +272,13 @@ export function BillingSettingsCard() {
             <div className="mt-2 text-lg font-black text-slate-950">
               {usage?.trialActive && !usage?.paidActive
                 ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
-                : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this month`}
+                : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this billing period`}
             </div>
+            {usage?.paidActive && usage?.paidBillingPeriodReady && billing?.current_period_end ? (
+              <div className="mt-1 text-[10px] font-semibold text-slate-500">
+                Renews {dateLabel(billing.current_period_end)}
+              </div>
+            ) : null}
           </div>
           <div className="rounded-xl border border-[#D4AF37] bg-[#FFF8E1] p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-[#8A6500]">Gifted evaluations</div>
