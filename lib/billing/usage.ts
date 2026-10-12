@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
+import { calendarMonthWindow, resolvePaidUsageWindow } from "@/lib/billing/billing-period";
 
 export type UsageKind =
   | "evaluation_completed"
@@ -72,11 +73,6 @@ function normalizePlanKey(value: unknown): PlanKey {
   return "starter";
 }
 
-function monthStartIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-}
-
 function isPaidStatus(status: string) {
   return status === "active" || status === "past_due" || status === "comped";
 }
@@ -136,7 +132,7 @@ async function countUsage(
   supabase: SupabaseClient,
   companyId: string,
   eventType: UsageKind,
-  options: { subjectKey?: string | null; since?: string | null } = {},
+  options: { subjectKey?: string | null; since?: string | null; before?: string | null } = {},
 ) {
   let query = supabase
     .from("company_usage_events")
@@ -146,6 +142,7 @@ async function countUsage(
 
   if (options.subjectKey) query = query.eq("subject_key", options.subjectKey);
   if (options.since) query = query.gte("created_at", options.since);
+  if (options.before) query = query.lt("created_at", options.before);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -164,7 +161,7 @@ export async function getCompanyUsageContext(
   ] = await Promise.all([
     supabase
       .from("company_billing_accounts")
-      .select("status,plan_key,trial_ends_at")
+      .select("status,plan_key,trial_ends_at,stripe_subscription_id,current_period_start,current_period_end")
       .eq("company_id", company.companyId)
       .maybeSingle(),
     supabase
@@ -189,6 +186,14 @@ export async function getCompanyUsageContext(
     !internalUnlimited &&
     status === "trialing" &&
     Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now());
+  const paidActive = internalUnlimited || isPaidStatus(status);
+  const paidUsageWindow = paidActive
+    ? resolvePaidUsageWindow({
+        stripeSubscriptionId: billing?.stripe_subscription_id,
+        currentPeriodStart: billing?.current_period_start,
+        currentPeriodEnd: billing?.current_period_end,
+      })
+    : calendarMonthWindow(new Date());
 
   return {
     company,
@@ -198,7 +203,11 @@ export async function getCompanyUsageContext(
     trialEndsAt: trialEndsAt?.toISOString() || null,
     trialActive,
     giftedEvaluations,
-    paidActive: internalUnlimited || isPaidStatus(status),
+    paidActive,
+    paidUsageWindow,
+    // A Stripe subscription without an authoritative, current period must
+    // not get a calendar-reset paid allowance (even on November 1).
+    paidBillingPeriodReady: !paidActive || paidUsageWindow.kind !== "unsynchronized",
   };
 }
 
@@ -214,18 +223,29 @@ export async function getUsageSummary(
     trialActive,
     paidActive,
     giftedEvaluations,
+    paidUsageWindow,
+    paidBillingPeriodReady,
   } = context;
 
-  const [trialEvaluationsUsed, monthlyEvaluationsUsed, monthlyProviderCalls] =
+  // Paid quotas (both evaluations and third-party API calls) follow the same
+  // Stripe period. Trial activity predating that period never consumes it.
+  const usageWindow = paidActive ? paidUsageWindow : calendarMonthWindow(new Date());
+  const windowFilter = {
+    since: usageWindow.start,
+    before: usageWindow.end,
+  };
+  const [trialEvaluationsUsed, countedEvaluations, countedProviderCalls] =
     await Promise.all([
       countUsage(supabase, company.companyId, "evaluation_completed"),
-      countUsage(supabase, company.companyId, "evaluation_completed", {
-        since: monthStartIso(),
-      }),
-      countUsage(supabase, company.companyId, "provider_api_call", {
-        since: monthStartIso(),
-      }),
+      paidBillingPeriodReady
+        ? countUsage(supabase, company.companyId, "evaluation_completed", windowFilter)
+        : Promise.resolve(0),
+      paidBillingPeriodReady
+        ? countUsage(supabase, company.companyId, "provider_api_call", windowFilter)
+        : Promise.resolve(0),
     ]);
+  const monthlyEvaluationsUsed = countedEvaluations;
+  const monthlyProviderCalls = countedProviderCalls;
 
   const limits = PLAN_LIMITS[planKey];
 
@@ -238,13 +258,16 @@ export async function getUsageSummary(
     monthlyEvaluationsUsed,
     monthlyEvaluationsRemaining: internalUnlimited
       ? null
-      : Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed),
+      : !paidBillingPeriodReady
+        ? 0
+        : Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed),
     giftedEvaluationsRemaining: internalUnlimited ? null : giftedEvaluations,
     effectiveEvaluationsRemaining: internalUnlimited
       ? null
       : paidActive
-        ? Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed) +
-          giftedEvaluations
+        ? (paidBillingPeriodReady
+          ? Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed)
+          : 0) + giftedEvaluations
         : Math.max(0, TRIAL_LIMITS.evaluationsTotal - trialEvaluationsUsed) +
           giftedEvaluations,
     monthlyProviderCalls,
@@ -252,7 +275,7 @@ export async function getUsageSummary(
     trialLimits: TRIAL_LIMITS,
     canUsePaidProviders:
       internalUnlimited ||
-      paidActive ||
+      (paidActive && paidBillingPeriodReady) ||
       giftedEvaluations > 0 ||
       (trialActive && trialEvaluationsUsed < TRIAL_LIMITS.evaluationsTotal),
   };
@@ -337,6 +360,21 @@ export async function checkUsageAllowance(args: {
   }
 
   if (
+    summary.paidActive &&
+    !summary.paidBillingPeriodReady &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
+    return {
+      allowed: false as const,
+      code: "BILLING_PERIOD_UNAVAILABLE",
+      status: 503,
+      message: "Subscription billing period is awaiting synchronization. Please try again shortly.",
+      summary,
+    };
+  }
+
+  if (
     kind === "evaluation_completed" &&
     summary.paidActive &&
     summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth &&
@@ -416,7 +454,8 @@ export async function checkUsageAllowance(args: {
     !summary.internalUnlimited &&
     giftedCreditsAvailable &&
     (summary.paidActive
-      ? summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
+      ? !summary.paidBillingPeriodReady ||
+        summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
       : !summary.trialActive ||
         summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal);
 
