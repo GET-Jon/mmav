@@ -6753,18 +6753,23 @@ export function EvaluationWorkspace({
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">{dealershipProfile.websiteUrl ? "Website saved" : "Add in settings"}</span>
                   </div>
                   {dealershipProfile.websiteUrl ? <p className="mt-2 break-all text-xs font-bold text-blue-700">{dealershipProfile.websiteUrl}</p> : null}
-                  <Link href="/settings?tab=organization" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Edit dealership profile</Link>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Link href="/settings?tab=intelligence&section=knowledge" className="text-xs font-bold text-blue-700 hover:underline">Edit dealership profile →</Link>
+                    <Link href="/settings?tab=organization" className="text-xs font-semibold text-slate-600 hover:text-blue-700 hover:underline">Edit website URL</Link>
+                  </div>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Website analysis will help identify inventory mix, price bands, and dealership positioning. Your URL is saved as context; automatic website analysis is not active yet.</p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-sm font-black text-slate-900">Your acquisition preferences</div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">This will be where dealers add preferred makes, body styles, price bands, mileage/age targets, target gross, and categories they avoid.</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Add preferred makes, body styles, price bands, mileage and age targets, target gross, and vehicles to avoid. Lot Logic uses your saved dealership knowledge when assessing fit.</p>
+                  <Link href="/settings?tab=intelligence&section=knowledge" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Manage acquisition preferences →</Link>
                 </div>
 
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
                   <div className="text-sm font-black text-slate-900">Deal spec / buying guide</div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Planned: upload a dealership buying guide or deal-spec document so Lot Logic can incorporate those rules into dealer fit.</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Upload a buying guide or deal-spec document in Insights so Lot Logic can learn your explicit acquisition rules.</p>
+                  <Link href="/insights#teach-lot-logic" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Upload buying guide →</Link>
                 </div>
               </div>
             </div>
