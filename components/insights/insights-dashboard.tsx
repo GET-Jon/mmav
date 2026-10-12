@@ -625,7 +625,7 @@ export function InsightsDashboard({
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <section id="teach-lot-logic" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">Teach Lot Logic</div>
         <h3 className="mt-1 text-xl font-black text-slate-950">Help Lot Logic understand your dealership</h3>
         <p className="mt-2 max-w-4xl text-sm font-semibold leading-6 text-slate-600">
