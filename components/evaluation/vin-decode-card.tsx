@@ -2,13 +2,6 @@
 
 import type { VinDecodeResult } from "@/types/vin";
 
-type AppliedVehicleProfile = {
-  profile: string;
-  ruleName: string;
-  source: string;
-  reason: string;
-};
-
 type ManualVehicleBasics = {
   year: string;
   make: string;
@@ -66,14 +59,10 @@ export function VinDecodeCard({
   decoded,
   manualVehicle,
   onManualVehicleChange,
-  appliedVehicleProfile,
-  onReapplyVehicleProfile,
 }: {
   decoded?: VinDecodeResult | null;
   manualVehicle: ManualVehicleBasics;
   onManualVehicleChange: (key: ManualVehicleField, value: string) => void;
-  appliedVehicleProfile?: AppliedVehicleProfile | null;
-  onReapplyVehicleProfile?: () => void;
 }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -168,37 +157,7 @@ export function VinDecodeCard({
             <FieldRow label="Plant" value={decoded.plantCountry} />
           </div>
 
-          {appliedVehicleProfile ? (
-            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
-                    Applied Vehicle Profile
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-slate-950">
-                    {appliedVehicleProfile.profile}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {appliedVehicleProfile.ruleName} ·{" "}
-                    {appliedVehicleProfile.source}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {appliedVehicleProfile.reason}
-                  </p>
-                </div>
 
-                {onReapplyVehicleProfile ? (
-                  <button
-                    type="button"
-                    onClick={onReapplyVehicleProfile}
-                    className="shrink-0 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white"
-                  >
-                    Reapply
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </>
       )}
     </section>
