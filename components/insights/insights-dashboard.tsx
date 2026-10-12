@@ -645,26 +645,16 @@ export function InsightsDashboard({
             </p>
           {canTeach ? (
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="font-black text-slate-950">
-                    Upload dealership knowledge
-                  </div>
-                  <p className="mt-1 max-w-xl text-xs font-semibold leading-5 text-slate-600">
-                    Dealer playbooks, buying notes, customer sweet spots, brand
-                    preferences, recon capabilities, or other team guidance.
-                    Lot Logic extracts only explicit statements supported by the
-                    document.
-                  </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold text-slate-600">
+                  Supported documents
                 </div>
-                <div className="shrink-0 rounded-lg bg-white px-3 py-2 text-[10px] font-bold leading-4 text-slate-500 shadow-sm">
-                  PDF · TXT · MD · CSV · RTF · JSON
-                  <br />
-                  Up to 10 MB
+                <div className="rounded-lg bg-white px-3 py-2 text-[10px] font-bold leading-4 text-slate-500 shadow-sm">
+                  PDF · TXT · MD · CSV · RTF · JSON · Up to 10 MB
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1.3fr_auto] md:items-end">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:items-end">
                 <label className="block">
                   <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
                     Optional title
@@ -696,7 +686,7 @@ export function InsightsDashboard({
                   type="button"
                   disabled={!knowledgeFile || uploadingKnowledge}
                   onClick={() => void uploadDealershipKnowledge()}
-                  className="rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="sm:col-span-2 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {uploadingKnowledge ? "Learning..." : "Upload & Learn"}
                 </button>
@@ -840,8 +830,8 @@ export function InsightsDashboard({
         </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid items-start gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
             Team activity
           </div>
@@ -881,7 +871,7 @@ export function InsightsDashboard({
               </div>
             )}
           </div>
-        </section>
+        </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
             Looking ahead
