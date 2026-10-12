@@ -30,6 +30,7 @@ type SettingsTab =
 type SettingsPageProps = {
   searchParams?: Promise<{
     tab?: string | string[];
+    section?: string | string[];
   }>;
 };
 
@@ -132,6 +133,15 @@ async function loadSettingsContext(userId: string) {
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeTab = normalizeTab(resolvedSearchParams.tab);
+  const requestedIntelligenceSection = Array.isArray(resolvedSearchParams.section)
+    ? resolvedSearchParams.section[0]
+    : resolvedSearchParams.section;
+  const intelligenceSection = (
+    ["knowledge", "insights", "validation", "policies", "history", "reset"]
+      .includes(requestedIntelligenceSection || "")
+      ? requestedIntelligenceSection
+      : "validation"
+  ) as "knowledge" | "insights" | "validation" | "policies" | "history" | "reset";
   const user = await getCurrentUser();
 
   if (!user) redirect("/login?next=/settings");
@@ -327,6 +337,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <>
             <LotLogicIntelligenceCard
               canReview={companyContext.company.role === "company_admin"}
+              initialSection={intelligenceSection}
               initialKnowledgeSources={companyContext.intelligence.knowledgeSources}
               initialInsights={companyContext.intelligence.insights}
               initialAssertions={companyContext.intelligence.assertions}
