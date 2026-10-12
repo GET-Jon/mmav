@@ -23,6 +23,17 @@ function firstSubscriptionPriceId(subscription: JsonRecord) {
   return stringValue(price.id);
 }
 
+function subscriptionPeriodStart(subscription: JsonRecord) {
+  const direct = unixToIso(subscription.current_period_start);
+  if (direct) return direct;
+
+  // Newer Stripe subscription API versions expose billing periods on items.
+  const items = record(subscription.items);
+  const data = Array.isArray(items.data) ? items.data : [];
+  const first = record(data[0]);
+  return unixToIso(first.current_period_start);
+}
+
 function subscriptionPeriodEnd(subscription: JsonRecord) {
   const direct = unixToIso(subscription.current_period_end);
   if (direct) return direct;
@@ -165,6 +176,51 @@ export async function POST(request: NextRequest) {
       const planKey = planKeyForSubscription(object);
       const entitlements = planEntitlements(planKey);
       const rawStatus = stringValue(object.status) || "not_configured";
+      const periodStart = subscriptionPeriodStart(object);
+      const periodEnd = subscriptionPeriodEnd(object);
+      // An active Stripe subscription without both period boundaries cannot
+      // be used to replenish paid usage; return retryable failure so Stripe
+      // resends it instead of silently reverting to calendar-month resets.
+      if (
+        ["active", "trialing", "past_due", "unpaid", "paused"].includes(rawStatus) &&
+        (!periodStart || !periodEnd || periodStart >= periodEnd)
+      ) {
+        return NextResponse.json(
+          { error: "Stripe subscription event is missing a valid billing period." },
+          { status: 503 },
+        );
+      }
+
+      const { data: currentBilling, error: currentBillingError } = await admin
+        .from("company_billing_accounts")
+        .select("current_period_start,stripe_subscription_id")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (currentBillingError) {
+        return NextResponse.json({ error: currentBillingError.message }, { status: 500 });
+      }
+      // A delayed older webhook must not rewind the company's quota window.
+      const oldStart = currentBilling?.current_period_start
+        ? new Date(currentBilling.current_period_start).getTime()
+        : null;
+      const newStart = periodStart ? new Date(periodStart).getTime() : null;
+      const stalePeriod = oldStart !== null && newStart !== null &&
+        oldStart > newStart &&
+        (!currentBilling?.stripe_subscription_id ||
+          currentBilling.stripe_subscription_id === subscriptionId);
+      if (stalePeriod) {
+        const { error: staleEventError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId,
+          company_id: companyId,
+          event_type: eventType,
+          stripe_object_id: stringValue(object.id),
+          metadata: { livemode: Boolean(event.livemode), ignored: "older_period" },
+        });
+        if (staleEventError) {
+          return NextResponse.json({ error: staleEventError.message }, { status: 500 });
+        }
+        return NextResponse.json({ received: true, ignored: "older_period" });
+      }
       const mappedStatus =
         rawStatus === "incomplete" || rawStatus === "incomplete_expired"
           ? "unpaid"
@@ -188,7 +244,8 @@ export async function POST(request: NextRequest) {
             plan_key: planKey,
             stripe_price_id: firstSubscriptionPriceId(object),
             trial_ends_at: unixToIso(object.trial_end),
-            current_period_end: subscriptionPeriodEnd(object),
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
             cancel_at_period_end: Boolean(object.cancel_at_period_end),
             updated_at: new Date().toISOString(),
           },
