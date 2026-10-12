@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { DEALERSHIP_DISCOVERY_QUESTIONS } from "@/lib/lot-logic-intelligence/dealership-questions";
 
 type WindowDays = 30 | 60 | 90;
 
@@ -159,25 +160,7 @@ function buildQuestions(rows: InsightEvaluation[], groups: GroupStat[]) {
     });
   }
 
-  if (!questions.length) {
-    questions.push({
-      id: "sweet-spot",
-      title: "What is your dealership's real sweet spot?",
-      prompt:
-        "Tell Lot Logic which vehicle types, price bands, mileage ranges, brands, or customer needs you are most excited to buy for.",
-      knowledgeTitle: "Dealership acquisition sweet spot",
-    });
-  }
-
-  questions.push({
-    id: "hold-time",
-    title: "How patient are you with inventory?",
-    prompt:
-      "What is a comfortable retail hold period for your dealership, and at what point does a car start to feel too slow?",
-    knowledgeTitle: "Inventory hold-time preference",
-  });
-
-  return questions.slice(0, 4);
+  return questions.slice(0, 3);
 }
 
 function StatCard({
@@ -212,11 +195,15 @@ function StatCard({
 export function InsightsDashboard({
   evaluations,
   canTeach,
+  initialLearnedQuestionTitles,
 }: {
   evaluations: InsightEvaluation[];
   canTeach: boolean;
+  initialLearnedQuestionTitles: string[];
 }) {
   const [days, setDays] = useState<WindowDays>(30);
+  const [learnedTitles, setLearnedTitles] = useState(initialLearnedQuestionTitles);
+  const [questionPage, setQuestionPage] = useState(0);
   const [answeringId, setAnsweringId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [savedQuestions, setSavedQuestions] = useState<Record<string, boolean>>(
@@ -299,9 +286,25 @@ export function InsightsDashboard({
       .sort((a, b) => b.count - a.count);
   }, [rows]);
 
-  const questions = useMemo(
-    () => buildQuestions(rows, groups),
-    [rows, groups],
+  const questions = useMemo(() => {
+    const behavioral = buildQuestions(rows, groups);
+    const guided = DEALERSHIP_DISCOVERY_QUESTIONS.map((item, index) => ({
+      id: `guided-${index}`,
+      title: item.title,
+      prompt: item.question,
+      knowledgeTitle: item.title,
+    }));
+    const learned = new Set(learnedTitles.map(value => value.toLowerCase().trim()));
+    return [...behavioral, ...guided].filter(question =>
+      !learned.has(question.knowledgeTitle.toLowerCase().trim()) &&
+      !savedQuestions[question.id]);
+  }, [rows, groups, learnedTitles, savedQuestions]);
+  const questionPageSize = 2;
+  const pageCount = Math.ceil(questions.length / questionPageSize);
+  const currentQuestionPage = Math.min(questionPage, Math.max(0, pageCount - 1));
+  const visibleQuestions = questions.slice(
+    currentQuestionPage * questionPageSize,
+    (currentQuestionPage + 1) * questionPageSize,
   );
 
   const topPattern = mostEvaluated[0] || null;
@@ -336,6 +339,7 @@ export function InsightsDashboard({
       }
 
       setSavedQuestions((current) => ({ ...current, [question.id]: true }));
+      setLearnedTitles((current) => [...current, question.knowledgeTitle]);
       setSaveMessage(
         "Added to Lot Logic Intelligence. Future recommendations can use this context.",
       );
