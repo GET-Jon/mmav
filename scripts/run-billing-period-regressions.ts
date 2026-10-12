@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { calendarMonthWindow, resolvePaidUsageWindow } from "../lib/billing/billing-period";
+import { checkPreviewBillingIsolation, isDeployPreview } from "../lib/billing/preview-isolation";
 
 const windowFor = (start: string | null, end: string | null, now: string, subscription = "sub_live") =>
   resolvePaidUsageWindow({
@@ -45,4 +46,28 @@ const feb = calendarMonthWindow(new Date("2028-02-29T17:00:00Z"));
 assert.equal(feb.start, "2028-02-01T00:00:00.000Z");
 assert.equal(feb.end, "2028-03-01T00:00:00.000Z");
 
-console.log("Billing-period regressions passed");
+const preview = {
+  context: "deploy-preview",
+  deployPrimeUrl: "https://deploy-preview-19--mmav.netlify.app",
+  stripeSecretKey: "sk_test_fake",
+  supabaseUrl: "https://separatetestproject.supabase.co",
+};
+assert.equal(isDeployPreview(preview), true);
+assert.equal(checkPreviewBillingIsolation(preview).safe, true, "Proper test isolation permits checkout");
+assert.equal(checkPreviewBillingIsolation({ ...preview, stripeSecretKey: "sk_live_fake" }).safe, false,
+  "Preview must not accept live Stripe credentials");
+assert.equal(checkPreviewBillingIsolation({ ...preview, stripeSecretKey: undefined }).safe, false,
+  "Preview must fail closed if Stripe is unset");
+assert.equal(checkPreviewBillingIsolation({ ...preview, supabaseUrl: "https://ymlleqpbpgzydyzwhlqq.supabase.co" }).safe, false,
+  "Preview must not write to production Supabase");
+assert.equal(checkPreviewBillingIsolation({ ...preview, supabaseUrl: undefined }).safe, false);
+assert.equal(checkPreviewBillingIsolation({
+  ...preview, context: undefined,
+}).safe, true, "Preview hostname also enforces the same guards");
+assert.equal(checkPreviewBillingIsolation({
+  ...preview, context: "production", deployPrimeUrl: "https://yourlotlogic.com",
+  stripeSecretKey: "sk_live_fake",
+  supabaseUrl: "https://ymlleqpbpgzydyzwhlqq.supabase.co",
+}).safe, true, "Production configuration remains unaffected by preview-only checks");
+
+console.log("Billing-period and preview-isolation regressions passed");
