@@ -27,6 +27,9 @@ type UsageStatus = {
   internalUnlimited?: boolean;
   trialActive?: boolean;
   paidActive?: boolean;
+  paidBillingPeriodReady?: boolean;
+  status?: string;
+  planKey?: "starter" | "dealer" | "dealer_pro";
   trialEvaluationsUsed?: number;
   trialEvaluationsRemaining?: number | null;
   monthlyEvaluationsUsed?: number;
@@ -71,44 +74,83 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const evaluationUsage = (() => {
     if (!usage || usage.internalUnlimited) return null;
 
-    const gifted = Number(usage.giftedEvaluationsRemaining || 0);
+    const planName = usage.planKey === "dealer_pro"
+      ? "Dealer Pro"
+      : usage.planKey === "dealer"
+        ? "Dealer"
+        : "Starter";
+    const status = String(usage.status || "");
+    const gifted = Math.max(0, Number(usage.giftedEvaluationsRemaining || 0));
 
-    if (!usage.paidActive) {
+    // Stripe can create a subscription before payment is confirmed.
+    // Never label an unpaid subscription as a free trial.
+    if (["unpaid", "past_due", "paused"].includes(status)) {
+      return {
+        used: 0,
+        total: 1,
+        gifted: 0,
+        label: `${planName} · Payment due`,
+      };
+    }
+
+    if (usage.paidActive) {
+      if (usage.paidBillingPeriodReady === false) {
+        return {
+          used: 0,
+          total: 1,
+          gifted: 0,
+          label: `${planName} · Syncing billing`,
+        };
+      }
+
+      const monthlyLimit = Math.max(0, Number(usage.limits?.evaluationsPerMonth || 0));
+      if (!monthlyLimit) return null;
+      const total = monthlyLimit + gifted;
+      const remaining = Math.max(
+        0,
+        Number(usage.effectiveEvaluationsRemaining ?? usage.monthlyEvaluationsRemaining ?? 0),
+      );
+      return {
+        used: Math.max(0, total - remaining),
+        total,
+        gifted,
+        label: `${planName} · ${remaining} evals left`,
+      };
+    }
+
+    if (usage.trialActive) {
       const used = Number(usage.trialEvaluationsUsed || 0);
       const total = 5;
       return {
         used,
         total,
         gifted,
-        label:
-          gifted > 0
-            ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
-            : `${Math.min(used, total)}/${total} free evals`,
+        label: gifted > 0
+          ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
+          : `${Math.min(used, total)}/${total} free evals`,
       };
     }
 
-    const total = Number(usage.limits?.evaluationsPerMonth || 0);
-    if (!total) return null;
-
-    const used = Number(usage.monthlyEvaluationsUsed || 0);
     return {
-      used,
-      total,
-      gifted,
-      label:
-        gifted > 0
-          ? `${used}/${total} evals · ${gifted} gifted`
-          : `${used}/${total} evals`,
+      used: 1,
+      total: 1,
+      gifted: 0,
+      label: "Trial ended · Choose plan",
     };
   })();
 
   const trialPaywallReached =
     Boolean(usage) &&
     !usage?.paidActive &&
+    usage?.status === "trialing" &&
     usage?.canUsePaidProviders === false;
 
   const evaluationUsageTone = (() => {
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
+
+    if (["unpaid", "past_due", "paused"].includes(String(usage?.status || ""))) {
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    }
 
     if (Number(evaluationUsage.gifted || 0) > 0) {
       return "border-[#D4AF37] bg-[#FFF8E1] text-[#7A5A00] shadow-[0_0_0_1px_rgba(212,175,55,0.12)]";
