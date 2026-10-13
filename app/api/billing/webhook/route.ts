@@ -6,6 +6,7 @@ import {
   verifyStripeWebhook,
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { firstPeriodTrialRollover } from "@/lib/billing/trial-rollover";
 import {
   configuredStripeLiveMode,
   currentPreviewBillingIsolation,
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
 
       const { data: currentBilling, error: currentBillingError } = await admin
         .from("company_billing_accounts")
-        .select("current_period_start,stripe_subscription_id")
+        .select("current_period_start,stripe_subscription_id,trial_rollover_period_start")
         .eq("company_id", companyId)
         .maybeSingle();
       if (currentBillingError) {
@@ -298,6 +299,58 @@ export async function POST(request: NextRequest) {
 
       if (entitlementError) {
         return NextResponse.json({ error: entitlementError.message }, { status: 500 });
+      }
+
+      // Record unused free-trial evaluations once, only when Stripe first
+      // confirms an active paid subscription. The credit is tied to this
+      // first billing period rather than adding to non-expiring gifts.
+      // A conditional update makes retries and competing events idempotent.
+      if (
+        rawStatus === "active" &&
+        periodStart &&
+        !currentBilling?.trial_rollover_period_start
+      ) {
+        const { data: companyRow, error: companyLookupError } = await admin
+          .from("companies")
+          .select("created_at")
+          .eq("id", companyId)
+          .single();
+        if (companyLookupError) {
+          return NextResponse.json({ error: companyLookupError.message }, { status: 500 });
+        }
+
+        const { data: trialEvaluations, error: trialUsageError } = await admin
+          .from("company_usage_events")
+          .select("units")
+          .eq("company_id", companyId)
+          .eq("event_type", "evaluation_completed")
+          .lt("created_at", periodStart);
+        if (trialUsageError) {
+          return NextResponse.json({ error: trialUsageError.message }, { status: 500 });
+        }
+
+        const trialUsed = (trialEvaluations || []).reduce(
+          (sum, row) => sum + Number(row.units || 0),
+          0,
+        );
+        const carryover = firstPeriodTrialRollover({
+          companyCreatedAt: companyRow?.created_at,
+          firstPeriodStart: periodStart,
+          trialEvaluationsUsed: trialUsed,
+        });
+
+        const { error: rolloverError } = await admin
+          .from("company_billing_accounts")
+          .update({
+            trial_rollover_evaluations: carryover,
+            trial_rollover_period_start: periodStart,
+          })
+          .eq("company_id", companyId)
+          .eq("stripe_subscription_id", subscriptionId)
+          .is("trial_rollover_period_start", null);
+        if (rolloverError) {
+          return NextResponse.json({ error: rolloverError.message }, { status: 500 });
+        }
       }
     }
   }
