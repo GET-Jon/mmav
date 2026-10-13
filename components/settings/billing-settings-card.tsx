@@ -41,6 +41,9 @@ type BillingStatus = {
     trialEvaluationsRemaining?: number | null;
     monthlyEvaluationsUsed?: number;
     monthlyEvaluationsRemaining?: number | null;
+    trialRolloverEvaluations?: number;
+    trialRolloverEvaluationsRemaining?: number;
+    firstCycleAllowance?: number;
     giftedEvaluationsRemaining?: number | null;
     effectiveEvaluationsRemaining?: number | null;
     monthlyProviderCalls?: number;
@@ -272,8 +275,15 @@ export function BillingSettingsCard() {
             <div className="mt-2 text-lg font-black text-slate-950">
               {usage?.trialActive && !usage?.paidActive
                 ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
-                : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.limits?.evaluationsPerMonth || "—"} this billing period`}
+                : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.firstCycleAllowance ?? usage?.limits?.evaluationsPerMonth ?? "—"} this billing period`}
             </div>
+            {usage?.paidActive && (usage?.trialRolloverEvaluations || 0) > 0 ? (
+              <div className="mt-2 rounded-lg bg-blue-50 px-2 py-2 text-[11px] font-semibold leading-5 text-blue-800">
+                Includes {usage?.trialRolloverEvaluations} unused free-trial evaluations
+                ({usage?.trialRolloverEvaluationsRemaining} remaining).
+                These carry over only into your first paid billing period and expire at renewal.
+              </div>
+            ) : null}
             {usage?.paidActive && usage?.paidBillingPeriodReady && billing?.current_period_end ? (
               <div className="mt-1 text-[10px] font-semibold text-slate-500">
                 Renews {dateLabel(billing.current_period_end)}
