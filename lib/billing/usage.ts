@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { calendarMonthWindow, resolvePaidUsageWindow } from "@/lib/billing/billing-period";
+import { remainingTrialRollover, trialRolloverForPeriod } from "@/lib/billing/trial-rollover";
 
 export type UsageKind =
   | "evaluation_completed"
@@ -161,7 +162,7 @@ export async function getCompanyUsageContext(
   ] = await Promise.all([
     supabase
       .from("company_billing_accounts")
-      .select("status,plan_key,trial_ends_at,stripe_subscription_id,current_period_start,current_period_end")
+      .select("status,plan_key,trial_ends_at,stripe_subscription_id,current_period_start,current_period_end,trial_rollover_evaluations,trial_rollover_period_start")
       .eq("company_id", company.companyId)
       .maybeSingle(),
     supabase
@@ -195,10 +196,22 @@ export async function getCompanyUsageContext(
       })
     : calendarMonthWindow(new Date());
 
+  const paidBillingPeriodReady =
+    !paidActive || paidUsageWindow.kind !== "unsynchronized";
+  const trialRolloverEvaluations =
+    paidActive && paidBillingPeriodReady && !internalUnlimited
+      ? trialRolloverForPeriod({
+          firstPeriodStart: billing?.trial_rollover_period_start,
+          currentPeriodStart: billing?.current_period_start,
+          carryoverEvaluations: billing?.trial_rollover_evaluations,
+        })
+      : 0;
+
   return {
     company,
     status,
     planKey,
+    trialRolloverEvaluations,
     internalUnlimited,
     trialEndsAt: trialEndsAt?.toISOString() || null,
     trialActive,
@@ -207,7 +220,7 @@ export async function getCompanyUsageContext(
     paidUsageWindow,
     // A Stripe subscription without an authoritative, current period must
     // not get a calendar-reset paid allowance (even on November 1).
-    paidBillingPeriodReady: !paidActive || paidUsageWindow.kind !== "unsynchronized",
+    paidBillingPeriodReady,
   };
 }
 
@@ -225,6 +238,7 @@ export async function getUsageSummary(
     giftedEvaluations,
     paidUsageWindow,
     paidBillingPeriodReady,
+    trialRolloverEvaluations,
   } = context;
 
   // Paid quotas (both evaluations and third-party API calls) follow the same
@@ -248,9 +262,20 @@ export async function getUsageSummary(
   const monthlyProviderCalls = countedProviderCalls;
 
   const limits = PLAN_LIMITS[planKey];
+  const firstCycleAllowance = limits.evaluationsPerMonth + trialRolloverEvaluations;
+  const trialRolloverEvaluationsRemaining =
+    paidActive && paidBillingPeriodReady
+      ? remainingTrialRollover({
+          monthlyAllowance: limits.evaluationsPerMonth,
+          carryover: trialRolloverEvaluations,
+          periodEvaluationsUsed: monthlyEvaluationsUsed,
+        })
+      : 0;
 
   return {
     ...context,
+    firstCycleAllowance,
+    trialRolloverEvaluationsRemaining,
     trialEvaluationsUsed,
     trialEvaluationsRemaining: internalUnlimited
       ? null
@@ -266,7 +291,7 @@ export async function getUsageSummary(
       ? null
       : paidActive
         ? (paidBillingPeriodReady
-          ? Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed)
+          ? Math.max(0, firstCycleAllowance - monthlyEvaluationsUsed)
           : 0) + giftedEvaluations
         : Math.max(0, TRIAL_LIMITS.evaluationsTotal - trialEvaluationsUsed) +
           giftedEvaluations,
@@ -377,7 +402,7 @@ export async function checkUsageAllowance(args: {
   if (
     kind === "evaluation_completed" &&
     summary.paidActive &&
-    summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth &&
+    summary.monthlyEvaluationsUsed >= summary.firstCycleAllowance &&
     !giftedCreditsAvailable
   ) {
     return {
@@ -455,7 +480,7 @@ export async function checkUsageAllowance(args: {
     giftedCreditsAvailable &&
     (summary.paidActive
       ? !summary.paidBillingPeriodReady ||
-        summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
+        summary.monthlyEvaluationsUsed >= summary.firstCycleAllowance
       : !summary.trialActive ||
         summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal);
 
