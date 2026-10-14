@@ -7,6 +7,7 @@ import {
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { firstPeriodTrialRollover } from "@/lib/billing/trial-rollover";
+import { shouldMarkInvoicePastDue, shouldSyncSubscriptionStatus } from "@/lib/billing/payment-status";
 import {
   configuredStripeLiveMode,
   currentPreviewBillingIsolation,
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
       companyId ||
       (await companyIdFromCustomer(admin, customerId));
 
-    if (companyId) {
+    if (companyId && shouldSyncSubscriptionStatus(stringValue(object.status))) {
       const planKey = planKeyForSubscription(object);
       const entitlements = planEntitlements(planKey);
       const rawStatus = stringValue(object.status) || "not_configured";
@@ -356,13 +357,42 @@ export async function POST(request: NextRequest) {
   }
 
   if (eventType === "invoice.payment_failed" && companyId) {
-    await admin
+    const { data: existingBilling, error: billingLookupError } = await admin
       .from("company_billing_accounts")
-      .update({
-        status: "past_due",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("company_id", companyId);
+      .select("status,stripe_subscription_id")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (billingLookupError) {
+      return NextResponse.json({ error: billingLookupError.message }, { status: 500 });
+    }
+
+    // Stripe Checkout can create an incomplete subscription and emit an invoice
+    // failure even though the customer never paid. Don't replace the free trial
+    // with past_due or give that attempted plan's monthly allowance.
+    const invoiceSubscriptionId =
+      stringValue(object.subscription) ||
+      stringValue(record(record(object.parent).subscription_details).subscription);
+    const matchesCurrentSubscription =
+      !invoiceSubscriptionId ||
+      existingBilling?.stripe_subscription_id === invoiceSubscriptionId;
+
+    if (
+      existingBilling &&
+      shouldMarkInvoicePastDue(String(existingBilling.status)) &&
+      matchesCurrentSubscription
+    ) {
+      const { error: failureUpdateError } = await admin
+        .from("company_billing_accounts")
+        .update({
+          status: "past_due",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+        .in("status", ["active", "past_due"]);
+      if (failureUpdateError) {
+        return NextResponse.json({ error: failureUpdateError.message }, { status: 500 });
+      }
+    }
   }
 
   if (eventType === "invoice.paid" && companyId) {
