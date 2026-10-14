@@ -28,6 +28,11 @@ type UsageStatus = {
   trialActive?: boolean;
   paidActive?: boolean;
   paidBillingPeriodReady?: boolean;
+  postCancelActive?: boolean;
+  postCancelBalance?: number;
+  postCancelRemaining?: number;
+  postCancelStartsAt?: string | null;
+  postCancelExpiresAt?: string | null;
   status?: string;
   planKey?: "starter" | "dealer" | "dealer_pro";
   trialEvaluationsUsed?: number;
@@ -119,6 +124,28 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
       };
     }
 
+    if (status === "canceled") {
+      if (usage.postCancelActive) {
+        const n = Math.max(0, Number(usage.postCancelRemaining || 0));
+        return {
+          used: 0,
+          total: Math.max(1, n),
+          gifted,
+          label: n > 0
+            ? `${n} paid evals left · 30-day window`
+            : "Cancellation credits used · Choose plan",
+        };
+      }
+      return {
+        used: 1,
+        total: 1,
+        gifted,
+        label: usage.postCancelStartsAt && Date.parse(usage.postCancelStartsAt) > Date.now()
+          ? "Canceled · Credits start at period end"
+          : "Canceled · Choose plan",
+      };
+    }
+
     if (usage.trialActive) {
       const used = Number(usage.trialEvaluationsUsed || 0);
       const total = 5;
@@ -139,6 +166,9 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
       label: "Trial ended · Choose plan",
     };
   })();
+
+  const cancellationPaywallReached =
+    usage?.status === "canceled" && usage?.canStartEvaluation === false;
 
   const trialPaywallReached =
     Boolean(usage) &&
@@ -161,6 +191,10 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
 
     if (["unpaid", "past_due", "paused"].includes(String(usage?.status || ""))) {
       return "border-amber-200 bg-amber-50 text-amber-800";
+    }
+
+    if (usage?.status === "canceled") {
+      return "border-blue-200 bg-blue-50 text-blue-700";
     }
 
     if (Number(evaluationUsage.gifted || 0) > 0) {
@@ -348,7 +382,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             )
           ) : null}
 
-          {billingSyncBlocksNewEvaluation ? (
+          {cancellationPaywallReached ? (
+            <Link
+              href="/settings?tab=billing"
+              title="Review remaining credits or start a new subscription"
+              className="hidden rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-black text-blue-800 transition hover:bg-blue-100 lg:block"
+            >
+              Review credits
+            </Link>
+          ) : billingSyncBlocksNewEvaluation ? (
             <Link
               href="/settings?tab=billing"
               title="Paid evaluations are temporarily unavailable while the billing period is verified"
