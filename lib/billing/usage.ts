@@ -160,7 +160,7 @@ export async function getCompanyUsageContext(
   ] = await Promise.all([
     supabase
       .from("company_billing_accounts")
-      .select("status,plan_key,trial_ends_at,stripe_subscription_id,current_period_start,current_period_end,trial_rollover_evaluations,trial_rollover_period_start,post_cancel_evaluations,post_cancel_starts_at,post_cancel_expires_at")
+      .select("status,plan_key,trial_ends_at,stripe_subscription_id,current_period_start,current_period_end,cancel_at_period_end,trial_rollover_evaluations,trial_rollover_period_start,post_cancel_evaluations,post_cancel_starts_at,post_cancel_expires_at")
       .eq("company_id", company.companyId)
       .maybeSingle(),
     supabase
@@ -216,6 +216,8 @@ export async function getCompanyUsageContext(
     company,
     status,
     planKey,
+    cancelAtPeriodEnd: Boolean(billing?.cancel_at_period_end),
+    currentPeriodEnd: billing?.current_period_end || null,
     trialRolloverEvaluations,
     cancelCredits,
     internalUnlimited,
