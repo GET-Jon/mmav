@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
 
       const { data: currentBilling, error: currentBillingError } = await admin
         .from("company_billing_accounts")
-        .select("current_period_start,stripe_subscription_id,trial_rollover_period_start")
+        .select("status,current_period_start,stripe_subscription_id,trial_rollover_period_start")
         .eq("company_id", companyId)
         .maybeSingle();
       if (currentBillingError) {
