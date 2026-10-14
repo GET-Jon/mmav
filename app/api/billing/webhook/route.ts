@@ -7,6 +7,7 @@ import {
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { firstPeriodTrialRollover } from "@/lib/billing/trial-rollover";
+import { ignoreSubscriptionEvent, invoiceBelongsToCurrentSubscription } from "@/lib/billing/subscription-event-guard";
 import { cancellationBalance } from "@/lib/billing/post-cancel";
 import { preserveInitialTrial, shouldMarkInvoicePastDue, shouldSyncSubscriptionStatus } from "@/lib/billing/payment-status";
 import {
@@ -172,6 +173,26 @@ export async function POST(request: NextRequest) {
     companyId = companyId || clientReferenceId;
 
     if (companyId) {
+      const incomingSubscriptionId = stringValue(object.subscription);
+      const { data: linkedBilling, error: linkedError } = await admin
+        .from("company_billing_accounts")
+        .select("status,stripe_subscription_id")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
+      if (
+        linkedBilling?.stripe_subscription_id &&
+        linkedBilling.stripe_subscription_id !== incomingSubscriptionId &&
+        !["canceled", "trialing", "unpaid", "not_configured"].includes(String(linkedBilling.status))
+      ) {
+        const { error: ignoredError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId, company_id: companyId, event_type: eventType,
+          stripe_object_id: incomingSubscriptionId,
+          metadata: { livemode: Boolean(event.livemode), ignored: "stale_checkout" },
+        });
+        if (ignoredError) return NextResponse.json({ error: ignoredError.message }, { status: 500 });
+        return NextResponse.json({ received: true, ignored: "stale_checkout" });
+      }
       const { error } = await admin
         .from("company_billing_accounts")
         .upsert(
@@ -223,6 +244,20 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (currentBillingError) {
         return NextResponse.json({ error: currentBillingError.message }, { status: 500 });
+      }
+      if (ignoreSubscriptionEvent({
+        storedSubscriptionId: currentBilling?.stripe_subscription_id,
+        incomingSubscriptionId: subscriptionId,
+        storedStatus: currentBilling?.status,
+        incomingStatus: rawStatus,
+      })) {
+        const { error: ignoredError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId, company_id: companyId, event_type: eventType,
+          stripe_object_id: subscriptionId,
+          metadata: { livemode: Boolean(event.livemode), ignored: "outdated_subscription" },
+        });
+        if (ignoredError) return NextResponse.json({ error: ignoredError.message }, { status: 500 });
+        return NextResponse.json({ received: true, ignored: "outdated_subscription" });
       }
       if (preserveInitialTrial(String(currentBilling?.status || ""), currentBilling?.trial_rollover_period_start ?? null, rawStatus)) {
         const { error: skipError } = await admin.from("billing_events").insert({
@@ -477,18 +512,28 @@ export async function POST(request: NextRequest) {
   if (eventType === "invoice.paid" && companyId) {
     const { data: billing } = await admin
       .from("company_billing_accounts")
-      .select("status")
+      .select("status,stripe_subscription_id")
       .eq("company_id", companyId)
       .maybeSingle();
-
-    if (billing?.status === "past_due" || billing?.status === "unpaid") {
-      await admin
+    const invoiceSubscriptionId = stringValue(object.subscription) ||
+      stringValue(record(record(object.parent).subscription_details).subscription);
+    if (
+      (billing?.status === "past_due" || billing?.status === "unpaid") &&
+      invoiceBelongsToCurrentSubscription({
+        invoiceSubscriptionId,
+        storedSubscriptionId: billing?.stripe_subscription_id,
+      })
+    ) {
+      const { error: paidError } = await admin
         .from("company_billing_accounts")
         .update({
           status: "active",
           updated_at: new Date().toISOString(),
         })
-        .eq("company_id", companyId);
+        .eq("company_id", companyId)
+        .eq("stripe_subscription_id", invoiceSubscriptionId)
+        .in("status", ["past_due", "unpaid"]);
+      if (paidError) return NextResponse.json({ error: paidError.message }, { status: 500 });
     }
   }
 
