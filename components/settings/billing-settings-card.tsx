@@ -64,6 +64,7 @@ type BillingStatus = {
     dealer_pro?: boolean;
   };
   portalConfigured?: boolean;
+  recentCheckoutPaymentFailed?: boolean;
   error?: string;
 };
 
@@ -215,6 +216,17 @@ export function BillingSettingsCard() {
             <div className="mt-1 font-semibold text-blue-800">
               No credit card is required until you choose a paid plan.
             </div>
+          </div>
+        ) : null}
+
+        {usage?.trialActive && !usage?.paidActive && data?.recentCheckoutPaymentFailed ? (
+          <div role="status" className="mt-3 flex flex-wrap items-start gap-x-3 gap-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <span className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-black text-amber-900">
+              Payment declined
+            </span>
+            <p className="min-w-0 flex-1 font-semibold leading-6">
+              Your last payment attempt was unsuccessful, but your free trial is unaffected. Choose a plan below to try again with a different payment method.
+            </p>
           </div>
         ) : null}
 
