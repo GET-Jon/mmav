@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
 import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
+import { CancellationReturnNotice } from "@/components/billing/cancellation-return-notice";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export type AppTopNavPage =
@@ -24,6 +25,7 @@ type AppTopNavProps = {
 };
 
 type UsageStatus = {
+  company?: { companyId?: string };
   internalUnlimited?: boolean;
   trialActive?: boolean;
   paidActive?: boolean;
@@ -470,6 +472,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
         </div>
       </div>
       </header>
+      {userEmail ? <CancellationReturnNotice usage={usage} /> : null}
       {planSelectionOpen ? (
         <PlanSelectionModal
           message="You’ve used your free evaluations. Choose a plan to continue."
