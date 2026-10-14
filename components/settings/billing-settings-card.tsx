@@ -152,6 +152,7 @@ export function BillingSettingsCard() {
   const isAdmin = data?.company?.role === "company_admin";
   const hasCustomer = Boolean(billing?.stripe_customer_id);
   const hasSubscription = Boolean(billing?.stripe_subscription_id);
+  const paymentDue = ["past_due", "unpaid", "paused"].includes(billing?.status || "");
 
   return (
     <section className="space-y-5">
@@ -178,6 +179,7 @@ export function BillingSettingsCard() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Seats</div>
             <div className="mt-2 text-lg font-black text-slate-950">{entitlements?.seats_limit ?? usage?.limits?.seats ?? billing?.seats ?? 1}</div>
+            {paymentDue ? <div className="mt-1 text-[11px] font-bold text-amber-800">Plan benefit · payment required</div> : null}
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trial ends</div>
@@ -188,6 +190,16 @@ export function BillingSettingsCard() {
             <div className="mt-2 text-lg font-black text-slate-950">{dateLabel(billing?.current_period_end)}</div>
           </div>
         </div>
+
+        {paymentDue ? (
+          <div role="alert" className="mt-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <div className="font-black">Payment required to use paid evaluations</div>
+            <p className="mt-1 font-semibold leading-6">
+              Your {billing?.plan_key === "dealer_pro" ? "Dealer Pro" : billing?.plan_key === "dealer" ? "Dealer" : "Starter"} plan is on hold until Stripe confirms payment.
+              Your previous evaluations and drafts remain saved. Use Manage billing to resolve the payment.
+            </p>
+          </div>
+        ) : null}
 
         {usage?.trialActive && !usage?.paidActive ? (
           <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
@@ -235,7 +247,7 @@ export function BillingSettingsCard() {
               onClick={() => void launch("portal")}
               className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {actionLoading === "portal" ? "Opening portal…" : "Manage billing"}
+              {actionLoading === "portal" ? "Opening portal…" : paymentDue ? "Resolve payment in Stripe" : "Manage billing"}
             </button>
           </div>
         )}
@@ -277,10 +289,18 @@ export function BillingSettingsCard() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Evaluations used</div>
             <div className="mt-2 text-lg font-black text-slate-950">
-              {usage?.trialActive && !usage?.paidActive
-                ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
-                : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.firstCycleAllowance ?? usage?.limits?.evaluationsPerMonth ?? "—"} this billing period`}
+              {paymentDue
+                ? "Paid allowance on hold"
+                : usage?.trialActive && !usage?.paidActive
+                  ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
+                  : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.firstCycleAllowance ?? usage?.limits?.evaluationsPerMonth ?? "—"} this billing period`}
             </div>
+            {paymentDue ? (
+              <div className="mt-2 text-[11px] font-semibold leading-5 text-amber-800">
+                The plan includes {usage?.limits?.evaluationsPerMonth ?? "—"} evaluations per month when payment is current.
+                {Number(usage?.giftedEvaluationsRemaining || 0) > 0 ? " Separately gifted evaluations remain available." : ""}
+              </div>
+            ) : null}
             {usage?.paidActive && (usage?.trialRolloverEvaluations || 0) > 0 ? (
               <div className="mt-2 rounded-lg bg-blue-50 px-2 py-2 text-[11px] font-semibold leading-5 text-blue-800">
                 Includes {usage?.trialRolloverEvaluations} unused free-trial evaluations
@@ -325,9 +345,11 @@ export function BillingSettingsCard() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-black text-slate-950">Current entitlements</h3>
+        <h3 className="text-lg font-black text-slate-950">{paymentDue ? "Plan benefits (on hold)" : "Current entitlements"}</h3>
         <p className="mt-1 text-sm font-semibold text-slate-500">
-          Your plan controls monthly evaluations, seats, and access to supported Lot Logic capabilities.
+          {paymentDue
+            ? "These are the features included with your selected plan; paid access is unavailable until payment succeeds."
+            : "Your plan controls monthly evaluations, seats, and access to supported Lot Logic capabilities."}
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
