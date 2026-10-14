@@ -125,14 +125,14 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     }
 
     if (status === "canceled") {
-      const expiry = usage.postCancelExpiresAt ? new Date(usage.postCancelExpiresAt) : null;
-      const validExpiry = expiry && Number.isFinite(expiry.getTime());
+      const expiryMs = Date.parse(usage.postCancelExpiresAt || "");
+      const validExpiry = Number.isFinite(expiryMs);
       const creditCount = usage.postCancelActive
         ? Math.max(0, Number(usage.postCancelRemaining || 0))
         : Math.max(0, Number(usage.postCancelBalance || 0));
-      const hasUnexpiredCredits = validExpiry && expiry.getTime() > Date.now() && creditCount > 0;
+      const hasUnexpiredCredits = validExpiry && expiryMs > Date.now() && creditCount > 0;
       const expiryDate = validExpiry
-        ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(expiry)
+        ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(expiryMs))
         : null;
       return {
         used: hasUnexpiredCredits ? 0 : 1,
@@ -140,7 +140,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
         gifted,
         label: hasUnexpiredCredits
           ? `Canceled · Credits expire ${expiryDate}`
-          : expiryDate && expiry.getTime() <= Date.now()
+          : expiryDate && expiryMs <= Date.now()
             ? `Canceled · Credits expired ${expiryDate}`
             : "Canceled · No paid credits left",
       };
