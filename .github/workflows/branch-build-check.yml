@@ -22,6 +22,8 @@ jobs:
         run: npx --yes tsx@4.20.6 scripts/run-comp-regressions.ts
       - name: Billing period regression suite
         run: npx --yes tsx@4.20.6 scripts/run-billing-period-regressions.ts
+      - name: Failed checkout regressions
+        run: npx --yes tsx@4.20.6 scripts/run-initial-checkout-regressions.ts
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build
