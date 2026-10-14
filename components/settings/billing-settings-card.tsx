@@ -90,6 +90,20 @@ function dateLabel(value: string | null | undefined) {
   }).format(date);
 }
 
+function exactDeadline(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
 export function BillingSettingsCard() {
   const [data, setData] = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -301,9 +315,9 @@ export function BillingSettingsCard() {
           <div role="status" className="mt-4 space-y-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950">
             <div className="font-black">Cancellation scheduled · No further monthly renewals</div>
             <p className="font-semibold leading-6">
-              Your plan remains active until <strong>{dateLabel(cancellationEnd)}</strong>.
+              Your plan remains active until <strong>{exactDeadline(cancellationEnd)}</strong>.
               After it ends, you can use any unused <strong>paid</strong> evaluations for 30 more days,
-              through <strong>{dateLabel(cancellationGraceUntil)}</strong>.
+              through <strong>{exactDeadline(cancellationGraceUntil)}</strong>.
             </p>
             <p className="font-black">Currently {paidEvaluationsLeft} paid evaluations could carry over. This number decreases as you complete evaluations.</p>
             <p className="text-xs font-semibold leading-5 text-blue-900">
@@ -321,10 +335,10 @@ export function BillingSettingsCard() {
             </div>
             <p className="font-semibold leading-6">
               {usage?.postCancelActive
-                ? `${usage.postCancelRemaining ?? 0} unused paid evaluations remain available through ${dateLabel(usage.postCancelExpiresAt)}.`
+                ? `${usage.postCancelRemaining ?? 0} unused paid evaluations remain available through ${exactDeadline(usage.postCancelExpiresAt)}.`
                 : gracePending
-                  ? `Your unused paid evaluations become available on ${dateLabel(usage?.postCancelStartsAt)}, and expire ${dateLabel(usage?.postCancelExpiresAt)}.`
-                  : `Unused paid evaluations expired on ${dateLabel(usage?.postCancelExpiresAt)}.`}
+                  ? `Your unused paid evaluations become available on ${exactDeadline(usage?.postCancelStartsAt)}, and expire ${exactDeadline(usage?.postCancelExpiresAt)}.`
+                  : `Unused paid evaluations expired on ${exactDeadline(usage?.postCancelExpiresAt)}.`}
             </p>
             <p className="text-xs font-semibold leading-5">
               Your subscription will not renew. No additional monthly evaluations are issued. Free-trial bonuses are not carried over. Previously saved work remains accessible. Choose a plan above to restart a paid subscription.
@@ -359,9 +373,9 @@ export function BillingSettingsCard() {
                 ? "Paid allowance on hold"
                 : canceled
                   ? usage?.postCancelActive
-                    ? `${usage.postCancelRemaining ?? 0} paid evaluations left · expires ${dateLabel(usage.postCancelExpiresAt)}`
+                    ? `${usage.postCancelRemaining ?? 0} paid evaluations left · expires ${exactDeadline(usage.postCancelExpiresAt)}`
                     : gracePending
-                      ? `${usage?.postCancelBalance ?? 0} paid evaluations · available from ${dateLabel(usage?.postCancelStartsAt)}`
+                      ? `${usage?.postCancelBalance ?? 0} paid evaluations · available from ${exactDeadline(usage?.postCancelStartsAt)}`
                       : "No paid evaluations available"
                 : billingPeriodUnavailable
                   ? `${usage?.limits?.evaluationsPerMonth ?? "—"} included · temporarily unavailable`
