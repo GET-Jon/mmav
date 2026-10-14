@@ -224,6 +224,14 @@ export async function POST(request: NextRequest) {
       if (currentBillingError) {
         return NextResponse.json({ error: currentBillingError.message }, { status: 500 });
       }
+      if (preserveInitialTrial(String(currentBilling?.status || ""), currentBilling?.trial_rollover_period_start ?? null, rawStatus)) {
+        const { error: skipError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId, company_id: companyId, event_type: eventType,
+          stripe_object_id: subscriptionId, metadata: { livemode: Boolean(event.livemode), ignored: "initial_trial" },
+        });
+        if (skipError) return NextResponse.json({ error: skipError.message }, { status: 500 });
+        return NextResponse.json({ received: true, ignored: "initial_trial" });
+      }
       // A delayed older webhook must not rewind the company's quota window.
       const oldStart = currentBilling?.current_period_start
         ? new Date(currentBilling.current_period_start).getTime()
