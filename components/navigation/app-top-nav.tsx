@@ -120,28 +120,14 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
         0,
         Number(usage.effectiveEvaluationsRemaining ?? usage.monthlyEvaluationsRemaining ?? 0),
       );
-      // Cancellation is scheduled, not completed: all current evaluations
-      // remain usable, but only unspent PAID-plan credits enter the 30-day
-      // post-cancellation window. Trial bonuses expire at period end.
-      const endMs = Date.parse(usage.currentPeriodEnd || "");
-      if (
-        status === "active" &&
-        usage.cancelAtPeriodEnd &&
-        Number.isFinite(endMs)
-      ) {
-        const expiryMs = endMs + 30 * 24 * 60 * 60 * 1000;
-        const expDate = new Intl.DateTimeFormat("en-US", {
-          month: "short", day: "numeric",
-        }).format(new Date(expiryMs));
-        const paidLeft = Math.max(
-          0,
-          monthlyLimit - Math.max(0, Number(usage.monthlyEvaluationsUsed || 0)),
-        );
+      // The header shows one current balance. Trial/paid credit distinctions
+      // and post-cancellation expiry remain clearly explained in Billing.
+      if (status === "active" && usage.cancelAtPeriodEnd) {
         return {
           used: Math.max(0, total - remaining),
           total,
           gifted,
-          label: `Canceling · ${remaining} now · ${paidLeft} paid expire ${expDate}`,
+          label: `Canceling · ${remaining} evals left`,
         };
       }
       return {
