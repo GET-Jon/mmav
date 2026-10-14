@@ -122,6 +122,12 @@ function detectSpecialVariant(vehicle: VehicleIdentity) {
     }
   }
 
+  if (make === "chevrolet" && modelFamily === "silverado 1500") {
+    // Trail Boss is a material 1500 package: normalize provider model names
+    // but never value an ordinary Silverado as an identical Trail Boss.
+    if (containsAny(text, ["trail boss", "trailboss"])) return "trail-boss";
+  }
+
   if (make === "ford" && modelFamily === "f 150") {
     if (containsAny(text, ["raptor r"])) return "raptor-r";
     if (containsAny(text, ["raptor"])) return "raptor";
