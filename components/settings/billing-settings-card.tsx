@@ -361,7 +361,7 @@ export function BillingSettingsCard() {
                   ? usage?.postCancelActive
                     ? `${usage.postCancelRemaining ?? 0} paid evaluations left · expires ${dateLabel(usage.postCancelExpiresAt)}`
                     : gracePending
-                      ? `${usage.postCancelBalance ?? 0} paid evaluations · available from ${dateLabel(usage.postCancelStartsAt)}`
+                      ? `${usage?.postCancelBalance ?? 0} paid evaluations · available from ${dateLabel(usage?.postCancelStartsAt)}`
                       : "No paid evaluations available"
                 : billingPeriodUnavailable
                   ? `${usage?.limits?.evaluationsPerMonth ?? "—"} included · temporarily unavailable`
