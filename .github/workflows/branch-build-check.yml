@@ -26,6 +26,8 @@ jobs:
         run: npx --yes tsx@4.20.6 scripts/run-initial-checkout-regressions.ts
       - name: Post-cancellation credit regressions
         run: npx --yes tsx@4.20.6 scripts/run-post-cancel-regressions.ts
+      - name: Stripe event ordering regressions
+        run: npx --yes tsx@4.20.6 scripts/run-subscription-event-regressions.ts
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build
