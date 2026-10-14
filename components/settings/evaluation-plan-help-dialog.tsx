@@ -86,7 +86,9 @@ export function EvaluationPlanHelpDialog() {
 
           <div className="space-y-2 text-xs font-medium leading-5 text-slate-600">
             <p><strong className="text-slate-800">Free-trial bonus:</strong> Unused free evaluations carry into your first paid billing period only, and expire at its first renewal.</p>
-            <p><strong className="text-slate-800">Renewal:</strong> Your monthly allowance resets at the start of your next Stripe billing period. Unused paid evaluations do not roll over.</p>
+            <p><strong className="text-slate-800">Renewal:</strong> Your monthly allowance resets at the start of your next Stripe billing period. Unused evaluations do not roll over to another paid month.</p>
+            <p><strong className="text-slate-800">Cancellation:</strong> Your paid plan remains available through the end of the current billing period. After it ends, any unused <strong>paid-plan</strong> evaluations remain usable for exactly 30 days, then expire. No new monthly evaluations are issued. Free-trial bonuses never extend into this 30-day window.</p>
+            <p><strong className="text-slate-800">Your work:</strong> Evaluations and pipeline records already saved remain available after cancellation or credit expiry.</p>
             <p><strong className="text-slate-800">Billing:</strong> Stripe shows any prorated price adjustment when you change plans; the evaluation allowance is not a separate credit balance.</p>
           </div>
           <button
