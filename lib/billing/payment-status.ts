@@ -13,8 +13,8 @@ export function allowsPaidEvaluationAccess(status: string) {
  * subscription reaches a billable/valid state, rather than replacing it with
  * an unpaid Dealer/Dealer Pro entitlement.
  */
-export function shouldSyncSubscriptionStatus(status: string) {
-  return status !== "incomplete" && status !== "incomplete_expired";
+export function shouldSyncSubscriptionStatus(status: string | null) {
+  return Boolean(status && status !== "incomplete" && status !== "incomplete_expired");
 }
 
 /**
