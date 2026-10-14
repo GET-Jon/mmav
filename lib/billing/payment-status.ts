@@ -24,3 +24,7 @@ export function shouldSyncSubscriptionStatus(status: string | null) {
 export function shouldMarkInvoicePastDue(currentStatus: string) {
   return currentStatus === "active" || currentStatus === "past_due";
 }
+
+export function preserveInitialTrial(localStatus: string, paidPeriod: string | null, stripeStatus: string) {
+  return localStatus === "trialing" && !paidPeriod && stripeStatus !== "active";
+}
