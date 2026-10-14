@@ -397,11 +397,17 @@ export async function checkUsageAllowance(args: {
     !giftedCreditsAvailable &&
     !existingCompletedEvaluation
   ) {
+    const startsAt = Date.parse(summary.postCancelStartsAt || "");
+    const scheduled = Number.isFinite(startsAt) &&
+      startsAt > Date.now() &&
+      summary.postCancelBalance > 0;
     return {
       allowed: false as const,
-      code: "CANCELLATION_CREDITS_UNAVAILABLE",
+      code: scheduled ? "CANCELLATION_CREDITS_SCHEDULED" : "CANCELLATION_CREDITS_UNAVAILABLE",
       status: 402,
-      message: "Your subscription has ended and there are no paid evaluations available. Choose a plan to continue.",
+      message: scheduled
+        ? `Your ${summary.postCancelBalance} unused paid evaluations are preserved. They become available when your paid subscription period ends. The 30-day window and exact expiration date are shown in Billing.`
+        : "Your subscription has ended and no paid evaluations remain available. Choose a plan to continue.",
       summary,
     };
   }
