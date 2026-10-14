@@ -486,9 +486,10 @@ export async function POST(request: NextRequest) {
     const invoiceSubscriptionId =
       stringValue(object.subscription) ||
       stringValue(record(record(object.parent).subscription_details).subscription);
-    const matchesCurrentSubscription =
-      !invoiceSubscriptionId ||
-      existingBilling?.stripe_subscription_id === invoiceSubscriptionId;
+    const matchesCurrentSubscription = invoiceBelongsToCurrentSubscription({
+      invoiceSubscriptionId,
+      storedSubscriptionId: existingBilling?.stripe_subscription_id,
+    });
 
     if (
       existingBilling &&
