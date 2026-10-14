@@ -7,7 +7,7 @@ import {
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { firstPeriodTrialRollover } from "@/lib/billing/trial-rollover";
-import { shouldMarkInvoicePastDue, shouldSyncSubscriptionStatus } from "@/lib/billing/payment-status";
+import { preserveInitialTrial, shouldMarkInvoicePastDue, shouldSyncSubscriptionStatus } from "@/lib/billing/payment-status";
 import {
   configuredStripeLiveMode,
   currentPreviewBillingIsolation,
