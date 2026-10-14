@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
 
       const { data: currentBilling, error: currentBillingError } = await admin
         .from("company_billing_accounts")
-        .select("status,plan_key,current_period_start,current_period_end,stripe_subscription_id,trial_rollover_period_start,post_cancel_starts_at")
+        .select("status,plan_key,current_period_start,current_period_end,cancel_at_period_end,stripe_subscription_id,trial_rollover_period_start,post_cancel_starts_at")
         .eq("company_id", companyId)
         .maybeSingle();
       if (currentBillingError) {
@@ -286,7 +286,9 @@ export async function POST(request: NextRequest) {
       ) {
         const lastStart = currentBilling.current_period_start;
         const lastEnd = currentBilling.current_period_end;
-        const endedAt = unixToIso(object.ended_at) || lastEnd;
+        const endedAt = currentBilling.cancel_at_period_end
+          ? lastEnd
+          : (unixToIso(object.ended_at) || lastEnd);
         const endedMs = Date.parse(endedAt || "");
         const startMs = Date.parse(lastStart || "");
         const endMs = Date.parse(lastEnd || "");
