@@ -154,6 +154,7 @@ export function BillingSettingsCard() {
   const hasCustomer = Boolean(billing?.stripe_customer_id);
   const hasSubscription = Boolean(billing?.stripe_subscription_id);
   const paymentDue = ["past_due", "unpaid", "paused"].includes(billing?.status || "");
+  const billingPeriodUnavailable = usage?.paidActive && usage.paidBillingPeriodReady === false;
 
   return (
     <section className="space-y-5">
@@ -270,9 +271,9 @@ export function BillingSettingsCard() {
           </div>
         ) : null}
 
-        {usage?.paidActive && usage.paidBillingPeriodReady === false ? (
-          <div role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900">
-            We are waiting for Stripe to confirm this subscription's current billing period. Paid monthly allowance will resume after synchronization; gifted evaluations remain available.
+        {billingPeriodUnavailable ? (
+          <div role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-900">
+            Your subscription is active, but Lot Logic cannot validate its current billing period yet. Paid evaluations are temporarily unavailable; saved work is unaffected. If this persists after refreshing, please contact support.
           </div>
         ) : null}
 
@@ -303,10 +304,17 @@ export function BillingSettingsCard() {
             <div className="mt-2 text-lg font-black text-slate-950">
               {paymentDue
                 ? "Paid allowance on hold"
-                : usage?.trialActive && !usage?.paidActive
-                  ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
-                  : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.firstCycleAllowance ?? usage?.limits?.evaluationsPerMonth ?? "—"} this billing period`}
+                : billingPeriodUnavailable
+                  ? `${usage?.limits?.evaluationsPerMonth ?? "—"} included · temporarily unavailable`
+                  : usage?.trialActive && !usage?.paidActive
+                    ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
+                    : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.firstCycleAllowance ?? usage?.limits?.evaluationsPerMonth ?? "—"} this billing period`}
             </div>
+            {billingPeriodUnavailable ? (
+              <div className="mt-2 text-[11px] font-semibold leading-5 text-amber-800">
+                Your monthly allowance is included with Starter, Dealer, or Dealer Pro, but cannot be spent until the billing period is verified.
+              </div>
+            ) : null}
             {paymentDue ? (
               <div className="mt-2 text-[11px] font-semibold leading-5 text-amber-800">
                 The plan includes {usage?.limits?.evaluationsPerMonth ?? "—"} evaluations per month when payment is current.
