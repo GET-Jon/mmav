@@ -4612,6 +4612,9 @@ export function EvaluationWorkspace({
         }
       : rawCompSearchRecommendation;
 
+  const recommendedCompSearchExhausted = automaticCompSearchCompleted &&
+    compSearchRecommendation.action === "manual-review";
+
   const compNextStep = {
     path:
       compSearchRecommendation.action === "broaden-vehicle" ||
@@ -7551,10 +7554,14 @@ export function EvaluationWorkspace({
                     {needsCompSearch ? (
                       <span className="group relative inline-flex">
                         <button type="button" aria-label="Why market evidence needs attention"
-                          title="No trusted comps yet. An unpriced Verdict does not charge a credit or provide a reliable sale or profit estimate."
+                          title={recommendedCompSearchExhausted
+                            ? "Recommended searches have finished. An unpriced review will not consume an evaluation credit."
+                            : "No trusted comps yet. Run the recommended search before deciding whether a valuation is possible."}
                           className="flex h-5 w-5 items-center justify-center rounded-full border border-amber-300 text-[11px] font-black text-amber-800 focus-visible:outline-2 focus-visible:outline-blue-600">!</button>
                         <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                          No trusted comparisons yet. Continue to Verdict opens an unpriced review without using an evaluation credit. Sale and profit estimates remain unavailable.
+                          {recommendedCompSearchExhausted
+                            ? "Recommended searches have finished without reliable comparisons. You can review an unpriced verdict without using an evaluation credit; no sale or profit estimate is available."
+                            : "The initial search has not established reliable comparisons. Run the recommended search for stronger market evidence before treating this as unpriceable."}
                         </span>
                       </span>
                     ) : null}
@@ -7711,7 +7718,7 @@ export function EvaluationWorkspace({
                       <>
                         <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
                           <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
-                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Improve comps or review the unpriced verdict.</div>
+                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Run the recommended search to check for qualifying comparisons before treating the valuation as unavailable.</div>
                         </div>
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                           <button type="button" onClick={() => void improveCompSearch()}
@@ -7863,7 +7870,9 @@ export function EvaluationWorkspace({
             <>
               {compSummary.includedCount === 0 ? (
                 <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950" role="status">
-                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. No evaluation credit was consumed for entering this unpriced verdict.
+                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. {recommendedCompSearchExhausted
+                    ? "Recommended searches have been completed without qualifying comps; this unpriced review did not consume an evaluation credit."
+                    : "Recommended searches are still available. Return to Market and improve the comparison set before concluding this vehicle cannot be valued."}
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
