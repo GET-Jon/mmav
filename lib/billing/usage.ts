@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { calendarMonthWindow, resolvePaidUsageWindow } from "@/lib/billing/billing-period";
 import { remainingTrialRollover, trialRolloverForPeriod } from "@/lib/billing/trial-rollover";
+import { allowsPaidEvaluationAccess } from "@/lib/billing/payment-status";
 
 export type UsageKind =
   | "evaluation_completed"
@@ -72,10 +73,6 @@ function normalizePlanKey(value: unknown): PlanKey {
   const plan = String(value || "").trim().toLowerCase();
   if (plan === "dealer" || plan === "dealer_pro") return plan;
   return "starter";
-}
-
-function isPaidStatus(status: string) {
-  return status === "active" || status === "past_due" || status === "comped";
 }
 
 export function evaluationUsageSubject(input: {
@@ -187,7 +184,7 @@ export async function getCompanyUsageContext(
     !internalUnlimited &&
     status === "trialing" &&
     Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now());
-  const paidActive = internalUnlimited || isPaidStatus(status);
+  const paidActive = internalUnlimited || allowsPaidEvaluationAccess(status);
   const paidUsageWindow = paidActive
     ? resolvePaidUsageWindow({
         stripeSubscriptionId: billing?.stripe_subscription_id,
