@@ -330,7 +330,7 @@ export function BillingSettingsCard() {
           <div role="status" className="mt-4 space-y-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950">
             <div className="font-black">
               {usage?.postCancelActive ? "Subscription ended · 30-day evaluation window" :
-                gracePending ? "Subscription ended · evaluation window not started yet" :
+                gracePending ? "Cancellation recorded · evaluation window begins at subscription end" :
                 "Your 30-day evaluation window has ended"}
             </div>
             <p className="font-semibold leading-6">
