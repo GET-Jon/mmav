@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EvaluationPlanHelpDialog } from "@/components/settings/evaluation-plan-help-dialog";
 
 type BillingStatus = {
   company?: {
@@ -265,7 +266,10 @@ export function BillingSettingsCard() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-black text-slate-950">Usage</h3>
+        <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-3">
+          <h3 className="text-lg font-black text-slate-950">Usage</h3>
+          <EvaluationPlanHelpDialog />
+        </div>
         <p className="mt-1 text-sm font-semibold text-slate-500">
           Only completed valuations count toward your evaluation allowance. Drafts, edits, reopened evaluations, and comp refreshes do not consume another evaluation.
         </p>
