@@ -151,6 +151,11 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     ["past_due", "unpaid", "paused"].includes(String(usage?.status || "")) &&
     usage?.canStartEvaluation === false;
 
+  const billingSyncBlocksNewEvaluation =
+    Boolean(usage?.paidActive) &&
+    usage?.paidBillingPeriodReady === false &&
+    usage?.canStartEvaluation === false;
+
   const evaluationUsageTone = (() => {
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
 
@@ -343,7 +348,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             )
           ) : null}
 
-          {paymentBlocksNewEvaluation ? (
+          {billingSyncBlocksNewEvaluation ? (
+            <Link
+              href="/settings?tab=billing"
+              title="Paid evaluations are temporarily unavailable while the billing period is verified"
+              className="hidden rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-black text-amber-900 transition hover:bg-amber-100 lg:block"
+            >
+              Review billing
+            </Link>
+          ) : paymentBlocksNewEvaluation ? (
             <Link
               href="/settings?tab=billing"
               title="Resolve payment to create a new evaluation"
