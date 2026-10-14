@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { calendarMonthWindow, resolvePaidUsageWindow } from "../lib/billing/billing-period";
 import { checkPreviewBillingIsolation, isDeployPreview } from "../lib/billing/preview-isolation";
+import { trialRolloverForPeriod } from "../lib/billing/trial-rollover";
 
 const windowFor = (start: string | null, end: string | null, now: string, subscription = "sub_live") =>
   resolvePaidUsageWindow({
@@ -41,6 +42,35 @@ assert.equal(windowFor("2026-11-12T16:00:00Z", "2026-12-12T16:00:00Z", "2026-11-
 assert.equal(windowFor("2026-11-12T16:00:00Z", "2026-11-12T16:00:00Z", "2026-11-12T16:00:00Z").kind, "unsynchronized");
 assert.equal(windowFor("2026-10-12T16:00:00Z", "2026-11-12T16:00:00Z", "2026-11-01T00:00:00Z", "").kind, "calendar",
   "Comped/manual accounts without Stripe subscriptions retain their current allowance behavior");
+
+// Stripe test clocks do not advance the Lot Logic server clock. An active
+// subscription with a future simulated cycle must keep paid usage unavailable.
+const simulatedRenewalStart = "2026-11-14T15:23:39Z";
+const simulatedRenewalEnd = "2026-12-14T15:23:39Z";
+assert.equal(
+  windowFor(simulatedRenewalStart, simulatedRenewalEnd, "2026-10-14T16:40:00Z").kind,
+  "unsynchronized",
+  "Successful recovery to a future test-clock period must not grant evaluations early",
+);
+const currentRenewal = windowFor(
+  simulatedRenewalStart, simulatedRenewalEnd, "2026-11-14T15:23:40Z",
+);
+assert.equal(currentRenewal.kind, "stripe", "The cycle becomes usable when the actual clock reaches it");
+assert.equal(
+  inPeriod("2026-10-14T15:23:39Z", currentRenewal.start!, currentRenewal.end!),
+  false,
+  "Previous period evaluations are excluded from the renewed allowance",
+);
+assert.equal(trialRolloverForPeriod({
+  firstPeriodStart: "2026-10-14T15:23:39Z",
+  currentPeriodStart: simulatedRenewalStart,
+  carryoverEvaluations: 5,
+}), 0, "First paid month trial bonus must expire on renewal");
+assert.equal(trialRolloverForPeriod({
+  firstPeriodStart: "2026-10-14T15:23:39Z",
+  currentPeriodStart: "2026-10-14T15:23:39Z",
+  carryoverEvaluations: 5,
+}), 5, "Unused trial credits are only valid in their original paid cycle");
 
 const feb = calendarMonthWindow(new Date("2028-02-29T17:00:00Z"));
 assert.equal(feb.start, "2028-02-01T00:00:00.000Z");
