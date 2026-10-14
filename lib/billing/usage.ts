@@ -352,6 +352,20 @@ export async function checkUsageAllowance(args: {
     )) > 0;
 
   if (
+    ["past_due", "unpaid", "paused"].includes(summary.status) &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
+    return {
+      allowed: false as const,
+      code: "PAYMENT_REQUIRED",
+      status: 402,
+      message: "Your subscription payment is due. Update your payment details in Billing to start new evaluations.",
+      summary,
+    };
+  }
+
+  if (
     !summary.paidActive &&
     !summary.trialActive &&
     !giftedCreditsAvailable &&
