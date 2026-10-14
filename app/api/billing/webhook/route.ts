@@ -7,6 +7,7 @@ import {
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { firstPeriodTrialRollover } from "@/lib/billing/trial-rollover";
+import { cancellationBalance } from "@/lib/billing/post-cancel";
 import { preserveInitialTrial, shouldMarkInvoicePastDue, shouldSyncSubscriptionStatus } from "@/lib/billing/payment-status";
 import {
   configuredStripeLiveMode,
@@ -218,7 +219,7 @@ export async function POST(request: NextRequest) {
 
       const { data: currentBilling, error: currentBillingError } = await admin
         .from("company_billing_accounts")
-        .select("status,current_period_start,stripe_subscription_id,trial_rollover_period_start")
+        .select("status,plan_key,current_period_start,current_period_end,stripe_subscription_id,trial_rollover_period_start,post_cancel_starts_at")
         .eq("company_id", companyId)
         .maybeSingle();
       if (currentBillingError) {
@@ -266,6 +267,63 @@ export async function POST(request: NextRequest) {
             ? rawStatus
             : "not_configured";
 
+      // A cancellation preserves only the unspent PAID portion of the last
+      // actually active period. A past-due/unpaid/failed subscription earns no
+      // grace credits; original trial-rollover credits never transfer.
+      let postCancelUpdate: {
+        post_cancel_evaluations: number;
+        post_cancel_starts_at: string | null;
+        post_cancel_expires_at: string | null;
+      } | null = null;
+      if (
+        rawStatus === "canceled" &&
+        currentBilling?.status === "active" &&
+        currentBilling.stripe_subscription_id === subscriptionId &&
+        !currentBilling.post_cancel_starts_at
+      ) {
+        const lastStart = currentBilling.current_period_start;
+        const lastEnd = currentBilling.current_period_end;
+        const endedAt = unixToIso(object.ended_at) || lastEnd;
+        const endedMs = Date.parse(endedAt || "");
+        const startMs = Date.parse(lastStart || "");
+        const endMs = Date.parse(lastEnd || "");
+        if (
+          !Number.isFinite(endedMs) || !Number.isFinite(startMs) ||
+          !Number.isFinite(endMs) || endedMs < startMs || endedMs > endMs
+        ) {
+          return NextResponse.json(
+            { error: "Cancellation cannot be anchored to a valid paid period." },
+            { status: 503 },
+          );
+        }
+        const { data: lastPeriodUsage, error: usageError } = await admin
+          .from("company_usage_events")
+          .select("units")
+          .eq("company_id", companyId)
+          .eq("event_type", "evaluation_completed")
+          .gte("created_at", lastStart)
+          .lt("created_at", endedAt!);
+        if (usageError) {
+          return NextResponse.json({ error: usageError.message }, { status: 500 });
+        }
+        const used = (lastPeriodUsage || []).reduce(
+          (sum, row) => sum + Number(row.units || 0), 0,
+        );
+        const finalPlan = planEntitlements(String(currentBilling.plan_key || "starter"));
+        const balance = cancellationBalance({
+          paidAllowance: finalPlan.evaluations_per_month,
+          evaluationsUsedInFinalPaidPeriod: used,
+          endedAt,
+        });
+        if (!balance) {
+          return NextResponse.json({ error: "Invalid cancellation date." }, { status: 503 });
+        }
+        postCancelUpdate = {
+          post_cancel_evaluations: balance.evaluations,
+          post_cancel_starts_at: balance.startsAt,
+          post_cancel_expires_at: balance.expiresAt,
+        };
+      }
       const { error } = await admin
         .from("company_billing_accounts")
         .upsert(
@@ -274,7 +332,16 @@ export async function POST(request: NextRequest) {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
             status: mappedStatus,
-            plan_key: planKey,
+            plan_key: rawStatus === "canceled" && currentBilling?.plan_key
+              ? currentBilling.plan_key : planKey,
+            ...(postCancelUpdate || {}),
+            ...(rawStatus === "active"
+              ? {
+                  post_cancel_evaluations: 0,
+                  post_cancel_starts_at: null,
+                  post_cancel_expires_at: null,
+                }
+              : {}),
             stripe_price_id: firstSubscriptionPriceId(object),
             trial_ends_at: unixToIso(object.trial_end),
             current_period_start: periodStart,
