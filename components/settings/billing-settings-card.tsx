@@ -45,6 +45,12 @@ type BillingStatus = {
     trialRolloverEvaluations?: number;
     trialRolloverEvaluationsRemaining?: number;
     firstCycleAllowance?: number;
+    postCancelActive?: boolean;
+    postCancelBalance?: number;
+    postCancelUsed?: number;
+    postCancelRemaining?: number;
+    postCancelStartsAt?: string | null;
+    postCancelExpiresAt?: string | null;
     giftedEvaluationsRemaining?: number | null;
     effectiveEvaluationsRemaining?: number | null;
     monthlyProviderCalls?: number;
@@ -153,6 +159,20 @@ export function BillingSettingsCard() {
   const isAdmin = data?.company?.role === "company_admin";
   const hasCustomer = Boolean(billing?.stripe_customer_id);
   const hasSubscription = Boolean(billing?.stripe_subscription_id);
+  const canManageSubscription = hasSubscription && billing?.status !== "canceled";
+  const cancellationScheduled = Boolean(billing?.cancel_at_period_end && billing?.status === "active");
+  const cancellationEnd = billing?.current_period_end;
+  const cancellationGraceUntil = cancellationEnd
+    ? new Date(new Date(cancellationEnd).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+  const paidEvaluationsLeft = Math.max(0,
+    Number(usage?.limits?.evaluationsPerMonth || 0) - Number(usage?.monthlyEvaluationsUsed || 0),
+  );
+  const canceled = billing?.status === "canceled";
+  const hasCancellationWindow = canceled && Boolean(usage?.postCancelStartsAt && usage?.postCancelExpiresAt);
+  const gracePending = hasCancellationWindow && !usage?.postCancelActive &&
+    Date.parse(usage?.postCancelStartsAt || "") > Date.now();
+  const graceExpired = hasCancellationWindow && !usage?.postCancelActive && !gracePending;
   const paymentDue = ["past_due", "unpaid", "paused"].includes(billing?.status || "");
   const billingPeriodUnavailable = usage?.paidActive && usage.paidBillingPeriodReady === false;
 
@@ -176,7 +196,7 @@ export function BillingSettingsCard() {
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Plan</div>
-            <div className="mt-2 text-lg font-black capitalize text-slate-950">{billing?.plan_key || "Starter"}</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{billing?.plan_key === "dealer_pro" ? "Dealer Pro" : billing?.plan_key === "dealer" ? "Dealer" : "Starter"}</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Seats</div>
@@ -231,7 +251,7 @@ export function BillingSettingsCard() {
           </div>
         ) : null}
 
-        {!hasSubscription ? (
+        {!canManageSubscription ? (
           <div className="mt-5">
             <div className="text-xs font-black uppercase tracking-wide text-slate-400">Choose a paid plan</div>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -277,9 +297,42 @@ export function BillingSettingsCard() {
           </div>
         ) : null}
 
-        {billing?.cancel_at_period_end ? (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-            This subscription is scheduled to cancel at the end of the current billing period.
+        {cancellationScheduled && cancellationEnd && cancellationGraceUntil ? (
+          <div role="status" className="mt-4 space-y-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950">
+            <div className="font-black">Cancellation scheduled · No further monthly renewals</div>
+            <p className="font-semibold leading-6">
+              Your plan remains active until <strong>{dateLabel(cancellationEnd)}</strong>.
+              After it ends, you can use any unused <strong>paid</strong> evaluations for 30 more days,
+              through <strong>{dateLabel(cancellationGraceUntil)}</strong>.
+            </p>
+            <p className="font-black">Currently {paidEvaluationsLeft} paid evaluations could carry over. This number decreases as you complete evaluations.</p>
+            <p className="text-xs font-semibold leading-5 text-blue-900">
+              No new monthly allowance is added after cancellation. Unused free-trial bonus evaluations expire on the original billing-period end date and do not carry over. Your saved evaluations and pipeline stay accessible.
+            </p>
+          </div>
+        ) : null}
+
+        {hasCancellationWindow ? (
+          <div role="status" className="mt-4 space-y-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950">
+            <div className="font-black">
+              {usage?.postCancelActive ? "Subscription ended · 30-day evaluation window" :
+                gracePending ? "Subscription ended · evaluation window not started yet" :
+                "Your 30-day evaluation window has ended"}
+            </div>
+            <p className="font-semibold leading-6">
+              {usage?.postCancelActive
+                ? `${usage.postCancelRemaining ?? 0} unused paid evaluations remain available through ${dateLabel(usage.postCancelExpiresAt)}.`
+                : gracePending
+                  ? `Your unused paid evaluations become available on ${dateLabel(usage?.postCancelStartsAt)}, and expire ${dateLabel(usage?.postCancelExpiresAt)}.`
+                  : `Unused paid evaluations expired on ${dateLabel(usage?.postCancelExpiresAt)}.`}
+            </p>
+            <p className="text-xs font-semibold leading-5">
+              Your subscription will not renew. No additional monthly evaluations are issued. Free-trial bonuses are not carried over. Previously saved work remains accessible. Choose a plan above to restart a paid subscription.
+            </p>
+          </div>
+        ) : canceled ? (
+          <div role="status" className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+            Your subscription has ended, and no paid evaluations remain available. Your saved work is retained. Choose a plan above to subscribe again.
           </div>
         ) : null}
 
@@ -304,12 +357,23 @@ export function BillingSettingsCard() {
             <div className="mt-2 text-lg font-black text-slate-950">
               {paymentDue
                 ? "Paid allowance on hold"
+                : canceled
+                  ? usage?.postCancelActive
+                    ? `${usage.postCancelRemaining ?? 0} paid evaluations left · expires ${dateLabel(usage.postCancelExpiresAt)}`
+                    : gracePending
+                      ? `${usage.postCancelBalance ?? 0} paid evaluations · available from ${dateLabel(usage.postCancelStartsAt)}`
+                      : "No paid evaluations available"
                 : billingPeriodUnavailable
                   ? `${usage?.limits?.evaluationsPerMonth ?? "—"} included · temporarily unavailable`
                   : usage?.trialActive && !usage?.paidActive
                     ? `${usage.trialEvaluationsUsed || 0} / 5 trial`
                     : `${usage?.monthlyEvaluationsUsed || 0} / ${usage?.firstCycleAllowance ?? usage?.limits?.evaluationsPerMonth ?? "—"} this billing period`}
             </div>
+            {canceled ? (
+              <div className="mt-2 text-[11px] font-semibold leading-5 text-slate-600">
+                Fixed unused paid balance only · no monthly refill or free-trial bonus. Unused credits expire 30 days after the plan ends.
+              </div>
+            ) : null}
             {billingPeriodUnavailable ? (
               <div className="mt-2 text-[11px] font-semibold leading-5 text-amber-800">
                 Your monthly allowance is included with Starter, Dealer, or Dealer Pro, but cannot be spent until the billing period is verified.
