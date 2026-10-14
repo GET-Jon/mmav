@@ -37,6 +37,7 @@ type UsageStatus = {
   giftedEvaluationsRemaining?: number | null;
   effectiveEvaluationsRemaining?: number | null;
   canUsePaidProviders?: boolean;
+  canStartEvaluation?: boolean;
   limits?: {
     evaluationsPerMonth?: number;
   };
@@ -144,6 +145,11 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
     !usage?.paidActive &&
     usage?.status === "trialing" &&
     usage?.canUsePaidProviders === false;
+
+  const paymentBlocksNewEvaluation =
+    Boolean(usage) &&
+    ["past_due", "unpaid", "paused"].includes(String(usage?.status || "")) &&
+    usage?.canStartEvaluation === false;
 
   const evaluationUsageTone = (() => {
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
@@ -337,7 +343,15 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             )
           ) : null}
 
-          {trialPaywallReached ? (
+          {paymentBlocksNewEvaluation ? (
+            <Link
+              href="/settings?tab=billing"
+              title="Resolve payment to create a new evaluation"
+              className="hidden rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-black text-amber-900 transition hover:bg-amber-100 lg:block"
+            >
+              Resolve payment
+            </Link>
+          ) : trialPaywallReached ? (
             <button
               type="button"
               onClick={() => setPlanSelectionOpen(true)}
