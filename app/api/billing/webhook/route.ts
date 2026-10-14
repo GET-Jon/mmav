@@ -200,7 +200,6 @@ export async function POST(request: NextRequest) {
 
     if (companyId && shouldSyncSubscriptionStatus(stringValue(object.status))) {
       const planKey = planKeyForSubscription(object);
-      const entitlements = planEntitlements(planKey);
       const rawStatus = stringValue(object.status) || "not_configured";
       const periodStart = subscriptionPeriodStart(object);
       const periodEnd = subscriptionPeriodEnd(object);
@@ -233,6 +232,10 @@ export async function POST(request: NextRequest) {
         if (skipError) return NextResponse.json({ error: skipError.message }, { status: 500 });
         return NextResponse.json({ received: true, ignored: "initial_trial" });
       }
+      const effectivePlanKey = rawStatus === "canceled" && currentBilling?.plan_key
+        ? String(currentBilling.plan_key)
+        : planKey;
+      const entitlements = planEntitlements(effectivePlanKey);
       // A delayed older webhook must not rewind the company's quota window.
       const oldStart = currentBilling?.current_period_start
         ? new Date(currentBilling.current_period_start).getTime()
@@ -332,8 +335,7 @@ export async function POST(request: NextRequest) {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
             status: mappedStatus,
-            plan_key: rawStatus === "canceled" && currentBilling?.plan_key
-              ? currentBilling.plan_key : planKey,
+            plan_key: effectivePlanKey,
             ...(postCancelUpdate || {}),
             ...(rawStatus === "active"
               ? {
@@ -361,7 +363,7 @@ export async function POST(request: NextRequest) {
         .upsert(
           {
             company_id: companyId,
-            plan_key: planKey,
+            plan_key: effectivePlanKey,
             evaluations_per_month: entitlements.evaluations_per_month,
             seats_limit: entitlements.seats_limit,
             auto_dev_enabled: true,
