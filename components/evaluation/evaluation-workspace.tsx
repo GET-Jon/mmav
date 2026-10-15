@@ -26,6 +26,7 @@ import {
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
+import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
@@ -1566,6 +1567,26 @@ export function EvaluationWorkspace({
       }),
     [comps, targetMileage, activeAssumptions],
   );
+
+  function downloadCompAudit() {
+    if (!comps.length) return;
+    const csv = createCompAuditCsv({
+      comps,
+      targetMileage,
+      assumptions: activeAssumptions,
+      summary: compSummary,
+    });
+    const objectUrl = URL.createObjectURL(new Blob([csv], {
+      type: "text/csv;charset=utf-8",
+    }));
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = "lot-logic-comp-audit.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
 
   const marketTimingAverageDealerDays =
     compSummary.averageDealerDays ||
@@ -7763,6 +7784,7 @@ export function EvaluationWorkspace({
                 action={
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
+                    <button type="button" onClick={downloadCompAudit} disabled={!comps.length} title="Download all comp inputs for valuation review; no evaluation credit used" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Export comp audit</button>
                     <button type="button" onClick={openMethodology} className="text-xs font-black text-slate-400 hover:text-slate-700">Methodology</button>
                   </div>
                 }
