@@ -52,7 +52,7 @@ export default function MotorMatchPage(){
   const analyze=useCallback(async()=>{
     if(!make.trim()||!model.trim()){setError("Add a make and model first.");return;}
     const id=++requestId.current;
-    const cohortKey=[make.trim(),model.trim(),trim.trim()||"*",zip.trim()||"national",zip.trim()?distance:"all"].map(v=>String(v).toLowerCase()).join("|");
+    const cohortKey=[make.trim(),model.trim(),trim.trim()||"*",zip.trim()||"national",zip.trim()?distance:"all",year].map(v=>String(v).toLowerCase()).join("|");
     const cached=cohortCache.current.get(cohortKey);
     if(cached&&cached.expiresAt>Date.now()){
       setResult(solveMarket(cached.cohort,year,budget,mileage,{callsThisUpdate:0,breakdown:[]},{hit:true,ttlSeconds:Math.max(0,Math.floor((cached.expiresAt-Date.now())/1000))}));
@@ -62,7 +62,7 @@ export default function MotorMatchPage(){
 
     setLoading(true);setError("");
     try{
-      const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({make:make.trim(),model:model.trim(),trim:trim.trim(),zip:zip.trim(),distance})});
+      const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({make:make.trim(),model:model.trim(),trim:trim.trim(),zip:zip.trim(),distance,year})});
       const payload=await response.json();
       setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
       if(!response.ok)throw new Error(payload?.error||"We could not check the market.");
