@@ -25,7 +25,7 @@ export async function POST(request:Request){
    sampleSize:loaded.cohort.listings.length,
    cache:{hit:loaded.cacheHit,ttlSeconds:Math.max(0,Math.floor((loaded.cohort.expiresAt-Date.now())/1000))},
    apiUsage:{callsThisUpdate:loaded.calls+yearCalls,breakdown:[
-    ...(loaded.calls?[{label:"Market cohort",purpose:"Build a private exact-year sample from low-price, low-mileage, and recent inventory."}]:[]),
+    ...(loaded.calls?[{label:"Market cohort",purpose:"Build a private exact-year sample from the lowest-price and lowest-mileage inventory."}]:[]),
     ...(yearCalls?[{label:"Older-year check",purpose:"Check whether a nearby older model year satisfies both limits."}]:[])
    ]}
   });
