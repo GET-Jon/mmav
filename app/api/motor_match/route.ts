@@ -14,15 +14,8 @@ const s=(v:unknown)=>String(v||"").trim();
 
 function map(payload:any):Listing[]{return (Array.isArray(payload?.data)?payload.data:[]).map((row:any)=>{const v=row?.vehicle||{};const r=row?.retailListing||{};return{vin:s(v.vin||row?.vin)||null,year:n(v.year),make:s(v.make)||null,model:s(v.model)||null,trim:s(v.trim)||null,price:n(r.price),miles:n(r.miles??r.mileage),dealer:s(r.dealer)||null,city:s(r.city)||null,state:s(r.state)||null,url:s(r.vdp)||null}})}
 
-function yearBand(year:number){
-  const min=Math.max(1990,year-3);
-  const max=Math.min(new Date().getFullYear()+1,year+3);
-  return {min,max};
-}
-
 function keyFor(make:string,model:string,trim:string,zip:string,distance:number,year:number){
-  const band=yearBand(year);
-  return [make,model,trim||"*",zip||"national",zip?distance:"all",band.min+"-"+band.max].map(v=>String(v).trim().toLowerCase()).join("|");
+  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
 }
 
 async function query(apiKey:string,params:Record<string,string|number|boolean|null|undefined>){
@@ -54,11 +47,10 @@ export async function POST(request:Request){
     });
   }
 
-  const band=yearBand(year);
   const base:Record<string,string|number|boolean>={
     "vehicle.make":make,
     "vehicle.model":model,
-    "vehicle.year":band.min+"-"+band.max,
+    "vehicle.year":year,
     "retailListing.used":true,
     includes:"total",
     limit:MAX_LISTINGS,
@@ -87,8 +79,8 @@ export async function POST(request:Request){
       cohort:value.listings,
       providerTotal:value.providerTotal,
       cache:{hit:false,key:cacheKey,ttlSeconds:Math.floor(CACHE_TTL_MS/1000)},
-      queryMeta:{yearBand:[band.min,band.max],trimRelaxed:relaxedTrim},
-      apiUsage:{callsThisUpdate:relaxedTrim?2:1,breakdown:relaxedTrim?[{label:"Market cohort",purpose:"Fetch inventory around the selected model year."},{label:"Trim fallback",purpose:"Retry without the trim because the exact trim returned no inventory."}]:[{label:"Market cohort",purpose:"Fetch inventory around the selected model year; sliders are solved from this cache."}]}
+      queryMeta:{year,trimRelaxed:relaxedTrim,sampleLimit:MAX_LISTINGS},
+      apiUsage:{callsThisUpdate:relaxedTrim?2:1,breakdown:relaxedTrim?[{label:"Market cohort",purpose:"Fetch inventory for the selected model year."},{label:"Trim fallback",purpose:"Retry without the trim because the exact trim returned no inventory."}]:[{label:"Market cohort",purpose:"Fetch inventory for the selected model year; price and mileage are solved from this cache."}]}
     });
   }catch(cause){
     return NextResponse.json({
