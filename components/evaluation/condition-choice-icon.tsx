@@ -29,9 +29,7 @@ export function ConditionChoiceIcon({
       ) : variant === "issues" ? (
         <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14.7 6.3a5 5 0 0 0-6.4 6.4 5 5 0 0 0 6.4 6.4Z" />
-          <path d="m8.3 12.7-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6" />
-          <path d="M14.8 6.4 18.6 2.6" />
+          <path d="M14.7 6.3a5 5 0 0 0-6.4 6.4L2.6 18.4a2 2 0 0 0 2.8 2.8l5.7-5.7a5 5 0 0 0 6.4-6.4L14 9.5z" />
         </svg>
       ) : (
         <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor"
