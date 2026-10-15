@@ -1,91 +1,35 @@
-import { NextResponse } from "next/server";
-
-export const dynamic = "force-dynamic";
-
-type Listing={vin:string|null;year:number|null;make:string|null;model:string|null;trim:string|null;price:number|null;miles:number|null;dealer:string|null;city:string|null;state:string|null;url:string|null};
-type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number};
-type ApiCall={label:string;purpose:string};
-
-const CACHE_TTL_MS=30*60*1000;
-const MAX_LISTINGS=100;
-const cohortCache=new Map<string,CachedCohort>();
-const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:null};
+import {NextResponse} from "next/server";
+import {findOlderYear,getMotorMatchCohort,solveMotorMatch} from "@/lib/motor-match/server";
+export const dynamic="force-dynamic";
 const s=(v:unknown)=>String(v||"").trim();
 
-function map(payload:any):Listing[]{return (Array.isArray(payload?.data)?payload.data:[]).map((row:any)=>{const v=row?.vehicle||{};const r=row?.retailListing||{};return{vin:s(v.vin||row?.vin)||null,year:n(v.year),make:s(v.make)||null,model:s(v.model)||null,trim:s(v.trim)||null,price:n(r.price),miles:n(r.miles??r.mileage),dealer:s(r.dealer)||null,city:s(r.city)||null,state:s(r.state)||null,url:s(r.vdp)||null}})}
-
-function keyFor(make:string,model:string,trim:string,zip:string,distance:number,year:number){
-  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
-}
-
-async function query(apiKey:string,params:Record<string,string|number|boolean|null|undefined>){
-  const q=new URLSearchParams();
-  Object.entries(params).forEach(([k,v])=>{if(v!==null&&v!==undefined&&v!=="")q.set(k,String(v))});
-  const res=await fetch("https://api.auto.dev/listings?"+q.toString(),{headers:{Authorization:"Bearer "+apiKey,Accept:"application/json"},cache:"no-store"});
-  const raw=await res.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{payload={message:raw}}
-  if(!res.ok)throw new Error(typeof payload?.message==="string"?payload.message:"Auto.dev request failed.");
-  return{total:typeof payload?.total==="number"?payload.total:map(payload).length,listings:map(payload)};
-}
-
 export async function POST(request:Request){
-  const apiKey=process.env.AUTODEV_API_KEY;
-  if(!apiKey)return NextResponse.json({error:"Motor Match is missing Auto.dev configuration."},{status:500});
-
+ try{
   const body=await request.json();
-  const make=s(body.make),model=s(body.model),trim=s(body.trim),zip=/^\d{5}$/.test(s(body.zip))?s(body.zip):"",distance=Math.min(Math.max(Number(body.distance)||500,25),1000),year=Math.round(Number(body.year)||new Date().getFullYear());
-  if(!make||!model)return NextResponse.json({error:"Make and model are required."},{status:400});
-
-  const cacheKey=keyFor(make,model,trim,zip,distance,year);
-  const now=Date.now();
-  const cached=cohortCache.get(cacheKey);
-  if(cached&&cached.expiresAt>now){
-    return NextResponse.json({
-      cohort:cached.listings,
-      providerTotal:cached.providerTotal,
-      cache:{hit:true,key:cacheKey,ttlSeconds:Math.max(0,Math.floor((cached.expiresAt-now)/1000))},
-      apiUsage:{callsThisUpdate:0,breakdown:[] as ApiCall[]}
-    });
+  const make=s(body.make),model=s(body.model),trim=s(body.trim),zip=/^\d{5}$/.test(s(body.zip))?s(body.zip):"",distance=Math.min(Math.max(Number(body.distance)||500,25),1000),year=Math.round(Number(body.year)||new Date().getFullYear()),budget=Math.max(0,Number(body.budget)||0),mileage=Math.max(0,Number(body.mileage)||0);
+  if(!make||!model||!year||!budget||!mileage)return NextResponse.json({error:"Year, make, model, budget and mileage are required."},{status:400});
+  const loaded=await getMotorMatchCohort({make,model,trim,zip,distance,year});
+  const solved=solveMotorMatch(loaded.cohort.listings,budget,mileage);
+  let yearCalls=0;
+  if(solved.state!=="green"){
+   const apiKey=process.env.AUTODEV_API_KEY;
+   if(apiKey){
+    solved.market.yearNeeded=await findOlderYear(apiKey,{make,model,trim,zip,distance,year,budget,mileage});
+    yearCalls=1;
+   }
   }
-
-  const base:Record<string,string|number|boolean>={
-    "vehicle.make":make,
-    "vehicle.model":model,
-    "vehicle.year":year,
-    "retailListing.used":true,
-    includes:"total",
-    limit:MAX_LISTINGS,
-    sort:"updatedAt.desc"
-  };
-  if(trim)base["vehicle.trim"]=trim;
-  if(zip){base.zip=zip;base.distance=distance}
-
-  try{
-    let result=await query(apiKey,base);
-    let relaxedTrim=false;
-    if(trim&&result.listings.length===0){
-      const relaxed={...base};
-      delete relaxed["vehicle.trim"];
-      result=await query(apiKey,relaxed);
-      relaxedTrim=true;
-    }
-    const value:CachedCohort={expiresAt:now+CACHE_TTL_MS,listings:result.listings,providerTotal:result.total};
-    cohortCache.set(cacheKey,value);
-
-    if(cohortCache.size>150){
-      for(const [key,item] of cohortCache){if(item.expiresAt<=now)cohortCache.delete(key)}
-    }
-
-    return NextResponse.json({
-      cohort:value.listings,
-      providerTotal:value.providerTotal,
-      cache:{hit:false,key:cacheKey,ttlSeconds:Math.floor(CACHE_TTL_MS/1000)},
-      queryMeta:{year,trimRelaxed:relaxedTrim,sampleLimit:MAX_LISTINGS},
-      apiUsage:{callsThisUpdate:relaxedTrim?2:1,breakdown:relaxedTrim?[{label:"Market cohort",purpose:"Fetch inventory for the selected model year."},{label:"Trim fallback",purpose:"Retry without the trim because the exact trim returned no inventory."}]:[{label:"Market cohort",purpose:"Fetch inventory for the selected model year; price and mileage are solved from this cache."}]}
-    });
-  }catch(cause){
-    return NextResponse.json({
-      error:cause instanceof Error?cause.message:"Motor Match market check failed.",
-      apiUsage:{callsThisUpdate:1,breakdown:[{label:"Market cohort",purpose:"Fetch inventory around the selected model year."}]}
-    },{status:502});
-  }
+  return NextResponse.json({
+   ...solved,
+   searchKey:loaded.key,
+   providerTotal:loaded.cohort.providerTotal,
+   sampleSize:loaded.cohort.listings.length,
+   cache:{hit:loaded.cacheHit,ttlSeconds:Math.max(0,Math.floor((loaded.cohort.expiresAt-Date.now())/1000))},
+   apiUsage:{callsThisUpdate:loaded.calls+yearCalls,breakdown:[
+    ...(loaded.calls?[{label:"Market cohort",purpose:"Build a private exact-year sample from low-price, low-mileage, and recent inventory."}]:[]),
+    ...(yearCalls?[{label:"Older-year check",purpose:"Check whether a nearby older model year satisfies both limits."}]:[])
+   ]}
+  });
+ }catch(cause){
+  return NextResponse.json({error:cause instanceof Error?cause.message:"Motor Match market check failed."},{status:502});
+ }
 }
