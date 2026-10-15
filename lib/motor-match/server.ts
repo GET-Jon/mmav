@@ -37,13 +37,12 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  const base:Record<string,string|number|boolean>={"vehicle.make":input.make,"vehicle.model":input.model,"vehicle.year":input.year,"retailListing.used":true,includes:"total",limit:SAMPLE_LIMIT};
  if(input.trim)base["vehicle.trim"]=input.trim;
  if(input.zip){base.zip=input.zip;base.distance=input.distance}
- const [cheap,lowMiles,recent]=await Promise.all([
+ const [cheap,lowMiles]=await Promise.all([
   query(apiKey,{...base,sort:"price.asc"}),
-  query(apiKey,{...base,sort:"miles.asc"}),
-  query(apiKey,{...base,sort:"updatedAt.desc"})
+  query(apiKey,{...base,sort:"miles.asc"})
  ]);
- const listings=dedupe([cheap.listings,lowMiles.listings,recent.listings]);
- const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(cheap.total,lowMiles.total,recent.total),calls:3,trim:input.trim};
+ const listings=dedupe([cheap.listings,lowMiles.listings]);
+ const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(cheap.total,lowMiles.total),calls:2,trim:input.trim};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
  return{key,cohort,cacheHit:false,calls:3};
