@@ -18,13 +18,14 @@ const money=(v:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency
 const num=(v:number)=>new Intl.NumberFormat("en-US").format(v);
 
 export default function MotorMatchPage(){
- const [year,setYear]=useState(Math.min(CURRENT_YEAR-2,2024)),[make,setMake]=useState("BMW"),[model,setModel]=useState("M340i"),[trim,setTrim]=useState("xDrive"),[budget,setBudget]=useState(38000),[mileage,setMileage]=useState(40000),[zip,setZip]=useState(""),[distance,setDistance]=useState(500);
- const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(""),[sessionCalls,setSessionCalls]=useState(0);
+ const [year,setYear]=useState<number|null>(null),[make,setMake]=useState(""),[model,setModel]=useState(""),[trim,setTrim]=useState(""),[budget,setBudget]=useState(30000),[mileage,setMileage]=useState(60000),[zip,setZip]=useState(""),[distance,setDistance]=useState(500);
+ const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
  const requestId=useRef(0);
+ const vehicleReady=Boolean(year&&make.trim()&&model.trim());
 
  const analyze=useCallback(async()=>{
-  if(!make.trim()||!model.trim()){setError("Add a make and model first.");return}
+  if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
   const id=++requestId.current;setLoading(true);setError("");
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
@@ -34,12 +35,12 @@ export default function MotorMatchPage(){
    if(id===requestId.current){setResult(payload);setStarted(true);setSent(false)}
   }catch(cause){if(id===requestId.current)setError(cause instanceof Error?cause.message:"We could not check the market.")}
   finally{if(id===requestId.current)setLoading(false)}
- },[budget,distance,make,mileage,model,trim,year,zip]);
+ },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
- useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),850);return()=>window.clearTimeout(t)},[analyze,started]);
+ useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),650);return()=>window.clearTimeout(t)},[analyze,started]);
 
  async function submitLead(e:React.FormEvent){
-  e.preventDefault();if(!result)return;setSending(true);setFormError("");
+  e.preventDefault();if(!result||!year)return;setSending(true);setFormError("");
   try{
    const response=await fetch("/api/motor_match/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,email,phone,notes,searchKey:result.searchKey,request:{year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance},result:{state:result.state,depth:result.depth,matchCount:result.matchCount,priceNeeded:result.market.priceNeeded,mileageNeeded:result.market.mileageNeeded,yearNeeded:result.market.yearNeeded}})});
    const payload=await response.json();if(!response.ok)throw new Error(payload?.error||"We could not send your request.");
@@ -48,59 +49,100 @@ export default function MotorMatchPage(){
   finally{setSending(false)}
  }
 
- const title=useMemo(()=>!result?"Ready to check the market":result.state==="green"?"Your target works.":result.state==="yellow"?"Possible, but the market is thin.":"Something has to give.",[result]);
- const statusClass=result?styles["status_"+result.state]:styles.status_idle;
+ const headline=useMemo(()=>{
+  if(!result)return "";
+  if(result.state==="green")return "Yes — this is realistic.";
+  if(result.state==="yellow")return "Possible — but options are limited.";
+  return "You're close, but something has to give.";
+ },[result]);
+
+ const subhead=useMemo(()=>{
+  if(!result)return "";
+  if(result.state==="green")return result.depth==="strong"?"Strong availability around your target.":"Healthy availability around your target.";
+  if(result.state==="yellow")return "Your target exists, but there is not much room to be picky about color, condition, or options.";
+  return "We couldn't find enough current inventory satisfying both limits at once.";
+ },[result]);
 
  return <main className={styles.shell}>
   <header className={styles.topbar}>
-   <div className={styles.brand}><span className={styles.mark}>MM</span><div><b>MOTOR MATCH</b><small>by Lot Logic</small></div></div>
-   <div className={styles.apiMeter}><div><span>API CALLS · SESSION</span><strong>{sessionCalls}</strong></div><div><span>LAST UPDATE</span><strong>{result?.apiUsage?.callsThisUpdate??0}</strong></div><details><summary>DETAILS</summary><div className={styles.apiPopover}>{(result?.apiUsage?.breakdown||[]).length?result!.apiUsage.breakdown.map((call,i)=><div key={i}><b>{i+1}. {call.label}</b><span>{call.purpose}</span></div>):<p>No new market calls. Using cached data.</p>}<small>Individual listings stay private and are never sent to the browser.</small></div></details></div>
+   <div className={styles.brand}><span className={styles.mark}>MM</span><div><b>MOTOR MATCH</b><small>by Mindful Motors</small></div></div>
+   <div className={styles.apiMeter}><div><span>API CALLS · SESSION</span><strong>{sessionCalls}</strong></div><div><span>LAST UPDATE</span><strong>{result?.apiUsage?.callsThisUpdate??0}</strong></div><details><summary>DETAILS</summary><div className={styles.apiPopover}>{(result?.apiUsage?.breakdown||[]).length?result!.apiUsage.breakdown.map((call,i)=><div key={i}><b>{i+1}. {call.label}</b><span>{call.purpose}</span></div>):<p>No new market calls yet.</p>}<small>Individual listings stay private and are never sent to the browser.</small></div></details></div>
   </header>
 
-  <section className={styles.intro}><div><span className={styles.eyebrow}>WHAT CAN I ACTUALLY BUY?</span><h1>Match the car to the market.</h1></div><p>Set the car you want and the limits you care about. We show whether they intersect — and exactly what to change when they don't.</p></section>
-
-  <section className={styles.dashboard}>
-   <div className={styles.identityBar}><div className={styles.identityTitle}><span>YOUR CAR</span><strong>{year} {make||"Make"} {model||"Model"} {trim}</strong></div><div className={styles.identityFields}>
-    <Field label="YEAR"><input type="number" min="1990" max={CURRENT_YEAR+1} value={year} onChange={e=>setYear(Number(e.target.value))}/></Field>
-    <Field label="MAKE"><input value={make} onChange={e=>setMake(e.target.value)}/></Field>
-    <Field label="MODEL"><input value={model} onChange={e=>{setModel(e.target.value);setTrim("")}}/></Field>
-    <Field label="TRIM"><input value={trim} onChange={e=>setTrim(e.target.value)} placeholder="Optional — leave blank if unsure"/></Field>
-    <Field label="ZIP"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
-    <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 mi</option><option value={250}>250 mi</option><option value={500}>500 mi</option><option value={1000}>1,000 mi</option></select></Field>
-   </div></div>
-
-   <div className={styles.gauges}>
-    <Gauge label="PRICE" value={money(budget)} hint="Maximum budget" min={5000} max={150000} step={500} raw={budget} onChange={setBudget} marker={result?.market.priceNeeded&&result.market.priceNeeded>budget?money(result.market.priceNeeded):null} markerLabel="HEALTHIER AT" status={result?result.constraintStatus.priceWorks?"works":"blocked":undefined}/>
-    <Gauge label="MILEAGE" value={num(mileage)+" mi"} hint="Maximum mileage" min={5000} max={200000} step={1000} raw={mileage} onChange={setMileage} marker={result?.market.mileageNeeded&&result.market.mileageNeeded>mileage?num(result.market.mileageNeeded)+" mi":null} markerLabel="HEALTHIER AT" status={result?result.constraintStatus.mileageWorks?"works":"blocked":undefined}/>
-    <Gauge label="YEAR" value={String(year)} hint="Model year" min={2000} max={CURRENT_YEAR+1} step={1} raw={year} onChange={setYear} marker={result?.market.yearNeeded&&result.market.yearNeeded<year?String(result.market.yearNeeded):null} markerLabel="TRY" status={result?result.matchCount>0?"works":"blocked":undefined}/>
-   </div>
-
-   <div className={styles.matchStrip}><div className={statusClass}><span className={styles.statusDot}/><div><small>{result?(result.matchCount+" CURRENT MATCH"+(result.matchCount===1?"":"ES")+" · "+result.depth.toUpperCase()+" MARKET"):"MARKET STATUS"}</small><strong>{title}</strong><p>{result?.message||"Run the match once, then price and mileage updates use the cached market."}</p></div></div>{!started?<button className={styles.primary} onClick={()=>void analyze()} disabled={loading}>{loading?"CHECKING…":"CHECK MARKET →"}</button>:<div className={styles.liveState}><span className={loading?styles.pulse:""}/>{loading?"Rechecking…":"Live"}</div>}</div>
-
-   {result&&result.state!=="green"?<div className={styles.adjustments}><div className={styles.adjustHeader}><span>MAKE IT WORK</span><p>Keep two. Flex one.</p></div>
-    <Adjustment label="PAY MORE" value={result.market.priceNeeded?money(result.market.priceNeeded):"—"} sub="Keep this year + mileage" active={!!result.market.priceNeeded&&result.market.priceNeeded>budget} onClick={()=>result.market.priceNeeded&&setBudget(Math.ceil(result.market.priceNeeded/500)*500)}/>
-    <Adjustment label="TAKE MORE MILES" value={result.market.mileageNeeded?num(result.market.mileageNeeded)+" mi":"—"} sub="Keep this year + price" active={!!result.market.mileageNeeded&&result.market.mileageNeeded>mileage} onClick={()=>result.market.mileageNeeded&&setMileage(Math.ceil(result.market.mileageNeeded/1000)*1000)}/>
-    <Adjustment label="GO OLDER" value={result.market.yearNeeded?String(result.market.yearNeeded):"—"} sub="Keep price + mileage" active={!!result.market.yearNeeded} onClick={()=>result.market.yearNeeded&&setYear(result.market.yearNeeded)}/>
-   </div>:null}
-   {error?<div className={styles.error}>{error}</div>:null}
+  <section className={styles.hero}>
+   <span className={styles.eyebrow}>WHAT CAN I ACTUALLY BUY?</span>
+   <h1>Tell us the car.<br/><em>We'll tell you the market.</em></h1>
+   <p>Set the vehicle, budget, mileage, and search area. Motor Match checks current inventory and tells you whether those limits actually intersect.</p>
   </section>
 
-  {result?<section className={styles.leadCard}>
-   <div className={styles.leadIntro}><span>WANT US TO FIND IT?</span><h2>Send this Motor Match to Mindful Motors.</h2><p>We’ll review your target and the live market behind it, then follow up personally.</p></div>
-   {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:<form className={styles.leadForm} onSubmit={submitLead}>
+  <section className={styles.builder}>
+   <div className={styles.step}>
+    <div className={styles.stepNumber}>1</div>
+    <div className={styles.stepCopy}><span>THE CAR</span><strong>What are you looking for?</strong></div>
+    <div className={styles.vehicleGrid}>
+     <Field label="YEAR"><input type="number" min="1990" max={CURRENT_YEAR+1} value={year??""} placeholder="2022" onChange={e=>setYear(e.target.value?Number(e.target.value):null)}/></Field>
+     <Field label="MAKE"><input value={make} placeholder="BMW" onChange={e=>setMake(e.target.value)}/></Field>
+     <Field label="MODEL"><input value={model} placeholder="5 Series" onChange={e=>{setModel(e.target.value);setTrim("")}}/></Field>
+     <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
+    </div>
+   </div>
+
+   <div className={styles.step}>
+    <div className={styles.stepNumber}>2</div>
+    <div className={styles.stepCopy}><span>YOUR LIMITS</span><strong>What matters most?</strong></div>
+    <div className={styles.limitGrid}>
+     <div className={styles.limitCard}><span>I WANT TO SPEND NO MORE THAN</span><strong>{money(budget)}</strong><input type="range" min={5000} max={150000} step={500} value={budget} onChange={e=>setBudget(Number(e.target.value))}/></div>
+     <div className={styles.limitCard}><span>AND STAY UNDER</span><strong>{num(mileage)} miles</strong><input type="range" min={5000} max={200000} step={1000} value={mileage} onChange={e=>setMileage(Number(e.target.value))}/></div>
+    </div>
+   </div>
+
+   <div className={styles.step}>
+    <div className={styles.stepNumber}>3</div>
+    <div className={styles.stepCopy}><span>SEARCH AREA</span><strong>How far should we look?</strong></div>
+    <div className={styles.locationGrid}>
+     <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
+     <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
+     <button className={styles.primary} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
+    </div>
+   </div>
+  </section>
+
+  {error?<div className={styles.error}>{error}</div>:null}
+
+  {result?<section className={styles.answer+" "+styles["answer_"+result.state]}>
+   <div className={styles.answerLead}><span>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span><h2>{headline}</h2><p>{subhead}</p></div>
+   <div className={styles.constraintRow}>
+    <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks}/>
+    <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks}/>
+    <Constraint label="Model year" value={String(year)} works={result.matchCount>0}/>
+   </div>
+
+   {result.state!=="green"?<div className={styles.options}>
+    <div className={styles.optionsTitle}><span>KEEP TWO. FLEX ONE.</span><strong>Here’s what opens the market.</strong></div>
+    <Option label="Keep the mileage" value={result.market.priceNeeded?money(result.market.priceNeeded):"No clear price target"} action={result.market.priceNeeded&&result.market.priceNeeded>budget?"Use this budget":"No change needed"} active={!!result.market.priceNeeded&&result.market.priceNeeded>budget} onClick={()=>result.market.priceNeeded&&setBudget(Math.ceil(result.market.priceNeeded/500)*500)}/>
+    <Option label="Keep the budget" value={result.market.mileageNeeded?num(result.market.mileageNeeded)+" mi":"No clear mileage target"} action={result.market.mileageNeeded&&result.market.mileageNeeded>mileage?"Use this mileage":"No change needed"} active={!!result.market.mileageNeeded&&result.market.mileageNeeded>mileage} onClick={()=>result.market.mileageNeeded&&setMileage(Math.ceil(result.market.mileageNeeded/1000)*1000)}/>
+    <Option label="Keep price + mileage" value={result.market.yearNeeded?String(result.market.yearNeeded):"No older-year shortcut"} action={result.market.yearNeeded?"Try this year":"No alternative found"} active={!!result.market.yearNeeded} onClick={()=>result.market.yearNeeded&&setYear(result.market.yearNeeded)}/>
+   </div>:null}
+
+   <div className={styles.cta}>
+    <div><span>WANT US TO FIND THE RIGHT ONE?</span><strong>We can take it from here.</strong><p>Mindful Motors can search the public market, auctions, and dealer network using the target you just built.</p></div>
+    {!showForm&&!sent?<button onClick={()=>setShowForm(true)}>START MY SEARCH →</button>:null}
+   </div>
+
+   {showForm&&!sent?<form className={styles.leadForm} onSubmit={submitLead}>
     <label><span>NAME</span><input required value={name} onChange={e=>setName(e.target.value)}/></label>
     <label><span>EMAIL</span><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
     <label><span>PHONE</span><input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label>
     <label className={styles.notes}><span>ANYTHING ELSE WE SHOULD KNOW?</span><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}/></label>
     <button type="submit" disabled={sending}>{sending?"SENDING…":"SEND MY MOTOR MATCH →"}</button>
     {formError?<div className={styles.formError}>{formError}</div>:null}
-   </form>}
+   </form>:null}
+
+   {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
   </section>:null}
  </main>;
 }
 
 function Field({label,children}:{label:string;children:React.ReactNode}){return <label className={styles.field}><span>{label}</span>{children}</label>}
-function Gauge({label,value,hint,min,max,step,raw,onChange,marker,markerLabel,status}:{label:string;value:string;hint:string;min:number;max:number;step:number;raw:number;onChange:(v:number)=>void;marker:string|null;markerLabel:string;status?:"works"|"blocked"}){
- return <div className={styles.gauge}><div className={styles.gaugeTop}><div><span>{label}</span><strong className={status==="blocked"?styles.redText:undefined}>{value}</strong><small>{hint}</small></div>{marker?<div className={styles.marketMarker}><span>{markerLabel}</span><b>{marker}</b></div>:status==="works"?<div className={styles.okMarker}>✓ WORKS</div>:null}</div><input type="range" min={min} max={max} step={step} value={raw} onChange={e=>onChange(Number(e.target.value))}/><div className={styles.rangeEnds}><span>{label==="PRICE"?"$5k":label==="MILEAGE"?"5k":"2000"}</span><span>{label==="PRICE"?"$150k":label==="MILEAGE"?"200k":String(CURRENT_YEAR+1)}</span></div></div>
-}
-function Adjustment({label,value,sub,active,onClick}:{label:string;value:string;sub:string;active:boolean;onClick:()=>void}){return <button disabled={!active} onClick={onClick} className={styles.adjustment}><span>{label}</span><strong>{value}</strong><small>{sub}</small><b>{active?"APPLY →":"NO CHANGE NEEDED"}</b></button>}
+function Constraint({label,value,works}:{label:string;value:string;works:boolean}){return <div className={styles.constraint}><span>{label}</span><strong>{value}</strong><b className={works?styles.good:styles.bad}>{works?"WORKS":"BLOCKING"}</b></div>}
+function Option({label,value,action,active,onClick}:{label:string;value:string;action:string;active:boolean;onClick:()=>void}){return <button className={styles.option} disabled={!active} onClick={onClick}><span>{label}</span><strong>{value}</strong><b>{action}</b></button>}
