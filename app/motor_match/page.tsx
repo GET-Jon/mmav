@@ -80,7 +80,6 @@ export default function MotorMatchPage(){
     <div className={styles.stepNumber}>1</div>
     <div className={styles.stepCopy}><span>THE CAR</span><strong>What are you looking for?</strong></div>
     <div className={styles.vehicleGrid}>
-     <Field label="YEAR"><input type="number" min="1990" max={CURRENT_YEAR+1} value={year??""} placeholder="2022" onChange={e=>setYear(e.target.value?Number(e.target.value):null)}/></Field>
      <Field label="MAKE"><input value={make} placeholder="BMW" onChange={e=>setMake(e.target.value)}/></Field>
      <Field label="MODEL"><input value={model} placeholder="5 Series" onChange={e=>{setModel(e.target.value);setTrim("")}}/></Field>
      <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
@@ -91,6 +90,7 @@ export default function MotorMatchPage(){
     <div className={styles.stepNumber}>2</div>
     <div className={styles.stepCopy}><span>YOUR LIMITS</span><strong>What matters most?</strong></div>
     <div className={styles.limitGrid}>
+     <div className={styles.limitCard}><span>MODEL YEAR</span><strong>{year??"Choose year"}</strong><input type="range" min={2000} max={CURRENT_YEAR+1} step={1} value={year??2022} onChange={e=>setYear(Number(e.target.value))}/></div>
      <div className={styles.limitCard}><span>I WANT TO SPEND NO MORE THAN</span><strong>{money(budget)}</strong><input type="range" min={5000} max={150000} step={500} value={budget} onChange={e=>setBudget(Number(e.target.value))}/></div>
      <div className={styles.limitCard}><span>AND STAY UNDER</span><strong>{num(mileage)} miles</strong><input type="range" min={5000} max={200000} step={1000} value={mileage} onChange={e=>setMileage(Number(e.target.value))}/></div>
     </div>
