@@ -276,10 +276,14 @@ function MarketConfidenceHelp({
   confidence,
   compCount,
   reasons,
+  primaryCount = 0,
+  pricingMode,
 }: {
   confidence: "Strong" | "Moderate" | "Limited";
   compCount: number;
   reasons: string[];
+  primaryCount?: number;
+  pricingMode?: "primary" | "market-fallback";
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -322,7 +326,9 @@ function MarketConfidenceHelp({
           Why {confidence.toLowerCase()} confidence?
         </span>
         <span className="mt-1 block text-xs font-medium leading-5 text-slate-600">
-          {compCount} selected comp{compCount === 1 ? "" : "s"} provide useful pricing evidence, but confidence measures how well listings match and agree, not just how many were found.
+          {pricingMode === "primary"
+            ? `${primaryCount} close peers set the primary price; ${compCount - primaryCount} broader listings remain as market context. Confidence measures the pricing agreement and reliability of those close peers.`
+            : `${compCount} comps provide market context, but fewer than four close, uncapped pricing peers are available. Confidence is conservative until better evidence is found.`}
         </span>
         {reasons.length > 0 ? (
           <span className="mt-2 block border-t border-slate-100 pt-2">
@@ -7680,6 +7686,8 @@ export function EvaluationWorkspace({
                                 confidence={marketEvidenceStrength}
                                 compCount={compSummary.includedCount}
                                 reasons={compSummary.confidenceReasons || []}
+                                primaryCount={compSummary.primaryCompCount || 0}
+                                pricingMode={compSummary.pricingMode}
                               />
                             ) : null}
                           </div>
@@ -7687,6 +7695,17 @@ export function EvaluationWorkspace({
                       </div>
                       {activeStage === "market" ? (
                         <>
+                        {compSummary.pricingMode === "primary" ? (
+                          <div className="mt-3 text-[11px] font-semibold leading-4 text-slate-600">
+                            <span className="font-black text-emerald-800">{compSummary.primaryCompCount} close, uncapped peers set this estimate</span>
+                            {" · "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} broader selected comps provide market context.
+                            {" "}Asking prices are not completed-sale prices.
+                          </div>
+                        ) : compSummary.includedCount > 0 ? (
+                          <div className="mt-3 text-[11px] font-semibold leading-4 text-amber-800">
+                            Broad-market estimate: only {compSummary.primaryCompCount || 0} close, uncapped peers found (minimum 4). Treat the retail value as provisional.
+                          </div>
+                        ) : null}
                         {hasLimitedMarketEvidence ? (
                           <div className="mt-3 text-xs font-semibold leading-5 text-amber-800">
                             {marketEvidenceDisplay} · {compSearchRecommendation.title}
