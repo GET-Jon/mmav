@@ -6,6 +6,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { ConditionChoiceIcon } from "@/components/evaluation/condition-choice-icon";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
   MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
@@ -7360,7 +7361,10 @@ export function EvaluationWorkspace({
                   <div className="space-y-2 opacity-55">
                     {["No material issues", "Known issues", "Condition unknown"].map((label) => (
                       <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
+                        <ConditionChoiceIcon
+                          variant={label === "No material issues" ? "clear" : label === "Known issues" ? "issues" : "unknown"}
+                          muted
+                        />
                         {label}
                       </div>
                     ))}
@@ -7372,16 +7376,31 @@ export function EvaluationWorkspace({
                   {conditionReviewStatus === "unreviewed" ? (
                     <div className="space-y-2">
                       <button type="button" onClick={() => chooseConditionReview("no_material_issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50">
-                        <div className="text-sm font-black text-slate-900">No material issues apparent</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="clear" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">No material issues apparent</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</span>
+                          </span>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-violet-300 hover:bg-violet-50">
-                        <div className="text-sm font-black text-slate-900">There are known issues</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="issues" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">There are known issues</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</span>
+                          </span>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("unknown")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-amber-300 hover:bg-amber-50">
-                        <div className="text-sm font-black text-slate-900">Condition is unknown</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="unknown" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">Condition is unknown</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</span>
+                          </span>
+                        </div>
                       </button>
                     </div>
                   ) : conditionReviewStatus === "issues" ? (
