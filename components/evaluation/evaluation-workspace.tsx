@@ -1564,9 +1564,12 @@ export function EvaluationWorkspace({
       calculateCompSummary({
         comps,
         targetMileage,
+        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+        targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
+        targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [comps, targetMileage, activeAssumptions],
+    [comps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
 
   function downloadCompAudit() {
@@ -4662,6 +4665,14 @@ export function EvaluationWorkspace({
       : compSummary.includedCount >= 4 && normalizedCompConfidence !== "low"
         ? "Moderate"
         : "Limited";
+  const marketEvidenceDisplay =
+    marketEvidenceStrength === "Limited" && compSummary.includedCount >= 4
+      ? "Low pricing confidence"
+      : marketEvidenceStrength === "Limited"
+        ? "Limited evidence"
+        : marketEvidenceStrength === "Strong"
+          ? "Strong pricing confidence"
+          : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
   const hasLowCompConfidence = hasLimitedMarketEvidence;
@@ -5036,7 +5047,7 @@ export function EvaluationWorkspace({
     presentationDecision === "pursue" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    compSummary.includedCount > 0 ? marketEvidenceStrength : "—";
+    compSummary.includedCount > 0 ? marketEvidenceDisplay : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
@@ -7580,7 +7591,7 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence`
+                          ? `${compSummary.includedCount} comps · ${compSummary.primaryCompCount || 0} close peers · ${marketEvidenceDisplay}`
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7663,8 +7674,8 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xl font-black text-slate-950">{marketEvidenceStrength}</span>
-                            {marketEvidenceStrength === "Limited" ? (
+                            <span className="text-lg font-black text-slate-950">{marketEvidenceDisplay}</span>
+                            {(marketEvidenceStrength === "Limited" || compSummary.pricingMode === "primary") ? (
                               <MarketConfidenceHelp
                                 confidence={marketEvidenceStrength}
                                 compCount={compSummary.includedCount}
@@ -7678,7 +7689,7 @@ export function EvaluationWorkspace({
                         <>
                         {hasLimitedMarketEvidence ? (
                           <div className="mt-3 text-xs font-semibold leading-5 text-amber-800">
-                            Limited evidence · {compSearchRecommendation.title}
+                            {marketEvidenceDisplay} · {compSearchRecommendation.title}
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -7819,7 +7830,7 @@ export function EvaluationWorkspace({
                           Full comp set appears after Continue to Verdict.
                         </div>
                       </div>
-                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
                       {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
@@ -8031,7 +8042,7 @@ export function EvaluationWorkspace({
                   }
                 >
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}
