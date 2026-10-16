@@ -5,3 +5,63 @@
 @keyframes carFill{0%{transform:scaleX(.06)}45%{transform:scaleX(.7)}75%{transform:scaleX(1)}100%{transform:scaleX(1)}}@keyframes carFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes loadingTextIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}@keyframes refreshPulse{0%{box-shadow:0 0 0 0 #2457ff55}70%{box-shadow:0 0 0 8px #2457ff00}100%{box-shadow:0 0 0 0 #2457ff00}}
 @media(max-width:720px){.loadingBackdrop{padding:12px}.loadingModal{padding:24px 18px 21px;border-radius:19px}.loadingCarWrap{margin-bottom:10px}.loadingCopy h2{font-size:25px;min-height:28px}.loadingCopy p{font-size:10px}.refreshStatus{align-items:flex-start}}
 @media(prefers-reduced-motion:reduce){.loadingCarSvg,.loadingCarFill,.loadingCopy h2,.refreshDot{animation:none}.loadingCarFill{transform:scaleX(.72)}}
+
+/* Visual hierarchy pass */
+.builder{border-color:#1111;box-shadow:0 18px 50px #1111110a}
+.step{position:relative;transition:background .2s ease,border-color .2s ease}
+.stepCar{background:#fff}
+.stepLimits{background:#faf8f2}
+.stepSearch{background:#f1f5ff;border-top-color:#2457ff20}
+.stepSearch .stepNumber{background:#2457ff}
+.stepSearch .stepCopy span{color:#2457ff;opacity:1}
+.stepSearch .primary{background:#2457ff;box-shadow:0 8px 20px #2457ff22}
+.stepSearch .primary:hover:not(:disabled){background:#1748e8}
+.stepLimits .limitCard{background:#fff;border-color:#1112}
+.stepLimits .limitCard strong{font-size:34px}
+.stepCar .field input{background:#fbfbfa}
+
+.answer{margin-top:22px;border:0;box-shadow:0 22px 60px #1112}
+.answerLead{position:relative;padding:28px 28px 24px;background:#111;color:#fff}
+.answerLead:before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:#2457ff}
+.answer_green .answerLead:before{background:#20a466}
+.answer_yellow .answerLead:before{background:#d59b18}
+.answer_red .answerLead:before{background:#d94b43}
+.resultStatusRow{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:10px}
+.resultStatus{display:inline-flex;align-items:center;width:max-content;border:1px solid #ffffff2b;background:#ffffff12;border-radius:999px;padding:7px 10px;font-size:8px!important;letter-spacing:.12em;font-weight:900;color:#fff!important}
+.resultVehicle{font-size:10px;font-weight:800;letter-spacing:.02em;color:#ffffff99;text-align:right}
+.answerLead h2{max-width:900px;font-size:clamp(38px,5vw,64px);margin:0 0 10px;color:#fff}
+.answerLead p{max-width:780px;color:#ffffffa8;opacity:1;font-size:14px}
+.targetBlock{padding:22px 26px 24px;background:#fff;border-top:0}
+.targetBlock .sectionKicker{margin-bottom:14px}
+.targetBlock .sectionKicker span{color:#2457ff;opacity:1}
+.targetBlock .sectionKicker strong{font-size:16px}
+.targetBlock .constraintRow{gap:10px}
+.targetBlock .constraint{background:#f7f7f5;border-color:#1111;box-shadow:none}
+.targetBlock .constraint strong{font-size:25px}
+.targetBlock .constraint b{justify-self:end}
+.nextMoves{padding:24px 26px 26px;background:#f5f2eb;border-top:1px solid #1111}
+.nextMoves .sectionKicker span{color:#2457ff;opacity:1}
+.nextMoves .sectionKicker strong{font-size:18px}
+.moveGrid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.moveGrid .option{position:relative;background:#fff;border:1px solid #2457ff2b;box-shadow:0 10px 26px #1111110a;padding:18px}
+.moveGrid .option:after{content:"APPLY";position:absolute;right:14px;top:14px;font-size:7px;font-weight:900;letter-spacing:.1em;color:#2457ff}
+.moveGrid .option span{color:#2457ff;opacity:1}
+.moveGrid .option strong{font-size:28px}
+.answer .cta{background:#111;color:#fff;border-top:0;padding:24px 26px}
+.answer .cta span{color:#7fa1ff;opacity:1}
+.answer .cta strong{font-size:26px;color:#fff}
+.answer .cta p{color:#ffffff9c;opacity:1}
+.answer .cta button{background:#2457ff;color:#fff;box-shadow:0 8px 22px #2457ff33}
+.answer .cta button:hover{background:#3a68ff}
+.refreshStatus{margin:12px 0 0;border-color:#2457ff25;background:#eef3ff}
+
+@media(max-width:720px){
+ .stepCar,.stepLimits,.stepSearch{background:#fff}
+ .stepSearch{background:#f3f6ff}
+ .resultStatusRow{align-items:flex-start;flex-direction:column;gap:8px}
+ .resultVehicle{text-align:left}
+ .answerLead{padding:24px 20px 21px}
+ .targetBlock,.nextMoves{padding:20px}
+ .answer .cta{padding:22px 20px}
+ .stepLimits .limitCard strong{font-size:30px}
+}
