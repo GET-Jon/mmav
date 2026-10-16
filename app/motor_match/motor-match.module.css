@@ -65,3 +65,56 @@
  .answer .cta{padding:22px 20px}
  .stepLimits .limitCard strong{font-size:30px}
 }
+
+/* Guided setup progression */
+.stepActive{background:#eef3ff;border-top-color:#2457ff24}
+.stepActive .stepNumber{background:#2457ff}
+.stepActive .stepCopy span{color:#2457ff;opacity:1}
+.makeFocus{border-color:#2457ff!important;box-shadow:0 0 0 3px #2457ff18!important}
+.stepPulse{animation:limitsGuidePulse .7s ease-in-out 3}
+.primary{background:#b6b8bd;color:#fff;box-shadow:none;transition:background .2s ease,box-shadow .2s ease,transform .2s ease}
+.primaryReady{background:#2457ff!important;box-shadow:0 8px 20px #2457ff28}
+.primaryReady:hover:not(:disabled){background:#1748e8!important;transform:translateY(-1px)}
+.stepSearch{background:#fff;border-top-color:#1111}
+.stepSearch .stepNumber{background:#111}
+.stepSearch .stepCopy span{color:inherit;opacity:.4}
+.stepSearch .primary{background:#b6b8bd}
+.stepSearch .primaryReady{background:#2457ff!important}
+
+@keyframes limitsGuidePulse{
+  0%,100%{background:#faf8f2;box-shadow:inset 0 0 0 0 #2457ff00}
+  50%{background:#eef3ff;box-shadow:inset 0 0 0 2px #2457ff22}
+}
+
+/* Refined result treatment */
+.answer{background:#fff;border:1px solid #1111;box-shadow:0 18px 50px #1111110d}
+.answerLead{background:#fbfaf6;color:#111;border-bottom:1px solid #1111;padding:24px 26px 21px}
+.answerLead:before{width:4px}
+.answer_green .answerLead{background:#f3faf6}
+.answer_yellow .answerLead{background:#fff9eb}
+.answer_red .answerLead{background:#fff4f2}
+.resultStatusRow{margin-bottom:8px}
+.resultStatus{background:#fff;border:1px solid #1112;color:#111!important}
+.answer_green .resultStatus{border-color:#20a46635;color:#148852!important;background:#edf8f2}
+.answer_yellow .resultStatus{border-color:#d59b1835;color:#9a6c00!important;background:#fff4d8}
+.answer_red .resultStatus{border-color:#d94b4335;color:#b93831!important;background:#ffebe8}
+.resultVehicle{font-size:14px;font-weight:800;letter-spacing:-.01em;color:#111b;white-space:nowrap}
+.answerLead h2{font-size:clamp(32px,3.6vw,48px);line-height:1;letter-spacing:-.045em;color:#111;max-width:none;white-space:nowrap}
+.answerLead p{font-size:13px;line-height:1.4;color:#1119;max-width:none;white-space:nowrap}
+.answer .cta{background:#f3f6ff;color:#111;border-top:1px solid #2457ff18}
+.answer .cta span{color:#2457ff;opacity:1}
+.answer .cta strong{font-size:23px;color:#111}
+.answer .cta p{color:#1118;opacity:1}
+.answer .cta button{background:#2457ff;color:#fff}
+.targetBlock{background:#fff}
+.nextMoves{background:#faf8f2}
+
+@media(max-width:980px){
+ .answerLead h2,.answerLead p{white-space:normal}
+ .resultVehicle{white-space:normal}
+}
+@media(max-width:720px){
+ .stepActive{background:#eef3ff}
+ .stepPulse{animation:limitsGuidePulse .7s ease-in-out 3}
+ .answerLead h2{font-size:34px}
+}
