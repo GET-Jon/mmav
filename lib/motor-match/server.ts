@@ -13,12 +13,19 @@ function keyFor({make,model,trim,zip,distance,year}:{make:string;model:string;tr
  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
 }
 
-async function query(apiKey:string,params:Record<string,string|number|boolean|null|undefined>){
+async function query(apiKey:string,params:Record<string,string|number|boolean|null|undefined>,timeoutMs=9000){
  const q=new URLSearchParams();Object.entries(params).forEach(([k,v])=>{if(v!==null&&v!==undefined&&v!=="")q.set(k,String(v))});
- const res=await fetch("https://api.auto.dev/listings?"+q.toString(),{headers:{Authorization:"Bearer "+apiKey,Accept:"application/json"},cache:"no-store"});
- const raw=await res.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{payload={message:raw}}
- if(!res.ok)throw new Error(typeof payload?.message==="string"?payload.message:"Auto.dev request failed.");
- return{total:typeof payload?.total==="number"?payload.total:map(payload).length,listings:map(payload)};
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),timeoutMs);
+ try{
+  const res=await fetch("https://api.auto.dev/listings?"+q.toString(),{headers:{Authorization:"Bearer "+apiKey,Accept:"application/json"},cache:"no-store",signal:controller.signal});
+  const raw=await res.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{payload={message:raw}}
+  if(!res.ok)throw new Error(typeof payload?.message==="string"?payload.message:"Auto.dev request failed.");
+  return{total:typeof payload?.total==="number"?payload.total:map(payload).length,listings:map(payload)};
+ }catch(error){
+  if(error instanceof Error&&error.name==="AbortError")throw new Error("Auto.dev timed out.");
+  throw error;
+ }finally{clearTimeout(timer)}
 }
 
 function dedupe(groups:Listing[][]){
@@ -37,12 +44,14 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  const base:Record<string,string|number|boolean>={"vehicle.make":input.make,"vehicle.model":input.model,"vehicle.year":input.year,"retailListing.used":true,includes:"total",limit:SAMPLE_LIMIT};
  if(input.trim)base["vehicle.trim"]=input.trim;
  if(input.zip){base.zip=input.zip;base.distance=input.distance}
- const [cheap,lowMiles]=await Promise.all([
+ const settled=await Promise.allSettled([
   query(apiKey,{...base,sort:"price.asc"}),
   query(apiKey,{...base,sort:"miles.asc"})
  ]);
- const listings=dedupe([cheap.listings,lowMiles.listings]);
- const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(cheap.total,lowMiles.total),calls:2,trim:input.trim};
+ const successful=settled.filter((item):item is PromiseFulfilledResult<{total:number;listings:Listing[]}=>item.status==="fulfilled").map(item=>item.value);
+ if(!successful.length)throw new Error("The market data provider is taking too long. Please try again.");
+ const listings=dedupe(successful.map(item=>item.listings));
+ const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
  return{key,cohort,cacheHit:false,calls:3};
