@@ -118,3 +118,42 @@
  .stepPulse{animation:limitsGuidePulse .7s ease-in-out 3}
  .answerLead h2{font-size:34px}
 }
+
+/* Final hierarchy refinements */
+.stepPulse{animation:limitsGuidePulse 1s ease-in-out 4}
+
+/* Results: improve legibility and make status unmistakable */
+.resultStatus{font-size:10px!important;padding:7px 11px}
+.resultVehicle{font-size:15px}
+.answerLead p{font-size:14px}
+.sectionKicker span{font-size:10px}
+.sectionKicker strong{font-size:17px}
+.targetBlock .constraint>span{font-size:10px}
+.targetBlock .constraint b{font-size:10px;padding:7px 10px}
+.moveGrid .option span{font-size:10px}
+.moveGrid .option b{font-size:10px}
+.moveGrid .option:after{font-size:9px}
+.answer .cta span{font-size:10px}
+.answer .cta p{font-size:13px}
+.answer .cta button{font-size:10px}
+.refreshStatus small{font-size:10px}
+.apiMeter span{font-size:8px}
+.apiPopover span,.apiPopover p,.apiPopover small{font-size:10px}
+
+/* Good vs blocking constraint cards */
+.targetBlock .constraint:has(.good){border-color:#20a46666;background:#f5fbf7}
+.targetBlock .constraint:has(.bad){border-color:#d94b4355;background:#fff0ee}
+.good{background:#e8f7ef;color:#137a4a}
+.bad{background:#ffe2de;color:#a9342d}
+
+/* Red results should invite contact without reading like a win */
+.answer_red .cta{background:#f7f5f1;border-top:1px solid #d94b4324;color:#111}
+.answer_red .cta span{color:#a85b54}
+.answer_red .cta strong{color:#111}
+.answer_red .cta p{color:#1119}
+.answer_red .cta button{background:#2f3135;color:#fff;box-shadow:none}
+.answer_red .cta button:hover{background:#1f2023}
+
+/* Yellow stays cautious; green can retain the positive blue action */
+.answer_yellow .cta{background:#fffaf0;border-top-color:#d59b1826}
+.answer_yellow .cta span{color:#9a6c00}
