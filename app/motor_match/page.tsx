@@ -70,7 +70,38 @@ export default function MotorMatchPage(){
   const htmlBackground=document.documentElement.style.background;
   document.body.style.background="transparent";
   document.documentElement.style.background="transparent";
-  return()=>{document.body.style.background=bodyBackground;document.documentElement.style.background=htmlBackground};
+
+  let lastHeight=0;
+  let raf=0;
+  const reportHeight=()=>{
+   cancelAnimationFrame(raf);
+   raf=requestAnimationFrame(()=>{
+    const height=Math.ceil(Math.max(
+     document.documentElement.scrollHeight,
+     document.body.scrollHeight,
+     document.documentElement.getBoundingClientRect().height,
+     document.body.getBoundingClientRect().height
+    ));
+    if(Math.abs(height-lastHeight)<2)return;
+    lastHeight=height;
+    window.parent.postMessage({type:"motor-match:resize",height},"*");
+   });
+  };
+  const observer=new ResizeObserver(reportHeight);
+  observer.observe(document.documentElement);
+  observer.observe(document.body);
+  window.addEventListener("resize",reportHeight);
+  reportHeight();
+  const delayed=[100,400,900].map(ms=>window.setTimeout(reportHeight,ms));
+
+  return()=>{
+   observer.disconnect();
+   window.removeEventListener("resize",reportHeight);
+   delayed.forEach(window.clearTimeout);
+   cancelAnimationFrame(raf);
+   document.body.style.background=bodyBackground;
+   document.documentElement.style.background=htmlBackground;
+  };
  },[]);
  useEffect(()=>{
   fetch("/api/motor_match/options").then(r=>r.json()).then(payload=>setMakes(Array.isArray(payload?.makes)?payload.makes:[])).catch(()=>setError("We couldn't load the vehicle list. Please refresh and try again."));
