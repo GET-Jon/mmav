@@ -30,6 +30,7 @@ export default function MotorMatchPage(){
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
  const [makes,setMakes]=useState<string[]>([]),[models,setModels]=useState<string[]>([]),[validYears,setValidYears]=useState<number[]>([]);
  const [manualInquiry,setManualInquiry]=useState(false);
+ const [embedded,setEmbedded]=useState(false);
  const requestId=useRef(0);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
  const hasFlashedLimits=useRef(false);
@@ -61,6 +62,7 @@ export default function MotorMatchPage(){
   finally{if(id===requestId.current)setLoading(false)}
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
+ useEffect(()=>{setEmbedded(new URLSearchParams(window.location.search).get("embed")==="1")},[]);
  useEffect(()=>{
   fetch("/api/motor_match/options").then(r=>r.json()).then(payload=>setMakes(Array.isArray(payload?.makes)?payload.makes:[])).catch(()=>setError("We couldn't load the vehicle list. Please refresh and try again."));
  },[]);
@@ -123,17 +125,17 @@ export default function MotorMatchPage(){
   return "We couldn't find enough current inventory satisfying both limits at once.";
  },[result]);
 
- return <main className={styles.shell}>
-  <header className={styles.topbar}>
+ return <main className={styles.shell+(embedded?" "+styles.shellEmbedded:"")}>
+  {!embedded?<header className={styles.topbar}>
    <div className={styles.brand}><span className={styles.mark}>MM</span><div><b>MOTOR MATCH</b><small>by Mindful Motors</small></div></div>
    <div className={styles.apiMeter}><div><span>API CALLS · SESSION</span><strong>{sessionCalls}</strong></div><div><span>LAST UPDATE</span><strong>{result?.apiUsage?.callsThisUpdate??0}</strong></div><details><summary>DETAILS</summary><div className={styles.apiPopover}>{(result?.apiUsage?.breakdown||[]).length?result!.apiUsage.breakdown.map((call,i)=><div key={i}><b>{i+1}. {call.label}</b><span>{call.purpose}</span></div>):<p>No new market calls yet.</p>}<small>Individual listings stay private and are never sent to the browser.</small></div></details></div>
-  </header>
+  </header>:null}
 
-  <section className={styles.hero}>
+  {!embedded?<section className={styles.hero}>
    <span className={styles.eyebrow}>WHAT CAN I ACTUALLY BUY?</span>
    <h1>Tell us the car.<br/><em>We'll tell you the market.</em></h1>
    <p>Set the vehicle, budget, mileage, and search area. Motor Match checks current inventory and tells you whether those limits actually intersect.</p>
-  </section>
+  </section>:null}
 
   <section className={styles.builder}>
    <div className={styles.step+" "+styles.stepCar+" "+(!guidedReady?styles.stepActive:"")}>
