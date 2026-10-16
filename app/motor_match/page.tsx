@@ -161,10 +161,18 @@ export default function MotorMatchPage(){
    {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
   </section>:null}
 
-  {loading&&!started?<div className={styles.loadingBackdrop}>
-   <div className={styles.loadingModal} role="status" aria-live="polite" aria-label="Searching the market">
-    <div className={styles.loadingCarWrap} aria-hidden="true">
-     <svg className={styles.loadingCarSvg} viewBox="0 0 240 110">
+  {loading&&!started?<div
+   role="presentation"
+   style={{position:"fixed",inset:0,zIndex:9999,display:"grid",placeItems:"center",padding:20,background:"rgba(17,17,17,.42)",backdropFilter:"blur(6px)"}}
+  >
+   <div
+    role="status"
+    aria-live="polite"
+    aria-label="Searching the market"
+    style={{width:"min(520px,calc(100vw - 32px))",boxSizing:"border-box",background:"#fbfaf6",border:"1px solid rgba(17,17,17,.12)",borderRadius:24,boxShadow:"0 30px 80px rgba(0,0,0,.28)",padding:"30px 26px 25px",textAlign:"center"}}
+   >
+    <div style={{display:"grid",placeItems:"center",margin:"0 auto 14px"}} aria-hidden="true">
+     <svg viewBox="0 0 240 110" width="220" height="101" style={{display:"block",maxWidth:"70vw"}}>
       <defs>
        <clipPath id="motor-match-car-fill">
         <path d="M31 67c4-16 16-26 35-30l22-5 17-18h52l25 22 25 7c12 4 20 14 20 26v8h-15a25 25 0 0 0-49 0H79a25 25 0 0 0-49 0H18v-7c0-7 5-12 13-13Zm71-31h66l-17-15h-37l-12 15Z"/>
@@ -172,16 +180,22 @@ export default function MotorMatchPage(){
         <circle cx="187" cy="79" r="18"/>
        </clipPath>
       </defs>
-      <path className={styles.loadingCarBase} d="M31 67c4-16 16-26 35-30l22-5 17-18h52l25 22 25 7c12 4 20 14 20 26v8h-15a25 25 0 0 0-49 0H79a25 25 0 0 0-49 0H18v-7c0-7 5-12 13-13Zm71-31h66l-17-15h-37l-12 15Z"/>
-      <circle className={styles.loadingWheelBase} cx="55" cy="79" r="18"/><circle className={styles.loadingWheelBase} cx="187" cy="79" r="18"/>
-      <g clipPath="url(#motor-match-car-fill)"><rect className={styles.loadingCarFill} x="0" y="0" width="240" height="110"/></g>
-      <circle className={styles.loadingHub} cx="55" cy="79" r="7"/><circle className={styles.loadingHub} cx="187" cy="79" r="7"/>
+      <path fill="#d5d8de" d="M31 67c4-16 16-26 35-30l22-5 17-18h52l25 22 25 7c12 4 20 14 20 26v8h-15a25 25 0 0 0-49 0H79a25 25 0 0 0-49 0H18v-7c0-7 5-12 13-13Zm71-31h66l-17-15h-37l-12 15Z"/>
+      <circle fill="#b9bec7" cx="55" cy="79" r="18"/>
+      <circle fill="#b9bec7" cx="187" cy="79" r="18"/>
+      <g clipPath="url(#motor-match-car-fill)">
+       <rect x="0" y="0" width="0" height="110" fill="#2457ff">
+        <animate attributeName="width" values="0;168;240;240" keyTimes="0;0.5;0.78;1" dur="3.8s" repeatCount="indefinite"/>
+       </rect>
+      </g>
+      <circle fill="#fbfaf6" stroke="rgba(17,17,17,.14)" strokeWidth="2" cx="55" cy="79" r="7"/>
+      <circle fill="#fbfaf6" stroke="rgba(17,17,17,.14)" strokeWidth="2" cx="187" cy="79" r="7"/>
      </svg>
     </div>
-    <div className={styles.loadingCopy}>
-     <span>SEARCHING THE MARKET</span>
-     <h2 key={loadingMessageIndex}>{LOADING_MESSAGES[loadingMessageIndex]}</h2>
-     <p>This can take a few seconds while we search current inventory.</p>
+    <div>
+     <span style={{display:"block",fontSize:8,fontWeight:900,letterSpacing:".14em",color:"#2457ff",marginBottom:7}}>SEARCHING THE MARKET</span>
+     <h2 key={loadingMessageIndex} style={{margin:0,fontSize:"clamp(25px,4vw,34px)",lineHeight:1.05,letterSpacing:"-.04em",minHeight:36}}>{LOADING_MESSAGES[loadingMessageIndex]}</h2>
+     <p style={{margin:"9px 0 0",fontSize:11,lineHeight:1.45,opacity:.56}}>This can take a few seconds while we search current inventory.</p>
     </div>
    </div>
   </div>:null}
