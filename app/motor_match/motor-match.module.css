@@ -157,3 +157,8 @@
 /* Yellow stays cautious; green can retain the positive blue action */
 .answer_yellow .cta{background:#fffaf0;border-top-color:#d59b1826}
 .answer_yellow .cta span{color:#9a6c00}
+
+.vehicleError{margin-top:12px;border:1px solid #d94b4350;background:#fff3f1;border-radius:13px;padding:13px 15px;display:flex;align-items:center;gap:10px;color:#8f302b}
+.vehicleError strong{font-size:10px;letter-spacing:.1em}
+.vehicleError span{font-size:13px;font-weight:700}
+@media(max-width:720px){.vehicleError{align-items:flex-start;flex-direction:column;gap:4px}}
