@@ -83,6 +83,7 @@ export default function MotorMatchPage(){
      <Field label="MAKE"><input value={make} placeholder="BMW" onChange={e=>setMake(e.target.value)}/></Field>
      <Field label="MODEL"><input value={model} placeholder="5 Series" onChange={e=>{setModel(e.target.value);setTrim("")}}/></Field>
      <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
+     <Field label="YEAR"><input type="number" min="1990" max={CURRENT_YEAR+1} value={year??""} placeholder="2022" onChange={e=>setYear(e.target.value?Number(e.target.value):null)}/></Field>
     </div>
    </div>
 
@@ -90,15 +91,15 @@ export default function MotorMatchPage(){
     <div className={styles.stepNumber}>2</div>
     <div className={styles.stepCopy}><span>YOUR LIMITS</span><strong>What matters most?</strong></div>
     <div className={styles.limitGrid}>
-     <div className={styles.limitCard}><span>MODEL YEAR</span><strong>{year??"Choose year"}</strong><input type="range" min={2000} max={CURRENT_YEAR+1} step={1} value={year??2022} onChange={e=>setYear(Number(e.target.value))}/></div>
-     <div className={styles.limitCard}><span>I WANT TO SPEND NO MORE THAN</span><strong>{money(budget)}</strong><input type="range" min={5000} max={150000} step={500} value={budget} onChange={e=>setBudget(Number(e.target.value))}/></div>
-     <div className={styles.limitCard}><span>AND STAY UNDER</span><strong>{num(mileage)} miles</strong><input type="range" min={5000} max={200000} step={1000} value={mileage} onChange={e=>setMileage(Number(e.target.value))}/></div>
+     <div className={styles.limitCard}><span>YEAR</span><strong>{year??"Choose year"}</strong><input type="range" min={2000} max={CURRENT_YEAR+1} step={1} value={year??2022} onChange={e=>setYear(Number(e.target.value))}/></div>
+     <div className={styles.limitCard}><span>COST</span><strong>{money(budget)}</strong><input type="range" min={5000} max={150000} step={500} value={budget} onChange={e=>setBudget(Number(e.target.value))}/></div>
+     <div className={styles.limitCard}><span>MILES</span><strong>{num(mileage)} miles</strong><input type="range" min={5000} max={200000} step={1000} value={mileage} onChange={e=>setMileage(Number(e.target.value))}/></div>
     </div>
    </div>
 
    <div className={styles.step}>
     <div className={styles.stepNumber}>3</div>
-    <div className={styles.stepCopy}><span>SEARCH AREA</span><strong>How far should we look?</strong></div>
+    <div className={styles.stepCopy}><span>SEARCH</span><strong>Where should we look?</strong></div>
     <div className={styles.locationGrid}>
      <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
      <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
@@ -126,20 +127,30 @@ export default function MotorMatchPage(){
 
    <div className={styles.cta}>
     <div><span>WANT US TO FIND THE RIGHT ONE?</span><strong>We can take it from here.</strong><p>Mindful Motors can search the public market, auctions, and dealer network using the target you just built.</p></div>
-    {!showForm&&!sent?<button onClick={()=>setShowForm(true)}>START MY SEARCH →</button>:null}
+    {!showForm&&!sent?<button onClick={()=>setShowForm(true)}>FIND MY CAR →</button>:null}
    </div>
-
-   {showForm&&!sent?<form className={styles.leadForm} onSubmit={submitLead}>
-    <label><span>NAME</span><input required value={name} onChange={e=>setName(e.target.value)}/></label>
-    <label><span>EMAIL</span><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
-    <label><span>PHONE</span><input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label>
-    <label className={styles.notes}><span>ANYTHING ELSE WE SHOULD KNOW?</span><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}/></label>
-    <button type="submit" disabled={sending}>{sending?"SENDING…":"SEND MY MOTOR MATCH →"}</button>
-    {formError?<div className={styles.formError}>{formError}</div>:null}
-   </form>:null}
 
    {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
   </section>:null}
+
+  {showForm&&!sent?<div className={styles.modalBackdrop} onMouseDown={e=>{if(e.target===e.currentTarget)setShowForm(false)}}>
+   <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="motor-match-form-title">
+    <button className={styles.modalClose} type="button" onClick={()=>setShowForm(false)} aria-label="Close">×</button>
+    <div className={styles.modalIntro}>
+     <span>FIND MY CAR</span>
+     <h2 id="motor-match-form-title">Let Mindful Motors take it from here.</h2>
+     <p>Send us your Motor Match and we’ll review the live market, auctions, and dealer network for the best fit.</p>
+    </div>
+    <form className={styles.leadForm} onSubmit={submitLead}>
+     <label><span>NAME</span><input required value={name} onChange={e=>setName(e.target.value)}/></label>
+     <label><span>EMAIL</span><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
+     <label><span>PHONE</span><input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label>
+     <label className={styles.notes}><span>ANYTHING ELSE WE SHOULD KNOW?</span><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}/></label>
+     <button type="submit" disabled={sending}>{sending?"SENDING…":"FIND MY CAR →"}</button>
+     {formError?<div className={styles.formError}>{formError}</div>:null}
+    </form>
+   </div>
+  </div>:null}
  </main>;
 }
 
