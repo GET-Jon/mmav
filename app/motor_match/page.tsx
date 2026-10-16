@@ -33,8 +33,10 @@ export default function MotorMatchPage(){
  const makeInputRef=useRef<HTMLInputElement|null>(null);
  const hasFlashedLimits=useRef(false);
  const [flashLimits,setFlashLimits]=useState(false);
+ const [searchReady,setSearchReady]=useState(false);
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
  const guidedReady=Boolean(make.trim()&&model.trim()&&year&&String(year).length===4);
+ const makeNeedsFocus=!make.trim();
 
  const analyze=useCallback(async()=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
@@ -55,7 +57,8 @@ export default function MotorMatchPage(){
   if(!guidedReady||hasFlashedLimits.current)return;
   hasFlashedLimits.current=true;
   setFlashLimits(true);
-  const timer=window.setTimeout(()=>setFlashLimits(false),2100);
+  setSearchReady(false);
+  const timer=window.setTimeout(()=>{setFlashLimits(false);setSearchReady(true)},4000);
   return()=>window.clearTimeout(timer);
  },[guidedReady]);
  useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),650);return()=>window.clearTimeout(t)},[analyze,started]);
@@ -108,7 +111,7 @@ export default function MotorMatchPage(){
     <div className={styles.stepNumber}>1</div>
     <div className={styles.stepCopy}><span>THE CAR</span><strong>What are you looking for?</strong></div>
     <div className={styles.vehicleGrid}>
-     <Field label="MAKE"><input ref={makeInputRef} className={!guidedReady?styles.makeFocus:""} value={make} placeholder="BMW" onChange={e=>setMake(e.target.value)}/></Field>
+     <Field label="MAKE"><input ref={makeInputRef} className={makeNeedsFocus?styles.makeFocus:""} value={make} placeholder="BMW" onChange={e=>setMake(e.target.value)}/></Field>
      <Field label="MODEL"><input value={model} placeholder="5 Series" onChange={e=>{setModel(e.target.value);setTrim("")}}/></Field>
      <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
      <Field label="YEAR"><input type="number" min="1990" max={CURRENT_YEAR+1} value={year??""} placeholder="2022" onChange={e=>setYear(e.target.value?Number(e.target.value):null)}/></Field>
@@ -131,7 +134,7 @@ export default function MotorMatchPage(){
     <div className={styles.locationGrid}>
      <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
      <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
-     <button className={styles.primary+" "+(guidedReady?styles.primaryReady:"")} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
+     <button className={styles.primary+" "+(searchReady||started?styles.primaryReady:"")} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
     </div>
    </div>
   </section>
