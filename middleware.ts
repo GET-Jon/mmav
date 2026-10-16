@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/cookies",
   "/motor_match",
   "/motor_match_map",
+  "/motor-match-embed.js",
   "/api/motor_match",
   "/auth/callback",
   "/auth/confirm",
