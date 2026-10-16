@@ -162,3 +162,10 @@
 .vehicleError strong{font-size:10px;letter-spacing:.1em}
 .vehicleError span{font-size:13px;font-weight:700}
 @media(max-width:720px){.vehicleError{align-items:flex-start;flex-direction:column;gap:4px}}
+
+.vehicleArea{display:flex;flex-direction:column;gap:7px;min-width:0}
+.dreamLink{align-self:flex-start;border:0;background:transparent;padding:0;color:#2457ff;font:inherit;font-size:10px;font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.dreamLink:hover{color:#1748e8}
+.field select:disabled{opacity:.55;cursor:not-allowed}
+.manualSuccess{margin:12px 0 0}
+@media(max-width:720px){.vehicleArea{grid-column:1/-1}.dreamLink{font-size:11px;line-height:1.35}}
