@@ -111,18 +111,28 @@ export default function MotorMatchPage(){
   {error?<div className={styles.error}>{error}</div>:null}
 
   {result?<section className={styles.answer+" "+styles["answer_"+result.state]}>
-   <div className={styles.answerLead}><span>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span><h2>{headline}</h2><p>{subhead}</p></div>
-   <div className={styles.constraintRow}>
-    <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks}/>
-    <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks}/>
-    <Constraint label="Model year" value={String(year)} works={result.matchCount>0}/>
+   <div className={styles.answerLead}>
+    <span>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+    <h2>{headline}</h2>
+    <p>{subhead}</p>
    </div>
 
-   {result.state!=="green"?<div className={styles.options}>
-    <div className={styles.optionsTitle}><span>KEEP TWO. FLEX ONE.</span><strong>Here’s what opens the market.</strong></div>
-    <Option label="Keep the mileage" value={result.market.priceNeeded?money(result.market.priceNeeded):"No clear price target"} action={result.market.priceNeeded&&result.market.priceNeeded>budget?"Use this budget":"No change needed"} active={!!result.market.priceNeeded&&result.market.priceNeeded>budget} onClick={()=>result.market.priceNeeded&&setBudget(Math.ceil(result.market.priceNeeded/500)*500)}/>
-    <Option label="Keep the budget" value={result.market.mileageNeeded?num(result.market.mileageNeeded)+" mi":"No clear mileage target"} action={result.market.mileageNeeded&&result.market.mileageNeeded>mileage?"Use this mileage":"No change needed"} active={!!result.market.mileageNeeded&&result.market.mileageNeeded>mileage} onClick={()=>result.market.mileageNeeded&&setMileage(Math.ceil(result.market.mileageNeeded/1000)*1000)}/>
-    <Option label="Keep price + mileage" value={result.market.yearNeeded?String(result.market.yearNeeded):"No older-year shortcut"} action={result.market.yearNeeded?"Try this year":"No alternative found"} active={!!result.market.yearNeeded} onClick={()=>result.market.yearNeeded&&setYear(result.market.yearNeeded)}/>
+   <div className={styles.targetBlock}>
+    <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>Here’s what’s working.</strong></div>
+    <div className={styles.constraintRow}>
+     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks}/>
+     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks}/>
+     <Constraint label="Year" value={String(year)} works={result.matchCount>0}/>
+    </div>
+   </div>
+
+   {result.state!=="green"?<div className={styles.nextMoves}>
+    <div className={styles.sectionKicker}><span>BEST NEXT MOVES</span><strong>Change only what needs changing.</strong></div>
+    <div className={styles.moveGrid}>
+     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Pay more" value={money(result.market.priceNeeded)} action="Keep the year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
+     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Take more miles" value={num(result.market.mileageNeeded)+" mi"} action="Keep the year + budget" active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:<div className={styles.steadyCard}><span>MILEAGE</span><strong>Already works</strong><p>No mileage change needed.</p></div>}
+     {result.market.yearNeeded?<Option label="Go older" value={String(result.market.yearNeeded)} action="Keep the price + mileage" active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
+    </div>
    </div>:null}
 
    <div className={styles.cta}>
