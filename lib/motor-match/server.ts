@@ -48,13 +48,13 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
   query(apiKey,{...base,sort:"price.asc"}),
   query(apiKey,{...base,sort:"miles.asc"})
  ]);
- const successful=settled.filter((item):item is PromiseFulfilledResult<{total:number;listings:Listing[]}=>item.status==="fulfilled").map(item=>item.value);
+ const successful=settled.flatMap(item=>item.status==="fulfilled"?[item.value]:[]);
  if(!successful.length)throw new Error("The market data provider is taking too long. Please try again.");
  const listings=dedupe(successful.map(item=>item.listings));
  const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
- return{key,cohort,cacheHit:false,calls:3};
+ return{key,cohort,cacheHit:false,calls:2};
 }
 
 function fifth(values:number[]){const sorted=values.filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);return sorted.length?sorted[Math.min(4,sorted.length-1)]:null}
