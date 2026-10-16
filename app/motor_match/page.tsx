@@ -13,7 +13,6 @@ type MatchResponse={
  cache?:{hit:boolean;ttlSeconds:number};
 };
 
-const CURRENT_YEAR=new Date().getFullYear();
 const money=(v:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(v);
 const num=(v:number)=>new Intl.NumberFormat("en-US").format(v);
 const LOADING_MESSAGES=[
@@ -29,14 +28,18 @@ export default function MotorMatchPage(){
  const [year,setYear]=useState<number|null>(null),[make,setMake]=useState(""),[model,setModel]=useState(""),[trim,setTrim]=useState(""),[budget,setBudget]=useState(30000),[mileage,setMileage]=useState(60000),[zip,setZip]=useState(""),[distance,setDistance]=useState(500);
  const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[loadingMessageIndex,setLoadingMessageIndex]=useState(0),[error,setError]=useState(""),[vehicleError,setVehicleError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
+ const [makes,setMakes]=useState<string[]>([]),[models,setModels]=useState<string[]>([]),[validYears,setValidYears]=useState<number[]>([]);
+ const [manualInquiry,setManualInquiry]=useState(false);
  const requestId=useRef(0);
- const makeInputRef=useRef<HTMLInputElement|null>(null);
+ const makeInputRef=useRef<HTMLSelectElement|null>(null);
  const hasFlashedLimits=useRef(false);
  const [flashLimits,setFlashLimits]=useState(false);
  const [searchReady,setSearchReady]=useState(false);
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
  const guidedReady=Boolean(make.trim()&&model.trim()&&year&&String(year).length===4);
  const makeNeedsFocus=!make.trim();
+ const sliderYears=useMemo(()=>[...validYears].sort((a,b)=>a-b),[validYears]);
+ const yearSliderIndex=year?Math.max(0,sliderYears.indexOf(year)):0;
 
  const analyze=useCallback(async()=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
@@ -58,6 +61,21 @@ export default function MotorMatchPage(){
   finally{if(id===requestId.current)setLoading(false)}
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
+ useEffect(()=>{
+  fetch("/api/motor_match/options").then(r=>r.json()).then(payload=>setMakes(Array.isArray(payload?.makes)?payload.makes:[])).catch(()=>setError("We couldn't load the vehicle list. Please refresh and try again."));
+ },[]);
+ useEffect(()=>{
+  if(!make){setModels([]);return}
+  fetch("/api/motor_match/options?make="+encodeURIComponent(make)).then(r=>r.json()).then(payload=>setModels(Array.isArray(payload?.models)?payload.models:[])).catch(()=>setModels([]));
+ },[make]);
+ useEffect(()=>{
+  if(!make||!model){setValidYears([]);return}
+  fetch("/api/motor_match/options?make="+encodeURIComponent(make)+"&model="+encodeURIComponent(model)).then(r=>r.json()).then(payload=>{
+   const next=Array.isArray(payload?.years)?payload.years.map(Number).filter(Number.isFinite):[];
+   setValidYears(next);
+   setYear(current=>current&&next.includes(current)?current:null);
+  }).catch(()=>setValidYears([]));
+ },[make,model]);
  useEffect(()=>{makeInputRef.current?.focus()},[]);
  useEffect(()=>{
   if(!guidedReady||hasFlashedLimits.current)return;
@@ -75,13 +93,18 @@ export default function MotorMatchPage(){
  },[loading,started]);
 
  async function submitLead(e:React.FormEvent){
-  e.preventDefault();if(!result||!year)return;setSending(true);setFormError("");
+  e.preventDefault();if(!manualInquiry&&(!result||!year))return;setSending(true);setFormError("");
   try{
-   const response=await fetch("/api/motor_match/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,email,phone,notes,searchKey:result.searchKey,request:{year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance},result:{state:result.state,depth:result.depth,matchCount:result.matchCount,priceNeeded:result.market.priceNeeded,mileageNeeded:result.market.mileageNeeded,yearNeeded:result.market.yearNeeded}})});
+   const response=await fetch("/api/motor_match/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    manualInquiry,name,email,phone,notes,
+    searchKey:manualInquiry?"":result?.searchKey||"",
+    request:{year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance},
+    result:manualInquiry?null:result?{state:result.state,depth:result.depth,matchCount:result.matchCount,priceNeeded:result.market.priceNeeded,mileageNeeded:result.market.mileageNeeded,yearNeeded:result.market.yearNeeded}:null
+   })});
    const raw=await response.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{}
    if(!response.ok)throw new Error(payload?.error||"We could not send your request. Please try again.");
    if(!payload)throw new Error("We could not read the submission response. Please try again.");
-   setSent(true);
+   setSent(true);setShowForm(false);
   }catch(cause){setFormError(cause instanceof Error?cause.message:"We could not send your request.")}
   finally{setSending(false)}
  }
@@ -116,11 +139,14 @@ export default function MotorMatchPage(){
    <div className={styles.step+" "+styles.stepCar+" "+(!guidedReady?styles.stepActive:"")}>
     <div className={styles.stepNumber}>1</div>
     <div className={styles.stepCopy}><span>THE CAR</span><strong>What are you looking for?</strong></div>
-    <div className={styles.vehicleGrid}>
-     <Field label="MAKE"><input ref={makeInputRef} className={makeNeedsFocus?styles.makeFocus:""} value={make} placeholder="BMW" onChange={e=>setMake(e.target.value)}/></Field>
-     <Field label="MODEL"><input value={model} placeholder="5 Series" onChange={e=>{setModel(e.target.value);setTrim("")}}/></Field>
-     <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
-     <Field label="YEAR"><input type="number" min="1990" max={CURRENT_YEAR+1} value={year??""} placeholder="2022" onChange={e=>setYear(e.target.value?Number(e.target.value):null)}/></Field>
+    <div className={styles.vehicleArea}>
+     <div className={styles.vehicleGrid}>
+      <Field label="MAKE"><select ref={makeInputRef} className={makeNeedsFocus?styles.makeFocus:""} value={make} onChange={e=>{setMake(e.target.value);setModel("");setYear(null);setTrim("");setResult(null);setStarted(false);setVehicleError("");setSearchReady(false)}}><option value="">Select make</option>{makes.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+      <Field label="MODEL"><select value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setVehicleError("");setSearchReady(false)}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+      <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
+      <Field label="YEAR"><select value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+     </div>
+     <button type="button" className={styles.dreamLink} onClick={()=>{setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Don&apos;t see your dream car here - let us know what you&apos;re looking for</button>
     </div>
    </div>
 
@@ -128,7 +154,7 @@ export default function MotorMatchPage(){
     <div className={styles.stepNumber}>2</div>
     <div className={styles.stepCopy}><span>YOUR LIMITS</span><strong>What matters most?</strong></div>
     <div className={styles.limitGrid}>
-     <div className={styles.limitCard}><span>YEAR</span><strong>{year??"Choose year"}</strong><input type="range" min={2000} max={CURRENT_YEAR+1} step={1} value={year??2022} onChange={e=>setYear(Number(e.target.value))}/></div>
+     <div className={styles.limitCard}><span>YEAR</span><strong>{year??"Choose year"}</strong><input type="range" min={0} max={Math.max(0,sliderYears.length-1)} step={1} value={yearSliderIndex} disabled={!year||sliderYears.length<2} onChange={e=>setYear(sliderYears[Number(e.target.value)]??year)}/></div>
      <div className={styles.limitCard}><span>COST</span><strong>{money(budget)}</strong><input type="range" min={5000} max={150000} step={500} value={budget} onChange={e=>setBudget(Number(e.target.value))}/></div>
      <div className={styles.limitCard}><span>MILES</span><strong>{num(mileage)} miles</strong><input type="range" min={5000} max={200000} step={1000} value={mileage} onChange={e=>setMileage(Number(e.target.value))}/></div>
     </div>
@@ -145,6 +171,7 @@ export default function MotorMatchPage(){
    </div>
   </section>
 
+  {sent&&manualInquiry?<div className={styles.success+" "+styles.manualSuccess}><strong>Got it.</strong><span>We’ll take a look at what you’re trying to find and get back to you.</span></div>:null}
   {vehicleError?<div className={styles.vehicleError}><strong>CHECK THE VEHICLE</strong><span>{vehicleError}</span></div>:null}
   {error?<div className={styles.error}>{error}</div>:null}
 
@@ -180,7 +207,7 @@ export default function MotorMatchPage(){
 
    <div className={styles.cta}>
     <div><span>WANT US TO FIND THE RIGHT ONE?</span><strong>We can take it from here.</strong><p>Mindful Motors can search the public market, auctions, and dealer network using the target you just built.</p></div>
-    {!showForm&&!sent?<button onClick={()=>setShowForm(true)}>FIND MY CAR →</button>:null}
+    {!showForm&&!sent?<button onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>FIND MY CAR →</button>:null}
    </div>
 
    {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
@@ -229,15 +256,15 @@ export default function MotorMatchPage(){
    <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="motor-match-form-title">
     <button className={styles.modalClose} type="button" onClick={()=>setShowForm(false)} aria-label="Close">×</button>
     <div className={styles.modalIntro}>
-     <span>FIND MY CAR</span>
-     <h2 id="motor-match-form-title">Let Mindful Motors take it from here.</h2>
-     <p>Send us your Motor Match and we’ll review the live market, auctions, and dealer network for the best fit.</p>
+     <span>{manualInquiry?"DREAM CAR REQUEST":"FIND MY CAR"}</span>
+     <h2 id="motor-match-form-title">{manualInquiry?"Tell us what you’re looking for.":"Let Mindful Motors take it from here."}</h2>
+     <p>{manualInquiry?"If it isn’t in the list, that doesn’t mean we can’t find it. Tell us what you have in mind and we’ll take a look.":"Send us your Motor Match and we’ll review the live market, auctions, and dealer network for the best fit."}</p>
     </div>
     <form className={styles.leadForm} onSubmit={submitLead}>
      <label><span>NAME</span><input required value={name} onChange={e=>setName(e.target.value)}/></label>
      <label><span>EMAIL</span><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
      <label><span>PHONE</span><input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label>
-     <label className={styles.notes}><span>ANYTHING ELSE WE SHOULD KNOW?</span><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}/></label>
+     <label className={styles.notes}><span>{manualInquiry?"WHAT ARE YOU LOOKING FOR?":"ANYTHING ELSE WE SHOULD KNOW?"}</span><textarea required={manualInquiry} value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder={manualInquiry?"Tell us the car, year range, trim, or anything else that matters.":""}/></label>
      <button type="submit" disabled={sending}>{sending?"SENDING…":"FIND MY CAR →"}</button>
      {formError?<div className={styles.formError}>{formError}</div>:null}
     </form>
