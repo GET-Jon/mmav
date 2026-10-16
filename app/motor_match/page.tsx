@@ -27,7 +27,7 @@ const LOADING_MESSAGES=[
 
 export default function MotorMatchPage(){
  const [year,setYear]=useState<number|null>(null),[make,setMake]=useState(""),[model,setModel]=useState(""),[trim,setTrim]=useState(""),[budget,setBudget]=useState(30000),[mileage,setMileage]=useState(60000),[zip,setZip]=useState(""),[distance,setDistance]=useState(500);
- const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[loadingMessageIndex,setLoadingMessageIndex]=useState(0),[error,setError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
+ const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[loadingMessageIndex,setLoadingMessageIndex]=useState(0),[error,setError]=useState(""),[vehicleError,setVehicleError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
  const requestId=useRef(0);
  const makeInputRef=useRef<HTMLInputElement|null>(null);
@@ -40,12 +40,18 @@ export default function MotorMatchPage(){
 
  const analyze=useCallback(async()=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
-  const id=++requestId.current;setLoading(true);setError("");
+  const id=++requestId.current;setLoading(true);setError("");setVehicleError("");
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
    const raw=await response.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{}
    setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
-   if(!response.ok)throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
+   if(!response.ok){
+    if(payload?.code==="vehicle_unverified"){
+     if(id===requestId.current){setResult(null);setStarted(false);setVehicleError(payload.error||"We couldn't verify that vehicle.");}
+     return;
+    }
+    throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
+   }
    if(!payload)throw new Error("We could not read the market response. Please try again.");
    if(id===requestId.current){setResult(payload);setStarted(true);setSent(false)}
   }catch(cause){if(id===requestId.current)setError(cause instanceof Error?cause.message:"We could not check the market.")}
@@ -139,6 +145,7 @@ export default function MotorMatchPage(){
    </div>
   </section>
 
+  {vehicleError?<div className={styles.vehicleError}><strong>CHECK THE VEHICLE</strong><span>{vehicleError}</span></div>:null}
   {error?<div className={styles.error}>{error}</div>:null}
 
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
