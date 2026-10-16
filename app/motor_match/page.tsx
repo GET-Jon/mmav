@@ -16,10 +16,18 @@ type MatchResponse={
 const CURRENT_YEAR=new Date().getFullYear();
 const money=(v:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(v);
 const num=(v:number)=>new Intl.NumberFormat("en-US").format(v);
+const LOADING_MESSAGES=[
+ "Finding your car…",
+ "Searching for the perfect fit…",
+ "Checking current market inventory…",
+ "Comparing price and mileage…",
+ "Looking for the best match…",
+ "Building your Motor Match…",
+];
 
 export default function MotorMatchPage(){
  const [year,setYear]=useState<number|null>(null),[make,setMake]=useState(""),[model,setModel]=useState(""),[trim,setTrim]=useState(""),[budget,setBudget]=useState(30000),[mileage,setMileage]=useState(60000),[zip,setZip]=useState(""),[distance,setDistance]=useState(500);
- const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
+ const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[loadingMessageIndex,setLoadingMessageIndex]=useState(0),[error,setError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
  const requestId=useRef(0);
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
@@ -39,6 +47,11 @@ export default function MotorMatchPage(){
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
  useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),650);return()=>window.clearTimeout(t)},[analyze,started]);
+ useEffect(()=>{
+  if(!loading||started){setLoadingMessageIndex(0);return}
+  const timer=window.setInterval(()=>setLoadingMessageIndex(index=>(index+1)%LOADING_MESSAGES.length),1450);
+  return()=>window.clearInterval(timer);
+ },[loading,started]);
 
  async function submitLead(e:React.FormEvent){
   e.preventDefault();if(!result||!year)return;setSending(true);setFormError("");
@@ -113,6 +126,8 @@ export default function MotorMatchPage(){
 
   {error?<div className={styles.error}>{error}</div>:null}
 
+  {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
+
   {result?<section className={styles.answer+" "+styles["answer_"+result.state]}>
    <div className={styles.answerLead}>
     <span>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
@@ -145,6 +160,31 @@ export default function MotorMatchPage(){
 
    {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
   </section>:null}
+
+  {loading&&!started?<div className={styles.loadingBackdrop}>
+   <div className={styles.loadingModal} role="status" aria-live="polite" aria-label="Searching the market">
+    <div className={styles.loadingCarWrap} aria-hidden="true">
+     <svg className={styles.loadingCarSvg} viewBox="0 0 240 110">
+      <defs>
+       <clipPath id="motor-match-car-fill">
+        <path d="M31 67c4-16 16-26 35-30l22-5 17-18h52l25 22 25 7c12 4 20 14 20 26v8h-15a25 25 0 0 0-49 0H79a25 25 0 0 0-49 0H18v-7c0-7 5-12 13-13Zm71-31h66l-17-15h-37l-12 15Z"/>
+        <circle cx="55" cy="79" r="18"/>
+        <circle cx="187" cy="79" r="18"/>
+       </clipPath>
+      </defs>
+      <path className={styles.loadingCarBase} d="M31 67c4-16 16-26 35-30l22-5 17-18h52l25 22 25 7c12 4 20 14 20 26v8h-15a25 25 0 0 0-49 0H79a25 25 0 0 0-49 0H18v-7c0-7 5-12 13-13Zm71-31h66l-17-15h-37l-12 15Z"/>
+      <circle className={styles.loadingWheelBase} cx="55" cy="79" r="18"/><circle className={styles.loadingWheelBase} cx="187" cy="79" r="18"/>
+      <g clipPath="url(#motor-match-car-fill)"><rect className={styles.loadingCarFill} x="0" y="0" width="240" height="110"/></g>
+      <circle className={styles.loadingHub} cx="55" cy="79" r="7"/><circle className={styles.loadingHub} cx="187" cy="79" r="7"/>
+     </svg>
+    </div>
+    <div className={styles.loadingCopy}>
+     <span>SEARCHING THE MARKET</span>
+     <h2 key={loadingMessageIndex}>{LOADING_MESSAGES[loadingMessageIndex]}</h2>
+     <p>This can take a few seconds while we search current inventory.</p>
+    </div>
+   </div>
+  </div>:null}
 
   {showForm&&!sent?<div className={styles.modalBackdrop} onMouseDown={e=>{if(e.target===e.currentTarget)setShowForm(false)}}>
    <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="motor-match-form-title">
