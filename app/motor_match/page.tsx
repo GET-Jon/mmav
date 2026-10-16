@@ -29,9 +29,10 @@ export default function MotorMatchPage(){
   const id=++requestId.current;setLoading(true);setError("");
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
-   const payload=await response.json();
+   const raw=await response.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{}
    setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
-   if(!response.ok)throw new Error(payload?.error||"We could not check the market.");
+   if(!response.ok)throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
+   if(!payload)throw new Error("We could not read the market response. Please try again.");
    if(id===requestId.current){setResult(payload);setStarted(true);setSent(false)}
   }catch(cause){if(id===requestId.current)setError(cause instanceof Error?cause.message:"We could not check the market.")}
   finally{if(id===requestId.current)setLoading(false)}
@@ -43,7 +44,9 @@ export default function MotorMatchPage(){
   e.preventDefault();if(!result||!year)return;setSending(true);setFormError("");
   try{
    const response=await fetch("/api/motor_match/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,email,phone,notes,searchKey:result.searchKey,request:{year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance},result:{state:result.state,depth:result.depth,matchCount:result.matchCount,priceNeeded:result.market.priceNeeded,mileageNeeded:result.market.mileageNeeded,yearNeeded:result.market.yearNeeded}})});
-   const payload=await response.json();if(!response.ok)throw new Error(payload?.error||"We could not send your request.");
+   const raw=await response.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{}
+   if(!response.ok)throw new Error(payload?.error||"We could not send your request. Please try again.");
+   if(!payload)throw new Error("We could not read the submission response. Please try again.");
    setSent(true);
   }catch(cause){setFormError(cause instanceof Error?cause.message:"We could not send your request.")}
   finally{setSending(false)}
