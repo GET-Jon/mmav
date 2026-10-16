@@ -62,7 +62,16 @@ export default function MotorMatchPage(){
   finally{if(id===requestId.current)setLoading(false)}
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
- useEffect(()=>{setEmbedded(new URLSearchParams(window.location.search).get("embed")==="1")},[]);
+ useEffect(()=>{
+  const isEmbed=new URLSearchParams(window.location.search).get("embed")==="1";
+  setEmbedded(isEmbed);
+  if(!isEmbed)return;
+  const bodyBackground=document.body.style.background;
+  const htmlBackground=document.documentElement.style.background;
+  document.body.style.background="transparent";
+  document.documentElement.style.background="transparent";
+  return()=>{document.body.style.background=bodyBackground;document.documentElement.style.background=htmlBackground};
+ },[]);
  useEffect(()=>{
   fetch("/api/motor_match/options").then(r=>r.json()).then(payload=>setMakes(Array.isArray(payload?.makes)?payload.makes:[])).catch(()=>setError("We couldn't load the vehicle list. Please refresh and try again."));
  },[]);
