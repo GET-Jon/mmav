@@ -1,5 +1,6 @@
 import {NextResponse} from "next/server";
 import {findOlderYear,getMotorMatchCohort,solveMotorMatch} from "@/lib/motor-match/server";
+import {resolveVehicleGeneration} from "@/lib/vehicle-generations";
 export const dynamic="force-dynamic";
 const s=(v:unknown)=>String(v||"").trim();
 
@@ -8,7 +9,15 @@ export async function POST(request:Request){
   const body=await request.json();
   const make=s(body.make),model=s(body.model),trim=s(body.trim),zip=/^\d{5}$/.test(s(body.zip))?s(body.zip):"",distance=Math.min(Math.max(Number(body.distance)||500,25),1000),year=Math.round(Number(body.year)||new Date().getFullYear()),budget=Math.max(0,Number(body.budget)||0),mileage=Math.max(0,Number(body.mileage)||0);
   if(!make||!model||!year||!budget||!mileage)return NextResponse.json({error:"Year, make, model, budget and mileage are required."},{status:400});
+  const identityMatch=resolveVehicleGeneration({year,make,model,trim});
   const loaded=await getMotorMatchCohort({make,model,trim,zip,distance,year});
+  if(!identityMatch&&loaded.cohort.listings.length===0){
+   return NextResponse.json({
+    code:"vehicle_unverified",
+    error:"We couldn't verify that vehicle. Check the make, model, and year.",
+    vehicle:{year,make,model,trim}
+   },{status:422});
+  }
   const solved=solveMotorMatch(loaded.cohort.listings,budget,mileage);
   let yearCalls=0;
   if(solved.state!=="green"){
