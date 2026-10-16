@@ -199,3 +199,12 @@
   .shellEmbedded .builder,
   .shellEmbedded .answer{border-radius:14px}
 }
+
+/* Embedded page should read as part of the host site, not a nested document */
+.shellEmbedded{
+  padding:10px 0 0;
+  overflow:visible;
+}
+.shellEmbedded .builder{
+  overflow:hidden;
+}
