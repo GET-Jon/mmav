@@ -169,3 +169,33 @@
 .field select:disabled{opacity:.55;cursor:not-allowed}
 .manualSuccess{margin:12px 0 0}
 @media(max-width:720px){.vehicleArea{grid-column:1/-1}.dreamLink{font-size:11px;line-height:1.35}}
+
+/* Wix/native embed presentation */
+.shellEmbedded{
+  min-height:0;
+  background:transparent;
+  padding:0;
+}
+.shellEmbedded .builder{
+  margin:0;
+  border-radius:18px;
+  box-shadow:0 12px 34px #1111110d;
+}
+.shellEmbedded .answer{
+  margin-top:16px;
+}
+.shellEmbedded .step{
+  padding-top:16px;
+  padding-bottom:16px;
+}
+.shellEmbedded .targetBlock,
+.shellEmbedded .nextMoves,
+.shellEmbedded .answer .cta{
+  padding-top:20px;
+  padding-bottom:20px;
+}
+@media(max-width:720px){
+  .shellEmbedded{padding:0}
+  .shellEmbedded .builder,
+  .shellEmbedded .answer{border-radius:14px}
+}
