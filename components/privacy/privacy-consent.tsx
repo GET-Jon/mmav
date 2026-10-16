@@ -170,6 +170,7 @@ function loadPostHog() {
 
 export function PrivacyConsent() {
   const pathname = usePathname();
+  const isMotorMatch = pathname === "/motor_match" || pathname.startsWith("/motor_match/");
   const [consent, setConsent] = useState<ConsentState | null>(null);
   const [bannerOpen, setBannerOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
@@ -177,12 +178,17 @@ export function PrivacyConsent() {
   const [advertising, setAdvertising] = useState(false);
 
   useEffect(() => {
+    if (isMotorMatch) {
+      setBannerOpen(false);
+      setPreferencesOpen(false);
+      return;
+    }
     const stored = readConsent();
     setConsent(stored);
     setAnalytics(stored?.analytics ?? false);
     setAdvertising(stored?.advertising ?? false);
     setBannerOpen(!stored);
-  }, []);
+  }, [isMotorMatch]);
 
   useEffect(() => {
     function openPreferences() {
@@ -258,6 +264,8 @@ export function PrivacyConsent() {
     }
     updateGoogleConsent(next);
   }
+
+  if (isMotorMatch) return null;
 
   return (
     <>
