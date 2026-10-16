@@ -92,7 +92,7 @@ export default function MotorMatchPage(){
   </section>
 
   <section className={styles.builder}>
-   <div className={styles.step}>
+   <div className={styles.step+" "+styles.stepCar}>
     <div className={styles.stepNumber}>1</div>
     <div className={styles.stepCopy}><span>THE CAR</span><strong>What are you looking for?</strong></div>
     <div className={styles.vehicleGrid}>
@@ -103,7 +103,7 @@ export default function MotorMatchPage(){
     </div>
    </div>
 
-   <div className={styles.step}>
+   <div className={styles.step+" "+styles.stepLimits}>
     <div className={styles.stepNumber}>2</div>
     <div className={styles.stepCopy}><span>YOUR LIMITS</span><strong>What matters most?</strong></div>
     <div className={styles.limitGrid}>
@@ -113,7 +113,7 @@ export default function MotorMatchPage(){
     </div>
    </div>
 
-   <div className={styles.step}>
+   <div className={styles.step+" "+styles.stepSearch}>
     <div className={styles.stepNumber}>3</div>
     <div className={styles.stepCopy}><span>SEARCH</span><strong>Where should we look?</strong></div>
     <div className={styles.locationGrid}>
@@ -130,13 +130,16 @@ export default function MotorMatchPage(){
 
   {result?<section className={styles.answer+" "+styles["answer_"+result.state]}>
    <div className={styles.answerLead}>
-    <span>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+    <div className={styles.resultStatusRow}>
+     <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+     <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
+    </div>
     <h2>{headline}</h2>
     <p>{subhead}</p>
    </div>
 
    <div className={styles.targetBlock}>
-    <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>Here’s what’s working.</strong></div>
+    <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>What the market says about each limit.</strong></div>
     <div className={styles.constraintRow}>
      <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks}/>
      <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks}/>
@@ -144,12 +147,12 @@ export default function MotorMatchPage(){
     </div>
    </div>
 
-   {result.state!=="green"?<div className={styles.nextMoves}>
-    <div className={styles.sectionKicker}><span>BEST NEXT MOVES</span><strong>Change only what needs changing.</strong></div>
+   {result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
+    <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Relax one constraint — not all three.</strong></div>
     <div className={styles.moveGrid}>
-     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Pay more" value={money(result.market.priceNeeded)} action="Keep the year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
-     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Take more miles" value={num(result.market.mileageNeeded)+" mi"} action="Keep the year + budget" active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:<div className={styles.steadyCard}><span>MILEAGE</span><strong>Already works</strong><p>No mileage change needed.</p></div>}
-     {result.market.yearNeeded?<Option label="Go older" value={String(result.market.yearNeeded)} action="Keep the price + mileage" active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
+     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action="Keep year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
+     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action="Keep year + budget" active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
+     {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
     </div>
    </div>:null}
 
