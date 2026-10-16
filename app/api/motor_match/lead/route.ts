@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import {closestListings,getCachedMotorMatch,getMotorMatchCohort} from "@/lib/motor-match/server";
 
 export const dynamic="force-dynamic";
+// Resend delivery is configured server-side via Netlify environment variables.
 const s=(v:unknown)=>String(v||"").trim();
 
 export async function POST(request:Request){
