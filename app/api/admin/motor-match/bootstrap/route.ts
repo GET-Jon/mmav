@@ -70,3 +70,32 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const token = url.searchParams.get("token") || "";
+  const expected = process.env.MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN || "";
+  const isPreview =
+    process.env.CONTEXT === "deploy-preview" ||
+    String(process.env.DEPLOY_PRIME_URL || "").includes("deploy-preview-");
+
+  if (!isPreview || !expected || token !== expected) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  try {
+    const run = await getOrCreateMotorMatchBootstrapRun();
+    const result = await runMotorMatchBootstrapBatch({ runId: run.id, maxCalls: 3 });
+    return NextResponse.json({ ok: true, test: true, ...result });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Motor Match bootstrap test failed.",
+      },
+      { status: 500 },
+    );
+  }
+}
