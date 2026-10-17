@@ -73,7 +73,10 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const token = url.searchParams.get("token") || "";
+  const token =
+    request.headers.get("x-motor-match-bootstrap-token") ||
+    url.searchParams.get("token") ||
+    "";
   const expected = process.env.MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN || "";
   const isPreview =
     process.env.CONTEXT === "deploy-preview" ||
