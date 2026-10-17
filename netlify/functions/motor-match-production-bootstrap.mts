@@ -7,10 +7,6 @@ import {
 
 export default {
   async deploySucceeded() {
-    const context = String(process.env.CONTEXT || "");
-
-    if (context !== "production") return;
-
     const run = await getOrCreateMotorMatchBootstrapRun();
 
     while (Number(run.calls_used || 0) < 275) {
