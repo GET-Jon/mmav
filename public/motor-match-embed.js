@@ -75,7 +75,9 @@ class MotorMatchEmbed extends HTMLElement {
     const requested = Number(data.height);
     if (!Number.isFinite(requested)) return;
 
-    const next = Math.max(420, Math.min(2400, Math.ceil(requested + 4)));
+    const next = Math.max(420, Math.min(2400, Math.ceil(requested)));
+    const current = parseFloat(this.style.height) || 0;
+    if (Math.abs(next - current) < 2) return;
     this.style.height = `${next}px`;
   }
 }
