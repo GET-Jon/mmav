@@ -16,23 +16,69 @@ function keyFor({make,model,trim,zip,distance,year}:{make:string;model:string;tr
  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
 }
 
-async function queryStoredCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
+async function queryStoredRows(args:{
+ make:string;model:string;trim:string;yearMin:number;yearMax:number;maxPrice?:number|null;maxMiles?:number|null
+}){
+ const remoteUrl=process.env.MOTOR_MATCH_PROD_DB_URL;
+ const remoteKey=process.env.MOTOR_MATCH_PROD_DB_ANON_KEY;
+ const testToken=process.env.MOTOR_MATCH_PROD_DB_TEST_TOKEN;
+
+ if(remoteUrl&&remoteKey&&testToken){
+  const response=await fetch(`${remoteUrl}/rest/v1/rpc/motor_match_test_rows`,{
+   method:"POST",
+   headers:{
+    apikey:remoteKey,
+    Authorization:`Bearer ${remoteKey}`,
+    "Content-Type":"application/json"
+   },
+   body:JSON.stringify({
+    p_token:testToken,
+    p_make:args.make,
+    p_model:args.model,
+    p_year_min:args.yearMin,
+    p_year_max:args.yearMax,
+    p_trim:args.trim||null,
+    p_max_price:args.maxPrice??null,
+    p_max_miles:args.maxMiles??null
+   }),
+   cache:"no-store"
+  });
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(typeof payload?.message==="string"?payload.message:"Production Motor Match database test query failed.");
+  return (Array.isArray(payload)?payload:[]).map((row:any)=>({
+   vin:null,
+   year:n(row.year),
+   make:s(row.make)||null,
+   model:s(row.model)||null,
+   trim:s(row.trim_name)||null,
+   price:n(row.price),
+   miles:n(row.miles),
+   dealer:null,
+   city:null,
+   state:null,
+   url:null
+  })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0);
+ }
+
  const supabase=createSupabaseAdminClient();
  let q=supabase
   .from("motor_match_market_observations")
   .select("vin,year,make,model,trim,price,miles,dealer,city,state,listing_url")
-  .eq("bucket_make",input.make)
-  .eq("bucket_model",input.model)
-  .eq("year",input.year)
+  .eq("bucket_make",args.make)
+  .eq("bucket_model",args.model)
+  .gte("year",args.yearMin)
+  .lte("year",args.yearMax)
   .order("observed_at",{ascending:false})
   .limit(DB_MAX_SAMPLE);
 
- if(input.trim)q=q.ilike("trim",`%${input.trim}%`);
+ if(args.trim)q=q.ilike("trim",`%${args.trim}%`);
+ if(typeof args.maxPrice==="number")q=q.lte("price",args.maxPrice);
+ if(typeof args.maxMiles==="number")q=q.lte("miles",args.maxMiles);
 
  const {data,error}=await q;
  if(error)throw error;
 
- const listings=(data||[]).map((row:any)=>({
+ return (data||[]).map((row:any)=>({
   vin:s(row.vin)||null,
   year:n(row.year),
   make:s(row.make)||null,
@@ -45,33 +91,32 @@ async function queryStoredCohort(input:{make:string;model:string;trim:string;zip
   state:s(row.state)||null,
   url:s(row.listing_url)||null
  })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0);
+}
 
- return listings;
+async function queryStoredCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
+ return queryStoredRows({
+  make:input.make,
+  model:input.model,
+  trim:input.trim,
+  yearMin:input.year,
+  yearMax:input.year
+ });
 }
 
 export async function findOlderYearFromDatabase(input:{make:string;model:string;trim:string;year:number;budget:number;mileage:number}){
  if(input.year<=1991)return null;
- const supabase=createSupabaseAdminClient();
- let q=supabase
-  .from("motor_match_market_observations")
-  .select("year,price,miles,trim")
-  .eq("bucket_make",input.make)
-  .eq("bucket_model",input.model)
-  .gte("year",Math.max(1990,input.year-3))
-  .lt("year",input.year)
-  .lte("price",Math.round(input.budget))
-  .lte("miles",Math.round(input.mileage))
-  .limit(500);
-
- if(input.trim)q=q.ilike("trim",`%${input.trim}%`);
-
- const {data,error}=await q;
- if(error)throw error;
-
+ const rows=await queryStoredRows({
+  make:input.make,
+  model:input.model,
+  trim:input.trim,
+  yearMin:Math.max(1990,input.year-3),
+  yearMax:input.year-1,
+  maxPrice:Math.round(input.budget),
+  maxMiles:Math.round(input.mileage)
+ });
  const counts=new Map<number,number>();
- for(const row of data||[]){
-  const year=n((row as any).year);
-  if(year)counts.set(year,(counts.get(year)||0)+1);
+ for(const row of rows){
+  if(row.year)counts.set(row.year,(counts.get(row.year)||0)+1);
  }
  return Array.from(counts.entries())
   .filter(([,count])=>count>=3)
