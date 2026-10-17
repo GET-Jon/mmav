@@ -8,9 +8,8 @@ import {
 export default {
   async deploySucceeded() {
     const context = String(process.env.CONTEXT || "");
-    const branch = String(process.env.BRANCH || "");
 
-    if (context !== "production" || branch !== "main") return;
+    if (context !== "production") return;
 
     const run = await getOrCreateMotorMatchBootstrapRun();
 
