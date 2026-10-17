@@ -13,10 +13,24 @@ const makeLabel=(value:string)=>{
 const modelParts=(value:string)=>String(value||"").split("/").map(v=>v.trim()).filter(Boolean);
 const same=(a:string,b:string)=>normalizeVehicleText(a)===normalizeVehicleText(b);
 
+const MOTOR_MATCH_SUPPORTED_MAKES=new Set([
+ "alfa romeo",
+ "audi",
+ "bmw",
+ "land rover",
+ "maserati",
+ "mercedes benz",
+ "porsche",
+ "subaru",
+ "volkswagen",
+ "volvo",
+]);
+
 export function motorMatchMakes(){
  const map=new Map<string,string>();
  for(const rule of vehicleGenerationRules){
   const key=canonicalVehicleMake(rule.make);
+  if(!MOTOR_MATCH_SUPPORTED_MAKES.has(key))continue;
   if(key&&!map.has(key))map.set(key,makeLabel(rule.make));
  }
  return [...map.values()].sort((a,b)=>a.localeCompare(b));
@@ -25,6 +39,7 @@ export function motorMatchMakes(){
 export function motorMatchModels(make:string){
  const values=new Map<string,string>();
  const target=canonicalVehicleMake(make);
+ if(!MOTOR_MATCH_SUPPORTED_MAKES.has(target))return [];
  for(const rule of vehicleGenerationRules){
   if(canonicalVehicleMake(rule.make)!==target)continue;
   for(const part of modelParts(rule.model)){
@@ -37,6 +52,7 @@ export function motorMatchModels(make:string){
 
 export function motorMatchYears(make:string,model:string){
  const targetMake=canonicalVehicleMake(make);
+ if(!MOTOR_MATCH_SUPPORTED_MAKES.has(targetMake))return [];
  const years=new Set<number>();
  for(const rule of vehicleGenerationRules){
   if(canonicalVehicleMake(rule.make)!==targetMake)continue;
