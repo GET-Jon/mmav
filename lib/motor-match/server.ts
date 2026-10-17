@@ -5,7 +5,7 @@ type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number;call
 const CACHE_TTL_MS=30*60*1000;
 const SAMPLE_LIMIT=100;
 const cache=new Map<string,CachedCohort>();
-const DB_MIN_SAMPLE=5;
+const DB_MIN_SAMPLE=1;
 const DB_MAX_SAMPLE=500;
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:null};
 const s=(v:unknown)=>String(v||"").trim();
@@ -155,18 +155,16 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
 
  if(!force){
   const stored=await queryStoredCohort(input);
-  if(stored.length>=DB_MIN_SAMPLE){
-   const cohort:CachedCohort={
-    expiresAt:now+CACHE_TTL_MS,
-    listings:stored,
-    providerTotal:stored.length,
-    calls:0,
-    trim:input.trim,
-    source:"database"
-   };
-   cache.set(key,cohort);
-   return{key,cohort,cacheHit:false,calls:0};
-  }
+  const cohort:CachedCohort={
+   expiresAt:now+CACHE_TTL_MS,
+   listings:stored,
+   providerTotal:stored.length,
+   calls:0,
+   trim:input.trim,
+   source:"database"
+  };
+  cache.set(key,cohort);
+  return{key,cohort,cacheHit:false,calls:0};
  }
 
  const apiKey=process.env.AUTODEV_API_KEY;if(!apiKey)throw new Error("Motor Match is missing Auto.dev configuration.");
