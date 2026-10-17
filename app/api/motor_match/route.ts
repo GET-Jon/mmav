@@ -39,8 +39,8 @@ export async function POST(request:Request){
    dataSource:loaded.cohort.source,
    marketScope:loaded.cohort.source==="database"?"stored national snapshot":"live geographic query",
    cache:{hit:loaded.cacheHit,ttlSeconds:Math.max(0,Math.floor((loaded.cohort.expiresAt-Date.now())/1000))},
-   apiUsage:{callsThisUpdate:loaded.calls+yearCalls,breakdown:[
-    ...(loaded.calls?[{label:"Market cohort",purpose:"Build a private exact-year sample from the lowest-price and lowest-mileage inventory."}]:[]),
+   apiUsage:{callsThisUpdate:0,breakdown:[
+    ...(loaded.cohort.source==="database"?[{label:"Stored market database",purpose:"Use the stored Motor Match market snapshot without a live provider call."}]:[]),
     ...(yearCalls?[{label:"Older-year check",purpose:"Check whether a nearby older model year satisfies both limits."}]:[])
    ]}
   });
