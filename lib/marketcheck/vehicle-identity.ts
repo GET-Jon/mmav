@@ -65,11 +65,12 @@ function canonicalAudiFamily(modelCompact: string) {
 function canonicalBmwFamily(model: string, modelCompact: string) {
   const normalized = normalizeVehicleText(model);
 
-  for (const series of ["2", "3", "4", "5", "7", "8"]) {
+  for (const series of ["1", "2", "3", "4", "5", "7", "8"]) {
     if (normalized === `${series} series`) return `${series} series`;
   }
 
   const families: Array<[string, string[]]> = [
+    ["1 series", ["128i", "135i", "135is"]],
     ["2 series", ["m2", "228i", "230i", "m235i", "m240i"]],
     ["3 series", ["m3", "320i", "328i", "330i", "335i", "340i", "m340i"]],
     ["4 series", ["m4", "428i", "430i", "435i", "440i", "m440i"]],
