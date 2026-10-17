@@ -5,7 +5,7 @@ import styles from "./motor-match.module.css";
 
 type MatchState="green"|"yellow"|"red";
 type MatchResponse={
- state:MatchState;depth:"strong"|"healthy"|"thin"|"none";matchCount:number;
+ state:MatchState;depth:"strong"|"healthy"|"thin"|"none";confidence?:"strong"|"adequate"|"limited"|"none";matchCount:number;
  constraintStatus:{priceWorks:boolean;mileageWorks:boolean};
  market:{priceNeeded:number|null;mileageNeeded:number|null;yearNeeded:number|null};
  message:string;searchKey:string;providerTotal:number;sampleSize:number;dataSource?:"database"|"auto_dev";
@@ -44,7 +44,8 @@ export default function MotorMatchPage(){
  const makeNeedsFocus=!make.trim();
  const sliderYears=useMemo(()=>[...validYears].sort((a,b)=>a-b),[validYears]);
  const yearSliderIndex=year?Math.max(0,sliderYears.indexOf(year)):0;
- const limitedMarket=Boolean(result&&result.dataSource==="database"&&result.sampleSize<5);
+ const zeroData=Boolean(result&&result.dataSource==="database"&&result.sampleSize===0);
+ const limitedMarket=Boolean(result&&result.dataSource==="database"&&result.sampleSize>0&&result.sampleSize<5);
 
  const analyze=useCallback(async(scrollToAnswer=false)=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
@@ -176,22 +177,23 @@ export default function MotorMatchPage(){
 
  const headline=useMemo(()=>{
   if(!result)return "";
-  if(limitedMarket)return "This one needs a closer look.";
+  if(zeroData)return "This one needs a closer look.";
+  if(limitedMarket&&result.state==="red")return "The data points in one direction.";
+  if(limitedMarket&&result.state==="yellow")return "Possible — with a limited sample.";
+  if(limitedMarket&&result.state==="green")return "Your target looks realistic — with limited data.";
   if(result.state==="green")return "Yes — this is realistic.";
   if(result.state==="yellow")return "Possible — but options are limited.";
   return "You're close, but something has to give.";
- },[limitedMarket,result]);
+ },[limitedMarket,result,zeroData]);
 
  const subhead=useMemo(()=>{
   if(!result)return "";
-  if(limitedMarket){
-   if(result.sampleSize===0)return `We don't have enough current observations for the ${year} ${make} ${model} to give you a reliable automated answer.`;
-   return `We only have ${result.sampleSize} current observation${result.sampleSize===1?"":"s"} for the ${year} ${make} ${model}, so we don't want to overstate what the market is telling us.`;
-  }
+  if(zeroData)return `We don't have usable current observations for the ${year} ${make} ${model}, so this one needs a hands-on search.`;
+  if(limitedMarket)return `We only have ${result.sampleSize} current observation${result.sampleSize===1?"":"s"} for the ${year} ${make} ${model}. The recommendations below are directional, not definitive.`;
   if(result.state==="green")return result.depth==="strong"?"Strong availability around your target.":"Healthy availability around your target.";
   if(result.state==="yellow")return "Your target exists, but there is not much room to be picky about color, condition, or options.";
   return "We couldn't find enough current inventory satisfying both limits at once.";
- },[limitedMarket,make,model,result,year]);
+ },[limitedMarket,make,model,result,year,zeroData]);
 
  return <main ref={shellRef} className={styles.shell+(embedded?" "+styles.shellEmbedded:"")}>
   {!embedded?<header className={styles.topbar}>
@@ -247,10 +249,10 @@ export default function MotorMatchPage(){
 
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
 
-  {result?<section ref={answerRef} className={styles.answer+" "+styles["answer_"+result.state]+(limitedMarket?" "+styles.answer_limited:"")}>
+  {result?<section ref={answerRef} className={styles.answer+" "+styles["answer_"+result.state]+((limitedMarket||zeroData)?" "+styles.answer_limited:"")}>
    <div className={styles.answerLead}>
     <div className={styles.resultStatusRow}>
-     <span className={styles.resultStatus}>{limitedMarket?"LIMITED MARKET DATA":result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+     <span className={styles.resultStatus}>{zeroData?"NO USABLE MARKET DATA":limitedMarket?"LIMITED SAMPLE · DIRECTIONAL RESULT":result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
      <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
     </div>
     <h2>{headline}</h2>
@@ -260,23 +262,28 @@ export default function MotorMatchPage(){
    <div className={styles.targetBlock}>
     <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>What the market says about each limit.</strong></div>
     <div className={styles.constraintRow}>
-     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks} limited={limitedMarket}/>
-     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks} limited={limitedMarket}/>
-     <Constraint label="Year" value={String(year)} works={result.matchCount>0} limited={limitedMarket}/>
+     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks} limited={zeroData}/>
+     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks} limited={zeroData}/>
+     <Constraint label="Year" value={String(year)} works={result.matchCount>0} limited={zeroData}/>
     </div>
-    {limitedMarket?<div className={styles.rareHelp}>
-     <div><span>RARE, UNUSUAL, MODIFIED, OR VERY SPECIFIC?</span><strong>Some cars need a human search.</strong><p>Thin data doesn&apos;t mean the car is wrong for you. It means we&apos;d rather look at it personally than pretend a small sample is definitive.</p></div>
+    {zeroData?<div className={styles.rareHelp}>
+     <div><span>RARE, UNUSUAL, MODIFIED, OR VERY SPECIFIC?</span><strong>Some cars need a human search.</strong><p>No usable snapshot doesn&apos;t mean the car is wrong for you. It means we&apos;d rather look at it personally than manufacture an answer from bad data.</p></div>
      <button type="button" onClick={()=>{setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>ASK US TO LOOK →</button>
     </div>:null}
    </div>
 
-   {!limitedMarket&&result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
+   {!zeroData&&result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
     <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Relax one constraint — not all three.</strong></div>
     <div className={styles.moveGrid}>
      {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action="Keep year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
      {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action="Keep year + budget" active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
      {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
     </div>
+   </div>:null}
+
+   {limitedMarket?<div className={styles.limitedNote}>
+    <div><span>LIMITED SAMPLE</span><strong>Use these adjustments as a direction, not a guarantee.</strong><p>We found only {result.sampleSize} usable observation{result.sampleSize===1?"":"s"} for this exact year. Motor Match is still showing what the available data suggests; Mindful Motors can verify the broader market if you want us to take it further.</p></div>
+    <button type="button" onClick={()=>{setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>ASK US TO VERIFY →</button>
    </div>:null}
 
    <div className={styles.cta}>
