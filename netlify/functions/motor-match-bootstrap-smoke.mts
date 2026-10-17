@@ -1,14 +1,12 @@
-import type { DeploySucceededEvent } from "@netlify/functions";
-
 export default {
-  async deploySucceeded(event: DeploySucceededEvent) {
-    const deploy = event.deploy as any;
+  async deploySucceeded(event: any) {
+    const deploy = event?.deploy || {};
     const context = String(deploy?.context || "");
     const reviewId = Number(deploy?.review_id ?? deploy?.reviewId ?? 0);
 
     if (context !== "deploy-preview" || reviewId !== 20) return;
 
-    const token = Netlify.env.get("MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN");
+    const token = process.env.MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN;
     if (!token) throw new Error("Missing MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN.");
 
     const response = await fetch(
