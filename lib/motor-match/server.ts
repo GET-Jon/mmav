@@ -10,6 +10,26 @@ const DB_MAX_SAMPLE=500;
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:null};
 const s=(v:unknown)=>String(v||"").trim();
 
+function median(values:number[]){
+ const sorted=values.filter(Number.isFinite).sort((a,b)=>a-b);
+ if(!sorted.length)return null;
+ const mid=Math.floor(sorted.length/2);
+ return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;
+}
+
+function cleanListings(rows:Listing[]){
+ const basic=rows.filter(l=>
+  typeof l.price==="number"&&l.price>=2500&&
+  typeof l.miles==="number"&&l.miles>=0&&l.miles<=250000
+ );
+ if(basic.length<5)return basic;
+ const med=median(basic.map(l=>l.price as number));
+ if(!med)return basic;
+ const low=Math.max(2500,med*.3);
+ const high=med*4;
+ return basic.filter(l=>(l.price as number)>=low&&(l.price as number)<=high);
+}
+
 function map(payload:any):Listing[]{return (Array.isArray(payload?.data)?payload.data:[]).map((row:any)=>{const v=row?.vehicle||{};const r=row?.retailListing||{};return{vin:s(v.vin||row?.vin)||null,year:n(v.year),make:s(v.make)||null,model:s(v.model)||null,trim:s(v.trim)||null,price:n(r.price),miles:n(r.miles??r.mileage),dealer:s(r.dealer)||null,city:s(r.city)||null,state:s(r.state)||null,url:s(r.vdp)||null}}).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0)}
 
 function keyFor({make,model,trim,zip,distance,year}:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
@@ -45,7 +65,7 @@ async function queryStoredRows(args:{
   });
   const payload=await response.json().catch(()=>null);
   if(!response.ok)throw new Error(typeof payload?.message==="string"?payload.message:"Production Motor Match database test query failed.");
-  return (Array.isArray(payload)?payload:[]).map((row:any)=>({
+  return cleanListings((Array.isArray(payload)?payload:[]).map((row:any)=>({
    vin:null,
    year:n(row.year),
    make:s(row.make)||null,
@@ -57,7 +77,7 @@ async function queryStoredRows(args:{
    city:null,
    state:null,
    url:null
-  })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0);
+  })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0));
  }
 
  const supabase=createSupabaseAdminClient();
@@ -78,7 +98,7 @@ async function queryStoredRows(args:{
  const {data,error}=await q;
  if(error)throw error;
 
- return (data||[]).map((row:any)=>({
+ return cleanListings((data||[]).map((row:any)=>({
   vin:s(row.vin)||null,
   year:n(row.year),
   make:s(row.make)||null,
@@ -90,7 +110,7 @@ async function queryStoredRows(args:{
   city:s(row.city)||null,
   state:s(row.state)||null,
   url:s(row.listing_url)||null
- })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0);
+ })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0));
 }
 
 async function queryStoredCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
@@ -184,18 +204,23 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  return{key,cohort,cacheHit:false,calls:2};
 }
 
-function fifth(values:number[]){const sorted=values.filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);return sorted.length?sorted[Math.min(4,sorted.length-1)]:null}
+function directionalThreshold(values:number[]){
+ const sorted=values.filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+ if(!sorted.length)return null;
+ return sorted[Math.min(4,sorted.length-1)];
+}
 
 export function solveMotorMatch(listings:Listing[],budget:number,mileage:number){
  const exact=listings.filter(l=>(l.price??Infinity)<=budget&&(l.miles??Infinity)<=mileage);
  const withinMileage=listings.filter(l=>(l.miles??Infinity)<=mileage);
  const withinBudget=listings.filter(l=>(l.price??Infinity)<=budget);
- const priceNeeded=fifth(withinMileage.map(l=>l.price as number));
- const mileageNeeded=fifth(withinBudget.map(l=>l.miles as number));
+ const priceNeeded=directionalThreshold(withinMileage.map(l=>l.price as number));
+ const mileageNeeded=directionalThreshold(withinBudget.map(l=>l.miles as number));
  const state=exact.length>=5?"green":exact.length>0?"yellow":"red";
  const depth=exact.length>=10?"strong":exact.length>=5?"healthy":exact.length>0?"thin":"none";
+ const confidence=listings.length>=15?"strong":listings.length>=5?"adequate":listings.length>0?"limited":"none";
  return{
-  state,depth,matchCount:exact.length,
+  state,depth,confidence,matchCount:exact.length,
   constraintStatus:{priceWorks:withinBudget.length>0,mileageWorks:withinMileage.length>0},
   market:{priceNeeded,mileageNeeded,yearNeeded:null as number|null},
   message:state==="green"?"Your price and mileage overlap with a healthy current market.":state==="yellow"?"Your target is possible, but there are only a few current options.":"We could not find a current listing satisfying both limits at once."
