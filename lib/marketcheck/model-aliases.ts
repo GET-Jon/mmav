@@ -11,6 +11,12 @@ export const marketCheckModelAliases: MarketCheckModelAlias[] = [
   // BMW standard series aliases
   {
     make: "BMW",
+    models: ["128i", "135i", "135is"],
+    fallbackModel: "1 Series",
+    notes: "BMW 1 Series U.S. model-code fallback.",
+  },
+  {
+    make: "BMW",
     models: ["228i", "230i", "m235i", "m240i"],
     fallbackModel: "2 Series",
     notes: "BMW 2 Series standard model-code fallback.",
@@ -38,6 +44,12 @@ export const marketCheckModelAliases: MarketCheckModelAlias[] = [
     models: ["740i", "745e", "750i", "760i", "m760i"],
     fallbackModel: "7 Series",
     notes: "BMW 7 Series standard model-code fallback.",
+  },
+  {
+    make: "BMW",
+    models: ["840i", "850i", "m850i"],
+    fallbackModel: "8 Series",
+    notes: "BMW 8 Series standard model-code fallback.",
   },
 
   // Mercedes-Benz standard class aliases
