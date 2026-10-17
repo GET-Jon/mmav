@@ -229,3 +229,16 @@
  .rareHelp button{width:100%}
  .answer{scroll-margin-top:10px}
 }
+
+
+.limitedNote{margin:0;padding:18px 26px;background:#fffaf0;border-top:1px solid #d8b44d33;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.limitedNote>div{max-width:780px}
+.limitedNote span{display:block;font-size:8px;font-weight:900;letter-spacing:.11em;color:#a77300;margin-bottom:4px}
+.limitedNote strong{display:block;font-size:19px;letter-spacing:-.025em;margin-bottom:5px}
+.limitedNote p{margin:0;font-size:11px;line-height:1.45;opacity:.62}
+.limitedNote button{border:0;border-radius:10px;background:#111;color:#fff;padding:12px 15px;font-size:9px;font-weight:900;letter-spacing:.08em;cursor:pointer;white-space:nowrap}
+.limitedNote button:hover{background:#292929}
+@media(max-width:720px){
+ .limitedNote{align-items:flex-start;flex-direction:column;padding:18px 20px}
+ .limitedNote button{width:100%}
+}
