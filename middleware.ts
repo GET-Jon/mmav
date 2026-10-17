@@ -13,7 +13,6 @@ const PUBLIC_PATHS = [
   "/motor_match_map",
   "/motor-match-embed.js",
   "/api/motor_match",
-  "/api/admin/motor-match/bootstrap",
   "/auth/callback",
   "/auth/confirm",
   "/auth/partner-invite",
