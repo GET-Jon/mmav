@@ -1,7 +1,7 @@
 // Preview-only bootstrap smoke runner.
 export default {
   async deploySucceeded() {
-    const token = process.env.MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN;
+    const token = process.env.MOTOR_MATCH_BOOTSTRAP_SMOKE_TOKEN;
     console.log("bootstrap-smoke token-present", Boolean(token));
     if (!token) return;
 
