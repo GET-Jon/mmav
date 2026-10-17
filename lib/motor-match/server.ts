@@ -1,9 +1,12 @@
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 type Listing={vin:string|null;year:number|null;make:string|null;model:string|null;trim:string|null;price:number|null;miles:number|null;dealer:string|null;city:string|null;state:string|null;url:string|null};
-type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number;calls:number;trim:string};
+type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number;calls:number;trim:string;source:"database"|"auto_dev"};
 
 const CACHE_TTL_MS=30*60*1000;
 const SAMPLE_LIMIT=100;
 const cache=new Map<string,CachedCohort>();
+const DB_MIN_SAMPLE=5;
+const DB_MAX_SAMPLE=500;
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:null};
 const s=(v:unknown)=>String(v||"").trim();
 
@@ -11,6 +14,70 @@ function map(payload:any):Listing[]{return (Array.isArray(payload?.data)?payload
 
 function keyFor({make,model,trim,zip,distance,year}:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
+}
+
+async function queryStoredCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
+ const supabase=createSupabaseAdminClient();
+ let q=supabase
+  .from("motor_match_market_observations")
+  .select("vin,year,make,model,trim,price,miles,dealer,city,state,listing_url")
+  .eq("bucket_make",input.make)
+  .eq("bucket_model",input.model)
+  .eq("year",input.year)
+  .order("observed_at",{ascending:false})
+  .limit(DB_MAX_SAMPLE);
+
+ if(input.trim)q=q.ilike("trim",`%${input.trim}%`);
+
+ const {data,error}=await q;
+ if(error)throw error;
+
+ const listings=(data||[]).map((row:any)=>({
+  vin:s(row.vin)||null,
+  year:n(row.year),
+  make:s(row.make)||null,
+  model:s(row.model)||null,
+  trim:s(row.trim)||null,
+  price:n(row.price),
+  miles:n(row.miles),
+  dealer:s(row.dealer)||null,
+  city:s(row.city)||null,
+  state:s(row.state)||null,
+  url:s(row.listing_url)||null
+ })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0);
+
+ return listings;
+}
+
+export async function findOlderYearFromDatabase(input:{make:string;model:string;trim:string;year:number;budget:number;mileage:number}){
+ if(input.year<=1991)return null;
+ const supabase=createSupabaseAdminClient();
+ let q=supabase
+  .from("motor_match_market_observations")
+  .select("year,price,miles,trim")
+  .eq("bucket_make",input.make)
+  .eq("bucket_model",input.model)
+  .gte("year",Math.max(1990,input.year-3))
+  .lt("year",input.year)
+  .lte("price",Math.round(input.budget))
+  .lte("miles",Math.round(input.mileage))
+  .limit(500);
+
+ if(input.trim)q=q.ilike("trim",`%${input.trim}%`);
+
+ const {data,error}=await q;
+ if(error)throw error;
+
+ const counts=new Map<number,number>();
+ for(const row of data||[]){
+  const year=n((row as any).year);
+  if(year)counts.set(year,(counts.get(year)||0)+1);
+ }
+ return Array.from(counts.entries())
+  .filter(([,count])=>count>=3)
+  .sort((a,b)=>b[0]-a[0])[0]?.[0]
+  ||Array.from(counts.keys()).sort((a,b)=>b-a)[0]
+  ||null;
 }
 
 async function query(apiKey:string,params:Record<string,string|number|boolean|null|undefined>,timeoutMs=9000){
@@ -38,9 +105,26 @@ function dedupe(groups:Listing[][]){
 }
 
 export async function getMotorMatchCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number},force=false){
- const apiKey=process.env.AUTODEV_API_KEY;if(!apiKey)throw new Error("Motor Match is missing Auto.dev configuration.");
  const key=keyFor(input),now=Date.now(),existing=cache.get(key);
  if(!force&&existing&&existing.expiresAt>now)return{key,cohort:existing,cacheHit:true,calls:0};
+
+ if(!force){
+  const stored=await queryStoredCohort(input);
+  if(stored.length>=DB_MIN_SAMPLE){
+   const cohort:CachedCohort={
+    expiresAt:now+CACHE_TTL_MS,
+    listings:stored,
+    providerTotal:stored.length,
+    calls:0,
+    trim:input.trim,
+    source:"database"
+   };
+   cache.set(key,cohort);
+   return{key,cohort,cacheHit:false,calls:0};
+  }
+ }
+
+ const apiKey=process.env.AUTODEV_API_KEY;if(!apiKey)throw new Error("Motor Match is missing Auto.dev configuration.");
  const base:Record<string,string|number|boolean>={"vehicle.make":input.make,"vehicle.model":input.model,"vehicle.year":input.year,"retailListing.used":true,includes:"total",limit:SAMPLE_LIMIT};
  if(input.trim)base["vehicle.trim"]=input.trim;
  if(input.zip){base.zip=input.zip;base.distance=input.distance}
@@ -51,7 +135,7 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  const successful=settled.flatMap(item=>item.status==="fulfilled"?[item.value]:[]);
  if(!successful.length)throw new Error("The market data provider is taking too long. Please try again.");
  const listings=dedupe(successful.map(item=>item.listings));
- const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim};
+ const cohort:CachedCohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim,source:"auto_dev"};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
  return{key,cohort,cacheHit:false,calls:2};
