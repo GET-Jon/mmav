@@ -77,7 +77,10 @@ export async function GET(request: Request) {
     request.headers.get("x-motor-match-bootstrap-token") ||
     url.searchParams.get("token") ||
     "";
-  const expected = process.env.MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN || "";
+  const expected =
+    process.env.MOTOR_MATCH_BOOTSTRAP_TEST_TOKEN ||
+    process.env.MOTOR_MATCH_BOOTSTRAP_SMOKE_TOKEN ||
+    "";
   const isPreview =
     process.env.CONTEXT === "deploy-preview" ||
     String(process.env.DEPLOY_PRIME_URL || "").includes("deploy-preview-");
