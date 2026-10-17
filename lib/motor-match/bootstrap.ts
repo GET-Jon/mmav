@@ -1,5 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
+import { vehicleGenerationRules } from "@/lib/vehicle-generations/rules";
+import { normalizeVehicleText } from "@/lib/marketcheck/vehicle-identity";
 import {
   MOTOR_MATCH_BOOTSTRAP_CORE_CALLS,
   MOTOR_MATCH_BOOTSTRAP_MAX_CALLS,
@@ -30,6 +32,7 @@ type AutoDevObservation = {
 };
 
 type FetchStrategy = { sort: string; page: number };
+type YearBand = { startYear: number; endYear: number; generation: string };
 
 const toNumber = (value: unknown) => {
   const parsed = Number(value);
@@ -38,7 +41,7 @@ const toNumber = (value: unknown) => {
 
 const toString = (value: unknown) => String(value ?? "").trim();
 
-function fetchStrategy(sequence: number): FetchStrategy {
+function fetchStrategy(repeat: number): FetchStrategy {
   const strategies: FetchStrategy[] = [
     { sort: "updatedAt.desc", page: 1 },
     { sort: "price.asc", page: 1 },
@@ -48,7 +51,41 @@ function fetchStrategy(sequence: number): FetchStrategy {
     { sort: "updatedAt.desc", page: 2 },
     { sort: "price.asc", page: 2 },
   ];
-  return strategies[Math.min(Math.max(sequence - 1, 0), strategies.length - 1)];
+  return strategies[Math.min(Math.max(repeat - 1, 0), strategies.length - 1)];
+}
+
+function modelParts(value: string) {
+  return String(value || "")
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function bootstrapYearBands(make: string, model: string): YearBand[] {
+  const targetMake = normalizeVehicleText(make);
+  const targetModel = normalizeVehicleText(model);
+  const bands = vehicleGenerationRules
+    .filter(
+      (rule) =>
+        normalizeVehicleText(rule.make) === targetMake &&
+        modelParts(rule.model).some(
+          (part) => normalizeVehicleText(part) === targetModel,
+        ),
+    )
+    .map((rule) => ({
+      startYear: rule.startYear,
+      endYear: rule.endYear,
+      generation: rule.generation,
+    }))
+    .sort((a, b) => b.endYear - a.endYear || b.startYear - a.startYear);
+
+  const seen = new Set<string>();
+  return bands.filter((band) => {
+    const key = `${band.startYear}-${band.endYear}|${band.generation}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function mapListings(payload: any): AutoDevObservation[] {
@@ -245,7 +282,14 @@ async function collectOneCoreCall(runId: string, task: NonNullable<Awaited<Retur
     throw new Error("Motor Match bootstrap call ceiling reached.");
   }
 
-  const strategy = fetchStrategy(task.sequence);
+  const yearBands = bootstrapYearBands(task.make, task.model);
+  const band = yearBands.length
+    ? yearBands[(task.sequence - 1) % yearBands.length]
+    : null;
+  const repeat = yearBands.length
+    ? Math.floor((task.sequence - 1) / yearBands.length) + 1
+    : task.sequence;
+  const strategy = fetchStrategy(repeat);
   const params = new URLSearchParams({
     "vehicle.make": task.make,
     "vehicle.model": task.model,
@@ -255,6 +299,14 @@ async function collectOneCoreCall(runId: string, task: NonNullable<Awaited<Retur
     sort: strategy.sort,
     page: String(strategy.page),
   });
+  if (band) {
+    params.set(
+      "vehicle.year",
+      band.startYear === band.endYear
+        ? String(band.startYear)
+        : `${band.startYear}-${band.endYear}`,
+    );
+  }
 
   const response = await fetch(`https://api.auto.dev/listings?${params.toString()}`, {
     headers: {
@@ -335,7 +387,12 @@ async function collectOneCoreCall(runId: string, task: NonNullable<Awaited<Retur
       unique_observations: uniqueStored,
       status: response.status,
       error: errorMessage,
-      metadata: { purpose: "core_bootstrap" },
+      metadata: {
+        purpose: "core_bootstrap",
+        generation: band?.generation || null,
+        yearStart: band?.startYear || null,
+        yearEnd: band?.endYear || null,
+      },
     });
 
   if (fetchError) throw fetchError;
@@ -356,6 +413,9 @@ async function collectOneCoreCall(runId: string, task: NonNullable<Awaited<Retur
       sequence: task.sequence,
       sort: strategy.sort,
       page: strategy.page,
+      generation: band?.generation || null,
+      yearStart: band?.startYear || null,
+      yearEnd: band?.endYear || null,
       returned: observations.length,
       uniqueStored,
     },
@@ -369,6 +429,9 @@ async function collectOneCoreCall(runId: string, task: NonNullable<Awaited<Retur
     sequence: task.sequence,
     sort: strategy.sort,
     page: strategy.page,
+    generation: band?.generation || null,
+    yearStart: band?.startYear || null,
+    yearEnd: band?.endYear || null,
     returned: observations.length,
     uniqueStored,
     providerTotal,
