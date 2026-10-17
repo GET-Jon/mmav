@@ -32,6 +32,7 @@ export default function MotorMatchPage(){
  const [manualInquiry,setManualInquiry]=useState(false);
  const [embedded,setEmbedded]=useState(false);
  const requestId=useRef(0);
+ const shellRef=useRef<HTMLElement|null>(null);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
  const hasFlashedLimits=useRef(false);
  const [flashLimits,setFlashLimits]=useState(false);
@@ -68,28 +69,33 @@ export default function MotorMatchPage(){
   if(!isEmbed)return;
   const bodyBackground=document.body.style.background;
   const htmlBackground=document.documentElement.style.background;
+  const bodyMinHeight=document.body.style.minHeight;
+  const bodyHeight=document.body.style.height;
+  const htmlMinHeight=document.documentElement.style.minHeight;
+  const htmlHeight=document.documentElement.style.height;
   document.body.style.background="transparent";
   document.documentElement.style.background="transparent";
+  document.body.style.minHeight="0";
+  document.body.style.height="auto";
+  document.documentElement.style.minHeight="0";
+  document.documentElement.style.height="auto";
 
   let lastHeight=0;
   let raf=0;
   const reportHeight=()=>{
    cancelAnimationFrame(raf);
    raf=requestAnimationFrame(()=>{
-    const height=Math.ceil(Math.max(
-     document.documentElement.scrollHeight,
-     document.body.scrollHeight,
-     document.documentElement.getBoundingClientRect().height,
-     document.body.getBoundingClientRect().height
-    ));
+    const shell=shellRef.current;
+    if(!shell)return;
+    const rect=shell.getBoundingClientRect();
+    const height=Math.ceil(Math.max(shell.scrollHeight,rect.height));
     if(Math.abs(height-lastHeight)<2)return;
     lastHeight=height;
     window.parent.postMessage({type:"motor-match:resize",height},"*");
    });
   };
   const observer=new ResizeObserver(reportHeight);
-  observer.observe(document.documentElement);
-  observer.observe(document.body);
+  if(shellRef.current)observer.observe(shellRef.current);
   window.addEventListener("resize",reportHeight);
   reportHeight();
   const delayed=[100,400,900].map(ms=>window.setTimeout(reportHeight,ms));
@@ -101,6 +107,10 @@ export default function MotorMatchPage(){
    cancelAnimationFrame(raf);
    document.body.style.background=bodyBackground;
    document.documentElement.style.background=htmlBackground;
+   document.body.style.minHeight=bodyMinHeight;
+   document.body.style.height=bodyHeight;
+   document.documentElement.style.minHeight=htmlMinHeight;
+   document.documentElement.style.height=htmlHeight;
   };
  },[]);
  useEffect(()=>{
@@ -165,7 +175,7 @@ export default function MotorMatchPage(){
   return "We couldn't find enough current inventory satisfying both limits at once.";
  },[result]);
 
- return <main className={styles.shell+(embedded?" "+styles.shellEmbedded:"")}>
+ return <main ref={shellRef} className={styles.shell+(embedded?" "+styles.shellEmbedded:"")}>
   {!embedded?<header className={styles.topbar}>
    <div className={styles.brand}><span className={styles.mark}>MM</span><div><b>MOTOR MATCH</b><small>by Mindful Motors</small></div></div>
    <div className={styles.apiMeter}><div><span>API CALLS · SESSION</span><strong>{sessionCalls}</strong></div><div><span>LAST UPDATE</span><strong>{result?.apiUsage?.callsThisUpdate??0}</strong></div><details><summary>DETAILS</summary><div className={styles.apiPopover}>{(result?.apiUsage?.breakdown||[]).length?result!.apiUsage.breakdown.map((call,i)=><div key={i}><b>{i+1}. {call.label}</b><span>{call.purpose}</span></div>):<p>No new market calls yet.</p>}<small>Individual listings stay private and are never sent to the browser.</small></div></details></div>
