@@ -85,6 +85,14 @@ export async function GET(request: Request) {
 
   try {
     const run = await getOrCreateMotorMatchBootstrapRun();
+    if (Number(run.calls_used || 0) > 0) {
+      return NextResponse.json({
+        ok: true,
+        test: true,
+        alreadyRan: true,
+        status: await getMotorMatchBootstrapStatus(run.id),
+      });
+    }
     const result = await runMotorMatchBootstrapBatch({ runId: run.id, maxCalls: 3 });
     return NextResponse.json({ ok: true, test: true, ...result });
   } catch (error) {
