@@ -378,17 +378,20 @@ export function MarketCompsTable({
   assumptions,
   onToggleIncluded,
   maxVisibleRows,
+  primaryCompIds = [],
 }: {
   comps: MarketComp[];
   targetMileage: number;
   assumptions: Assumptions;
   onToggleIncluded: (id: string) => void;
   maxVisibleRows?: number;
+  primaryCompIds?: string[];
 }) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "qualityScore", desc: true },
   ]);
   const [selectedComp, setSelectedComp] = useState<MarketComp | null>(null);
+  const primaryIds = useMemo(() => new Set(primaryCompIds), [primaryCompIds]);
 
   const columns = useMemo<ColumnDef<MarketComp>[]>(
     () => [
@@ -450,6 +453,15 @@ export function MarketCompsTable({
               >
                 {tableRelationshipLabel(row.original)}
               </span>
+              {row.original.included && primaryIds.has(row.original.id) ? (
+                <span title="Close year and mileage, direct match, no capped mileage adjustment: used to set the primary price" className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-800">
+                  Primary pricing
+                </span>
+              ) : row.original.included && primaryCompIds.length > 0 ? (
+                <span title="Selected supporting-market context; not used to set primary price" className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600">
+                  Market context
+                </span>
+              ) : null}
               {row.original.dealerDecision === "include" ? (
                 <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-black text-blue-800">
                   Dealer selected
@@ -567,7 +579,7 @@ export function MarketCompsTable({
         ),
       },
     ],
-    [assumptions, onToggleIncluded, targetMileage],
+    [assumptions, onToggleIncluded, targetMileage, primaryCompIds, primaryIds],
   );
 
   const table = useReactTable({

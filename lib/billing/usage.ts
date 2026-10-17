@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
+import { calendarMonthWindow, resolvePaidUsageWindow } from "@/lib/billing/billing-period";
+import { remainingTrialRollover, trialRolloverForPeriod } from "@/lib/billing/trial-rollover";
+import { allowsPaidEvaluationAccess } from "@/lib/billing/payment-status";
+import { cancellationWindow } from "@/lib/billing/post-cancel";
 
 export type UsageKind =
   | "evaluation_completed"
@@ -72,15 +76,6 @@ function normalizePlanKey(value: unknown): PlanKey {
   return "starter";
 }
 
-function monthStartIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-}
-
-function isPaidStatus(status: string) {
-  return status === "active" || status === "past_due" || status === "comped";
-}
-
 export function evaluationUsageSubject(input: {
   evaluationUsageId?: unknown;
   vin?: unknown;
@@ -136,7 +131,7 @@ async function countUsage(
   supabase: SupabaseClient,
   companyId: string,
   eventType: UsageKind,
-  options: { subjectKey?: string | null; since?: string | null } = {},
+  options: { subjectKey?: string | null; since?: string | null; before?: string | null } = {},
 ) {
   let query = supabase
     .from("company_usage_events")
@@ -146,6 +141,7 @@ async function countUsage(
 
   if (options.subjectKey) query = query.eq("subject_key", options.subjectKey);
   if (options.since) query = query.gte("created_at", options.since);
+  if (options.before) query = query.lt("created_at", options.before);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -164,7 +160,7 @@ export async function getCompanyUsageContext(
   ] = await Promise.all([
     supabase
       .from("company_billing_accounts")
-      .select("status,plan_key,trial_ends_at")
+      .select("status,plan_key,trial_ends_at,stripe_subscription_id,current_period_start,current_period_end,cancel_at_period_end,trial_rollover_evaluations,trial_rollover_period_start,post_cancel_evaluations,post_cancel_starts_at,post_cancel_expires_at")
       .eq("company_id", company.companyId)
       .maybeSingle(),
     supabase
@@ -189,16 +185,50 @@ export async function getCompanyUsageContext(
     !internalUnlimited &&
     status === "trialing" &&
     Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now());
+  const paidActive = internalUnlimited || allowsPaidEvaluationAccess(status);
+  const cancelCredits = cancellationWindow({
+    status,
+    startsAt: billing?.post_cancel_starts_at,
+    expiresAt: billing?.post_cancel_expires_at,
+    initialEvaluations: billing?.post_cancel_evaluations,
+    usedDuringWindow: 0,
+  });
+  const paidUsageWindow = paidActive
+    ? resolvePaidUsageWindow({
+        stripeSubscriptionId: billing?.stripe_subscription_id,
+        currentPeriodStart: billing?.current_period_start,
+        currentPeriodEnd: billing?.current_period_end,
+      })
+    : calendarMonthWindow(new Date());
+
+  const paidBillingPeriodReady =
+    !paidActive || paidUsageWindow.kind !== "unsynchronized";
+  const trialRolloverEvaluations =
+    paidActive && paidBillingPeriodReady && !internalUnlimited
+      ? trialRolloverForPeriod({
+          firstPeriodStart: billing?.trial_rollover_period_start,
+          currentPeriodStart: billing?.current_period_start,
+          carryoverEvaluations: billing?.trial_rollover_evaluations,
+        })
+      : 0;
 
   return {
     company,
     status,
     planKey,
+    cancelAtPeriodEnd: Boolean(billing?.cancel_at_period_end),
+    currentPeriodEnd: billing?.current_period_end || null,
+    trialRolloverEvaluations,
+    cancelCredits,
     internalUnlimited,
     trialEndsAt: trialEndsAt?.toISOString() || null,
     trialActive,
     giftedEvaluations,
-    paidActive: internalUnlimited || isPaidStatus(status),
+    paidActive,
+    paidUsageWindow,
+    // A Stripe subscription without an authoritative, current period must
+    // not get a calendar-reset paid allowance (even on November 1).
+    paidBillingPeriodReady,
   };
 }
 
@@ -214,23 +244,61 @@ export async function getUsageSummary(
     trialActive,
     paidActive,
     giftedEvaluations,
+    paidUsageWindow,
+    paidBillingPeriodReady,
+    trialRolloverEvaluations,
+    cancelCredits,
   } = context;
 
-  const [trialEvaluationsUsed, monthlyEvaluationsUsed, monthlyProviderCalls] =
+  // Paid quotas (both evaluations and third-party API calls) follow the same
+  // Stripe period. Trial activity predating that period never consumes it.
+  const usageWindow = paidActive ? paidUsageWindow : cancelCredits.valid && cancelCredits.startsAt && cancelCredits.expiresAt
+    ? { start: cancelCredits.startsAt, end: cancelCredits.expiresAt } : calendarMonthWindow(new Date());
+  const windowFilter = {
+    since: usageWindow.start,
+    before: usageWindow.end,
+  };
+  const [trialEvaluationsUsed, countedEvaluations, countedProviderCalls] =
     await Promise.all([
       countUsage(supabase, company.companyId, "evaluation_completed"),
-      countUsage(supabase, company.companyId, "evaluation_completed", {
-        since: monthStartIso(),
-      }),
-      countUsage(supabase, company.companyId, "provider_api_call", {
-        since: monthStartIso(),
-      }),
+      (paidActive ? paidBillingPeriodReady : cancelCredits.valid)
+        ? countUsage(supabase, company.companyId, "evaluation_completed", windowFilter)
+        : Promise.resolve(0),
+      (paidActive ? paidBillingPeriodReady : cancelCredits.valid)
+        ? countUsage(supabase, company.companyId, "provider_api_call", windowFilter)
+        : Promise.resolve(0),
     ]);
+  const monthlyEvaluationsUsed = countedEvaluations;
+  const monthlyProviderCalls = countedProviderCalls;
 
+  const grace = cancellationWindow({
+    status: context.status,
+    startsAt: cancelCredits.startsAt,
+    expiresAt: cancelCredits.expiresAt,
+    initialEvaluations: cancelCredits.initial,
+    usedDuringWindow: paidActive ? 0 : countedEvaluations,
+  });
   const limits = PLAN_LIMITS[planKey];
+  const firstCycleAllowance = limits.evaluationsPerMonth + trialRolloverEvaluations;
+  const trialRolloverEvaluationsRemaining =
+    paidActive && paidBillingPeriodReady
+      ? remainingTrialRollover({
+          monthlyAllowance: limits.evaluationsPerMonth,
+          carryover: trialRolloverEvaluations,
+          periodEvaluationsUsed: monthlyEvaluationsUsed,
+        })
+      : 0;
 
   return {
     ...context,
+    firstCycleAllowance,
+    trialRolloverEvaluationsRemaining,
+    postCancelActive: grace.active,
+    postCancelBalance: grace.initial,
+    postCancelUsed: paidActive ? 0 : countedEvaluations,
+    postCancelRemaining: grace.remaining,
+    postCancelStartsAt: grace.startsAt,
+    postCancelExpiresAt: grace.expiresAt,
     trialEvaluationsUsed,
     trialEvaluationsRemaining: internalUnlimited
       ? null
@@ -238,21 +306,26 @@ export async function getUsageSummary(
     monthlyEvaluationsUsed,
     monthlyEvaluationsRemaining: internalUnlimited
       ? null
-      : Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed),
+      : !paidBillingPeriodReady
+        ? 0
+        : Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed),
     giftedEvaluationsRemaining: internalUnlimited ? null : giftedEvaluations,
     effectiveEvaluationsRemaining: internalUnlimited
       ? null
       : paidActive
-        ? Math.max(0, limits.evaluationsPerMonth - monthlyEvaluationsUsed) +
-          giftedEvaluations
-        : Math.max(0, TRIAL_LIMITS.evaluationsTotal - trialEvaluationsUsed) +
+        ? (paidBillingPeriodReady
+          ? Math.max(0, firstCycleAllowance - monthlyEvaluationsUsed)
+          : 0) + giftedEvaluations
+        : grace.remaining +
+          (trialActive ? Math.max(0, TRIAL_LIMITS.evaluationsTotal - trialEvaluationsUsed) : 0) +
           giftedEvaluations,
     monthlyProviderCalls,
     limits,
     trialLimits: TRIAL_LIMITS,
     canUsePaidProviders:
       internalUnlimited ||
-      paidActive ||
+      (paidActive && paidBillingPeriodReady) ||
+      (grace.active && grace.remaining > 0) ||
       giftedEvaluations > 0 ||
       (trialActive && trialEvaluationsUsed < TRIAL_LIMITS.evaluationsTotal),
   };
@@ -307,7 +380,59 @@ export async function checkUsageAllowance(args: {
     )) > 0;
 
   if (
+    ["past_due", "unpaid", "paused"].includes(summary.status) &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
+    return {
+      allowed: false as const,
+      code: "PAYMENT_REQUIRED",
+      status: 402,
+      message: "Your subscription payment is due. Update your payment details in Billing to start new evaluations.",
+      summary,
+    };
+  }
+
+  if (
+    summary.status === "canceled" &&
+    !summary.postCancelActive &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
+    const startsAt = Date.parse(summary.postCancelStartsAt || "");
+    const scheduled = Number.isFinite(startsAt) &&
+      startsAt > Date.now() &&
+      summary.postCancelBalance > 0;
+    return {
+      allowed: false as const,
+      code: scheduled ? "CANCELLATION_CREDITS_SCHEDULED" : "CANCELLATION_CREDITS_UNAVAILABLE",
+      status: 402,
+      message: scheduled
+        ? `Your ${summary.postCancelBalance} unused paid evaluations are preserved. They become available when your paid subscription period ends. The 30-day window and exact expiration date are shown in Billing.`
+        : "Your subscription has ended and no paid evaluations remain available. Choose a plan to continue.",
+      summary,
+    };
+  }
+
+  if (
+    summary.status === "canceled" &&
+    summary.postCancelActive &&
+    summary.postCancelRemaining === 0 &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
+    return {
+      allowed: false as const,
+      code: "CANCELLATION_CREDITS_EXHAUSTED",
+      status: 402,
+      message: "You have used all evaluations from your canceled plan. Choose a plan to continue.",
+      summary,
+    };
+  }
+
+  if (
     !summary.paidActive &&
+    !summary.postCancelActive &&
     !summary.trialActive &&
     !giftedCreditsAvailable &&
     !existingCompletedEvaluation
@@ -323,6 +448,7 @@ export async function checkUsageAllowance(args: {
 
   if (
     !summary.paidActive &&
+    !summary.postCancelActive &&
     summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal &&
     !giftedCreditsAvailable &&
     !existingCompletedEvaluation
@@ -337,9 +463,24 @@ export async function checkUsageAllowance(args: {
   }
 
   if (
+    summary.paidActive &&
+    !summary.paidBillingPeriodReady &&
+    !giftedCreditsAvailable &&
+    !existingCompletedEvaluation
+  ) {
+    return {
+      allowed: false as const,
+      code: "BILLING_PERIOD_UNAVAILABLE",
+      status: 503,
+      message: "Subscription billing period is awaiting synchronization. Please try again shortly.",
+      summary,
+    };
+  }
+
+  if (
     kind === "evaluation_completed" &&
     summary.paidActive &&
-    summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth &&
+    summary.monthlyEvaluationsUsed >= summary.firstCycleAllowance &&
     !giftedCreditsAvailable
   ) {
     return {
@@ -359,7 +500,7 @@ export async function checkUsageAllowance(args: {
       { subjectKey },
     );
 
-    const perVehicleLimit = !summary.paidActive
+    const perVehicleLimit = !(summary.paidActive || summary.postCancelActive)
       ? kind === "market_search"
         ? TRIAL_LIMITS.marketSearchesPerEvaluation
         : kind === "auto_dev_discovery"
@@ -395,7 +536,7 @@ export async function checkUsageAllowance(args: {
 
   if (kind === "provider_api_call") {
     const providerLimit =
-      !summary.paidActive
+      !(summary.paidActive || summary.postCancelActive)
         ? TRIAL_LIMITS.providerCallsTotal
         : summary.limits.providerCallsPerMonth;
 
@@ -416,9 +557,12 @@ export async function checkUsageAllowance(args: {
     !summary.internalUnlimited &&
     giftedCreditsAvailable &&
     (summary.paidActive
-      ? summary.monthlyEvaluationsUsed >= summary.limits.evaluationsPerMonth
-      : !summary.trialActive ||
-        summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal);
+      ? !summary.paidBillingPeriodReady ||
+        summary.monthlyEvaluationsUsed >= summary.firstCycleAllowance
+      : summary.postCancelActive
+        ? summary.postCancelRemaining <= 0
+        : !summary.trialActive ||
+          summary.trialEvaluationsUsed >= TRIAL_LIMITS.evaluationsTotal);
 
   return {
     allowed: true as const,

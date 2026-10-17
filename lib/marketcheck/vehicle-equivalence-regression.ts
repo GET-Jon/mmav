@@ -20,6 +20,36 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Silverado Trail Boss subject vs MarketCheck Silverado 1500 Custom is supporting, not a family reject",
+    target: { year: 2020, make: "Chevrolet", model: "Silverado Trail Boss", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Chevrolet", model: "Silverado 1500", trim: "Custom", bodyType: "Pickup", drivetrain: "RWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Silverado Trail Boss remains a materially different derivative from an ordinary Custom",
+    target: { year: 2020, make: "Chevrolet", model: "Silverado Trail Boss", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Chevrolet", model: "Silverado 1500", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Silverado 1500 LT Trail Boss still matches the subject derivative as near evidence",
+    target: { year: 2020, make: "Chevrolet", model: "Silverado Trail Boss", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Chevrolet", model: "Silverado 1500", trim: "LT Trail Boss", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Silverado 2500HD is never a Silverado 1500 comp",
+    target: { year: 2020, make: "Chevrolet", model: "Silverado Trail Boss", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Chevrolet", model: "Silverado 2500HD", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "reject",
+  },
+  {
+    name: "Silverado EV is never a Silverado 1500 comp",
+    target: { year: 2025, make: "Chevrolet", model: "Silverado 1500", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2025, make: "Chevrolet", model: "Silverado EV", trim: "WT", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Electric" },
+    expected: "reject",
+  },
+  {
     name: "Audi A5 VIN naming vs A5 Sportback is near, not rejected",
     target: {
       year: 2025,
@@ -658,6 +688,21 @@ type IdentityRegressionCase = {
 };
 
 export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
+  {
+    name: "Silverado Trail Boss 1500 and provider Silverado 1500 resolve into light-duty model family",
+    vehicle: { year: 2020, make: "Chevrolet", model: "Silverado Trail Boss", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: { modelFamily: "silverado 1500" },
+  },
+  {
+    name: "Silverado 3500 remains separate from Silverado 1500",
+    vehicle: { year: 2020, make: "Chevrolet", model: "Silverado 3500HD", trim: "LT", bodyType: "Pickup", fuelType: "Diesel" },
+    expected: { modelFamily: "silverado 3500" },
+  },
+  {
+    name: "Silverado EV remains a separate electric model family",
+    vehicle: { year: 2025, make: "Chevrolet", model: "Silverado EV", trim: "WT", bodyType: "Pickup", fuelType: "Electric" },
+    expected: { modelFamily: "silverado ev" },
+  },
   {
     name: "Audi Sportback descriptor stays in configuration, not model family",
     vehicle: {

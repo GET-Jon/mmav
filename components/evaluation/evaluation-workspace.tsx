@@ -6,6 +6,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { ConditionChoiceIcon } from "@/components/evaluation/condition-choice-icon";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
   MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
@@ -26,6 +27,7 @@ import {
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
+import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
@@ -274,10 +276,14 @@ function MarketConfidenceHelp({
   confidence,
   compCount,
   reasons,
+  primaryCount = 0,
+  pricingMode,
 }: {
   confidence: "Strong" | "Moderate" | "Limited";
   compCount: number;
   reasons: string[];
+  primaryCount?: number;
+  pricingMode?: "primary" | "market-fallback";
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -320,7 +326,9 @@ function MarketConfidenceHelp({
           Why {confidence.toLowerCase()} confidence?
         </span>
         <span className="mt-1 block text-xs font-medium leading-5 text-slate-600">
-          {compCount} selected comp{compCount === 1 ? "" : "s"} provide useful pricing evidence, but confidence measures how well listings match and agree, not just how many were found.
+          {pricingMode === "primary"
+            ? `${primaryCount} close peers set the primary price; ${compCount - primaryCount} broader listings remain as market context. Confidence measures the pricing agreement and reliability of those close peers.`
+            : `${compCount} comps provide market context, but fewer than four close, uncapped pricing peers are available. Confidence is conservative until better evidence is found.`}
         </span>
         {reasons.length > 0 ? (
           <span className="mt-2 block border-t border-slate-100 pt-2">
@@ -1562,10 +1570,33 @@ export function EvaluationWorkspace({
       calculateCompSummary({
         comps,
         targetMileage,
+        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+        targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
+        targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [comps, targetMileage, activeAssumptions],
+    [comps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
+
+  function downloadCompAudit() {
+    if (!comps.length) return;
+    const csv = createCompAuditCsv({
+      comps,
+      targetMileage,
+      assumptions: activeAssumptions,
+      summary: compSummary,
+    });
+    const objectUrl = URL.createObjectURL(new Blob([csv], {
+      type: "text/csv;charset=utf-8",
+    }));
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = "lot-logic-comp-audit.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
 
   const marketTimingAverageDealerDays =
     compSummary.averageDealerDays ||
@@ -4612,6 +4643,9 @@ export function EvaluationWorkspace({
         }
       : rawCompSearchRecommendation;
 
+  const recommendedCompSearchExhausted = automaticCompSearchCompleted &&
+    compSearchRecommendation.action === "manual-review";
+
   const compNextStep = {
     path:
       compSearchRecommendation.action === "broaden-vehicle" ||
@@ -4637,6 +4671,14 @@ export function EvaluationWorkspace({
       : compSummary.includedCount >= 4 && normalizedCompConfidence !== "low"
         ? "Moderate"
         : "Limited";
+  const marketEvidenceDisplay =
+    marketEvidenceStrength === "Limited" && compSummary.includedCount >= 4
+      ? "Low pricing confidence"
+      : marketEvidenceStrength === "Limited"
+        ? "Limited evidence"
+        : marketEvidenceStrength === "Strong"
+          ? "Strong pricing confidence"
+          : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
   const hasLowCompConfidence = hasLimitedMarketEvidence;
@@ -5011,7 +5053,7 @@ export function EvaluationWorkspace({
     presentationDecision === "pursue" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    compSummary.includedCount > 0 ? marketEvidenceStrength : "—";
+    compSummary.includedCount > 0 ? marketEvidenceDisplay : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
@@ -7336,7 +7378,10 @@ export function EvaluationWorkspace({
                   <div className="space-y-2 opacity-55">
                     {["No material issues", "Known issues", "Condition unknown"].map((label) => (
                       <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
+                        <ConditionChoiceIcon
+                          variant={label === "No material issues" ? "clear" : label === "Known issues" ? "issues" : "unknown"}
+                          muted
+                        />
                         {label}
                       </div>
                     ))}
@@ -7348,16 +7393,31 @@ export function EvaluationWorkspace({
                   {conditionReviewStatus === "unreviewed" ? (
                     <div className="space-y-2">
                       <button type="button" onClick={() => chooseConditionReview("no_material_issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50">
-                        <div className="text-sm font-black text-slate-900">No material issues apparent</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="clear" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">No material issues apparent</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</span>
+                          </span>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-violet-300 hover:bg-violet-50">
-                        <div className="text-sm font-black text-slate-900">There are known issues</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="issues" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">There are known issues</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</span>
+                          </span>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("unknown")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-amber-300 hover:bg-amber-50">
-                        <div className="text-sm font-black text-slate-900">Condition is unknown</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="unknown" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">Condition is unknown</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</span>
+                          </span>
+                        </div>
                       </button>
                     </div>
                   ) : conditionReviewStatus === "issues" ? (
@@ -7537,7 +7597,7 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence`
+                          ? `${compSummary.includedCount} comps · ${compSummary.primaryCompCount || 0} close peers · ${marketEvidenceDisplay}`
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7551,10 +7611,14 @@ export function EvaluationWorkspace({
                     {needsCompSearch ? (
                       <span className="group relative inline-flex">
                         <button type="button" aria-label="Why market evidence needs attention"
-                          title="No trusted comps yet. An unpriced Verdict does not charge a credit or provide a reliable sale or profit estimate."
+                          title={recommendedCompSearchExhausted
+                            ? "Recommended searches have finished. An unpriced review will not consume an evaluation credit."
+                            : "No trusted comps yet. Run the recommended search before deciding whether a valuation is possible."}
                           className="flex h-5 w-5 items-center justify-center rounded-full border border-amber-300 text-[11px] font-black text-amber-800 focus-visible:outline-2 focus-visible:outline-blue-600">!</button>
                         <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                          No trusted comparisons yet. Continue to Verdict opens an unpriced review without using an evaluation credit. Sale and profit estimates remain unavailable.
+                          {recommendedCompSearchExhausted
+                            ? "Recommended searches have finished without reliable comparisons. You can review an unpriced verdict without using an evaluation credit; no sale or profit estimate is available."
+                            : "The initial search has not established reliable comparisons. Run the recommended search for stronger market evidence before treating this as unpriceable."}
                         </span>
                       </span>
                     ) : null}
@@ -7616,12 +7680,14 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xl font-black text-slate-950">{marketEvidenceStrength}</span>
-                            {marketEvidenceStrength === "Limited" ? (
+                            <span className="text-lg font-black text-slate-950">{marketEvidenceDisplay}</span>
+                            {(marketEvidenceStrength === "Limited" || compSummary.pricingMode === "primary") ? (
                               <MarketConfidenceHelp
                                 confidence={marketEvidenceStrength}
                                 compCount={compSummary.includedCount}
                                 reasons={compSummary.confidenceReasons || []}
+                                primaryCount={compSummary.primaryCompCount || 0}
+                                pricingMode={compSummary.pricingMode}
                               />
                             ) : null}
                           </div>
@@ -7629,9 +7695,20 @@ export function EvaluationWorkspace({
                       </div>
                       {activeStage === "market" ? (
                         <>
+                        {compSummary.pricingMode === "primary" ? (
+                          <div className="mt-3 text-[11px] font-semibold leading-4 text-slate-600">
+                            <span className="font-black text-emerald-800">{compSummary.primaryCompCount} close, uncapped peers set this estimate</span>
+                            {" · "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} broader selected comps provide market context.
+                            {" "}Asking prices are not completed-sale prices.
+                          </div>
+                        ) : compSummary.includedCount > 0 ? (
+                          <div className="mt-3 text-[11px] font-semibold leading-4 text-amber-800">
+                            Broad-market estimate: only {compSummary.primaryCompCount || 0} close, uncapped peers found (minimum 4). Treat the retail value as provisional.
+                          </div>
+                        ) : null}
                         {hasLimitedMarketEvidence ? (
                           <div className="mt-3 text-xs font-semibold leading-5 text-amber-800">
-                            Limited evidence · {compSearchRecommendation.title}
+                            {marketEvidenceDisplay} · {compSearchRecommendation.title}
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -7711,7 +7788,7 @@ export function EvaluationWorkspace({
                       <>
                         <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
                           <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
-                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Improve comps or review the unpriced verdict.</div>
+                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Run the recommended search to check for qualifying comparisons before treating the valuation as unavailable.</div>
                         </div>
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                           <button type="button" onClick={() => void improveCompSearch()}
@@ -7756,6 +7833,7 @@ export function EvaluationWorkspace({
                 action={
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
+                    <button type="button" onClick={downloadCompAudit} disabled={!comps.length} title="Download all comp inputs for valuation review; no evaluation credit used" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Export comp audit</button>
                     <button type="button" onClick={openMethodology} className="text-xs font-black text-slate-400 hover:text-slate-700">Methodology</button>
                   </div>
                 }
@@ -7771,7 +7849,7 @@ export function EvaluationWorkspace({
                           Full comp set appears after Continue to Verdict.
                         </div>
                       </div>
-                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
                       {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
@@ -7863,7 +7941,9 @@ export function EvaluationWorkspace({
             <>
               {compSummary.includedCount === 0 ? (
                 <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950" role="status">
-                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. No evaluation credit was consumed for entering this unpriced verdict.
+                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. {recommendedCompSearchExhausted
+                    ? "Recommended searches have been completed without qualifying comps; this unpriced review did not consume an evaluation credit."
+                    : "Recommended searches are still available. Return to Market and improve the comparison set before concluding this vehicle cannot be valued."}
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
@@ -7981,7 +8061,7 @@ export function EvaluationWorkspace({
                   }
                 >
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}

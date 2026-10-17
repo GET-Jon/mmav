@@ -41,7 +41,28 @@ export async function GET() {
     return NextResponse.json({ error: entitlementError.message }, { status: 500 });
   }
 
+  // Keep the trial usable while surfacing a previous unsuccessful checkout.
+  // This is derived from Stripe's recorded invoice events, not inferred from
+  // trial status, so we don't permanently mark a dealership as delinquent.
+  let recentCheckoutPaymentFailed = false;
+  if (billing?.status === "trialing" && !billing.stripe_subscription_id) {
+    const { data: lastInvoiceEvent, error: invoiceEventError } = await admin
+      .from("billing_events")
+      .select("event_type")
+      .eq("company_id", company.companyId)
+      .in("event_type", ["invoice.payment_failed", "invoice.paid"])
+      .order("processed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (invoiceEventError) {
+      return NextResponse.json({ error: invoiceEventError.message }, { status: 500 });
+    }
+    recentCheckoutPaymentFailed = lastInvoiceEvent?.event_type === "invoice.payment_failed";
+  }
+
   return NextResponse.json({
+    recentCheckoutPaymentFailed,
     company: {
       id: company.companyId,
       name: company.companyName,

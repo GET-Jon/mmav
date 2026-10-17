@@ -118,4 +118,14 @@ export type CompSummary = {
   dealerOverrideCount?: number;
   dealerHardOverrideCount?: number;
   confidenceReasons?: string[];
+  /** All selected equivalence-qualified comps remain visible as market evidence. */
+  pricingMode?: "primary" | "market-fallback";
+  primaryCompCount?: number;
+  pricingCompCount?: number;
+  primaryCompIds?: string[];
+  /** Broad selected market median, before close-peer preference. */
+  marketMedianAdjusted?: number;
+  marketFullSpreadPercent?: number;
+  primaryFullSpreadPercent?: number | null;
+  primaryCentralSpreadPercent?: number | null;
 };

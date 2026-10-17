@@ -162,6 +162,19 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
     }
   }
 
+  if (make === "chevrolet") {
+    // Provider and VIN feeds interchange "Silverado", "Silverado 1500",
+    // and "Silverado Trail Boss" for the light-duty pickup family.
+    // Keep 2500/3500 heavy-duty trucks and the Silverado EV separate.
+    if (modelCompact.startsWith("silveradoev")) return "silverado ev";
+    if (modelCompact.startsWith("silverado3500")) return "silverado 3500";
+    if (modelCompact.startsWith("silverado2500")) return "silverado 2500";
+    if (modelCompact.startsWith("silverado4500")) return "silverado 4500";
+    if (modelCompact.startsWith("silverado5500")) return "silverado 5500";
+    if (modelCompact.startsWith("silverado6500")) return "silverado 6500";
+    if (modelCompact.startsWith("silverado")) return "silverado 1500";
+  }
+
   if (make === "ford") {
     // Bronco providers commonly move the door count between model and body
     // fields ("Bronco", "Bronco 4-Door", "Bronco 2-Door"). Those are one
