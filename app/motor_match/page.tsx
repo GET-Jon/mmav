@@ -8,7 +8,7 @@ type MatchResponse={
  state:MatchState;depth:"strong"|"healthy"|"thin"|"none";matchCount:number;
  constraintStatus:{priceWorks:boolean;mileageWorks:boolean};
  market:{priceNeeded:number|null;mileageNeeded:number|null;yearNeeded:number|null};
- message:string;searchKey:string;providerTotal:number;sampleSize:number;
+ message:string;searchKey:string;providerTotal:number;sampleSize:number;dataSource?:"database"|"auto_dev";
  apiUsage:{callsThisUpdate:number;breakdown:Array<{label:string;purpose:string}>};
  cache?:{hit:boolean;ttlSeconds:number};
 };
@@ -33,6 +33,8 @@ export default function MotorMatchPage(){
  const [embedded,setEmbedded]=useState(false);
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
+ const answerRef=useRef<HTMLElement|null>(null);
+ const shouldScrollToAnswer=useRef(false);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
  const hasFlashedLimits=useRef(false);
  const [flashLimits,setFlashLimits]=useState(false);
@@ -42,10 +44,13 @@ export default function MotorMatchPage(){
  const makeNeedsFocus=!make.trim();
  const sliderYears=useMemo(()=>[...validYears].sort((a,b)=>a-b),[validYears]);
  const yearSliderIndex=year?Math.max(0,sliderYears.indexOf(year)):0;
+ const limitedMarket=Boolean(result&&result.dataSource==="database"&&result.sampleSize<5);
 
- const analyze=useCallback(async()=>{
+ const analyze=useCallback(async(scrollToAnswer=false)=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
-  const id=++requestId.current;setLoading(true);setError("");setVehicleError("");
+  const id=++requestId.current;
+  if(scrollToAnswer)shouldScrollToAnswer.current=true;
+  setLoading(true);setError("");setVehicleError("");
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
    const raw=await response.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{}
@@ -137,7 +142,15 @@ export default function MotorMatchPage(){
   const timer=window.setTimeout(()=>{setFlashLimits(false);setSearchReady(true)},4000);
   return()=>window.clearTimeout(timer);
  },[guidedReady]);
- useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),650);return()=>window.clearTimeout(t)},[analyze,started]);
+ useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(false),650);return()=>window.clearTimeout(t)},[analyze,started]);
+ useEffect(()=>{
+  if(!result||!shouldScrollToAnswer.current)return;
+  shouldScrollToAnswer.current=false;
+  const timer=window.setTimeout(()=>{
+   answerRef.current?.scrollIntoView({behavior:"smooth",block:"start"});
+  },80);
+  return()=>window.clearTimeout(timer);
+ },[result]);
  useEffect(()=>{
   if(!loading||started){setLoadingMessageIndex(0);return}
   const timer=window.setInterval(()=>setLoadingMessageIndex(index=>(index+1)%LOADING_MESSAGES.length),1450);
@@ -163,17 +176,22 @@ export default function MotorMatchPage(){
 
  const headline=useMemo(()=>{
   if(!result)return "";
+  if(limitedMarket)return "This one needs a closer look.";
   if(result.state==="green")return "Yes — this is realistic.";
   if(result.state==="yellow")return "Possible — but options are limited.";
   return "You're close, but something has to give.";
- },[result]);
+ },[limitedMarket,result]);
 
  const subhead=useMemo(()=>{
   if(!result)return "";
+  if(limitedMarket){
+   if(result.sampleSize===0)return `We don't have enough current observations for the ${year} ${make} ${model} to give you a reliable automated answer.`;
+   return `We only have ${result.sampleSize} current observation${result.sampleSize===1?"":"s"} for the ${year} ${make} ${model}, so we don't want to overstate what the market is telling us.`;
+  }
   if(result.state==="green")return result.depth==="strong"?"Strong availability around your target.":"Healthy availability around your target.";
   if(result.state==="yellow")return "Your target exists, but there is not much room to be picky about color, condition, or options.";
   return "We couldn't find enough current inventory satisfying both limits at once.";
- },[result]);
+ },[limitedMarket,make,model,result,year]);
 
  return <main ref={shellRef} className={styles.shell+(embedded?" "+styles.shellEmbedded:"")}>
   {!embedded?<header className={styles.topbar}>
@@ -218,7 +236,7 @@ export default function MotorMatchPage(){
     <div className={styles.locationGrid}>
      <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
      <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
-     <button className={styles.primary+" "+(searchReady||started?styles.primaryReady:"")} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
+     <button className={styles.primary+" "+(searchReady||started?styles.primaryReady:"")} onClick={()=>void analyze(true)} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
     </div>
    </div>
   </section>
@@ -229,10 +247,10 @@ export default function MotorMatchPage(){
 
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
 
-  {result?<section className={styles.answer+" "+styles["answer_"+result.state]}>
+  {result?<section ref={answerRef} className={styles.answer+" "+styles["answer_"+result.state]+(limitedMarket?" "+styles.answer_limited:"")}>
    <div className={styles.answerLead}>
     <div className={styles.resultStatusRow}>
-     <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+     <span className={styles.resultStatus}>{limitedMarket?"LIMITED MARKET DATA":result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
      <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
     </div>
     <h2>{headline}</h2>
@@ -242,13 +260,17 @@ export default function MotorMatchPage(){
    <div className={styles.targetBlock}>
     <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>What the market says about each limit.</strong></div>
     <div className={styles.constraintRow}>
-     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks}/>
-     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks}/>
-     <Constraint label="Year" value={String(year)} works={result.matchCount>0}/>
+     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks} limited={limitedMarket}/>
+     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks} limited={limitedMarket}/>
+     <Constraint label="Year" value={String(year)} works={result.matchCount>0} limited={limitedMarket}/>
     </div>
+    {limitedMarket?<div className={styles.rareHelp}>
+     <div><span>RARE, UNUSUAL, MODIFIED, OR VERY SPECIFIC?</span><strong>Some cars need a human search.</strong><p>Thin data doesn&apos;t mean the car is wrong for you. It means we&apos;d rather look at it personally than pretend a small sample is definitive.</p></div>
+     <button type="button" onClick={()=>{setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>ASK US TO LOOK →</button>
+    </div>:null}
    </div>
 
-   {result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
+   {!limitedMarket&&result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
     <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Relax one constraint — not all three.</strong></div>
     <div className={styles.moveGrid}>
      {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action="Keep year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
@@ -326,5 +348,5 @@ export default function MotorMatchPage(){
 }
 
 function Field({label,children}:{label:string;children:React.ReactNode}){return <label className={styles.field}><span>{label}</span>{children}</label>}
-function Constraint({label,value,works}:{label:string;value:string;works:boolean}){return <div className={styles.constraint}><span>{label}</span><strong>{value}</strong><b className={works?styles.good:styles.bad}>{works?"WORKS":"BLOCKING"}</b></div>}
+function Constraint({label,value,works,limited=false}:{label:string;value:string;works:boolean;limited?:boolean}){return <div className={styles.constraint}><span>{label}</span><strong>{value}</strong><b className={limited?styles.limited:works?styles.good:styles.bad}>{limited?"LIMITED DATA":works?"WORKS":"BLOCKING"}</b></div>}
 function Option({label,value,action,active,onClick}:{label:string;value:string;action:string;active:boolean;onClick:()=>void}){return <button className={styles.option} disabled={!active} onClick={onClick}><span>{label}</span><strong>{value}</strong><b>{action}</b></button>}
