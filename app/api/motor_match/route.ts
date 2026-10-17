@@ -1,5 +1,5 @@
 import {NextResponse} from "next/server";
-import {findOlderYear,getMotorMatchCohort,solveMotorMatch} from "@/lib/motor-match/server";
+import {findOlderYear,findOlderYearFromDatabase,getMotorMatchCohort,solveMotorMatch} from "@/lib/motor-match/server";
 import {resolveVehicleGeneration} from "@/lib/vehicle-generations";
 export const dynamic="force-dynamic";
 const s=(v:unknown)=>String(v||"").trim();
@@ -21,10 +21,14 @@ export async function POST(request:Request){
   const solved=solveMotorMatch(loaded.cohort.listings,budget,mileage);
   let yearCalls=0;
   if(solved.state!=="green"){
-   const apiKey=process.env.AUTODEV_API_KEY;
-   if(apiKey){
-    solved.market.yearNeeded=await findOlderYear(apiKey,{make,model,trim,zip,distance,year,budget,mileage});
-    yearCalls=1;
+   if(loaded.cohort.source==="database"){
+    solved.market.yearNeeded=await findOlderYearFromDatabase({make,model,trim,year,budget,mileage});
+   }else{
+    const apiKey=process.env.AUTODEV_API_KEY;
+    if(apiKey){
+     solved.market.yearNeeded=await findOlderYear(apiKey,{make,model,trim,zip,distance,year,budget,mileage});
+     yearCalls=1;
+    }
    }
   }
   return NextResponse.json({
@@ -32,9 +36,11 @@ export async function POST(request:Request){
    searchKey:loaded.key,
    providerTotal:loaded.cohort.providerTotal,
    sampleSize:loaded.cohort.listings.length,
+   dataSource:loaded.cohort.source,
+   marketScope:loaded.cohort.source==="database"?"stored national snapshot":"live geographic query",
    cache:{hit:loaded.cacheHit,ttlSeconds:Math.max(0,Math.floor((loaded.cohort.expiresAt-Date.now())/1000))},
-   apiUsage:{callsThisUpdate:loaded.calls+yearCalls,breakdown:[
-    ...(loaded.calls?[{label:"Market cohort",purpose:"Build a private exact-year sample from the lowest-price and lowest-mileage inventory."}]:[]),
+   apiUsage:{callsThisUpdate:0,breakdown:[
+    ...(loaded.cohort.source==="database"?[{label:"Stored market database",purpose:"Use the stored Motor Match market snapshot without a live provider call."}]:[]),
     ...(yearCalls?[{label:"Older-year check",purpose:"Check whether a nearby older model year satisfies both limits."}]:[])
    ]}
   });

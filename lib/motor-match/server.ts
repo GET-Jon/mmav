@@ -1,16 +1,148 @@
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 type Listing={vin:string|null;year:number|null;make:string|null;model:string|null;trim:string|null;price:number|null;miles:number|null;dealer:string|null;city:string|null;state:string|null;url:string|null};
-type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number;calls:number;trim:string};
+type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number;calls:number;trim:string;source:"database"|"auto_dev"};
 
 const CACHE_TTL_MS=30*60*1000;
 const SAMPLE_LIMIT=100;
 const cache=new Map<string,CachedCohort>();
+const DB_MIN_SAMPLE=1;
+const DB_MAX_SAMPLE=500;
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:null};
 const s=(v:unknown)=>String(v||"").trim();
+
+function median(values:number[]){
+ const sorted=values.filter(Number.isFinite).sort((a,b)=>a-b);
+ if(!sorted.length)return null;
+ const mid=Math.floor(sorted.length/2);
+ return sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2;
+}
+
+function cleanListings(rows:Listing[]){
+ const basic=rows.filter(l=>
+  typeof l.price==="number"&&l.price>=2500&&
+  typeof l.miles==="number"&&l.miles>=0&&l.miles<=250000
+ );
+ if(basic.length<5)return basic;
+ const med=median(basic.map(l=>l.price as number));
+ if(!med)return basic;
+ const low=Math.max(2500,med*.3);
+ const high=med*4;
+ return basic.filter(l=>(l.price as number)>=low&&(l.price as number)<=high);
+}
 
 function map(payload:any):Listing[]{return (Array.isArray(payload?.data)?payload.data:[]).map((row:any)=>{const v=row?.vehicle||{};const r=row?.retailListing||{};return{vin:s(v.vin||row?.vin)||null,year:n(v.year),make:s(v.make)||null,model:s(v.model)||null,trim:s(v.trim)||null,price:n(r.price),miles:n(r.miles??r.mileage),dealer:s(r.dealer)||null,city:s(r.city)||null,state:s(r.state)||null,url:s(r.vdp)||null}}).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0)}
 
 function keyFor({make,model,trim,zip,distance,year}:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
+}
+
+async function queryStoredRows(args:{
+ make:string;model:string;trim:string;yearMin:number;yearMax:number;maxPrice?:number|null;maxMiles?:number|null
+}){
+ const remoteUrl=process.env.MOTOR_MATCH_PROD_DB_URL;
+ const remoteKey=process.env.MOTOR_MATCH_PROD_DB_ANON_KEY;
+ const testToken=process.env.MOTOR_MATCH_PROD_DB_TEST_TOKEN;
+
+ if(remoteUrl&&remoteKey&&testToken){
+  const response=await fetch(`${remoteUrl}/rest/v1/rpc/motor_match_test_rows`,{
+   method:"POST",
+   headers:{
+    apikey:remoteKey,
+    Authorization:`Bearer ${remoteKey}`,
+    "Content-Type":"application/json"
+   },
+   body:JSON.stringify({
+    p_token:testToken,
+    p_make:args.make,
+    p_model:args.model,
+    p_year_min:args.yearMin,
+    p_year_max:args.yearMax,
+    p_trim:args.trim||null,
+    p_max_price:args.maxPrice??null,
+    p_max_miles:args.maxMiles??null
+   }),
+   cache:"no-store"
+  });
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(typeof payload?.message==="string"?payload.message:"Production Motor Match database test query failed.");
+  return cleanListings((Array.isArray(payload)?payload:[]).map((row:any)=>({
+   vin:null,
+   year:n(row.year),
+   make:s(row.make)||null,
+   model:s(row.model)||null,
+   trim:s(row.trim_name)||null,
+   price:n(row.price),
+   miles:n(row.miles),
+   dealer:null,
+   city:null,
+   state:null,
+   url:null
+  })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0));
+ }
+
+ const supabase=createSupabaseAdminClient();
+ let q=supabase
+  .from("motor_match_market_observations")
+  .select("vin,year,make,model,trim,price,miles,dealer,city,state,listing_url")
+  .eq("bucket_make",args.make)
+  .eq("bucket_model",args.model)
+  .gte("year",args.yearMin)
+  .lte("year",args.yearMax)
+  .order("observed_at",{ascending:false})
+  .limit(DB_MAX_SAMPLE);
+
+ if(args.trim)q=q.ilike("trim",`%${args.trim}%`);
+ if(typeof args.maxPrice==="number")q=q.lte("price",args.maxPrice);
+ if(typeof args.maxMiles==="number")q=q.lte("miles",args.maxMiles);
+
+ const {data,error}=await q;
+ if(error)throw error;
+
+ return cleanListings((data||[]).map((row:any)=>({
+  vin:s(row.vin)||null,
+  year:n(row.year),
+  make:s(row.make)||null,
+  model:s(row.model)||null,
+  trim:s(row.trim)||null,
+  price:n(row.price),
+  miles:n(row.miles),
+  dealer:s(row.dealer)||null,
+  city:s(row.city)||null,
+  state:s(row.state)||null,
+  url:s(row.listing_url)||null
+ })).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0));
+}
+
+async function queryStoredCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
+ return queryStoredRows({
+  make:input.make,
+  model:input.model,
+  trim:input.trim,
+  yearMin:input.year,
+  yearMax:input.year
+ });
+}
+
+export async function findOlderYearFromDatabase(input:{make:string;model:string;trim:string;year:number;budget:number;mileage:number}){
+ if(input.year<=1991)return null;
+ const rows=await queryStoredRows({
+  make:input.make,
+  model:input.model,
+  trim:input.trim,
+  yearMin:Math.max(1990,input.year-3),
+  yearMax:input.year-1,
+  maxPrice:Math.round(input.budget),
+  maxMiles:Math.round(input.mileage)
+ });
+ const counts=new Map<number,number>();
+ for(const row of rows){
+  if(row.year)counts.set(row.year,(counts.get(row.year)||0)+1);
+ }
+ return Array.from(counts.entries())
+  .filter(([,count])=>count>=3)
+  .sort((a,b)=>b[0]-a[0])[0]?.[0]
+  ||Array.from(counts.keys()).sort((a,b)=>b-a)[0]
+  ||null;
 }
 
 async function query(apiKey:string,params:Record<string,string|number|boolean|null|undefined>,timeoutMs=9000){
@@ -38,9 +170,24 @@ function dedupe(groups:Listing[][]){
 }
 
 export async function getMotorMatchCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number},force=false){
- const apiKey=process.env.AUTODEV_API_KEY;if(!apiKey)throw new Error("Motor Match is missing Auto.dev configuration.");
  const key=keyFor(input),now=Date.now(),existing=cache.get(key);
  if(!force&&existing&&existing.expiresAt>now)return{key,cohort:existing,cacheHit:true,calls:0};
+
+ if(!force){
+  const stored=await queryStoredCohort(input);
+  const cohort:CachedCohort={
+   expiresAt:now+CACHE_TTL_MS,
+   listings:stored,
+   providerTotal:stored.length,
+   calls:0,
+   trim:input.trim,
+   source:"database"
+  };
+  cache.set(key,cohort);
+  return{key,cohort,cacheHit:false,calls:0};
+ }
+
+ const apiKey=process.env.AUTODEV_API_KEY;if(!apiKey)throw new Error("Motor Match is missing Auto.dev configuration.");
  const base:Record<string,string|number|boolean>={"vehicle.make":input.make,"vehicle.model":input.model,"vehicle.year":input.year,"retailListing.used":true,includes:"total",limit:SAMPLE_LIMIT};
  if(input.trim)base["vehicle.trim"]=input.trim;
  if(input.zip){base.zip=input.zip;base.distance=input.distance}
@@ -51,24 +198,29 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  const successful=settled.flatMap(item=>item.status==="fulfilled"?[item.value]:[]);
  if(!successful.length)throw new Error("The market data provider is taking too long. Please try again.");
  const listings=dedupe(successful.map(item=>item.listings));
- const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim};
+ const cohort:CachedCohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim,source:"auto_dev"};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
  return{key,cohort,cacheHit:false,calls:2};
 }
 
-function fifth(values:number[]){const sorted=values.filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);return sorted.length?sorted[Math.min(4,sorted.length-1)]:null}
+function directionalThreshold(values:number[]){
+ const sorted=values.filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+ if(!sorted.length)return null;
+ return sorted[Math.min(4,sorted.length-1)];
+}
 
 export function solveMotorMatch(listings:Listing[],budget:number,mileage:number){
  const exact=listings.filter(l=>(l.price??Infinity)<=budget&&(l.miles??Infinity)<=mileage);
  const withinMileage=listings.filter(l=>(l.miles??Infinity)<=mileage);
  const withinBudget=listings.filter(l=>(l.price??Infinity)<=budget);
- const priceNeeded=fifth(withinMileage.map(l=>l.price as number));
- const mileageNeeded=fifth(withinBudget.map(l=>l.miles as number));
+ const priceNeeded=directionalThreshold(withinMileage.map(l=>l.price as number));
+ const mileageNeeded=directionalThreshold(withinBudget.map(l=>l.miles as number));
  const state=exact.length>=5?"green":exact.length>0?"yellow":"red";
  const depth=exact.length>=10?"strong":exact.length>=5?"healthy":exact.length>0?"thin":"none";
+ const confidence=listings.length>=15?"strong":listings.length>=5?"adequate":listings.length>0?"limited":"none";
  return{
-  state,depth,matchCount:exact.length,
+  state,depth,confidence,matchCount:exact.length,
   constraintStatus:{priceWorks:withinBudget.length>0,mileageWorks:withinMileage.length>0},
   market:{priceNeeded,mileageNeeded,yearNeeded:null as number|null},
   message:state==="green"?"Your price and mileage overlap with a healthy current market.":state==="yellow"?"Your target is possible, but there are only a few current options.":"We could not find a current listing satisfying both limits at once."
