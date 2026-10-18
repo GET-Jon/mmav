@@ -14,17 +14,30 @@ export async function GET() {
       year: 2021,
     });
 
-    const solved = solveMotorMatch(loaded.cohort.listings, 30000, 60000);
+    const solved = solveMotorMatch(
+      loaded.cohort.listings,
+      15000,
+      60000,
+      2021,
+      loaded.cohort.generationStartYear,
+    );
 
     return NextResponse.json({
       ok: true,
       dataSource: loaded.cohort.source,
       sampleSize: loaded.cohort.listings.length,
+      generation: loaded.cohort.generation,
+      generationYears: [loaded.cohort.generationStartYear, loaded.cohort.generationEndYear],
       providerCalls: loaded.calls,
       result: {
         state: solved.state,
         depth: solved.depth,
         matchCount: solved.matchCount,
+        priceNeeded: solved.market.priceNeeded,
+        mileageNeeded: solved.market.mileageNeeded,
+        yearNeeded: solved.market.yearNeeded,
+        confidence: solved.confidence,
+        annualYearAdjustment: solved.model.annualYearAdjustment,
       },
     });
   } catch (error) {
