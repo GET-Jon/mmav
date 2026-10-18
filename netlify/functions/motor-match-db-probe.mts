@@ -1,3 +1,19 @@
+async function saveProbe(result: { configured: boolean; status: string; row_count: number | null; error: string | null }) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  await fetch(`${url}/rest/v1/motor_match_probe_results`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(result),
+  });
+}
+
 export default {
   async deploySucceeded() {
     const url = process.env.MOTOR_MATCH_PROD_DB_URL;
@@ -5,12 +21,12 @@ export default {
     const token = process.env.MOTOR_MATCH_PROD_DB_TEST_TOKEN;
 
     if (!url || !key || !token) {
-      console.log("motor-match-db-probe", JSON.stringify({
+      await saveProbe({
         configured: false,
-        url: Boolean(url),
-        key: Boolean(key),
-        token: Boolean(token),
-      }));
+        status: "missing_env",
+        row_count: null,
+        error: [!url ? "url" : "", !key ? "key" : "", !token ? "token" : ""].filter(Boolean).join(","),
+      });
       return;
     }
 
@@ -35,18 +51,19 @@ export default {
       });
 
       const payload = await response.json().catch(() => null);
-      console.log("motor-match-db-probe", JSON.stringify({
+      await saveProbe({
         configured: true,
-        status: response.status,
-        rows: Array.isArray(payload) ? payload.length : null,
-        error: response.ok ? null : (payload?.message || payload?.error || "unknown"),
-      }));
+        status: String(response.status),
+        row_count: Array.isArray(payload) ? payload.length : null,
+        error: response.ok ? null : String(payload?.message || payload?.error || "unknown"),
+      });
     } catch (error) {
-      console.log("motor-match-db-probe", JSON.stringify({
+      await saveProbe({
         configured: true,
         status: "fetch_error",
+        row_count: null,
         error: error instanceof Error ? error.message : String(error),
-      }));
+      });
     }
   },
 };
