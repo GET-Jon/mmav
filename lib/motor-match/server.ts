@@ -302,7 +302,17 @@ export function solveMotorMatch(
  return{
   state,depth,confidence,matchCount:exact.length,
   constraintStatus:{priceWorks:withinBudget.length>0,mileageWorks:withinMileage.length>0},
-  market:{priceNeeded,mileageNeeded,yearNeeded},
+  market:{
+   priceNeeded,
+   mileageNeeded,
+   yearNeeded,
+   priceMatchCount:priceNeeded?normalized.filter(l=>(l.adjustedPrice??Infinity)<=priceNeeded&&(l.miles??Infinity)<=mileage).length:0,
+   mileageMatchCount:mileageNeeded?normalized.filter(l=>(l.adjustedPrice??Infinity)<=budget&&(l.miles??Infinity)<=mileageNeeded).length:0,
+   yearMatchCount:yearNeeded?listings.filter(l=>{
+    const adjusted=adjustedPriceForYear(l,yearNeeded as number,annualAdjustment);
+    return (adjusted??Infinity)<=budget&&(l.miles??Infinity)<=mileage;
+   }).length:0
+  },
   model:{annualYearAdjustment:Math.round(annualAdjustment),generationSampleSize:listings.length},
   message:state==="green"?"Your price and mileage overlap with a healthy current market.":state==="yellow"?"Your target is possible, but there are only a few current options.":"We could not find a current listing satisfying both limits at once."
  };
