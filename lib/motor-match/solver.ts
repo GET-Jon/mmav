@@ -15,7 +15,8 @@ export type MotorMatchListing = {
 export type MotorMatchConfidence = "strong" | "adequate" | "limited" | "none";
 
 type PreparedListing = MotorMatchListing & {
-  adjustedPrice: number;
+  yearAdjustedPrice: number;
+  marketValueAtTargetMileage: number;
 };
 
 const DEFAULT_DOLLARS_PER_THOUSAND = 125;
@@ -157,7 +158,7 @@ function mileageAdjustment({
 function robustPriceFilter(rows: PreparedListing[]) {
   if (rows.length < 5) return rows;
 
-  const prices = rows.map((row) => row.adjustedPrice);
+  const prices = rows.map((row) => row.marketValueAtTargetMileage);
   const center = median(prices);
   if (!center) return rows;
 
@@ -167,9 +168,9 @@ function robustPriceFilter(rows: PreparedListing[]) {
 
   const kept = rows.filter((row) => {
     const robustZ =
-      (0.6745 * Math.abs(row.adjustedPrice - center)) / mad;
+      (0.6745 * Math.abs(row.marketValueAtTargetMileage - center)) / mad;
     const percentageGap =
-      center > 0 ? Math.abs(row.adjustedPrice - center) / center : 0;
+      center > 0 ? Math.abs(row.marketValueAtTargetMileage - center) / center : 0;
 
     return !(robustZ > 3.5 && percentageGap > 0.2);
   });
@@ -218,7 +219,8 @@ function prepareRows(
 
     return {
       ...row,
-      adjustedPrice: Math.max(0, yearAdjusted + mileageAdjusted),
+      yearAdjustedPrice: Math.max(0, yearAdjusted),
+      marketValueAtTargetMileage: Math.max(0, yearAdjusted + mileageAdjusted),
     };
   });
 
@@ -251,17 +253,17 @@ export function solveMotorMatch({
   ).length;
 
   const exact = rows.filter(
-    (row) => row.adjustedPrice <= budget && (row.miles as number) <= mileage,
+    (row) => row.yearAdjustedPrice <= budget && (row.miles as number) <= mileage,
   );
   const withinMileage = rows.filter(
     (row) => (row.miles as number) <= mileage,
   );
   const withinBudget = rows.filter(
-    (row) => row.adjustedPrice <= budget,
+    (row) => row.yearAdjustedPrice <= budget,
   );
 
   const priceNeeded = thresholdForCount(
-    withinMileage.map((row) => row.adjustedPrice),
+    withinMileage.map((row) => row.yearAdjustedPrice),
     desiredCount,
   );
   const mileageNeeded = thresholdForCount(
@@ -274,7 +276,7 @@ export function solveMotorMatch({
       ? 0
       : rows.filter(
           (row) =>
-            row.adjustedPrice <= priceNeeded &&
+            row.yearAdjustedPrice <= priceNeeded &&
             (row.miles as number) <= mileage,
         ).length;
 
@@ -283,7 +285,7 @@ export function solveMotorMatch({
       ? 0
       : rows.filter(
           (row) =>
-            row.adjustedPrice <= budget &&
+            row.yearAdjustedPrice <= budget &&
             (row.miles as number) <= mileageNeeded,
         ).length;
 
@@ -299,7 +301,7 @@ export function solveMotorMatch({
       const candidatePrepared = prepareRows(listings, candidate, mileage).rows;
       const candidateCount = candidatePrepared.filter(
         (row) =>
-          row.adjustedPrice <= budget && (row.miles as number) <= mileage,
+          row.yearAdjustedPrice <= budget && (row.miles as number) <= mileage,
       ).length;
 
       if (candidateCount >= Math.max(1, desiredCount)) {
@@ -321,10 +323,10 @@ export function solveMotorMatch({
           ? "thin"
           : "none";
 
-  const adjustedPrices = rows.map((row) => row.adjustedPrice);
-  const marketCenter = median(adjustedPrices);
-  const marketLow = percentile(adjustedPrices, 0.25);
-  const marketHigh = percentile(adjustedPrices, 0.75);
+  const targetValuePrices = rows.map((row) => row.marketValueAtTargetMileage);
+  const marketCenter = median(targetValuePrices);
+  const marketLow = percentile(targetValuePrices, 0.25);
+  const marketHigh = percentile(targetValuePrices, 0.75);
 
   return {
     state,
