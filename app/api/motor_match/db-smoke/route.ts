@@ -24,6 +24,11 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
+      remoteConfigured: Boolean(
+        process.env.MOTOR_MATCH_PROD_DB_URL &&
+        process.env.MOTOR_MATCH_PROD_DB_ANON_KEY &&
+        process.env.MOTOR_MATCH_PROD_DB_TEST_TOKEN
+      ),
       dataSource: loaded.cohort.source,
       sampleSize: loaded.cohort.listings.length,
       generation: loaded.cohort.generation,
