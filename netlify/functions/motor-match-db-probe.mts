@@ -1,8 +1,8 @@
 export default {
   async deploySucceeded() {
-    const url = Netlify.env.get("MOTOR_MATCH_PROD_DB_URL");
-    const key = Netlify.env.get("MOTOR_MATCH_PROD_DB_ANON_KEY");
-    const token = Netlify.env.get("MOTOR_MATCH_PROD_DB_TEST_TOKEN");
+    const url = process.env.MOTOR_MATCH_PROD_DB_URL;
+    const key = process.env.MOTOR_MATCH_PROD_DB_ANON_KEY;
+    const token = process.env.MOTOR_MATCH_PROD_DB_TEST_TOKEN;
 
     if (!url || !key || !token) {
       console.log("motor-match-db-probe", JSON.stringify({
