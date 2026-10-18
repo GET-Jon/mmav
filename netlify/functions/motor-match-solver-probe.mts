@@ -1,72 +1,60 @@
-import { solveMotorMatch, type MotorMatchListing } from "../../lib/motor-match/solver";
-
 export default {
   async deploySucceeded() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) return;
 
-    const headers = {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    };
-
-    const query = new URLSearchParams({
-      select: "year,make,model,trim,price,miles",
-      bucket_make: "eq.BMW",
-      bucket_model: "eq.3 Series",
-      year: "gte.2019",
-      order: "year.asc",
-      limit: "500",
-    });
-
     const response = await fetch(
-      `${url}/rest/v1/motor_match_market_observations?${query.toString()}&year=lte.2026`,
-      { headers },
+      "https://deploy-preview-21--mmav.netlify.app/api/motor_match",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          make: "BMW",
+          model: "3 Series",
+          trim: "",
+          year: 2021,
+          budget: 19500,
+          mileage: 60000,
+          zip: "",
+          distance: 500,
+        }),
+      },
     );
-    const payload = await response.json().catch(() => []);
-    const listings: MotorMatchListing[] = (Array.isArray(payload) ? payload : []).map((row: any) => ({
-      vin: null,
-      year: Number(row.year) || null,
-      make: row.make || null,
-      model: row.model || null,
-      trim: row.trim || null,
-      price: Number(row.price) || null,
-      miles: Number(row.miles) || null,
-      dealer: null,
-      city: null,
-      state: null,
-      url: null,
-    }));
 
-    const result = solveMotorMatch({
-      listings,
-      budget: 19500,
-      mileage: 60000,
-      targetYear: 2021,
-      generationStartYear: 2019,
-    });
+    const result = await response.json().catch(() => null);
 
     await fetch(`${url}/rest/v1/motor_match_probe_results`, {
       method: "POST",
-      headers: { ...headers, Prefer: "return=minimal" },
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
       body: JSON.stringify({
         configured: true,
-        status: `${result.state}/${result.confidence}`,
-        row_count: result.summary.sampleSize,
+        status: `route-${response.status}`,
+        row_count:
+          typeof result?.sampleSize === "number" ? result.sampleSize : null,
         error: JSON.stringify({
-          raw: listings.length,
-          matches: result.matchCount,
-          value: result.summary.marketCenter,
-          low: result.summary.marketLow,
-          high: result.summary.marketHigh,
-          priceNeeded: result.market.priceNeeded,
-          priceMatches: result.market.priceMatchCount,
-          mileageNeeded: result.market.mileageNeeded,
-          mileageMatches: result.market.mileageMatchCount,
-          yearNeeded: result.market.yearNeeded,
-          yearMatches: result.market.yearMatchCount,
+          state: result?.state ?? null,
+          confidence: result?.confidence ?? null,
+          raw: result?.rawSampleSize ?? null,
+          clean: result?.sampleSize ?? null,
+          generation: result?.generation ?? null,
+          value: result?.summary?.marketCenter ?? null,
+          low: result?.summary?.marketLow ?? null,
+          high: result?.summary?.marketHigh ?? null,
+          priceNeeded: result?.market?.priceNeeded ?? null,
+          priceMatches: result?.market?.priceMatchCount ?? null,
+          mileageNeeded: result?.market?.mileageNeeded ?? null,
+          mileageMatches: result?.market?.mileageMatchCount ?? null,
+          yearNeeded: result?.market?.yearNeeded ?? null,
+          yearMatches: result?.market?.yearMatchCount ?? null,
+          apiCalls: result?.apiUsage?.callsThisUpdate ?? null,
+          source: result?.marketScope ?? null,
+          error: result?.error ?? null,
         }),
       }),
     });
