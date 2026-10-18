@@ -192,6 +192,14 @@ function recommendationCount(confidence: MotorMatchConfidence) {
   return 0;
 }
 
+function roundUp(value: number, step: number) {
+  return Math.ceil(value / step) * step;
+}
+
+function roundNearest(value: number, step: number) {
+  return Math.round(value / step) * step;
+}
+
 function thresholdForCount(values: number[], desiredCount: number) {
   const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
   if (!sorted.length) return null;
@@ -262,14 +270,19 @@ export function solveMotorMatch({
     (row) => row.yearAdjustedPrice <= budget,
   );
 
-  const priceNeeded = thresholdForCount(
+  const rawPriceNeeded = thresholdForCount(
     withinMileage.map((row) => row.yearAdjustedPrice),
     desiredCount,
   );
-  const mileageNeeded = thresholdForCount(
+  const rawMileageNeeded = thresholdForCount(
     withinBudget.map((row) => row.miles as number),
     desiredCount,
   );
+
+  const priceNeeded =
+    rawPriceNeeded === null ? null : roundUp(rawPriceNeeded, 500);
+  const mileageNeeded =
+    rawMileageNeeded === null ? null : roundUp(rawMileageNeeded, 5000);
 
   const priceMatchCount =
     priceNeeded === null
@@ -298,13 +311,16 @@ export function solveMotorMatch({
       candidate >= Math.max(1990, generationStartYear);
       candidate -= 1
     ) {
-      const candidatePrepared = prepareRows(listings, candidate, mileage).rows;
-      const candidateCount = candidatePrepared.filter(
+      const candidateRows = cleanBaseRows(
+        listings.filter((row) => row.year === candidate),
+      );
+      const candidateCount = candidateRows.filter(
         (row) =>
-          row.yearAdjustedPrice <= budget && (row.miles as number) <= mileage,
+          (row.price as number) <= budget &&
+          (row.miles as number) <= mileage,
       ).length;
 
-      if (candidateCount >= Math.max(1, desiredCount)) {
+      if (candidateCount > 0) {
         yearNeeded = candidate;
         yearMatchCount = candidateCount;
         break;
@@ -348,9 +364,9 @@ export function solveMotorMatch({
     summary: {
       sampleSize: rows.length,
       exactYearSampleSize,
-      marketCenter: marketCenter ? Math.round(marketCenter) : null,
-      marketLow: marketLow ? Math.round(marketLow) : null,
-      marketHigh: marketHigh ? Math.round(marketHigh) : null,
+      marketCenter: marketCenter ? roundNearest(marketCenter, 500) : null,
+      marketLow: marketLow ? roundNearest(marketLow, 500) : null,
+      marketHigh: marketHigh ? roundNearest(marketHigh, 500) : null,
       annualYearAdjustment: Math.round(prepared.annualYearAdjustment),
     },
     message:
