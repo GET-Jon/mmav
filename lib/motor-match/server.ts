@@ -1,6 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { resolveVehicleGeneration } from "@/lib/vehicle-generations";
 type Listing={vin:string|null;year:number|null;make:string|null;model:string|null;trim:string|null;price:number|null;miles:number|null;dealer:string|null;city:string|null;state:string|null;url:string|null};
-type CachedCohort={expiresAt:number;listings:Listing[];providerTotal:number;calls:number;trim:string;source:"database"|"auto_dev"};
+type CachedCohort={
+ expiresAt:number;listings:Listing[];providerTotal:number;calls:number;trim:string;source:"database"|"auto_dev";
+ targetYear:number;generation:string|null;generationStartYear:number;generationEndYear:number
+};
 
 const CACHE_TTL_MS=30*60*1000;
 const SAMPLE_LIMIT=100;
@@ -114,13 +118,27 @@ async function queryStoredRows(args:{
 }
 
 async function queryStoredCohort(input:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
- return queryStoredRows({
+ const generation=resolveVehicleGeneration({
+  year:input.year,
+  make:input.make,
+  model:input.model,
+  trim:input.trim
+ });
+ const startYear=generation?.startYear??input.year;
+ const endYear=generation?.endYear??input.year;
+ const listings=await queryStoredRows({
   make:input.make,
   model:input.model,
   trim:input.trim,
-  yearMin:input.year,
-  yearMax:input.year
+  yearMin:startYear,
+  yearMax:endYear
  });
+ return{
+  listings,
+  generation:generation?.generation??null,
+  startYear,
+  endYear
+ };
 }
 
 export async function findOlderYearFromDatabase(input:{make:string;model:string;trim:string;year:number;budget:number;mileage:number}){
@@ -177,11 +195,15 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
   const stored=await queryStoredCohort(input);
   const cohort:CachedCohort={
    expiresAt:now+CACHE_TTL_MS,
-   listings:stored,
-   providerTotal:stored.length,
+   listings:stored.listings,
+   providerTotal:stored.listings.length,
    calls:0,
    trim:input.trim,
-   source:"database"
+   source:"database",
+   targetYear:input.year,
+   generation:stored.generation,
+   generationStartYear:stored.startYear,
+   generationEndYear:stored.endYear
   };
   cache.set(key,cohort);
   return{key,cohort,cacheHit:false,calls:0};
@@ -198,7 +220,7 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  const successful=settled.flatMap(item=>item.status==="fulfilled"?[item.value]:[]);
  if(!successful.length)throw new Error("The market data provider is taking too long. Please try again.");
  const listings=dedupe(successful.map(item=>item.listings));
- const cohort:CachedCohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim,source:"auto_dev"};
+ const cohort:CachedCohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim,source:"auto_dev",targetYear:input.year,generation:null,generationStartYear:input.year,generationEndYear:input.year};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
  return{key,cohort,cacheHit:false,calls:2};
@@ -210,19 +232,78 @@ function directionalThreshold(values:number[]){
  return sorted[Math.min(4,sorted.length-1)];
 }
 
-export function solveMotorMatch(listings:Listing[],budget:number,mileage:number){
- const exact=listings.filter(l=>(l.price??Infinity)<=budget&&(l.miles??Infinity)<=mileage);
- const withinMileage=listings.filter(l=>(l.miles??Infinity)<=mileage);
- const withinBudget=listings.filter(l=>(l.price??Infinity)<=budget);
- const priceNeeded=directionalThreshold(withinMileage.map(l=>l.price as number));
+function estimateAnnualYearAdjustment(listings:Listing[]){
+ const byYear=new Map<number,number[]>();
+ for(const l of listings){
+  if(!l.year||!l.price)continue;
+  const values=byYear.get(l.year)||[];
+  values.push(l.price);
+  byYear.set(l.year,values);
+ }
+ const medians=Array.from(byYear.entries())
+  .map(([year,prices])=>({year,price:median(prices) as number}))
+  .filter(row=>Number.isFinite(row.price))
+  .sort((a,b)=>a.year-b.year);
+ const slopes:number[]=[];
+ for(let i=0;i<medians.length;i++){
+  for(let j=i+1;j<medians.length;j++){
+   const dy=medians[j].year-medians[i].year;
+   if(dy>0)slopes.push((medians[j].price-medians[i].price)/dy);
+  }
+ }
+ const cohortMedian=median(listings.map(l=>l.price as number).filter(Boolean))||0;
+ const raw=median(slopes)||0;
+ const cap=Math.max(750,cohortMedian*.18);
+ return Math.max(0,Math.min(raw,cap));
+}
+
+function adjustedPriceForYear(listing:Listing,targetYear:number,annualAdjustment:number){
+ if(!listing.price)return null;
+ if(!listing.year||!annualAdjustment)return listing.price;
+ return Math.max(0,listing.price+annualAdjustment*(targetYear-listing.year));
+}
+
+export function solveMotorMatch(
+ listings:Listing[],
+ budget:number,
+ mileage:number,
+ targetYear?:number,
+ generationStartYear?:number
+){
+ const year=targetYear??listings.find(l=>l.year)?.year??new Date().getFullYear();
+ const annualAdjustment=estimateAnnualYearAdjustment(listings);
+ const normalized=listings.map(l=>({
+  ...l,
+  adjustedPrice:adjustedPriceForYear(l,year,annualAdjustment)
+ })).filter(l=>typeof l.adjustedPrice==="number"&&l.adjustedPrice>0);
+
+ const exact=normalized.filter(l=>(l.adjustedPrice??Infinity)<=budget&&(l.miles??Infinity)<=mileage);
+ const withinMileage=normalized.filter(l=>(l.miles??Infinity)<=mileage);
+ const withinBudget=normalized.filter(l=>(l.adjustedPrice??Infinity)<=budget);
+ const priceNeeded=directionalThreshold(withinMileage.map(l=>l.adjustedPrice as number));
  const mileageNeeded=directionalThreshold(withinBudget.map(l=>l.miles as number));
  const state=exact.length>=5?"green":exact.length>0?"yellow":"red";
  const depth=exact.length>=10?"strong":exact.length>=5?"healthy":exact.length>0?"thin":"none";
- const confidence=listings.length>=15?"strong":listings.length>=5?"adequate":listings.length>0?"limited":"none";
+ const confidence=listings.length>=20?"strong":listings.length>=8?"adequate":listings.length>=3?"limited":"none";
+
+ let yearNeeded:null|number=null;
+ const floor=Math.max(generationStartYear??year-3,1990);
+ if(state!=="green"){
+  for(let candidate=year-1;candidate>=floor;candidate--){
+   const count=listings.filter(l=>{
+    const adjusted=adjustedPriceForYear(l,candidate,annualAdjustment);
+    return (adjusted??Infinity)<=budget&&(l.miles??Infinity)<=mileage;
+   }).length;
+   const needed=confidence==="strong"?3:1;
+   if(count>=needed){yearNeeded=candidate;break}
+  }
+ }
+
  return{
   state,depth,confidence,matchCount:exact.length,
   constraintStatus:{priceWorks:withinBudget.length>0,mileageWorks:withinMileage.length>0},
-  market:{priceNeeded,mileageNeeded,yearNeeded:null as number|null},
+  market:{priceNeeded,mileageNeeded,yearNeeded},
+  model:{annualYearAdjustment:Math.round(annualAdjustment),generationSampleSize:listings.length},
   message:state==="green"?"Your price and mileage overlap with a healthy current market.":state==="yellow"?"Your target is possible, but there are only a few current options.":"We could not find a current listing satisfying both limits at once."
  };
 }
