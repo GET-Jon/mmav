@@ -18,11 +18,17 @@ export async function POST(request:Request){
     vehicle:{year,make,model,trim}
    },{status:422});
   }
-  const solved=solveMotorMatch(loaded.cohort.listings,budget,mileage);
+  const solved=solveMotorMatch(
+   loaded.cohort.listings,
+   budget,
+   mileage,
+   year,
+   loaded.cohort.generationStartYear
+  );
   let yearCalls=0;
   if(solved.state!=="green"){
    if(loaded.cohort.source==="database"){
-    solved.market.yearNeeded=await findOlderYearFromDatabase({make,model,trim,year,budget,mileage});
+    // Generation-aware solver already derives an older-year recommendation.
    }else{
     const apiKey=process.env.AUTODEV_API_KEY;
     if(apiKey){
@@ -37,7 +43,12 @@ export async function POST(request:Request){
    providerTotal:loaded.cohort.providerTotal,
    sampleSize:loaded.cohort.listings.length,
    dataSource:loaded.cohort.source,
-   marketScope:loaded.cohort.source==="database"?"stored national snapshot":"live geographic query",
+   marketScope:loaded.cohort.source==="database"?"stored generation-level national snapshot":"live geographic query",
+   generation:{
+    name:loaded.cohort.generation,
+    startYear:loaded.cohort.generationStartYear,
+    endYear:loaded.cohort.generationEndYear
+   },
    cache:{hit:loaded.cacheHit,ttlSeconds:Math.max(0,Math.floor((loaded.cohort.expiresAt-Date.now())/1000))},
    apiUsage:{callsThisUpdate:0,breakdown:[
     ...(loaded.cohort.source==="database"?[{label:"Stored market database",purpose:"Use the stored Motor Match market snapshot without a live provider call."}]:[]),
