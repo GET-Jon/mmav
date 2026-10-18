@@ -5,10 +5,36 @@ import styles from "./motor-match.module.css";
 
 type MatchState="green"|"yellow"|"red";
 type MatchResponse={
- state:MatchState;depth:"strong"|"healthy"|"thin"|"none";confidence?:"strong"|"adequate"|"limited"|"none";matchCount:number;
+ state:MatchState;
+ depth:"strong"|"healthy"|"thin"|"none";
+ confidence:"strong"|"adequate"|"limited"|"none";
+ matchCount:number;
  constraintStatus:{priceWorks:boolean;mileageWorks:boolean};
- market:{priceNeeded:number|null;mileageNeeded:number|null;yearNeeded:number|null;priceMatchCount?:number;mileageMatchCount?:number;yearMatchCount?:number};
- message:string;searchKey:string;providerTotal:number;sampleSize:number;dataSource?:"database"|"auto_dev";
+ market:{
+  priceNeeded:number|null;
+  mileageNeeded:number|null;
+  yearNeeded:number|null;
+  priceMatchCount:number;
+  mileageMatchCount:number;
+  yearMatchCount:number;
+ };
+ summary:{
+  sampleSize:number;
+  exactYearSampleSize:number;
+  marketCenter:number|null;
+  marketLow:number|null;
+  marketHigh:number|null;
+  annualYearAdjustment:number;
+ };
+ generation:{name:string|null;startYear:number;endYear:number};
+ trimApplied:boolean;
+ message:string;
+ searchKey:string;
+ providerTotal:number;
+ sampleSize:number;
+ rawSampleSize:number;
+ dataSource:"database";
+ marketScope:string;
  apiUsage:{callsThisUpdate:number;breakdown:Array<{label:string;purpose:string}>};
  cache?:{hit:boolean;ttlSeconds:number};
 };
@@ -18,7 +44,7 @@ const num=(v:number)=>new Intl.NumberFormat("en-US").format(v);
 const LOADING_MESSAGES=[
  "Finding your car…",
  "Searching for the perfect fit…",
- "Checking current market inventory…",
+ "Reading the market snapshot…",
  "Comparing price and mileage…",
  "Looking for the best match…",
  "Building your Motor Match…",
@@ -31,6 +57,7 @@ export default function MotorMatchPage(){
  const [makes,setMakes]=useState<string[]>([]),[models,setModels]=useState<string[]>([]),[validYears,setValidYears]=useState<number[]>([]);
  const [manualInquiry,setManualInquiry]=useState(false);
  const [embedded,setEmbedded]=useState(false);
+ const [debug,setDebug]=useState(false);
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
  const answerRef=useRef<HTMLElement|null>(null);
@@ -44,8 +71,8 @@ export default function MotorMatchPage(){
  const makeNeedsFocus=!make.trim();
  const sliderYears=useMemo(()=>[...validYears].sort((a,b)=>a-b),[validYears]);
  const yearSliderIndex=year?Math.max(0,sliderYears.indexOf(year)):0;
- const zeroData=Boolean(result&&result.dataSource==="database"&&result.sampleSize===0);
- const limitedMarket=Boolean(result&&result.dataSource==="database"&&result.sampleSize>0&&result.sampleSize<5);
+ const zeroData=Boolean(result&&result.confidence==="none");
+ const limitedMarket=Boolean(result&&result.confidence==="limited");
 
  const analyze=useCallback(async(scrollToAnswer=false)=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
@@ -70,8 +97,10 @@ export default function MotorMatchPage(){
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
  useEffect(()=>{
-  const isEmbed=new URLSearchParams(window.location.search).get("embed")==="1";
+  const params=new URLSearchParams(window.location.search);
+  const isEmbed=params.get("embed")==="1";
   setEmbedded(isEmbed);
+  setDebug(params.get("debug")==="1");
   if(!isEmbed)return;
   const bodyBackground=document.body.style.background;
   const htmlBackground=document.documentElement.style.background;
@@ -188,23 +217,23 @@ export default function MotorMatchPage(){
 
  const subhead=useMemo(()=>{
   if(!result)return "";
-  if(zeroData)return `We don't have usable current observations for the ${year} ${make} ${model}, so this one needs a hands-on search.`;
-  if(limitedMarket)return `We only have ${result.sampleSize} current observation${result.sampleSize===1?"":"s"} for the ${year} ${make} ${model}. The recommendations below are directional, not definitive.`;
-  if(result.state==="green")return result.depth==="strong"?"Strong availability around your target.":"Healthy availability around your target.";
-  if(result.state==="yellow")return "Your target exists, but there is not much room to be picky about color, condition, or options.";
-  return "We couldn't find enough current inventory satisfying both limits at once.";
+  if(zeroData)return `We don't have enough clean market observations for this ${make} ${model} generation to give you a useful automated answer.`;
+  if(limitedMarket)return `We have a small generation-level sample. The direction is useful, but the numbers should be treated as approximate.`;
+  if(result.state==="green")return `Your target sits inside the market we can see. We estimate about ${result.matchCount} comparable matches around these limits.`;
+  if(result.state==="yellow")return `Your target is possible, but only about ${result.matchCount} comparable match${result.matchCount===1?"":"es"} appears around these limits.`;
+  return "Your current limits don't overlap in the market snapshot. The smallest useful changes are shown below.";
  },[limitedMarket,make,model,result,year,zeroData]);
 
  return <main ref={shellRef} className={styles.shell+(embedded?" "+styles.shellEmbedded:"")}>
   {!embedded?<header className={styles.topbar}>
    <div className={styles.brand}><span className={styles.mark}>MM</span><div><b>MOTOR MATCH</b><small>by Mindful Motors</small></div></div>
-   <div className={styles.apiMeter}><div><span>API CALLS · SESSION</span><strong>{sessionCalls}</strong></div><div><span>LAST UPDATE</span><strong>{result?.apiUsage?.callsThisUpdate??0}</strong></div><details><summary>DETAILS</summary><div className={styles.apiPopover}>{(result?.apiUsage?.breakdown||[]).length?result!.apiUsage.breakdown.map((call,i)=><div key={i}><b>{i+1}. {call.label}</b><span>{call.purpose}</span></div>):<p>No new market calls yet.</p>}<small>Individual listings stay private and are never sent to the browser.</small></div></details></div>
+   {debug?<div className={styles.apiMeter}><div><span>API CALLS · SESSION</span><strong>{sessionCalls}</strong></div><div><span>LAST UPDATE</span><strong>{result?.apiUsage?.callsThisUpdate??0}</strong></div><details><summary>DEBUG</summary><div className={styles.apiPopover}>{result?<><div><b>Source</b><span>{result.marketScope}</span></div><div><b>Generation</b><span>{result.generation.name||"Unknown"} · {result.generation.startYear}-{result.generation.endYear}</span></div><div><b>Samples</b><span>{result.sampleSize} clean / {result.rawSampleSize} raw</span></div></>:<p>No market result yet.</p>}<small>Individual listings stay private and are never sent to the browser.</small></div></details></div>:null}
   </header>:null}
 
   {!embedded?<section className={styles.hero}>
    <span className={styles.eyebrow}>WHAT CAN I ACTUALLY BUY?</span>
    <h1>Tell us the car.<br/><em>We'll tell you the market.</em></h1>
-   <p>Set the vehicle, budget, mileage, and search area. Motor Match checks current inventory and tells you whether those limits actually intersect.</p>
+   <p>Set the vehicle, budget, and mileage. Motor Match compares your target with our market snapshot and shows what looks realistic — and what to change if it doesn&apos;t.</p>
   </section>:null}
 
   <section className={styles.builder}>
@@ -235,10 +264,13 @@ export default function MotorMatchPage(){
    <div className={styles.step+" "+styles.stepSearch}>
     <div className={styles.stepNumber}>3</div>
     <div className={styles.stepCopy}><span>SEARCH</span><strong>Where should we look?</strong></div>
-    <div className={styles.locationGrid}>
-     <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
-     <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
-     <button className={styles.primary+" "+(searchReady||started?styles.primaryReady:"")} onClick={()=>void analyze(true)} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
+    <div className={styles.locationArea}>
+     <div className={styles.locationGrid}>
+      <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
+      <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
+      <button className={styles.primary+" "+(searchReady||started?styles.primaryReady:"")} onClick={()=>void analyze(true)} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
+     </div>
+     <small className={styles.locationNote}>Value estimate uses our national market snapshot. ZIP and radius help us localize a follow-up search.</small>
     </div>
    </div>
   </section>
@@ -259,6 +291,15 @@ export default function MotorMatchPage(){
     <p>{subhead}</p>
    </div>
 
+   {!zeroData?<div className={styles.marketSnapshot}>
+    <div className={styles.sectionKicker}><span>MARKET SNAPSHOT</span><strong>Where this car is trading.</strong></div>
+    <div className={styles.marketSnapshotGrid}>
+     <div><span>ESTIMATED VALUE</span><strong>{result.summary.marketCenter?money(result.summary.marketCenter):"—"}</strong><small>At about {num(mileage)} miles</small></div>
+     <div><span>TYPICAL RANGE</span><strong>{result.summary.marketLow&&result.summary.marketHigh?money(result.summary.marketLow)+" – "+money(result.summary.marketHigh):"—"}</strong><small>Middle 50% of adjusted observations</small></div>
+     <div><span>MARKET SAMPLE</span><strong>{num(result.summary.sampleSize)} observations</strong><small>{result.generation.name?result.generation.name+" · ":""}{result.generation.startYear}-{result.generation.endYear}</small></div>
+    </div>
+   </div>:null}
+
    <div className={styles.targetBlock}>
     <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>What the market says about each limit.</strong></div>
     <div className={styles.constraintRow}>
@@ -275,14 +316,14 @@ export default function MotorMatchPage(){
    {!zeroData&&result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
     <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Relax one constraint — not all three.</strong></div>
     <div className={styles.moveGrid}>
-     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action={"Keep year + mileage · "+num(result.market.priceMatchCount||0)+" likely matches"} active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
-     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action={"Keep year + budget · "+num(result.market.mileageMatchCount||0)+" likely matches"} active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
-     {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action={"Keep budget + mileage · "+num(result.market.yearMatchCount||0)+" likely matches"} active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
+     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action={"Keep year + mileage · ~"+num(result.market.priceMatchCount)+" estimated matches"} active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
+     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action={"Keep year + budget · ~"+num(result.market.mileageMatchCount)+" estimated matches"} active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
+     {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action={"Keep budget + mileage · ~"+num(result.market.yearMatchCount)+" estimated matches"} active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
     </div>
    </div>:null}
 
    {limitedMarket?<div className={styles.limitedNote}>
-    <div><span>LIMITED SAMPLE</span><strong>Use these adjustments as a direction, not a guarantee.</strong><p>We found only {result.sampleSize} usable observation{result.sampleSize===1?"":"s"} for this exact year. Motor Match is still showing what the available data suggests; Mindful Motors can verify the broader market if you want us to take it further.</p></div>
+    <div><span>LIMITED SAMPLE</span><strong>Useful direction, lower confidence.</strong><p>We found {result.summary.sampleSize} clean observation{result.summary.sampleSize===1?"":"s"} across this generation. Motor Match will still show the nearest market moves, but we&apos;d verify the broader market before making a buying decision.</p></div>
     <button type="button" onClick={()=>{setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>ASK US TO VERIFY →</button>
    </div>:null}
 
