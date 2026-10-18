@@ -7,7 +7,7 @@ type MatchState="green"|"yellow"|"red";
 type MatchResponse={
  state:MatchState;depth:"strong"|"healthy"|"thin"|"none";confidence?:"strong"|"adequate"|"limited"|"none";matchCount:number;
  constraintStatus:{priceWorks:boolean;mileageWorks:boolean};
- market:{priceNeeded:number|null;mileageNeeded:number|null;yearNeeded:number|null};
+ market:{priceNeeded:number|null;mileageNeeded:number|null;yearNeeded:number|null;priceMatchCount?:number;mileageMatchCount?:number;yearMatchCount?:number};
  message:string;searchKey:string;providerTotal:number;sampleSize:number;dataSource?:"database"|"auto_dev";
  apiUsage:{callsThisUpdate:number;breakdown:Array<{label:string;purpose:string}>};
  cache?:{hit:boolean;ttlSeconds:number};
@@ -275,9 +275,9 @@ export default function MotorMatchPage(){
    {!zeroData&&result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
     <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Relax one constraint — not all three.</strong></div>
     <div className={styles.moveGrid}>
-     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action="Keep year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
-     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action="Keep year + budget" active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
-     {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
+     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action={"Keep year + mileage · "+num(result.market.priceMatchCount||0)+" likely matches"} active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
+     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action={"Keep year + budget · "+num(result.market.mileageMatchCount||0)+" likely matches"} active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
+     {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action={"Keep budget + mileage · "+num(result.market.yearMatchCount||0)+" likely matches"} active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
     </div>
    </div>:null}
 
