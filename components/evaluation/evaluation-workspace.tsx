@@ -2629,9 +2629,25 @@ export function EvaluationWorkspace({
 
     let activeVehicleIdentityProfile = vehicleIdentityProfile;
     if (useSemanticIdentity && vehicleIdentityProfilePromiseRef.current) {
-      setMarketCheckStatus("Finishing the vehicle identity profile…");
-      activeVehicleIdentityProfile =
-        await vehicleIdentityProfilePromiseRef.current;
+      // The optional identity enrichment occasionally takes ~30s or fails.
+      // Never hold an otherwise valid market search hostage to this request.
+      // If enrichment is not ready promptly, use the entered/decoded vehicle
+      // identity and keep the strict downstream equivalence checks intact.
+      setMarketCheckStatus("Checking vehicle identity…");
+      const identityProfile = await Promise.race([
+        vehicleIdentityProfilePromiseRef.current
+          .then((profile) => ({ profile }))
+          .catch(() => ({ profile: null })),
+        new Promise<{ profile: null }>((resolve) =>
+          window.setTimeout(() => resolve({ profile: null }), 2500),
+        ),
+      ]);
+      if (identityProfile.profile) {
+        activeVehicleIdentityProfile = identityProfile.profile;
+      } else {
+        activeVehicleIdentityProfile = null;
+        setMarketCheckStatus("Searching with decoded vehicle details…");
+      }
     }
 
     const year = vehicleOverride?.year || vehicleYear;
