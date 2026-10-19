@@ -4702,13 +4702,6 @@ export function EvaluationWorkspace({
     setAutomaticCompSearchCompleted(false);
     const searchOperationId = `recommended-${evaluationUsageId || "evaluation"}-${Date.now()}`;
 
-    window.setTimeout(() => {
-      compSectionRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
-
     try {
       if (compSearchRecommendation.action === "manual-review") {
         setCompSearchImprovementStatus(
@@ -4919,6 +4912,13 @@ export function EvaluationWorkspace({
       );
     } finally {
       setCompSearchImproving(false);
+      // Present completed evidence, not a stale table while requests are running.
+      window.setTimeout(() => {
+        compSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 120);
     }
   }
 
@@ -7594,10 +7594,10 @@ export function EvaluationWorkspace({
                   <h2 className="mt-1 text-lg font-black text-slate-950">
                     {!conditionStepConfirmed
                       ? "Market evidence"
-                      : evaluationRunning || marketCheckLoading
+                      : evaluationRunning || marketCheckLoading || compSearchImproving
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} comps · ${compSummary.primaryCompCount || 0} close peers · ${marketEvidenceDisplay}`
+                          ? `${compSummary.includedCount} comps · ${compSummary.primaryCompCount || 0} close matches · ${marketEvidenceDisplay}`
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7650,11 +7650,11 @@ export function EvaluationWorkspace({
                 </div>
               ) : (
                 <div className="mt-4 flex-1">
-                  {evaluationRunning || marketCheckLoading ? (
-                    <div className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+                  {evaluationRunning || marketCheckLoading || compSearchImproving ? (
+                    <div role="status" aria-live="polite" className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-4">
                         <div className="text-sm font-black text-blue-700">
-                          Checking the market…
+                          {compSearchImproving ? "Improving market evidence…" : "Checking the market…"}
                         </div>
                         <div className="flex items-center gap-1.5" aria-hidden="true">
                           {[0, 1, 2].map((index) => (
@@ -7666,6 +7666,9 @@ export function EvaluationWorkspace({
                           ))}
                         </div>
                       </div>
+                      {compSearchImproving && compSearchImprovementStatus ? (
+                        <div className="mt-2 text-xs font-medium leading-5 text-blue-800">{compSearchImprovementStatus}</div>
+                      ) : null}
                       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-100">
                         <div className="h-full w-2/3 animate-pulse rounded-full bg-blue-600" />
                       </div>
@@ -7697,18 +7700,18 @@ export function EvaluationWorkspace({
                         <>
                         {compSummary.pricingMode === "primary" ? (
                           <div className="mt-3 text-[11px] font-semibold leading-4 text-slate-600">
-                            <span className="font-black text-emerald-800">{compSummary.primaryCompCount} close, uncapped peers set this estimate</span>
-                            {" · "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} broader selected comps provide market context.
-                            {" "}Asking prices are not completed-sale prices.
+                            <span className="font-semibold text-slate-700">{compSummary.primaryCompCount} close matches set this estimate.</span>
+                            {" "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} additional comps provide market context. Asking prices are not completed-sale prices.
                           </div>
                         ) : compSummary.includedCount > 0 ? (
-                          <div className="mt-3 text-[11px] font-semibold leading-4 text-amber-800">
-                            Broad-market estimate: only {compSummary.primaryCompCount || 0} close, uncapped peers found (minimum 4). Treat the retail value as provisional.
+                          <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
+                            <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
+                            <span>Limited close matches. This estimate uses the broader market and may change as better comparisons are found.</span>
                           </div>
                         ) : null}
-                        {hasLimitedMarketEvidence ? (
-                          <div className="mt-3 text-xs font-semibold leading-5 text-amber-800">
-                            {marketEvidenceDisplay} · {compSearchRecommendation.title}
+                        {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
+                          <div className="mt-3 text-xs font-medium leading-5 text-slate-600">
+                            Additional market verification may improve confidence.
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -7827,7 +7830,13 @@ export function EvaluationWorkspace({
           )}
 
           {activeStage === "market" && (comps.length > 0 || needsCompSearch) ? (
-            <section ref={compSectionRef} className="mt-4 scroll-mt-4">
+            <section ref={compSectionRef} className="mt-4 scroll-mt-4" aria-busy={compSearchImproving || marketCheckLoading}>
+              {(compSearchImproving || marketCheckLoading) ? (
+                <div role="status" aria-live="polite" className="mb-3 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-xs font-semibold text-blue-800">
+                  <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />
+                  <span>{compSearchImprovementStatus || "Updating comparable vehicles…"}</span>
+                </div>
+              ) : null}
               <SectionCard
                 title="Comparable Vehicles"
                 action={
