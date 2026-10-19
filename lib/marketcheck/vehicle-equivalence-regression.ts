@@ -20,6 +20,18 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Canadian Audi A3 Komfort and US Premium stay near pending verified equipment equivalence",
+    target: { year: 2018, make: "Audi", model: "A3 Sedan", trim: "Premium, Komfort (Canada)", bodyType: "Sedan", drivetrain: "FWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Audi", model: "A3 Sedan", trim: "Premium", bodyType: "Sedan", drivetrain: "FWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Canadian A3 FWD and US A3 quattro cannot become direct pricing matches",
+    target: { year: 2018, make: "Audi", model: "A3 Sedan", trim: "Premium, Komfort (Canada)", bodyType: "Sedan", drivetrain: "FWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Audi", model: "A3 Sedan", trim: "Premium", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
     name: "Silverado Trail Boss subject vs MarketCheck Silverado 1500 Custom is supporting, not a family reject",
     target: { year: 2020, make: "Chevrolet", model: "Silverado Trail Boss", trim: "Custom", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
     candidate: { year: 2020, make: "Chevrolet", model: "Silverado 1500", trim: "Custom", bodyType: "Pickup", drivetrain: "RWD", fuelType: "Gasoline" },
