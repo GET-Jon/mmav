@@ -33,6 +33,7 @@ export function createCompAuditCsv({
     "pricing_comps_used", "market_median_adjusted",
     "market_full_spread_pct", "primary_full_spread_pct",
     "primary_central_spread_pct",
+    "identity_match_class", "primary_pricing_status", "expected_retail_fast_sale_target",
   ];
 
   const quote = (input: string | number | boolean | null | undefined) =>
@@ -90,6 +91,14 @@ export function createCompAuditCsv({
       summary.marketFullSpreadPercent,
       summary.primaryFullSpreadPercent,
       summary.primaryCentralSpreadPercent,
+      comp.equivalenceTier === "direct" ? "Direct identity" :
+        comp.equivalenceTier === "near" ? "Near identity (not primary)" :
+        comp.equivalenceTier === "supporting" ? "Supporting identity" : "Rejected identity",
+      !comp.included ? "Not selected" : primaryIds.has(comp.id) ? "Sets primary price" :
+        summary.pricingMode === "market-fallback"
+          ? "Broad-market fallback; no eligible primary cohort"
+          : "Market context; does not set primary price",
+      summary.fastSaleTarget,
     ];
     return fields.map(quote).join(",");
   });
