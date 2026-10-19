@@ -41,7 +41,7 @@ async function loadInsightsData(userId: string) {
     Date.now() - 90 * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  const [membersResult, evaluationsResult] = await Promise.all([
+  const [membersResult, evaluationsResult, knowledgeResult] = await Promise.all([
     supabase.rpc("get_inventory_company_members", {
       requested_company_id: company.companyId,
     }),
@@ -72,10 +72,19 @@ async function loadInsightsData(userId: string) {
       .gte("created_at", ninetyDaysAgo)
       .order("created_at", { ascending: false })
       .limit(500),
+    supabase
+      .from("lot_logic_intelligence_knowledge_sources")
+      .select("title")
+      .eq("company_id", company.companyId)
+      .eq("source_type", "manager_note")
+      .eq("active", true)
+      .order("updated_at", { ascending: false })
+      .limit(500),
   ]);
 
   if (membersResult.error) throw new Error(membersResult.error.message);
   if (evaluationsResult.error) throw new Error(evaluationsResult.error.message);
+  if (knowledgeResult.error) throw new Error(knowledgeResult.error.message);
 
   const memberRows = (membersResult.data || []) as CompanyMemberRpcRow[];
   const labelsByUserId = new Map(
@@ -94,7 +103,10 @@ async function loadInsightsData(userId: string) {
       : "Unknown",
   })) as InsightEvaluation[];
 
-  return { company, evaluations };
+  return {
+    company, evaluations,
+    learnedQuestionTitles: (knowledgeResult.data || []).map(row => String(row.title || "")),
+  };
 }
 
 export default async function InsightsPage() {
@@ -103,11 +115,13 @@ export default async function InsightsPage() {
 
   let evaluations: InsightEvaluation[] = [];
   let companyRole: string | null = null;
+  let learnedQuestionTitles: string[] = [];
   let loadError: string | null = null;
 
   try {
     const result = await loadInsightsData(user.id);
     evaluations = result.evaluations;
+    learnedQuestionTitles = result.learnedQuestionTitles;
     companyRole = result.company.role;
   } catch (error) {
     loadError =
@@ -144,6 +158,7 @@ export default async function InsightsPage() {
 
         <InsightsDashboard
           evaluations={evaluations}
+          initialLearnedQuestionTitles={learnedQuestionTitles}
           canTeach={companyRole === "company_admin"}
         />
       </div>

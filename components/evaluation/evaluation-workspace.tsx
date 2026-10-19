@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
 import {
@@ -65,6 +66,54 @@ const initialEvaluation: ValuationInput = {
 };
 
 const initialSelectedConditions: string[] = [];
+
+// Quiet, outline-first visual cues shared by the initial choices and the
+// confirmed condition state. They supplement labels, never replace them.
+type ConditionOptionKind = "fine" | "issues" | "unknown";
+
+function ConditionOptionIcon({
+  kind,
+  muted = false,
+}: {
+  kind: ConditionOptionKind;
+  muted?: boolean;
+}) {
+  const tone = muted
+    ? "bg-slate-100 text-slate-400 ring-slate-200/70"
+    : kind === "fine"
+      ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+      : kind === "issues"
+        ? "bg-violet-50 text-violet-600 ring-violet-100"
+        : "bg-amber-50 text-amber-600 ring-amber-100";
+
+  return (
+    <span aria-hidden="true"
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 ${tone}`}>
+      <svg width="20" height="20" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="1.7"
+        strokeLinecap="round" strokeLinejoin="round">
+        {kind === "fine" ? (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="m8 12 2.5 2.5L16 9" />
+          </>
+        ) : kind === "issues" ? (
+          <>
+            <path d="M7 8V6h3m4 2V6h-2" />
+            <path d="M5 10H3v5h2m14-4h2v4h-2" />
+            <path d="M7 9h10l2 2v6l-2 2H8l-3-3v-5z" />
+          </>
+        ) : (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9a2.7 2.7 0 0 1 5 1.4c0 1.7-2.5 2-2.5 3.8" />
+            <path d="M12 17h.01" />
+          </>
+        )}
+      </svg>
+    </span>
+  );
+}
 
 const conditionAnalysisProgressSteps = [
   "Reviewing condition notes",
@@ -271,74 +320,75 @@ function MetricCard({
 }
 
 function MarketConfidenceHelp({
-  confidence,
-  compCount,
-  reasons,
+  confidence, compCount, reasons,
 }: {
-  confidence: "Strong" | "Moderate" | "Limited";
+  confidence: "Strong" | "Moderate" | "Limited" | "Weak";
   compCount: number;
   reasons: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState({ top: 0, left: 0 });
   const id = useId();
-  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+
+  function show() {
+    const rect = button.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(320, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+    const top = window.innerHeight - rect.bottom < 280 && rect.top > 280
+      ? rect.top - 268
+      : Math.min(rect.bottom + 8, window.innerHeight - 120);
+    setPlacement({ top: Math.max(12, top), left });
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (!open) return;
-    function dismissOnOutsideClick(event: PointerEvent) {
-      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function dismissOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismissOnOutsideClick);
-    document.addEventListener("keydown", dismissOnEscape);
+    const outside = (event: PointerEvent) => {
+      if (!button.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const onScroll = () => setOpen(false);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
-      document.removeEventListener("pointerdown", dismissOnOutsideClick);
-      document.removeEventListener("keydown", dismissOnEscape);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
   }, [open]);
 
   return (
-    <span ref={wrapperRef} className="group relative inline-flex items-center">
-      <button
-        type="button"
+    <span className="relative inline-flex shrink-0 items-center">
+      <button ref={button} type="button"
         aria-label={`Why is market confidence ${confidence.toLowerCase()}?`}
-        aria-describedby={id}
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black text-slate-600 transition hover:border-blue-400 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-      >
-        i
-      </button>
-      <span
-        id={id}
-        role="tooltip"
-        className={`absolute right-0 top-full z-40 mt-2 w-[min(19rem,calc(100vw-3rem))] rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl transition-opacity ${open ? "visible opacity-100" : "invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"}`}
-      >
-        <span className="block text-xs font-black text-slate-950">
-          Why {confidence.toLowerCase()} confidence?
-        </span>
-        <span className="mt-1 block text-xs font-medium leading-5 text-slate-600">
-          {compCount} selected comp{compCount === 1 ? "" : "s"} provide useful pricing evidence, but confidence measures how well listings match and agree, not just how many were found.
-        </span>
-        {reasons.length > 0 ? (
-          <span className="mt-2 block border-t border-slate-100 pt-2">
-            {reasons.slice(0, 3).map((reason) => (
-              <span key={reason} className="mt-1 block text-xs font-semibold leading-4 text-slate-700">
-                • {reason.charAt(0).toUpperCase() + reason.slice(1)}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <span className="mt-2 block text-xs font-semibold leading-5 text-slate-700">
-            Lot Logic also checks trim equivalence, mileage-adjustment reliability, price spread and independent market corroboration.
-          </span>
-        )}
-        <span className="mt-2 block text-[11px] font-medium leading-4 text-slate-500">
-          Expected retail is a working estimate based on advertised prices, not a guaranteed sale price.
-        </span>
-      </span>
+        aria-describedby={open ? id : undefined} aria-expanded={open}
+        onMouseEnter={show} onMouseLeave={() => setOpen(false)}
+        onFocus={show} onBlur={() => setOpen(false)} onClick={show}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black text-slate-600 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">i</button>
+      {open && typeof document !== "undefined" ? createPortal(
+        <div id={id} role="tooltip" style={{ top: placement.top, left: placement.left, width: "min(320px, calc(100vw - 24px))" }}
+          className="pointer-events-none fixed z-[100] max-h-[min(300px,calc(100vh-24px))] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
+          <div className="text-xs font-black text-slate-950">Why {confidence.toLowerCase()} confidence?</div>
+          <p className="mt-1 text-xs font-medium leading-5 text-slate-600">
+            {compCount > 0
+              ? `${compCount} selected comps provide useful pricing evidence, but confidence also reflects vehicle fit, price agreement and adjustment reliability.`
+              : "No trusted comps are selected; a defensible sale-price estimate is not available."}
+          </p>
+          {reasons.length > 0 ? (
+            <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs font-semibold leading-5 text-slate-700">
+              {reasons.slice(0, 4).map(reason => <li key={reason}>• {reason.charAt(0).toUpperCase() + reason.slice(1)}</li>)}
+            </ul>
+          ) : null}
+          {compCount > 0 ? <p className="mt-2 text-[11px] font-medium leading-4 text-slate-500">
+            Expected retail is based on asking prices, not a guaranteed sale price.
+          </p> : null}
+        </div>, document.body,
+      ) : null}
     </span>
   );
 }
@@ -1102,6 +1152,15 @@ export function EvaluationWorkspace({
   const [allInCostOpen, setAllInCostOpen] = useState(false);
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
+  // The collapsed vehicle editor never mutates active evaluation data until
+  // Save. Cancel/close must not wipe the bid, conditions, or valuation comps.
+  const [quickEditDraft, setQuickEditDraft] = useState<{
+    vin: string;
+    manualVehicle: ManualVehicleBasics;
+    mileage: number;
+    bid: number;
+    auctionSite: string;
+  } | null>(null);
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
   const [vehicleThumbnailUrl, setVehicleThumbnailUrl] = useState("");
   const [vehicleThumbnailLoading, setVehicleThumbnailLoading] = useState(false);
@@ -1220,13 +1279,6 @@ export function EvaluationWorkspace({
     "default" | "saved"
   >("default");
 
-  const [appliedVehicleProfile, setAppliedVehicleProfile] = useState<{
-    profile: string;
-    ruleName: string;
-    source: string;
-    reason: string;
-  } | null>(null);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -1256,17 +1308,6 @@ export function EvaluationWorkspace({
             );
 
             const matchingCostDefault = profileMatch?.costDefault;
-
-            setAppliedVehicleProfile(
-              profileMatch
-                ? {
-                    profile: profileMatch.profile,
-                    ruleName: profileMatch.ruleName,
-                    source: profileMatch.source,
-                    reason: profileMatch.reason,
-                  }
-                : null,
-            );
 
             if (matchingCostDefault) {
               setEvaluation((previous) =>
@@ -1990,33 +2031,6 @@ export function EvaluationWorkspace({
     );
   }
 
-  function reapplyVehicleProfile() {
-    const profileMatch = getAppliedVehicleProfile(
-      activeAssumptions,
-      decodedVehicle,
-      targetMileage,
-    );
-
-    if (!profileMatch) {
-      setAppliedVehicleProfile(null);
-      return;
-    }
-
-    setEvaluation((previous) =>
-      applyCostDefaultToEvaluation(
-        previous,
-        profileMatch.costDefault,
-        activeAssumptions,
-      ),
-    );
-
-    setAppliedVehicleProfile({
-      profile: profileMatch.profile,
-      ruleName: profileMatch.ruleName,
-      source: profileMatch.source,
-      reason: profileMatch.reason,
-    });
-  }
   async function enrichVehicleIdentityProfile(decoded: VinDecodeResult) {
     const requestVin = String(decoded.vin || "").trim().toUpperCase();
     const baseline = buildDeterministicVehicleIdentityProfile(decoded);
@@ -2079,6 +2093,7 @@ export function EvaluationWorkspace({
 
   async function decodeVinFromBasics(
     vinOverride?: string,
+    bidOverride?: number,
   ): Promise<VinDecodeResult | null> {
     const vinToDecode = (vinOverride ?? vin).trim().toUpperCase();
 
@@ -2134,7 +2149,15 @@ export function EvaluationWorkspace({
 
       const decoded = data as VinDecodeResult;
 
-      handleDecodedVinAndReset(decoded);
+      if (
+        activeStage === "verdict" &&
+        String(decodedVehicle?.vin || "").trim().toUpperCase() ===
+          String(decoded.vin || "").trim().toUpperCase()
+      ) {
+        setDecodedVehicle(decoded);
+      } else {
+        handleDecodedVinAndReset(decoded, bidOverride);
+      }
       startVehicleIdentityProfileEnrichment(decoded);
 
       window.setTimeout(() => {
@@ -2154,7 +2177,7 @@ export function EvaluationWorkspace({
     return null;
   }
 
-  function handleDecodedVinAndReset(decoded: VinDecodeResult) {
+  function handleDecodedVinAndReset(decoded: VinDecodeResult, bidOverride?: number) {
     if (
       String(decoded.vin || "").trim().toUpperCase() !==
       String(decodedVehicle?.vin || "").trim().toUpperCase()
@@ -2177,20 +2200,9 @@ export function EvaluationWorkspace({
     );
     const matchingCostDefault = profileMatch?.costDefault;
 
-    setAppliedVehicleProfile(
-      profileMatch
-        ? {
-            profile: profileMatch.profile,
-            ruleName: profileMatch.ruleName,
-            source: profileMatch.source,
-            reason: profileMatch.reason,
-          }
-        : null,
-    );
-
     const baseEvaluation: ValuationInput = {
       ...initialEvaluation,
-      currentBid: valuationInput.currentBid,
+      currentBid: bidOverride ?? valuationInput.currentBid,
       targetResaleUsed: valuationInput.targetResaleUsed,
       targetProfit: valuation.desiredProfitTarget,
       hasAvoidFlag: false,
@@ -4020,7 +4032,6 @@ export function EvaluationWorkspace({
     setMethodologySaving(false);
     setMethodologyStatus("");
 
-    setAppliedVehicleProfile(null);
     setFinalTargetOverride(null);
 
     setSavedEvaluationId(null);
@@ -4392,45 +4403,78 @@ export function EvaluationWorkspace({
               text: "Current all-in cost is at the recommended all-in target.",
             };
 
+  const editingVehicle = quickEditDraft?.manualVehicle || manualVehicle;
+  const editingVin = quickEditDraft?.vin ?? vin;
   const hasManualQuickEvalBasics =
-    String(manualVehicle.year || "").trim().length > 0 &&
-    manualVehicle.make.trim().length > 0 &&
-    manualVehicle.model.trim().length > 0;
+    String(editingVehicle.year || "").trim().length > 0 &&
+    editingVehicle.make.trim().length > 0 &&
+    editingVehicle.model.trim().length > 0;
+  const hasQuickEvalBasics = (quickEvalMode === "vin"
+    ? editingVin.trim().length === 17 : hasManualQuickEvalBasics) &&
+    (quickEditDraft?.bid ?? valuationInput.currentBid) > 0 &&
+    (quickEditDraft?.mileage ?? targetMileage) > 0;
 
-  const hasQuickEvalBasics =
-    quickEvalMode === "vin"
-      ? vin.trim().length >= 17
-      : hasManualQuickEvalBasics;
+  function openVehicleEdit() {
+    setQuickEditDraft({
+      vin,
+      manualVehicle: { ...manualVehicle },
+      mileage: targetMileage,
+      bid: valuationInput.currentBid,
+      auctionSite,
+    });
+    setQuickEvalMode(vin ? "vin" : "manual");
+    setQuickEvalOpen(true);
+  }
+
+  function closeVehicleEdit() {
+    setQuickEditDraft(null);
+    setQuickEvalOpen(false);
+  }
 
   function startQuickEvaluation() {
-    setNotes("");
-    setAiSummaryError("");
-    setAiSummaryLoadingMode(null);
-    setActiveThesisMode("financial");
+    const draft = quickEditDraft;
+    if (!draft) return closeVehicleEdit();
 
+    const nextVin = draft.vin.trim().toUpperCase();
+    const sameVin = quickEvalMode === "vin" && Boolean(decodedVehicle?.vin) &&
+      nextVin === String(decodedVehicle?.vin).trim().toUpperCase();
+    const sameManual = quickEvalMode === "manual" && !decodedVehicle &&
+      (["year", "make", "model", "trim", "bodyClass"] as const).every((key) =>
+        String(draft.manualVehicle[key] || "").trim() ===
+        String(manualVehicle[key] || "").trim());
+
+    // Existing vehicle: update just the changed deal inputs, keeping all
+    // prior market evidence and usage accounting intact.
+    setEvaluation((old) => ({ ...old, currentBid: draft.bid }));
+    setTargetMileage(draft.mileage);
+    setAuctionSite(draft.auctionSite);
+    closeVehicleEdit();
+    if (sameVin || sameManual) return;
+
+    // Vehicle identity genuinely changed: start new evaluation, preserving
+    // the entered bid through the asynchronous VIN decoding step.
+    resetPreviousEvaluationResults({ preserveVehicleInfo: true });
+    setEvaluation((old) => ({ ...old, currentBid: draft.bid }));
+    setTargetMileage(draft.mileage);
+    setEvaluationUsageId(createEvaluationUsageId());
+    setActiveStage("vehicle");
+    setVehicleStepConfirmed(false);
+    setConditionStepConfirmed(false);
+    setVerdictEntered(false);
     if (quickEvalMode === "manual") {
       setDecodedVehicle(null);
       setVin("");
-      setManualVehicle((previous) => ({
-        ...previous,
-        year: String(previous.year || "").trim(),
-        make: previous.make.trim(),
-        model: previous.model.trim(),
-        trim: previous.trim.trim(),
-        bodyClass: previous.bodyClass.trim(),
-      }));
-      setQuickEvalOpen(false);
+      setManualVehicle({
+        year: String(draft.manualVehicle.year || "").trim(),
+        make: draft.manualVehicle.make.trim(),
+        model: draft.manualVehicle.model.trim(),
+        trim: draft.manualVehicle.trim.trim(),
+        bodyClass: draft.manualVehicle.bodyClass.trim(),
+      });
       return;
     }
-
-    const vinToDecode = vin.trim().toUpperCase();
-
-    setVin(vinToDecode);
-    setQuickEvalOpen(false);
-
-    if (vinToDecode.length >= 17) {
-      decodeVinFromBasics(vinToDecode);
-    }
+    setVin(nextVin);
+    void decodeVinFromBasics(nextVin, draft.bid);
   }
 
   async function runPrimaryEvaluation() {
@@ -5075,17 +5119,17 @@ export function EvaluationWorkspace({
             <div className="flex items-start justify-between gap-4 px-6 py-5">
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
-                  Quick Start Evaluation
+                  Edit Vehicle Details
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Enter a VIN to start. Mileage and current bid can be added now
-                  or later.
+                  You can update the mileage, bid, or source without restarting your evaluation.
+                  Changing the vehicle identity begins a new evaluation.
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setQuickEvalOpen(false)}
+                onClick={closeVehicleEdit}
                 className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close quick evaluation"
               >
@@ -5123,9 +5167,9 @@ export function EvaluationWorkspace({
                 <>
                   <FormRow label="VIN">
                     <input
-                      value={vin}
+                      value={quickEditDraft?.vin ?? vin}
                       onChange={(event) =>
-                        setVin(event.target.value.toUpperCase())
+                        setQuickEditDraft((prev) => prev ? { ...prev, vin: event.target.value.toUpperCase() } : prev)
                       }
                       placeholder="e.g. 5UXCR6C00L9U123456"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5143,12 +5187,9 @@ export function EvaluationWorkspace({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormRow label="Year">
                       <input
-                        value={manualVehicle.year}
+                        value={quickEditDraft?.manualVehicle.year ?? manualVehicle.year}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            year: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, year: event.target.value } } : prev)
                         }
                         placeholder="e.g. 2003"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5157,12 +5198,9 @@ export function EvaluationWorkspace({
 
                     <FormRow label="Make">
                       <input
-                        value={manualVehicle.make}
+                        value={quickEditDraft?.manualVehicle.make ?? manualVehicle.make}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            make: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, make: event.target.value } } : prev)
                         }
                         placeholder="e.g. BMW"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5173,12 +5211,9 @@ export function EvaluationWorkspace({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormRow label="Model">
                       <input
-                        value={manualVehicle.model}
+                        value={quickEditDraft?.manualVehicle.model ?? manualVehicle.model}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            model: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, model: event.target.value } } : prev)
                         }
                         placeholder="e.g. M3"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5187,12 +5222,9 @@ export function EvaluationWorkspace({
 
                     <FormRow label="Trim">
                       <input
-                        value={manualVehicle.trim}
+                        value={quickEditDraft?.manualVehicle.trim ?? manualVehicle.trim}
                         onChange={(event) =>
-                          setManualVehicle((previous) => ({
-                            ...previous,
-                            trim: event.target.value,
-                          }))
+                          setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, trim: event.target.value } } : prev)
                         }
                         placeholder="e.g. Competition, 3.0i, G550"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5202,12 +5234,9 @@ export function EvaluationWorkspace({
 
                   <FormRow label="Body Style">
                     <input
-                      value={manualVehicle.bodyClass}
+                      value={quickEditDraft?.manualVehicle.bodyClass ?? manualVehicle.bodyClass}
                       onChange={(event) =>
-                        setManualVehicle((previous) => ({
-                          ...previous,
-                          bodyClass: event.target.value,
-                        }))
+                        setQuickEditDraft((prev) => prev ? { ...prev, manualVehicle: { ...prev.manualVehicle, bodyClass: event.target.value } } : prev)
                       }
                       placeholder="e.g. Coupe, Sedan, Convertible, SUV"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
@@ -5221,10 +5250,10 @@ export function EvaluationWorkspace({
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(targetMileage)}
+                    value={formatNumberInput(quickEditDraft?.mileage ?? targetMileage)}
                     onFocus={(event) => event.currentTarget.select()}
                     onChange={(event) =>
-                      setTargetMileage(toNumber(event.target.value))
+                      setQuickEditDraft((prev) => prev ? { ...prev, mileage: toNumber(event.target.value) } : prev)
                     }
                     placeholder="e.g. 68,450"
                     className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
@@ -5241,13 +5270,10 @@ export function EvaluationWorkspace({
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(valuationInput.currentBid)}
+                    value={formatNumberInput(quickEditDraft?.bid ?? valuationInput.currentBid)}
                     onFocus={(event) => event.currentTarget.select()}
                     onChange={(event) =>
-                      updateEvaluationField(
-                        "currentBid",
-                        toNumber(event.target.value),
-                      )
+                      setQuickEditDraft((prev) => prev ? { ...prev, bid: toNumber(event.target.value) } : prev)
                     }
                     placeholder="e.g. 16,250"
                     className="w-full rounded-xl bg-transparent px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
@@ -5257,8 +5283,8 @@ export function EvaluationWorkspace({
 
               <FormRow label="Vehicle Source">
                 <select
-                  value={auctionSite}
-                  onChange={(event) => setAuctionSite(event.target.value)}
+                  value={quickEditDraft?.auctionSite ?? auctionSite}
+                  onChange={(event) => setQuickEditDraft((prev) => prev ? { ...prev, auctionSite: event.target.value } : prev)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                 >
                   <option>ACV Auctions</option>
@@ -5275,7 +5301,7 @@ export function EvaluationWorkspace({
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
               <button
                 type="button"
-                onClick={() => setQuickEvalOpen(false)}
+                onClick={closeVehicleEdit}
                 className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 Cancel
@@ -5287,7 +5313,7 @@ export function EvaluationWorkspace({
                 disabled={!hasQuickEvalBasics}
                 className="rounded-xl bg-slate-950 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                Start Evaluation
+                Save Changes
               </button>
             </div>
           </div>
@@ -6197,7 +6223,7 @@ export function EvaluationWorkspace({
                   Vehicle Details
                 </h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Full decoded identity and applied vehicle profile.
+                  Full decoded vehicle identity and specifications.
                 </p>
               </div>
 
@@ -6215,8 +6241,6 @@ export function EvaluationWorkspace({
               decoded={decodedVehicle}
               manualVehicle={manualVehicle}
               onManualVehicleChange={updateManualVehicleField}
-              appliedVehicleProfile={appliedVehicleProfile}
-              onReapplyVehicleProfile={reapplyVehicleProfile}
             />
           </div>
         </div>
@@ -6777,18 +6801,23 @@ export function EvaluationWorkspace({
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500">{dealershipProfile.websiteUrl ? "Website saved" : "Add in settings"}</span>
                   </div>
                   {dealershipProfile.websiteUrl ? <p className="mt-2 break-all text-xs font-bold text-blue-700">{dealershipProfile.websiteUrl}</p> : null}
-                  <Link href="/settings?tab=organization" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Edit dealership profile</Link>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Link href="/settings?tab=intelligence&section=knowledge" className="text-xs font-bold text-blue-700 hover:underline">Edit dealership profile →</Link>
+                    <Link href="/settings?tab=organization" className="text-xs font-semibold text-slate-600 hover:text-blue-700 hover:underline">Edit website URL</Link>
+                  </div>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Website analysis will help identify inventory mix, price bands, and dealership positioning. Your URL is saved as context; automatic website analysis is not active yet.</p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-sm font-black text-slate-900">Your acquisition preferences</div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">This will be where dealers add preferred makes, body styles, price bands, mileage/age targets, target gross, and categories they avoid.</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Add preferred makes, body styles, price bands, mileage and age targets, target gross, and vehicles to avoid. Lot Logic uses your saved dealership knowledge when assessing fit.</p>
+                  <Link href="/settings?tab=intelligence&section=knowledge" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Manage acquisition preferences →</Link>
                 </div>
 
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
                   <div className="text-sm font-black text-slate-900">Deal spec / buying guide</div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Planned: upload a dealership buying guide or deal-spec document so Lot Logic can incorporate those rules into dealer fit.</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Upload a buying guide or deal-spec document in Insights so Lot Logic can learn your explicit acquisition rules.</p>
+                  <Link href="/insights#teach-lot-logic" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Upload buying guide →</Link>
                 </div>
               </div>
             </div>
@@ -6977,62 +7006,74 @@ export function EvaluationWorkspace({
           {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
 
           {activeStage === "verdict" ? (
-            <section className="grid gap-4 lg:grid-cols-3">
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <section className="grid items-stretch gap-3 lg:grid-cols-3">
+              <article className="min-w-0 rounded-[18px] border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</span>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black leading-none text-emerald-700">Ready ✓</span>
+                  </div>
                   <button
                     type="button"
                     data-evaluation-entry-action="true"
-                    onClick={() => {
-                      setQuickEvalMode(vin ? "vin" : "manual");
-                      setQuickEvalOpen(true);
-                    }}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                    onClick={openVehicleEdit}
+                    className="shrink-0 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+                <div className="mt-2 min-w-0 break-words text-base font-black leading-snug text-slate-950 [overflow-wrap:anywhere] sm:text-lg">{vehicleTitle}</div>
               </article>
 
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <article className="min-w-0 rounded-[18px] border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</span>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black leading-none text-emerald-700">Ready ✓</span>
+                  </div>
                   <button
                     type="button"
                     onClick={openConditionAnalysis}
-                    className="text-xs font-black text-violet-700 hover:text-violet-900"
+                    className="shrink-0 text-xs font-black text-violet-700 hover:text-violet-900"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
+                <div className="mt-2 break-words text-base font-black leading-snug text-slate-950 sm:text-lg">
                   {conditionReviewStatus === "issues"
                     ? "Known issues"
                     : conditionReviewStatus === "unknown"
                       ? "Condition unknown"
                       : "No material issues"} · {money(displayedReconReserve)}
                 </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
 
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <article className="min-w-0 rounded-[18px] border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</span>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black leading-none ${compSummary.includedCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {compSummary.includedCount > 0 ? "Ready ✓" : "Needs attention"}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={openCompMarketEditor}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                    className="shrink-0 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     Edit
                   </button>
                 </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-base font-black leading-snug text-slate-950 sm:text-lg">
+                  <span className="min-w-0 break-words">{compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}</span>
+                  {compSummary.confidence !== "High" ? (
+                    <MarketConfidenceHelp
+                      confidence={compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
+                      compCount={compSummary.includedCount}
+                      reasons={compSummary.confidenceReasons || []}
+                    />
+                  ) : null}
                 </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
             </section>
           ) : (
@@ -7099,15 +7140,15 @@ export function EvaluationWorkspace({
                   <path d="M101 31l20 37M205 28l-10 40M75 68h173" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
                 </svg>
               ) : null}
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">1 · Vehicle</div>
                     {activeStage === "vehicle" ? (
                       <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white">Active</span>
                     ) : null}
                   </div>
-                  <h2 className="mt-1 text-lg font-black tracking-[-0.015em] text-slate-950">
+                  <h2 className="mt-1 break-words text-lg font-black leading-snug tracking-[-0.015em] text-slate-950 [overflow-wrap:anywhere]">
                     {hasEvaluationData ? vehicleTitle : "Identify the car"}
                   </h2>
                 </div>
@@ -7116,7 +7157,7 @@ export function EvaluationWorkspace({
                     type="button"
                     data-evaluation-entry-action="true"
                     onClick={() => setActiveStage("vehicle")}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
+                    className="shrink-0 text-xs font-black text-blue-700 hover:text-blue-900"
                   >
                     Edit
                   </button>
@@ -7244,7 +7285,7 @@ export function EvaluationWorkspace({
                   <div className="grid gap-2 text-sm">
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Mileage</span><span className="font-black text-slate-900">{targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"}</span></div>
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Bid / Ask</span><span className="font-black text-slate-900">{valuationInput.currentBid > 0 ? money(valuationInput.currentBid) : "—"}</span></div>
-                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{vehicleTrim || "—"}</span></div>
+                    <div className="flex items-start justify-between gap-3"><span className="shrink-0 font-semibold text-slate-500">Trim</span><span className="min-w-0 flex-1 break-words text-right font-black leading-5 text-slate-900 [overflow-wrap:anywhere]">{vehicleTrim || "—"}</span></div>
                   </div>
                   <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Vehicle ready ✓</div>
                 </div>
@@ -7334,10 +7375,14 @@ export function EvaluationWorkspace({
               {!vehicleStepConfirmed ? (
                 <div className="mt-5">
                   <div className="space-y-2 opacity-55">
-                    {["No material issues", "Known issues", "Condition unknown"].map((label) => (
-                      <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
-                        {label}
+                    {([
+                      { label: "No material issues", kind: "fine" },
+                      { label: "Known issues", kind: "issues" },
+                      { label: "Condition unknown", kind: "unknown" },
+                    ] as const).map(({ label, kind }) => (
+                      <div key={kind} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs font-bold text-slate-400">
+                        <ConditionOptionIcon kind={kind} muted />
+                        <span>{label}</span>
                       </div>
                     ))}
                   </div>
@@ -7348,16 +7393,31 @@ export function EvaluationWorkspace({
                   {conditionReviewStatus === "unreviewed" ? (
                     <div className="space-y-2">
                       <button type="button" onClick={() => chooseConditionReview("no_material_issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50">
-                        <div className="text-sm font-black text-slate-900">No material issues apparent</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind="fine" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-slate-900">No material issues apparent</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                          </div>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-violet-300 hover:bg-violet-50">
-                        <div className="text-sm font-black text-slate-900">There are known issues</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind="issues" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-slate-900">There are known issues</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                          </div>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("unknown")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-amber-300 hover:bg-amber-50">
-                        <div className="text-sm font-black text-slate-900">Condition is unknown</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind="unknown" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-slate-900">Condition is unknown</div>
+                            <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                          </div>
+                        </div>
                       </button>
                     </div>
                   ) : conditionReviewStatus === "issues" ? (
@@ -7446,8 +7506,11 @@ export function EvaluationWorkspace({
                           ? "border-amber-200 bg-amber-50"
                           : "border-emerald-200 bg-emerald-50"
                       }`}>
-                        <div className="text-sm font-black text-slate-900">
-                          {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
+                        <div className="flex items-center gap-3">
+                          <ConditionOptionIcon kind={conditionReviewStatus === "unknown" ? "unknown" : "fine"} />
+                          <div className="text-sm font-black text-slate-900">
+                            {conditionReviewStatus === "unknown" ? "Condition will remain an explicit uncertainty." : "No material issues apparent."}
+                          </div>
                         </div>
                         {conditionReviewStatus === "unknown" ? (
                           <div className="mt-3">
@@ -7491,12 +7554,15 @@ export function EvaluationWorkspace({
                 </div>
               ) : conditionReviewComplete ? (
                 <div className="mt-4">
-                  <div className="text-sm font-bold text-slate-700">
-                    {conditionReviewStatus === "issues"
-                      ? `${conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0} reviewed issue${(conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0) === 1 ? "" : "s"} · ≈ ${money(getEffectiveConditionPlanningEstimate())} reserve`
-                      : conditionReviewStatus === "unknown"
-                        ? "Condition unknown · final verdict will require review"
-                        : "No material issues apparent"}
+                  <div className="flex items-center gap-3">
+                    <ConditionOptionIcon kind={conditionReviewStatus === "issues" ? "issues" : conditionReviewStatus === "unknown" ? "unknown" : "fine"} />
+                    <div className="min-w-0 text-sm font-bold text-slate-700">
+                      {conditionReviewStatus === "issues"
+                        ? `${conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0} reviewed issue${(conditionAnalysis?.issues.filter((issue) => issue.includeInValuation).length || 0) === 1 ? "" : "s"} · ≈ ${money(getEffectiveConditionPlanningEstimate())} reserve`
+                        : conditionReviewStatus === "unknown"
+                          ? "Condition unknown · final verdict will require review"
+                          : "No material issues apparent"}
+                    </div>
                   </div>
                   <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Condition reviewed ✓</div>
                 </div>
