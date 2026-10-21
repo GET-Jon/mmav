@@ -4514,7 +4514,16 @@ export function EvaluationWorkspace({
       const access = await response.json();
       if (!response.ok) throw new Error(access.error || "Unable to check your evaluation allowance. Please try again.");
       if (access.canStartEvaluation === false) {
-        setPlanSelectionMessage(access.evaluationAccessMessage || "Choose a plan to continue evaluating vehicles.");
+        const scheduledCredits = access.status === "canceled" &&
+          Number(access.postCancelBalance || 0) > 0 &&
+          Boolean(access.postCancelStartsAt) &&
+          Date.parse(access.postCancelStartsAt) > Date.now();
+        if (scheduledCredits) {
+          const start = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(access.postCancelStartsAt));
+          setEvaluationAccessError(`Your ${access.postCancelBalance} paid evaluations are preserved, but cannot be used until ${start}. You can review saved work now, or visit Billing to restart a subscription.`);
+        } else {
+          setPlanSelectionMessage(access.evaluationAccessMessage || "Choose a plan to continue evaluating vehicles.");
+        }
         setEvaluationRunning(false);
         return;
       }
@@ -7297,7 +7306,7 @@ export function EvaluationWorkspace({
                   {vinDecodeError ? (
                     <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{vinDecodeError}</div>
                   ) : null}
-                  {evaluationAccessError ? <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{evaluationAccessError}</div> : null}
+                  {evaluationAccessError ? <div role="alert" className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-bold leading-5 text-blue-900">{evaluationAccessError} <Link href="/settings?tab=billing" className="ml-1 underline">View billing →</Link></div> : null}
 
                   <button
                     type="button"
