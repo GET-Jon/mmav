@@ -185,7 +185,20 @@ export async function getCompanyUsageContext(
     !internalUnlimited &&
     status === "trialing" &&
     Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now());
-  const paidActive = internalUnlimited || allowsPaidEvaluationAccess(status);
+  // A Stripe test clock can cancel a subscription before the application clock
+  // reaches the original paid-through date. Keep that paid period accessible.
+  const now = Date.now();
+  const periodStart = Date.parse(billing?.current_period_start || "");
+  const periodEnd = Date.parse(billing?.current_period_end || "");
+  const creditStart = Date.parse(billing?.post_cancel_starts_at || "");
+  const paidThroughCancellation =
+    status === "canceled" &&
+    Boolean(billing?.stripe_subscription_id) &&
+    Number.isFinite(periodStart) && Number.isFinite(periodEnd) &&
+    Number.isFinite(creditStart) &&
+    periodStart <= now && now < periodEnd && creditStart === periodEnd &&
+    Number(billing?.post_cancel_evaluations || 0) > 0;
+  const paidActive = internalUnlimited || allowsPaidEvaluationAccess(status) || paidThroughCancellation;
   const cancelCredits = cancellationWindow({
     status,
     startsAt: billing?.post_cancel_starts_at,
@@ -217,6 +230,7 @@ export async function getCompanyUsageContext(
     status,
     planKey,
     cancelAtPeriodEnd: Boolean(billing?.cancel_at_period_end),
+    currentPeriodStart: billing?.current_period_start || null,
     currentPeriodEnd: billing?.current_period_end || null,
     trialRolloverEvaluations,
     cancelCredits,
@@ -225,6 +239,7 @@ export async function getCompanyUsageContext(
     trialActive,
     giftedEvaluations,
     paidActive,
+    paidThroughCancellation,
     paidUsageWindow,
     // A Stripe subscription without an authoritative, current period must
     // not get a calendar-reset paid allowance (even on November 1).
@@ -258,7 +273,7 @@ export async function getUsageSummary(
     since: usageWindow.start,
     before: usageWindow.end,
   };
-  const [trialEvaluationsUsed, countedEvaluations, countedProviderCalls] =
+  const [trialEvaluationsUsed, countedEvaluations, countedProviderCalls, finalPaidPeriodUsage] =
     await Promise.all([
       countUsage(supabase, company.companyId, "evaluation_completed"),
       (paidActive ? paidBillingPeriodReady : cancelCredits.valid)
@@ -267,15 +282,24 @@ export async function getUsageSummary(
       (paidActive ? paidBillingPeriodReady : cancelCredits.valid)
         ? countUsage(supabase, company.companyId, "provider_api_call", windowFilter)
         : Promise.resolve(0),
+      cancelCredits.valid && !paidActive && context.currentPeriodStart && cancelCredits.startsAt
+        ? countUsage(supabase, company.companyId, "evaluation_completed", {
+            since: context.currentPeriodStart,
+            before: cancelCredits.startsAt,
+          })
+        : Promise.resolve(0),
     ]);
   const monthlyEvaluationsUsed = countedEvaluations;
   const monthlyProviderCalls = countedProviderCalls;
 
+  // An early cancellation event may have snapshot the balance before the
+  // dealer finished spending the paid period. Reconcile, never double-grant.
+  const remainingFinalPaid = Math.max(0, PLAN_LIMITS[planKey].evaluationsPerMonth - finalPaidPeriodUsage);
   const grace = cancellationWindow({
     status: context.status,
     startsAt: cancelCredits.startsAt,
     expiresAt: cancelCredits.expiresAt,
-    initialEvaluations: cancelCredits.initial,
+    initialEvaluations: Math.min(cancelCredits.initial, remainingFinalPaid),
     usedDuringWindow: paidActive ? 0 : countedEvaluations,
   });
   const limits = PLAN_LIMITS[planKey];
@@ -395,6 +419,7 @@ export async function checkUsageAllowance(args: {
 
   if (
     summary.status === "canceled" &&
+    !summary.paidThroughCancellation &&
     !summary.postCancelActive &&
     !giftedCreditsAvailable &&
     !existingCompletedEvaluation
