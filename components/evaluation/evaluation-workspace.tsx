@@ -42,7 +42,7 @@ import type {
   ConditionAnalysisIssue,
 } from "@/lib/ai/condition-analysis-types";
 
-import { evaluationDraftStorageKey as draftStorageKey } from "@/lib/evaluation-draft";
+import { evaluationDraftStorageKeyForUser } from "@/lib/evaluation-draft";
 
 const initialTargetMileage = 0;
 
@@ -758,11 +758,14 @@ export function EvaluationWorkspace({
   initialSavedEvaluationId = null,
   initialSavedPayload = null,
   userEmail = null,
+  userId,
 }: {
+  userId: string;
   initialSavedEvaluationId?: string | null;
   initialSavedPayload?: SavedEvaluationPayload | null;
   userEmail?: string | null;
 }) {
+  const draftStorageKey = evaluationDraftStorageKeyForUser(userId);
   const [evaluation, setEvaluation] = useState<ValuationInput>(
     initialSavedPayload?.evaluation || initialEvaluation,
   );
