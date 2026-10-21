@@ -1486,7 +1486,19 @@ export function EvaluationWorkspace({
           : null,
       );
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
-      const restoredStage = deriveEvaluationStage(draft as SavedEvaluationPayload);
+      const inferredStage = deriveEvaluationStage(draft as SavedEvaluationPayload);
+      // Explicit progress takes precedence over inferred data completeness: finding
+      // comps in the background does not mean the user advanced to Verdict.
+      const persistedStage = draft.activeStage;
+      const isValidStage = persistedStage === "vehicle" || persistedStage === "condition" ||
+        persistedStage === "market" || persistedStage === "verdict";
+      const restoredStage: EvaluationStage = isValidStage
+        ? (persistedStage === "verdict" && inferredStage !== "verdict"
+          ? inferredStage
+          : (persistedStage === "market" && (inferredStage === "vehicle" || inferredStage === "condition")
+            ? inferredStage
+            : persistedStage))
+        : (inferredStage === "verdict" ? "market" : inferredStage);
       setActiveStage(restoredStage);
       setVehicleStepConfirmed(restoredStage !== "vehicle");
       setConditionStepConfirmed(
@@ -1508,6 +1520,7 @@ export function EvaluationWorkspace({
       window.localStorage.setItem(
         draftStorageKey,
         JSON.stringify({
+          activeStage,
           evaluationUsageId,
           vin,
           auctionSite,
@@ -1539,6 +1552,7 @@ export function EvaluationWorkspace({
       console.error("Failed to save local evaluator draft:", error);
     }
   }, [
+    activeStage,
     evaluationUsageId,
     vin,
     auctionSite,
