@@ -54,7 +54,7 @@ export default async function Home() {
 
   return (
     <EvaluationAccessGuard>
-      <EvaluationWorkspace userEmail={user.email} />
+      <EvaluationWorkspace userId={user.id} userEmail={user.email} />
     </EvaluationAccessGuard>
   );
 }
