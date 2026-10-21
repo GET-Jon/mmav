@@ -28,7 +28,7 @@ export class GoogleAiTextClient implements AiTextClient {
     // Keep fallback limited to condition recon, rather than silently changing
     // model behavior for verdict summaries and other AI features.
     const fallbackModel = input.usageFeature === "condition_analysis"
-      ? (process.env.AI_RECON_FALLBACK_MODEL || "gemini-2.5-flash-lite")
+      ? (process.env.AI_RECON_FALLBACK_MODEL || "gemini-3.5-flash-lite")
           .trim().replace(/^["']|["']$/g, "").replace(/^models\//, "")
       : "";
     const models = fallbackModel && fallbackModel !== this.model
