@@ -29,6 +29,7 @@ type UsageStatus = {
   internalUnlimited?: boolean;
   trialActive?: boolean;
   paidActive?: boolean;
+  paidThroughCancellation?: boolean;
   paidBillingPeriodReady?: boolean;
   cancelAtPeriodEnd?: boolean;
   currentPeriodEnd?: string | null;
@@ -122,7 +123,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
       );
       // The header shows one current balance. Trial/paid credit distinctions
       // and post-cancellation expiry remain clearly explained in Billing.
-      if (status === "active" && usage.cancelAtPeriodEnd) {
+      if ((status === "active" && usage.cancelAtPeriodEnd) || usage.paidThroughCancellation) {
         return {
           used: Math.max(0, total - remaining),
           total,
