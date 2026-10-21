@@ -37,6 +37,7 @@ type BillingStatus = {
     trialEndsAt?: string | null;
     trialActive?: boolean;
     paidActive?: boolean;
+    paidThroughCancellation?: boolean;
     paidBillingPeriodReady?: boolean;
     trialEvaluationsUsed?: number;
     trialEvaluationsRemaining?: number | null;
