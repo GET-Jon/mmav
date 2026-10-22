@@ -4638,6 +4638,7 @@ export function EvaluationWorkspace({
 
   const rawCompSearchRecommendation = recommendCompSearchAction({
     includedCount: compSummary.includedCount,
+    primaryCompCount: compSummary.primaryCompCount || 0,
     confidence: String(compSummary.confidence || ""),
     returnedListings: compReturnedListings,
     usableListings: compUsableListings,
@@ -4670,14 +4671,14 @@ export function EvaluationWorkspace({
     .filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip))
     .length;
   const canContinueNationalSearch =
-    compSummary.includedCount < 4 && remainingNationalMarketCount > 0;
+    (compSummary.primaryCompCount || 0) < 4 && remainingNationalMarketCount > 0;
   const compSearchRecommendation = canContinueNationalSearch
     ? {
         action: "discovered-markets" as const,
         title: `Check ${remainingNationalMarketCount} remaining national market${remainingNationalMarketCount === 1 ? "" : "s"}`,
         reason: "National inventory discovery identified markets that have not yet been checked against strict vehicle-match rules.",
       }
-    : automaticCompSearchCompleted && compSummary.includedCount < 4
+    : automaticCompSearchCompleted && (compSummary.primaryCompCount || 0) < 4
       ? {
           action: "manual-review" as const,
           title: "Automatic market checks finished",
