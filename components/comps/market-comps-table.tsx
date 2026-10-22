@@ -388,6 +388,39 @@ export function MarketCompsTable({
     { id: "qualityScore", desc: true },
   ]);
   const [selectedComp, setSelectedComp] = useState<MarketComp | null>(null);
+  const [aiTrimReview, setAiTrimReview] = useState<{ summary: string; differences: string[]; aiEnhanced: boolean; note: string } | null>(null);
+  const [aiTrimReviewLoading, setAiTrimReviewLoading] = useState(false);
+  const [aiTrimReviewError, setAiTrimReviewError] = useState("");
+  async function explainTrimDifference(comp: MarketComp) {
+    const d = comp.marketCheckDetails;
+    if (!d?.targetYear || !d.targetMake || !d.targetModel) {
+      setAiTrimReviewError("Target vehicle details are incomplete; AI review is unavailable for this listing.");
+      return;
+    }
+    setAiTrimReview(null);
+    setAiTrimReviewError("");
+    setAiTrimReviewLoading(true);
+    try {
+      const response = await fetch("/api/evaluations/comp-trim-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target: {year: d.targetYear, make:d.targetMake,model:d.targetModel,trim:d.targetTrim,
+            drivetrain: null, fuelType:d.targetFuelType},
+          candidate:{year:comp.year,make:d.targetMake,model:comp.model,trim:comp.trim,
+            drivetrain:d.drivetrain,fuelType:d.fuelType,engine:d.engine,bodyType:d.bodyType},
+        }),
+      });
+      if (!response.ok) throw new Error("The comparison explanation is temporarily unavailable.");
+      const data = await response.json() as {summary:string;differences:string[];aiEnhanced:boolean;note:string};
+      setAiTrimReview(data);
+    } catch (error) {
+      setAiTrimReviewError(error instanceof Error ? error.message : "Unable to review this listing.");
+    } finally {
+      setAiTrimReviewLoading(false);
+    }
+  }
+
   const primaryIds = useMemo(() => new Set(primaryCompIds), [primaryCompIds]);
 
   const columns = useMemo<ColumnDef<MarketComp>[]>(
@@ -671,7 +704,7 @@ export function MarketCompsTable({
         ? createPortal(
             <div
               className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 py-[5vh] backdrop-blur-sm"
-              onClick={() => setSelectedComp(null)}
+              onClick={() => { setSelectedComp(null); setAiTrimReview(null); setAiTrimReviewError(""); }}
             >
           <div
             role="dialog"
@@ -708,6 +741,25 @@ export function MarketCompsTable({
                 targetMileage={targetMileage}
                 assumptions={assumptions}
               />
+              <section className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-black text-slate-950">Understand this trim comparison</div>
+                <p className="mt-1 text-xs font-semibold text-slate-600">
+                  Ask AI to explain differences using the available listing details. It cannot change the valuation or treat unverified equipment as fact.
+                </p>
+                <button type="button" disabled={aiTrimReviewLoading}
+                  onClick={() => void explainTrimDifference(selectedComp)}
+                  className="mt-3 rounded-lg bg-blue-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+                  {aiTrimReviewLoading ? "Reviewing listing…" : "Explain Trim Differences"}
+                </button>
+                {aiTrimReviewError ? <p role="alert" className="mt-2 text-xs text-red-700">{aiTrimReviewError}</p> : null}
+                {aiTrimReview ? (
+                  <div className="mt-3 text-xs font-semibold leading-5 text-slate-700" aria-live="polite">
+                    <p>{aiTrimReview.summary}</p>
+                    {aiTrimReview.differences.length ? <ul className="mt-2 list-disc pl-4">{aiTrimReview.differences.map((item,index)=><li key={index}>{item}</li>)}</ul> : null}
+                    <p className="mt-2 text-slate-500">{aiTrimReview.aiEnhanced ? "AI-assisted explanation" : "Rules-based explanation"} · {aiTrimReview.note}</p>
+                  </div>
+                ) : null}
+              </section>
 
               {selectedComp.imageUrl ? (
                 <img
