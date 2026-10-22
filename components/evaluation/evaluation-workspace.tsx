@@ -4739,7 +4739,8 @@ export function EvaluationWorkspace({
     }
 
     setCompSearchHandedOff(true);
-    setCompMarketEditorOpen(false);
+    // Keep the search dialog visible so progress and results are not hidden.
+    setCompSearchImprovementStatus("Preparing the next comparison search…");
     setCompSearchImproving(true);
     setAutomaticCompSearchCompleted(false);
     const searchOperationId = `recommended-${evaluationUsageId || "evaluation"}-${Date.now()}`;
@@ -4802,7 +4803,7 @@ export function EvaluationWorkspace({
 
         if (latestIncludedCount >= 4) {
           setCompSearchImprovementStatus(
-            "Reliable market evidence found. The comp set is ready for review.",
+            `Search completed. ${latestIncludedCount} comps are selected. Review their match quality before proceeding to Verdict.`,
           );
           return;
         }
@@ -4952,15 +4953,13 @@ export function EvaluationWorkspace({
             ? "All discovered national markets checked; review evidence and filtering before widening vehicle similarity."
             : "National discovery did not provide more markets. Review evidence and try a different geographic search.",
       );
+    } catch (error) {
+      setCompSearchImprovementStatus(error instanceof Error
+        ? `Search did not complete: ${error.message}`
+        : "Search did not complete. Please try again or use manual controls.");
     } finally {
       setCompSearchImproving(false);
-      // Present completed evidence, not a stale table while requests are running.
-      window.setTimeout(() => {
-        compSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 120);
+      // Do not scroll away from the search outcome while the dialog is open.
     }
   }
 
@@ -6357,11 +6356,11 @@ export function EvaluationWorkspace({
                     >
                       {compSearchImproving
                         ? "Running Search…"
-                        : compActionButtonLabel}}
+                        : compActionButtonLabel}
                     </button>
                   ) : null}
                   {compSearchImprovementStatus ? (
-                    <div className="mt-2 text-[11px] font-bold leading-4 text-blue-900/70">
+                    <div role="status" aria-live="polite" className="mt-3 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-900">
                       {compSearchImprovementStatus}
                     </div>
                   ) : null}
@@ -6398,6 +6397,7 @@ export function EvaluationWorkspace({
                       <p className="mt-2 text-slate-500">Different providers return different data sets. Counts may describe the latest response rather than cumulative search results.</p>
                     </div>
                   </details>
+                  <p className="mt-2 text-[11px] font-semibold text-slate-500">Finding more listings does not automatically increase pricing confidence. Review trim and vehicle match quality before continuing.</p>
                 </div>
 
                 <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
