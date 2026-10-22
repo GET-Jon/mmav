@@ -4936,6 +4936,7 @@ export function EvaluationWorkspace({
           latestIncludedCount = Number(
             validation.includedCount || latestIncludedCount,
           );
+          if (validation.mergedComps) latestPrimaryCount = countClosePeers(validation.mergedComps);
           latestSearchedZips =
             validation.searchedZips || latestSearchedZips;
           remainingNationalMarkets = discovery.recommendedMarkets.filter(
