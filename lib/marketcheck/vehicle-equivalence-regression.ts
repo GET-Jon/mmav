@@ -667,6 +667,36 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
     expected: "supporting",
   },
   {
+    name: "4Runner Base Grade versus Base is same trim",
+    target: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Base Grade" },
+    candidate: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Base" },
+    expected: "direct",
+  },
+  {
+    name: "4Runner Base Grade versus SR5 Premium is different trim",
+    target: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Base Grade" },
+    candidate: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "SR5 Premium" },
+    expected: "near",
+  },
+  {
+    name: "4Runner Base Grade versus Limited is different trim",
+    target: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Base Grade" },
+    candidate: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Limited" },
+    expected: "near",
+  },
+  {
+    name: "4Runner Base Grade versus unknown trim stays supporting",
+    target: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Base Grade" },
+    candidate: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "" },
+    expected: "supporting",
+  },
+  {
+    name: "4Runner Base Grade versus TRD Pro cannot establish equal value",
+    target: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "Base Grade" },
+    candidate: { ...base, year: 2015, make: "Toyota", model: "4Runner", trim: "TRD Pro" },
+    expected: "supporting",
+  },
+  {
     name: "4WD vs 2WD is supporting",
     target: { ...base, make: "Toyota", model: "4Runner", trim: "SR5", drivetrain: "4WD" },
     candidate: { ...base, make: "Toyota", model: "4Runner", trim: "SR5", drivetrain: "2WD" },
