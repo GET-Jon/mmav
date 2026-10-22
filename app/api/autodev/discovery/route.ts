@@ -206,6 +206,7 @@ export async function POST(request: Request) {
   let listings: AutoDevListing[] = [];
   const seenListings = new Set<string>();
   let lastAttempt: DiscoveryAttempt | null = null;
+  let latestCombinedEvidence: ReturnType<typeof buildAutoDevCompCandidates> | null = null;
   const targetMileage = Number(body.targetMileage || 0);
 
   for (const [attemptIndex, attempt] of attempts.entries()) {
@@ -332,6 +333,7 @@ export async function POST(request: Request) {
 
     const checked = buildAutoDevCompCandidates(batch, target, targetMileage);
     const combined = buildAutoDevCompCandidates(listings, target, targetMileage);
+    latestCombinedEvidence = combined;
     attemptsResult.push({
       label: attempt.label, model: attempt.model,
       returned: batch.length, total,
@@ -355,7 +357,7 @@ export async function POST(request: Request) {
     acc[state] = (acc[state] || 0) + 1;
     return acc;
   }, {});
-  const candidateEvidence = buildAutoDevCompCandidates(listings, target, targetMileage);
+  const candidateEvidence = latestCombinedEvidence ?? buildAutoDevCompCandidates(listings, target, targetMileage);
   const total = Math.max(exactTotal, listings.length);
   const metadata = {
     callsMade, attemptResults: attemptsResult,
