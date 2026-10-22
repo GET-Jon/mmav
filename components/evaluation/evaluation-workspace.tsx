@@ -5143,6 +5143,15 @@ export function EvaluationWorkspace({
     return "Current inventory age is broadly in line with recent regional sell-through.";
   })();
 
+  const compActionButtonLabels: Record<string, string> = {
+    "expand-geography": "Search Additional Nearby Markets →",
+    "broaden-vehicle": "Check Alternative Vehicle Names →",
+    "national-discovery": "Find Matching Inventory Nationwide →",
+    "discovered-markets": "Verify National Markets with MarketCheck →",
+    "manual-review": "Review Vehicle Match & Filters →",
+  };
+  const compActionButtonLabel = compActionButtonLabels[compSearchRecommendation.action] || "Improve Comparisons →";
+
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
     auctionSite || null,
@@ -6348,9 +6357,7 @@ export function EvaluationWorkspace({
                     >
                       {compSearchImproving
                         ? "Running Search…"
-                        : compSearchRecommendation.action === "manual-review"
-                          ? "Review Vehicle Match →"
-                          : "Run Recommended Search →"}
+                        : compActionButtonLabel}}
                     </button>
                   ) : null}
                   {compSearchImprovementStatus ? (
@@ -6360,27 +6367,37 @@ export function EvaluationWorkspace({
                   ) : null}
                 </div>
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-                  <div className="font-black text-slate-900">Search evidence</div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
-                    <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
-                    <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
-                    <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
-                    <span>Provider-usable: <b>{compUsableListings}</b></span>
-                    <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
-                    <span>Markets checked: <b>{compSearchRegions}</b></span>
-                    <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
+                  <div className="font-black text-slate-900">What this search found</div>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div><div className="text-[10px] font-bold text-slate-500">Comps selected</div><div className="mt-1 text-lg font-black text-slate-950">{compSummary.includedCount}</div></div>
+                    <div><div className="text-[10px] font-bold text-slate-500">Markets checked</div><div className="mt-1 text-lg font-black text-slate-950">{compSearchRegions}</div></div>
+                    <div><div className="text-[10px] font-bold text-slate-500">Markets to verify</div><div className="mt-1 text-lg font-black text-slate-950">{remainingNationalMarketCount}</div></div>
                   </div>
-                  <div className="mt-2 font-semibold text-slate-600">
-                    Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPrice ?? 0} missing price, {autoDevDiscovery?.candidateDiagnostics?.missingMileage ?? 0} missing mileage, {autoDevDiscovery?.candidateDiagnostics?.missingVin ?? 0} missing VIN, {autoDevDiscovery?.candidateDiagnostics?.missingListingUrl ?? 0} missing listing link, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
-                  </div>
-                  <div className="mt-2 font-semibold text-slate-600">
-                    Rejections (latest provider diagnostics):
-                    {" "}model {compModelMismatchCount},
-                    {" "}generation {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.generationMismatch || 0},
-                    {" "}quality {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.qualityBelowThreshold || 0}.
-                  </div>
-                  <p className="mt-2 text-slate-500">National listings and MarketCheck candidates are different data sets; discovery does not guarantee that the same listings can be retrieved as comps. These counts may represent the latest provider response, not cumulative totals.</p>
+                  <p className="mt-2 font-semibold leading-5 text-slate-600">
+                    National discovery identifies where vehicles are advertised. MarketCheck verification checks those markets for usable retail comparisons; it may not retrieve the same listings.
+                  </p>
+                  <details className="mt-3 rounded-lg border border-slate-200 bg-white">
+                    <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-blue-700">Show full search diagnostics ↓</summary>
+                    <div className="border-t border-slate-200 px-3 py-3">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
+                        <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
+                        <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
+                        <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
+                        <span>Provider-usable: <b>{compUsableListings}</b></span>
+                        <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
+                        <span>Markets checked: <b>{compSearchRegions}</b></span>
+                        <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-600">
+                        Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPrice ?? 0} missing price, {autoDevDiscovery?.candidateDiagnostics?.missingMileage ?? 0} missing mileage, {autoDevDiscovery?.candidateDiagnostics?.missingVin ?? 0} missing VIN, {autoDevDiscovery?.candidateDiagnostics?.missingListingUrl ?? 0} missing listing link, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-600">
+                        Rejections (latest provider diagnostics): model {compModelMismatchCount}, generation {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.generationMismatch || 0}, quality {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.qualityBelowThreshold || 0}.
+                      </div>
+                      <p className="mt-2 text-slate-500">Different providers return different data sets. Counts may describe the latest response rather than cumulative search results.</p>
+                    </div>
+                  </details>
                 </div>
 
                 <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
