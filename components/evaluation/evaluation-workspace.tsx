@@ -4770,10 +4770,11 @@ export function EvaluationWorkspace({
             (market) => !latestSearchedZips.includes(market.zip),
           ) || [];
 
+        // A second deliberate search should check another discovered market
+        // even when four broadly matched comps already exist.
         while (
-          latestIncludedCount < 4 &&
           remainingNationalMarkets.length > 0 &&
-          nationalBatches < 3
+          nationalBatches < 1
         ) {
           const validation = await searchAutoDevRecommendedMarkets(
             discovery,
