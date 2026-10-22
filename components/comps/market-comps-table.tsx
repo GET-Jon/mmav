@@ -536,34 +536,31 @@ export function MarketCompsTable({
       },
       {
         accessorKey: "qualityScore",
-        header: "Match Score",
+        header: "Pricing Relevance",
         cell: ({ row }) => {
-          const score = row.original.qualityScore;
-          const rejected = row.original.equivalenceTier === "reject";
+          const comp = row.original;
+          const rejected = comp.equivalenceTier === "reject";
+          const primary = primaryIds.has(comp.id);
+          const label = rejected
+            ? "Not suitable"
+            : primary
+              ? "Strong pricing peer"
+              : comp.equivalenceTier === "direct"
+                ? "Related vehicle"
+                : comp.equivalenceTier === "near"
+                  ? "Different configuration"
+                  : "Market context";
           const tone = rejected
-            ? "bg-red-100 text-red-700"
-            : score >= 85
-              ? "bg-emerald-100 text-emerald-700"
-              : score >= 70
-                ? "bg-blue-100 text-blue-700"
-                : score >= 60
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-red-100 text-red-700";
+            ? "bg-red-100 text-red-800"
+            : primary
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-slate-100 text-slate-700";
           return (
-            <div className="min-w-[88px]">
-              <span
-                title={
-                  rejected
-                    ? "This listing failed a hard vehicle-identity rule; open Details to see why."
-                    : "Open Details to see why this comp received its score"
-                }
-                className={`inline-flex min-w-9 justify-center rounded-full px-2 py-1 text-xs font-black ${tone}`}
-              >
-                {rejected ? "Rejected" : score}
+            <div className="min-w-[140px]">
+              <span title="Pricing relevance is based on vehicle equivalence and pricing-peer criteria. Open Details for the numerical match score and reasons." className={`inline-flex rounded-full px-2 py-1 text-[11px] font-black ${tone}`}>
+                {label}
               </span>
-              <div className="mt-1 text-[9px] font-bold text-slate-400">
-                {inferredListingConfidence(row.original)} data
-              </div>
+              <div className="mt-1 text-[9px] font-semibold text-slate-500">Details explain why →</div>
             </div>
           );
         },
