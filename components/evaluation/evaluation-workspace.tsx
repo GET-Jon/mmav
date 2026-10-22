@@ -6372,12 +6372,12 @@ export function EvaluationWorkspace({
                       </div>
                       <p className="text-xs font-semibold leading-5 text-slate-600">
                         {compSummary.primaryCompCount === 0
-                          ? "Pricing confidence remains limited because none of the selected listings closely match this vehicle. Compare their trim, drivetrain, model year, and mileage before accepting the estimate."
-                          : "Review the selected listings to confirm they are appropriate pricing comparisons. You can exclude unsuitable listings before proceeding."}
+                          ? "These listings help estimate the market, but none meets all close-pricing requirements. Lot Logic recommends checking for more equivalent trims and configurations."
+                          : "Lot Logic has found close pricing peers. You can review or exclude a listing before continuing."}
                       </p>
                       {remainingNationalMarketCount > 0 && compSearchRecommendation.action === "discovered-markets" ? (
                         <p className="text-xs font-semibold text-blue-800">
-                          This search pass is complete; {remainingNationalMarketCount} discovered market{remainingNationalMarketCount === 1 ? " remains" : "s remain"} available to check.
+                          This pass finished. {remainingNationalMarketCount} other promising market{remainingNationalMarketCount === 1 ? " remains" : "s remain"} to check.
                         </p>
                       ) : null}
                       <div className="flex flex-wrap gap-2">
@@ -6405,8 +6405,9 @@ export function EvaluationWorkspace({
                     </div>
                   ) : null}
                 </div>
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-                  <div className="font-black text-slate-900">What this search found</div>
+                <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                  <summary className="cursor-pointer font-black text-blue-800">See search coverage and technical details ↓</summary>
+                  <div className="mt-3 font-black text-slate-900">Search coverage</div>
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     <div><div className="text-[10px] font-bold text-slate-500">Comps selected</div><div className="mt-1 text-lg font-black text-slate-950">{compSummary.includedCount}</div></div>
                     <div><div className="text-[10px] font-bold text-slate-500">Markets checked</div><div className="mt-1 text-lg font-black text-slate-950">{compSearchRegions}</div></div>
@@ -6437,8 +6438,8 @@ export function EvaluationWorkspace({
                       <p className="mt-2 text-slate-500">Different providers return different data sets. Counts may describe the latest response rather than cumulative search results.</p>
                     </div>
                   </details>
-                  <p className="mt-2 text-[11px] font-semibold text-slate-500">Finding more listings does not automatically increase pricing confidence. Review trim and vehicle match quality before continuing.</p>
-                </div>
+                  <p className="mt-2 text-[11px] font-semibold text-slate-500">More listings do not necessarily mean stronger pricing evidence.</p>
+                </details>
 
                 <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
                   <summary className="cursor-pointer list-none px-4 py-4">
@@ -7696,7 +7697,9 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading || compSearchImproving
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} comps · ${compSummary.primaryCompCount || 0} close matches · ${marketEvidenceDisplay}`
+                          ? compSummary.primaryCompCount >= 4
+                            ? "Market pricing supported by close comparisons"
+                            : "Market estimate needs verification"
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7805,7 +7808,7 @@ export function EvaluationWorkspace({
                         ) : compSummary.includedCount > 0 ? (
                           <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
                             <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
-                            <span>Limited close matches. This estimate uses the broader market and may change as better comparisons are found.</span>
+                            <span>Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate.</span>
                           </div>
                         ) : null}
                         {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
