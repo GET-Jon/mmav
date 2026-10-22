@@ -208,30 +208,27 @@ function CompFitExplanation({
           <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
             Why Lot Logic considers this listing
           </div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-950">
-              {rejected ? "Rejected" : comp.qualityScore}
-            </span>
-            <span className="text-sm font-black text-slate-500">
-              {rejected ? "from valuation" : "/ 100 listing relevance score"}
-            </span>
+          <div className="mt-2 text-xl font-black text-slate-950">
+            {rejected ? "Not suitable for pricing" :
+              comp.equivalenceTier === "direct" ? "Same vehicle configuration" :
+              comp.equivalenceTier === "near" ? "Related vehicle — different trim or configuration" :
+              "Supporting market evidence"}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-black ${tierTone(comp)}`}>
-              {tierLabel(comp)}
-            </span>
-            <span className="text-sm font-bold text-blue-900">
-              {rejected ? "Vehicle identity rule failed" : fitLabel(comp.qualityScore)}
-            </span>
-          </div>
+          <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+            {rejected
+              ? "This listing failed a vehicle identity requirement."
+              : comp.equivalenceTier === "direct"
+                ? "Vehicle identity is aligned. Pricing suitability also depends on mileage, year and adjustment reliability."
+                : "A high relevance score does not mean this vehicle has the same retail value as your subject."}
+          </p>
         </div>
 
         <div className="rounded-xl border border-blue-100 bg-white px-4 py-3">
           <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
-            Listing confidence
+            Listing data completeness
           </div>
           <div className="mt-1 text-sm font-black text-slate-900">
-            {confidence}
+            {confidence === "High" ? "Well documented" : confidence === "Medium" ? "Partially documented" : "Limited information"}
           </div>
           <div className="mt-1 max-w-52 text-xs font-medium text-slate-500">
             Data completeness is separate from vehicle equivalence.
@@ -256,7 +253,7 @@ function CompFitExplanation({
                 What lowered this score
               </div>
               <div className="mt-0.5 text-xs font-semibold text-amber-900">
-                Match Score starts at 100. Only the deductions below reduce it.
+                Technical relevance score (not a pricing-confidence percentage). Only deductions below reduce it.
               </div>
             </div>
             <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700">
