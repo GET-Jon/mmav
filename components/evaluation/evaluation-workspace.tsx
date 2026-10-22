@@ -4803,7 +4803,7 @@ export function EvaluationWorkspace({
 
         if (latestIncludedCount >= 4) {
           setCompSearchImprovementStatus(
-            `Search completed. ${latestIncludedCount} comps are selected. Review their match quality before proceeding to Verdict.`,
+            `This search pass finished with ${latestIncludedCount} selected comps. Choose whether to review the listings, check more markets, or continue to Verdict.`,
           );
           return;
         }
@@ -6362,6 +6362,45 @@ export function EvaluationWorkspace({
                   {compSearchImprovementStatus ? (
                     <div role="status" aria-live="polite" className="mt-3 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-900">
                       {compSearchImprovementStatus}
+                    </div>
+                  ) : null}
+                  {!compSearchImproving && compSearchImprovementStatus ? (
+                    <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="text-sm font-black text-slate-950">
+                        {compSummary.primaryCompCount || 0} close matches among {compSummary.includedCount} selected comps
+                      </div>
+                      <p className="text-xs font-semibold leading-5 text-slate-600">
+                        {compSummary.primaryCompCount === 0
+                          ? "Pricing confidence remains limited because none of the selected listings closely match this vehicle. Compare their trim, drivetrain, model year, and mileage before accepting the estimate."
+                          : "Review the selected listings to confirm they are appropriate pricing comparisons. You can exclude unsuitable listings before proceeding."}
+                      </p>
+                      {remainingNationalMarketCount > 0 && compSearchRecommendation.action === "discovered-markets" ? (
+                        <p className="text-xs font-semibold text-blue-800">
+                          This search pass is complete; {remainingNationalMarketCount} discovered market{remainingNationalMarketCount === 1 ? " remains" : "s remain"} available to check.
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => {
+                          setCompMarketEditorOpen(false);
+                          window.setTimeout(() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                        }} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">
+                          Review Selected Comps ↓
+                        </button>
+                        {compSearchRecommendation.action !== "complete" &&
+                          compSearchRecommendation.action !== "manual-review" &&
+                          !(automaticCompSearchCompleted && !canContinueNationalSearch) ? (
+                          <button type="button" onClick={() => void improveCompSearch()}
+                            className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-black text-blue-800">
+                            Search More Markets →
+                          </button>
+                        ) : null}
+                        <button type="button" onClick={() => {
+                          setCompMarketEditorOpen(false);
+                          void continueToVerdict();
+                        }} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-900">
+                          Continue to Verdict (review confidence) →
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                 </div>
