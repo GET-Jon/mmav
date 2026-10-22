@@ -50,10 +50,10 @@ function DetailItem({ label, value }: { label: string; value: unknown }) {
 }
 
 function fitLabel(score: number) {
-  if (score >= 85) return "Excellent match";
-  if (score >= 70) return "Good match";
-  if (score >= 60) return "Usable match";
-  return "Weak match";
+  if (score >= 85) return "High relevance score";
+  if (score >= 70) return "Good relevance score";
+  if (score >= 60) return "Moderate relevance score";
+  return "Low relevance score";
 }
 
 function inferredListingConfidence(
@@ -206,14 +206,14 @@ function CompFitExplanation({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
-            Why this comp ranks here
+            Why Lot Logic considers this listing
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-950">
               {rejected ? "Rejected" : comp.qualityScore}
             </span>
             <span className="text-sm font-black text-slate-500">
-              {rejected ? "from valuation" : "/ 100 Match Score"}
+              {rejected ? "from valuation" : "/ 100 listing relevance score"}
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -785,14 +785,14 @@ export function MarketCompsTable({
                   <DetailItem label="Listing Date" value={selectedComp.marketCheckDetails?.listingDate} />
                   <DetailItem label="Last Seen" value={selectedComp.marketCheckDetails?.lastSeenDate} />
                   <DetailItem
-                    label="Match Score"
+                    label="Listing relevance score"
                     value={
                       selectedComp.equivalenceTier === "reject"
                         ? "Rejected by vehicle identity"
                         : selectedComp.qualityScore
                     }
                   />
-                  <DetailItem label="Listing Confidence" value={inferredListingConfidence(selectedComp)} />
+                  <DetailItem label="Listing data completeness" value={inferredListingConfidence(selectedComp) === "High" ? "Well documented" : inferredListingConfidence(selectedComp) === "Medium" ? "Partially documented" : "Limited information"} />
                   <DetailItem label="Included" value={selectedComp.included} />
                   <DetailItem
                     label="Adjusted Value"
