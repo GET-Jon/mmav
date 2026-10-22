@@ -7697,7 +7697,7 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading || compSearchImproving
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? compSummary.primaryCompCount >= 4
+                          ? (compSummary.primaryCompCount || 0) >= 4
                             ? "Market pricing supported by close comparisons"
                             : "Market estimate needs verification"
                           : "Market evidence"}
