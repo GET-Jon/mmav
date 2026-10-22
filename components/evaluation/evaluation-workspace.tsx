@@ -3396,10 +3396,19 @@ export function EvaluationWorkspace({
     }
 
     const searched = new Set(
-      searchedZipsOverride || marketCheckSearchMeta?.searchedZips || [],
+      (searchedZipsOverride || marketCheckSearchMeta?.searchedZips || [])
+        .map((zip) => String(zip).trim()),
     );
+    // Discovery can identify multiple clusters with the same ZIP. Verify a
+    // market once per pass rather than spending duplicate provider requests.
+    const selectedZips = new Set<string>();
     const regions = discovery.recommendedMarkets
-      .filter((market) => !searched.has(market.zip))
+      .filter((market) => {
+        const zip = String(market.zip || "").trim();
+        if (!zip || searched.has(zip) || selectedZips.has(zip)) return false;
+        selectedZips.add(zip);
+        return true;
+      })
       .slice(0, 3)
       .map((market, index) => ({
         market: `${market.market} · Auto.dev discovery`,
@@ -3431,13 +3440,10 @@ export function EvaluationWorkspace({
     });
 
     setAutoDevDiscoveryStatus(
-      "MarketCheck validation completed in " +
-        regions
-          .map((region) =>
-            region.market.replace(" · Auto.dev discovery", ""),
-          )
-          .join(", ") +
-        ".",
+      outcome
+        ? "MarketCheck verification completed in " +
+          regions.map((region) => region.market.replace(" · Auto.dev discovery", "")).join(", ") + "."
+        : "MarketCheck could not complete this verification pass. No additional market was confirmed as checked.",
     );
 
     return outcome;
