@@ -4805,8 +4805,13 @@ export function EvaluationWorkspace({
             validation.includedCount || latestIncludedCount,
           );
           if (validation.mergedComps) latestPrimaryCount = countClosePeers(validation.mergedComps);
+          const previousZipCount = new Set(latestSearchedZips).size;
           latestSearchedZips =
             validation.searchedZips || latestSearchedZips;
+          if (new Set(latestSearchedZips).size <= previousZipCount) {
+            setCompSearchImprovementStatus("This verification pass did not confirm any new markets. Review the current evidence or try again.");
+            break;
+          }
           remainingNationalMarkets =
             discovery?.recommendedMarkets?.filter(
               (market) => !latestSearchedZips.includes(market.zip),
@@ -4943,8 +4948,13 @@ export function EvaluationWorkspace({
             validation.includedCount || latestIncludedCount,
           );
           if (validation.mergedComps) latestPrimaryCount = countClosePeers(validation.mergedComps);
+          const previousZipCount = new Set(latestSearchedZips).size;
           latestSearchedZips =
             validation.searchedZips || latestSearchedZips;
+          if (new Set(latestSearchedZips).size <= previousZipCount) {
+            setCompSearchImprovementStatus("This verification pass did not confirm any new markets. Review the current evidence or try again.");
+            break;
+          }
           remainingNationalMarkets = discovery.recommendedMarkets.filter(
             (market) => !latestSearchedZips.includes(market.zip),
           );
