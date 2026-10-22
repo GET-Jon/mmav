@@ -4834,7 +4834,7 @@ export function EvaluationWorkspace({
         setAutomaticCompSearchCompleted(remainingNationalMarkets.length === 0);
         setCompSearchImprovementStatus(
           remainingNationalMarkets.length
-            ? `This pass reached its search limit; ${remainingNationalMarkets.length} discovered market(s) remain. Run Recommended Search again to continue.`
+            ? `This search pass is complete. ${remainingNationalMarkets.length} identified market(s) remain available.`
             : "All recommended national markets have been checked. Review rejection reasons or adjust the manual search.",
         );
         return;
@@ -4973,7 +4973,7 @@ export function EvaluationWorkspace({
       setAutomaticCompSearchCompleted(remainingDiscovered === 0);
       setCompSearchImprovementStatus(
         remainingDiscovered
-          ? `${remainingDiscovered} discovered national market(s) still need validation. Run Recommended Search again to continue.`
+          ? `This search pass is complete. ${remainingDiscovered} identified market(s) remain available.`
           : discovery
             ? "All discovered national markets checked; review evidence and filtering before widening vehicle similarity."
             : "National discovery did not provide more markets. Review evidence and try a different geographic search.",
@@ -6363,71 +6363,49 @@ export function EvaluationWorkspace({
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="px-6 py-5">
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">
-                    Recommended next step
-                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">Comparison search</div>
                   <div className="mt-1 text-base font-black text-slate-950">
-                    {compSearchRecommendation.title}
+                    {compSearchImproving ? "Searching for better matches…" : (compSummary.primaryCompCount || 0) >= 4 ? "Close pricing matches found" : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete" ? "Review the market evidence" : "More close matches needed"}
                   </div>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
-                    {compSearchRecommendation.reason}
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
+                    {compSummary.primaryCompCount || 0} close pricing matches · {compSummary.includedCount} related listings selected
                   </p>
-                  {compSearchRecommendation.action !== "complete" ? (
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-600">
+                    {compSearchImproving
+                      ? compSearchImprovementStatus || "Checking additional market evidence."
+                      : compSearchRecommendation.action === "discovered-markets"
+                        ? `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
+                        : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete"
+                          ? "No further automatic search is recommended. Review the listings or continue with the stated confidence."
+                          : compSearchRecommendation.reason}
+                  </p>
+                  {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
+                    <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
+                  ) : null}
+                  {compSearchRecommendation.action !== "complete" && !(automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review") ? (
                     <button
                       type="button"
                       onClick={() => void improveCompSearch()}
                       disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
-                      className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
+                      className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
                     >
-                      {compSearchImproving
-                        ? "Running Search…"
-                        : compActionButtonLabel}
+                      {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Review Search Settings" : remainingNationalMarketCount > 0 ? `Check ${remainingNationalMarketCount} Remaining Market${remainingNationalMarketCount === 1 ? "" : "s"} →` : "Improve Comparisons →"}
                     </button>
                   ) : null}
-                  {compSearchImprovementStatus ? (
-                    <div role="status" aria-live="polite" className="mt-3 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-900">
-                      {compSearchImprovementStatus}
-                    </div>
-                  ) : null}
-                  {!compSearchImproving && compSearchImprovementStatus ? (
-                    <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                      <div className="text-sm font-black text-slate-950">
-                        {compSummary.primaryCompCount || 0} close matches among {compSummary.includedCount} selected comps
-                      </div>
-                      <p className="text-xs font-semibold leading-5 text-slate-600">
-                        {compSummary.primaryCompCount === 0
-                          ? "These listings help estimate the market, but none meets all close-pricing requirements. Lot Logic recommends checking for more equivalent trims and configurations."
-                          : "Lot Logic has found close pricing peers. You can review or exclude a listing before continuing."}
-                      </p>
-                      {remainingNationalMarketCount > 0 && compSearchRecommendation.action === "discovered-markets" ? (
-                        <p className="text-xs font-semibold text-blue-800">
-                          This pass finished. {remainingNationalMarketCount} other promising market{remainingNationalMarketCount === 1 ? " remains" : "s remain"} to check.
-                        </p>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => {
-                          setCompMarketEditorOpen(false);
-                          window.setTimeout(() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                        }} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">
-                          Review Selected Comps ↓
-                        </button>
-                        {compSearchRecommendation.action !== "complete" &&
-                          compSearchRecommendation.action !== "manual-review" &&
-                          !(automaticCompSearchCompleted && !canContinueNationalSearch) ? (
-                          <button type="button" onClick={() => void improveCompSearch()}
-                            className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-black text-blue-800">
-                            Search More Markets →
-                          </button>
-                        ) : null}
-                        <button type="button" onClick={() => {
-                          setCompMarketEditorOpen(false);
-                          void continueToVerdict();
-                        }} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-900">
-                          Continue to Verdict (review confidence) →
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
+                    <button type="button" onClick={() => {
+                      setCompMarketEditorOpen(false);
+                      window.setTimeout(() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                    }} className="text-blue-800 underline underline-offset-2">
+                      Review comparable listings
+                    </button>
+                    <button type="button" onClick={() => {
+                      setCompMarketEditorOpen(false);
+                      void continueToVerdict();
+                    }} className="text-slate-600 underline underline-offset-2">
+                      Continue to Verdict
+                    </button>
+                  </div>
                 </div>
                 <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
                   <summary className="cursor-pointer font-black text-blue-800">See search coverage and technical details ↓</summary>
