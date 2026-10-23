@@ -1067,6 +1067,7 @@ export function EvaluationWorkspace({
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
+  const [automaticMarketPassFinished, setAutomaticMarketPassFinished] = useState(false);
   const [automaticCompSearchCompleted, setAutomaticCompSearchCompleted] =
     useState(false);
   const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
@@ -4043,6 +4044,7 @@ export function EvaluationWorkspace({
 
   function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
     automaticMarketSearchKeyRef.current = "";
+    setAutomaticMarketPassFinished(false);
     // Prevent stale search state from carrying into another vehicle.
     marketCheckInFlightRef.current = false;
 
@@ -4735,7 +4737,7 @@ export function EvaluationWorkspace({
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
   const hasLowCompConfidence = hasLimitedMarketEvidence;
 
-  async function improveCompSearch() {
+  async function improveCompSearch(isAutomatic = false) {
     if (
       compSearchImproving ||
       marketCheckLoading ||
@@ -4753,6 +4755,7 @@ export function EvaluationWorkspace({
     setCompSearchImprovementStatus("Preparing the next comparison search…");
     setCompSearchImproving(true);
     setAutomaticCompSearchCompleted(false);
+    if (isAutomatic) setAutomaticMarketPassFinished(false);
     const searchOperationId = `recommended-${evaluationUsageId || "evaluation"}-${Date.now()}`;
     // A normal evaluation may make up to three additional MarketCheck calls
     // after the initial (up to three-call) regional search.
@@ -4879,7 +4882,7 @@ export function EvaluationWorkspace({
         }
       }
 
-      if (latestRegionCount < 3 && additionalMarketCheckCalls < additionalMarketCheckBudget) {
+      if (latestRegionCount < 3 && latestIncludedCount === 0 && additionalMarketCheckCalls < additionalMarketCheckBudget) {
         setCompSearchImprovementStatus(
           "Checking the next best nearby markets before going national…",
         );
@@ -4996,6 +4999,7 @@ export function EvaluationWorkspace({
         ? `Search did not complete: ${error.message}`
         : "Search did not complete. Please try again or use manual controls.");
     } finally {
+      if (isAutomatic) setAutomaticMarketPassFinished(true);
       setCompSearchImproving(false);
       // Do not scroll away from the search outcome while the dialog is open.
     }
@@ -5192,7 +5196,7 @@ export function EvaluationWorkspace({
     const key = [evaluationUsageId || vin || vehicleModel, targetMileage, marketCheckSearchMeta.searchStage].join(":");
     if (automaticMarketSearchKeyRef.current === key) return;
     automaticMarketSearchKeyRef.current = key;
-    void improveCompSearch();
+    void improveCompSearch(true);
   // Runs when initial MarketCheck results finish; internal guards prevent repeat requests.
   }, [activeStage, marketCheckLoading, evaluationRunning, compSearchImproving,
       marketCheckSearchMeta, compSearchHandedOff, automaticCompSearchCompleted,
@@ -6405,7 +6409,7 @@ export function EvaluationWorkspace({
                     {compSearchImproving
                       ? compSearchImprovementStatus || "Checking additional market evidence."
                       : compSearchRecommendation.action === "discovered-markets"
-                        ? `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
+                        ? automaticMarketPassFinished ? `Automatic search finished. ${remainingNationalMarketCount} additional market${remainingNationalMarketCount === 1 ? "" : "s"} available if you want to search further.` : `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
                         : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete"
                           ? "No further automatic search is recommended. Review the listings or continue with the stated confidence."
                           : compSearchRecommendation.reason}
@@ -6420,7 +6424,7 @@ export function EvaluationWorkspace({
                       disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
                       className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
                     >
-                      {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Review Search Settings" : remainingNationalMarketCount > 0 ? `Check ${remainingNationalMarketCount} Remaining Market${remainingNationalMarketCount === 1 ? "" : "s"} →` : "Improve Comparisons →"}
+                      {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Review Search Settings" : remainingNationalMarketCount > 0 ? (automaticMarketPassFinished ? "Search Further (Optional) →" : `Check ${remainingNationalMarketCount} Remaining Market${remainingNationalMarketCount === 1 ? "" : "s"} →`) : "Improve Comparisons →"}
                     </button>
                   ) : null}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
