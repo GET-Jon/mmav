@@ -2,7 +2,7 @@
 import {useEffect,useState} from "react";
 import {defaultDealSources,normalizeDealSources,type DealSourceProfile} from "@/lib/deal-source-profiles";
 
-type Props={onClose?:()=>;onSaved?:(sources:DealSourceProfile[])=>void;embedded?:boolean};
+type Props={onClose?:()=>void;onSaved?:(sources:DealSourceProfile[])=>void;embedded?:boolean};
 const keys=[["auctionFee","Auction / transaction fee"],["transport","Transport"],["recon","Recon reserve"],["detailAdmin","Detail / admin"],["generalRiskReserve","Contingency reserve"]] as const;
 
 export function DealSourcesEditor({onClose,onSaved,embedded=false}:Props) {
