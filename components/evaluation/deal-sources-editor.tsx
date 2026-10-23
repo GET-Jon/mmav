@@ -2,10 +2,10 @@
 import {useEffect,useState} from "react";
 import {defaultDealSources,normalizeDealSources,type DealSourceProfile} from "@/lib/deal-source-profiles";
 
-type Props={onClose?:()=>void;onSaved?:(sources:DealSourceProfile[])=>void;embedded?:boolean};
+type Props={onClose?:()=>void;onSaved?:(sources:DealSourceProfile[])=>void;onApply?:(profile:DealSourceProfile)=>void;embedded?:boolean};
 const keys=[["auctionFee","Auction / transaction fee"],["transport","Transport"],["recon","Recon reserve"],["detailAdmin","Detail / admin"],["generalRiskReserve","Contingency reserve"]] as const;
 
-export function DealSourcesEditor({onClose,onSaved,embedded=false}:Props) {
+export function DealSourcesEditor({onClose,onSaved,onApply,embedded=false}:Props) {
   const [sources,setSources]=useState<DealSourceProfile[]>(defaultDealSources);
   const [selected,setSelected]=useState(defaultDealSources[0].id);
   const [loading,setLoading]=useState(true);
@@ -52,6 +52,10 @@ export function DealSourcesEditor({onClose,onSaved,embedded=false}:Props) {
       </div>:<p className="text-xs text-slate-500">Only dealership administrators can edit these defaults.</p>}
       {status?<p role="status" className="text-xs font-semibold text-blue-800">{status}</p>:null}
       {canEdit?<button type="button" onClick={()=>void save()} disabled={saving||sources.length===0} className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{saving?"Saving…":"Save Defaults"}</button>:null}
+      {onApply && current ? <button type="button" onClick={()=>onApply(current)}
+        className="w-full rounded-xl border border-blue-300 bg-white px-4 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">
+        Apply to This Vehicle
+      </button>:null}
     </div>}
   </div>;
 }
