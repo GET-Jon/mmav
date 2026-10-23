@@ -3388,6 +3388,7 @@ export function EvaluationWorkspace({
     discoveryOverride: typeof autoDevDiscovery = autoDevDiscovery,
     searchedZipsOverride?: string[],
     searchOperationId?: string,
+    maxMarkets = 3,
   ) {
     const discovery = discoveryOverride;
 
@@ -3410,7 +3411,7 @@ export function EvaluationWorkspace({
         selectedZips.add(zip);
         return true;
       })
-      .slice(0, 3)
+      .slice(0, Math.max(0, Math.min(3, maxMarkets)))
       .map((market, index) => ({
         market: `${market.market} · Auto.dev discovery`,
         zip: market.zip,
@@ -4803,9 +4804,10 @@ export function EvaluationWorkspace({
             discovery,
             latestSearchedZips,
             `${searchOperationId}-national-${nationalBatches + 1}`,
+            additionalMarketCheckBudget - additionalMarketCheckCalls,
           );
           nationalBatches += 1;
-          additionalMarketCheckCalls += Math.min(3, remainingNationalMarkets.length);
+          additionalMarketCheckCalls += Math.min(3, remainingNationalMarkets.length, additionalMarketCheckBudget - additionalMarketCheckCalls);
 
           if (!validation) break;
 
