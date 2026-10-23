@@ -771,7 +771,7 @@ export function EvaluationWorkspace({
   );
 
   const [auctionSite, setAuctionSite] = useState(
-    initialSavedPayload?.auctionSite || "auction-local",
+    initialSavedPayload?.auctionSite || "Auction — Local",
   );
 
   const [finalTargetOverride, setFinalTargetOverride] = useState<number | null>(
@@ -1937,7 +1937,7 @@ export function EvaluationWorkspace({
     const profile = dealSourceForValue(dealSources,value);
     if (profile && manuallyEditedCostsRef.current &&
         !window.confirm("Apply this source's default costs? This replaces your manual cost adjustments for the current vehicle.")) return;
-    setAuctionSite(profile?.id || value);
+    setAuctionSite(profile?.name || value);
     if(profile) setEvaluation(previous=>({...previous,costs:{
       ...previous.costs,auctionFee:profile.auctionFee,transport:profile.transport,
       recon:profile.recon,detailAdmin:profile.detailAdmin,
@@ -1947,7 +1947,7 @@ export function EvaluationWorkspace({
   }
   function dealSourceChoices() {
     return <>
-      {dealSources.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
+      {dealSources.map(profile=><option key={profile.id} value={profile.name}>{profile.name}</option>)}
       {!dealSourceForValue(dealSources,auctionSite) && auctionSite?<option value={auctionSite}>{auctionSite} (previous source)</option>:null}
       <option value="__manage__">⚙ Manage Sources…</option>
     </>;
@@ -2229,15 +2229,16 @@ export function EvaluationWorkspace({
       },
     };
 
-    setEvaluation(
-      matchingCostDefault
-        ? applyCostDefaultToEvaluation(
-            baseEvaluation,
-            matchingCostDefault,
-            activeAssumptions,
-          )
-        : baseEvaluation,
-    );
+    const classifiedEvaluation = matchingCostDefault
+      ? applyCostDefaultToEvaluation(baseEvaluation,matchingCostDefault,activeAssumptions)
+      : baseEvaluation;
+    const selectedSource = dealSourceForValue(dealSources,auctionSite);
+    setEvaluation(selectedSource ? {...classifiedEvaluation,costs:{
+      ...classifiedEvaluation.costs,
+      auctionFee:selectedSource.auctionFee,transport:selectedSource.transport,
+      recon:selectedSource.recon,detailAdmin:selectedSource.detailAdmin,
+      generalRiskReserve:selectedSource.generalRiskReserve,
+    }} : classifiedEvaluation);
 
     setTargetMileage((previous) => previous);
     setFinalTargetOverride(null);
