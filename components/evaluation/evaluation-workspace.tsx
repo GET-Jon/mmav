@@ -6417,27 +6417,30 @@ export function EvaluationWorkspace({
                   {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
                     <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
                   ) : null}
-                  {compSearchRecommendation.action === "manual-review" && !compSearchImproving ? (
+                  <div className="mt-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => void improveCompSearch()}
+                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading ||
+                        compSearchRecommendation.action === "complete" ||
+                        (automaticCompSearchCompleted && !canContinueNationalSearch)}
+                      className="min-h-12 flex-1 rounded-xl bg-blue-700 px-3 py-3 text-center text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {compSearchImproving ? "Searching…" : "Search Further (Optional) →"}
+                    </button>
+                    <span className="shrink-0 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">or</span>
                     <button
                       type="button"
                       onClick={() => {
                         setCompMarketEditorOpen(false);
                         void continueToVerdict();
                       }}
-                      className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800"
+                      disabled={verdictTransitioning || compSearchImproving}
+                      className="min-h-12 flex-1 rounded-xl border border-blue-300 bg-white px-3 py-3 text-center text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50"
                     >
-                      Continue to Verdict →
+                      {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
                     </button>
-                  ) : compSearchRecommendation.action !== "complete" && !(automaticCompSearchCompleted && !canContinueNationalSearch) ? (
-                    <button
-                      type="button"
-                      onClick={() => void improveCompSearch()}
-                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
-                      className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
-                    >
-                      {compSearchImproving ? "Searching…" : compSearchRecommendation.action === "manual-review" ? "Review Search Settings" : remainingNationalMarketCount > 0 ? (automaticMarketPassFinished ? "Search Further (Optional) →" : `Check ${remainingNationalMarketCount} Remaining Market${remainingNationalMarketCount === 1 ? "" : "s"} →`) : "Improve Comparisons →"}
-                    </button>
-                  ) : null}
+                  </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
                     <button type="button" onClick={() => {
                       setCompMarketEditorOpen(false);
@@ -6445,19 +6448,10 @@ export function EvaluationWorkspace({
                     }} className="text-blue-800 underline underline-offset-2">
                       Review comparable listings
                     </button>
-                    {compSearchRecommendation.action === "manual-review" ? (
-                      <button type="button" onClick={openCompVehicleMatchEditor}
-                        className="text-slate-600 underline underline-offset-2">
-                        Adjust search settings
-                      </button>
-                    ) : (
-                      <button type="button" onClick={() => {
-                        setCompMarketEditorOpen(false);
-                        void continueToVerdict();
-                      }} className="text-slate-600 underline underline-offset-2">
-                        Continue to Verdict
-                      </button>
-                    )}
+                    <button type="button" onClick={openCompVehicleMatchEditor}
+                      className="text-slate-600 underline underline-offset-2">
+                      Adjust search settings
+                    </button>
                   </div>
                 </div>
                 <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
