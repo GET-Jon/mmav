@@ -8051,7 +8051,22 @@ export function EvaluationWorkspace({
           {dealSourcesOpen ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6">
           <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto">
-            <DealSourcesEditor onClose={()=>setDealSourcesOpen(false)} onSaved={sources=>setDealSources(sources)}
+            <DealSourcesEditor onClose={()=>setDealSourcesOpen(false)} onSaved={sources=>{
+                const previousSource=dealSourceForValue(dealSources,auctionSite);
+                setDealSources(sources);
+                const updated=previousSource?sources.find(source=>source.id===previousSource.id):null;
+                if (updated) {
+                  setAuctionSite(updated.name);
+                  if (window.confirm("Defaults saved. Apply these updated costs to the current vehicle too?")) {
+                    setEvaluation(previous=>({...previous,costs:{
+                      ...previous.costs,auctionFee:updated.auctionFee,transport:updated.transport,
+                      recon:updated.recon,detailAdmin:updated.detailAdmin,
+                      generalRiskReserve:updated.generalRiskReserve,
+                    }}));
+                    manuallyEditedCostsRef.current=false;
+                  }
+                }
+              }}
               onApply={profile=>{
                 if (manuallyEditedCostsRef.current && !window.confirm("Replace manually edited costs for this vehicle?")) return;
                 setAuctionSite(profile.name);
