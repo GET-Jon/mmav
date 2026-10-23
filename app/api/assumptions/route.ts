@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const normalized = normalizeAssumptions(body.assumptions);
     const { data, error } = await admin.from("company_assumptions").upsert({
       company_id: company.companyId,
-      assumptions: { ...normalized, dealershipProfile: existing.profile },
+      assumptions: { ...normalized, dealSources: existing.raw?.dealSources, dealershipProfile: existing.profile },
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     }, { onConflict: "company_id" }).select("assumptions,updated_at").single();
