@@ -1056,6 +1056,7 @@ export function EvaluationWorkspace({
   } | null>(null);
 
   const marketCheckInFlightRef = useRef(false);
+  const automaticMarketSearchKeyRef = useRef("");
   const vehicleIdentityRequestVinRef = useRef("");
   const vehicleIdentityProfilePromiseRef =
     useRef<Promise<VehicleIdentityProfile> | null>(null);
@@ -4040,6 +4041,7 @@ export function EvaluationWorkspace({
   }
 
   function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
+    automaticMarketSearchKeyRef.current = "";
     // Prevent stale search state from carrying into another vehicle.
     marketCheckInFlightRef.current = false;
 
@@ -4751,6 +4753,10 @@ export function EvaluationWorkspace({
     setCompSearchImproving(true);
     setAutomaticCompSearchCompleted(false);
     const searchOperationId = `recommended-${evaluationUsageId || "evaluation"}-${Date.now()}`;
+    // A normal evaluation may make up to three additional MarketCheck calls
+    // after the initial (up to three-call) regional search.
+    const additionalMarketCheckBudget = 3;
+    let additionalMarketCheckCalls = 0;
 
     try {
       if (compSearchRecommendation.action === "manual-review") {
@@ -4790,7 +4796,8 @@ export function EvaluationWorkspace({
         // even when four broadly matched comps already exist.
         while (
           remainingNationalMarkets.length > 0 &&
-          nationalBatches < 1
+          nationalBatches < 1 &&
+          additionalMarketCheckCalls < additionalMarketCheckBudget
         ) {
           const validation = await searchAutoDevRecommendedMarkets(
             discovery,
@@ -4798,6 +4805,7 @@ export function EvaluationWorkspace({
             `${searchOperationId}-national-${nationalBatches + 1}`,
           );
           nationalBatches += 1;
+          additionalMarketCheckCalls += Math.min(3, remainingNationalMarkets.length);
 
           if (!validation) break;
 
@@ -4869,11 +4877,12 @@ export function EvaluationWorkspace({
         }
       }
 
-      if (latestRegionCount < 5) {
+      if (latestRegionCount < 3 && additionalMarketCheckCalls < additionalMarketCheckBudget) {
         setCompSearchImprovementStatus(
           "Checking the next best nearby markets before going national…",
         );
         const expanded = await expandMarketCheckSearch(searchOperationId);
+        additionalMarketCheckCalls += Math.min(3, compExpansionMarketsRemaining);
         latestIncludedCount = Number(
           expanded?.includedCount || latestIncludedCount,
         );
@@ -4927,7 +4936,8 @@ export function EvaluationWorkspace({
         while (
           latestPrimaryCount < 4 &&
           remainingNationalMarkets.length > 0 &&
-          nationalBatches < 3
+          nationalBatches < 3 &&
+          additionalMarketCheckCalls < additionalMarketCheckBudget
         ) {
           setCompSearchImprovementStatus(
             nationalBatches === 0
@@ -4941,6 +4951,7 @@ export function EvaluationWorkspace({
             `${searchOperationId}-national-${nationalBatches + 1}`,
           );
           nationalBatches += 1;
+          additionalMarketCheckCalls += Math.min(3, remainingNationalMarkets.length);
 
           if (!validation) break;
 
@@ -5166,6 +5177,24 @@ export function EvaluationWorkspace({
     }
     return "Current inventory age is broadly in line with recent regional sell-through.";
   })();
+
+  // Start the single budgeted improvement pass once the initial market results
+  // have settled. The key prevents repeated provider calls on re-renders.
+  useEffect(() => {
+    if (activeStage !== "market" || !marketCheckSearchMeta || marketCheckLoading ||
+        evaluationRunning || compSearchImproving || compSearchHandedOff ||
+        automaticCompSearchCompleted || !draftReady || !targetMileage ||
+        (compSummary.primaryCompCount || 0) >= 4 ||
+        compSearchRecommendation.action === "complete" ||
+        compSearchRecommendation.action === "manual-review") return;
+    const key = [evaluationUsageId || vin || vehicleModel, targetMileage, marketCheckSearchMeta.searchStage].join(":");
+    if (automaticMarketSearchKeyRef.current === key) return;
+    automaticMarketSearchKeyRef.current = key;
+    void improveCompSearch();
+  // Runs when initial MarketCheck results finish; internal guards prevent repeat requests.
+  }, [activeStage, marketCheckLoading, evaluationRunning, compSearchImproving,
+      marketCheckSearchMeta, compSearchHandedOff, automaticCompSearchCompleted,
+      compSummary.primaryCompCount, draftReady, targetMileage]);
 
   const compActionButtonLabels: Record<string, string> = {
     "expand-geography": "Search Additional Nearby Markets →",
