@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AssumptionsTabs } from "@/components/assumptions/assumptions-tabs";
+import { DealSourcesEditor } from "@/components/evaluation/deal-sources-editor";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { AccountSettingsCard } from "@/components/settings/account-settings-card";
 import { BillingSettingsCard } from "@/components/settings/billing-settings-card";
@@ -206,6 +207,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 in Insights → Teach Lot Logic.
               </p>
             </div>
+            <div className="mb-6"><DealSourcesEditor embedded /></div>
             <AssumptionsTabs assumptions={companyContext.assumptions} />
           </section>
         ) : null}
