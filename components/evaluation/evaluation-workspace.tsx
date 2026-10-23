@@ -6417,7 +6417,18 @@ export function EvaluationWorkspace({
                   {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
                     <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
                   ) : null}
-                  {compSearchRecommendation.action !== "complete" && !(automaticCompSearchCompleted && !canContinueNationalSearch && compSearchRecommendation.action !== "manual-review") ? (
+                  {compSearchRecommendation.action === "manual-review" && !compSearchImproving ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompMarketEditorOpen(false);
+                        void continueToVerdict();
+                      }}
+                      className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800"
+                    >
+                      Continue to Verdict →
+                    </button>
+                  ) : compSearchRecommendation.action !== "complete" && !(automaticCompSearchCompleted && !canContinueNationalSearch) ? (
                     <button
                       type="button"
                       onClick={() => void improveCompSearch()}
@@ -6434,12 +6445,19 @@ export function EvaluationWorkspace({
                     }} className="text-blue-800 underline underline-offset-2">
                       Review comparable listings
                     </button>
-                    <button type="button" onClick={() => {
-                      setCompMarketEditorOpen(false);
-                      void continueToVerdict();
-                    }} className="text-slate-600 underline underline-offset-2">
-                      Continue to Verdict
-                    </button>
+                    {compSearchRecommendation.action === "manual-review" ? (
+                      <button type="button" onClick={openCompVehicleMatchEditor}
+                        className="text-slate-600 underline underline-offset-2">
+                        Adjust search settings
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => {
+                        setCompMarketEditorOpen(false);
+                        void continueToVerdict();
+                      }} className="text-slate-600 underline underline-offset-2">
+                        Continue to Verdict
+                      </button>
+                    )}
                   </div>
                 </div>
                 <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
