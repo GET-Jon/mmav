@@ -7361,6 +7361,13 @@ export function EvaluationWorkspace({
                         className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none"
                       />
                     </div>
+                    <input
+                      value={manualVehicle.trim}
+                      onChange={(event) => updateManualVehicleField("trim", event.target.value)}
+                      placeholder="Trim (optional) — e.g. Limited, M Sport, Premium Plus"
+                      aria-label="Trim (optional)"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
+                    />
                   )}
 
                   <div className="grid grid-cols-2 gap-2">
