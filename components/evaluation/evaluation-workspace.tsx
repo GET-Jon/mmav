@@ -7341,7 +7341,7 @@ export function EvaluationWorkspace({
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
                     />
                   ) : (
-                    <div className="grid grid-cols-[76px_1fr_1fr] gap-2">
+                    <div className="space-y-2"><div className="grid grid-cols-[76px_1fr_1fr] gap-2">
                       <input
                         value={manualVehicle.year}
                         onChange={(event) => updateManualVehicleField("year", event.target.value)}
@@ -7366,8 +7366,9 @@ export function EvaluationWorkspace({
                       onChange={(event) => updateManualVehicleField("trim", event.target.value)}
                       placeholder="Trim (optional) — e.g. Limited, M Sport, Premium Plus"
                       aria-label="Trim (optional)"
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
                     />
+                    </div>
                   )}
 
                   <div className="grid grid-cols-2 gap-2">
