@@ -83,6 +83,7 @@ export function PricingPlanCards({
                 <div className="flex items-center gap-2"><Check />{plan.evaluations}</div>
                 <div className="flex items-center gap-2"><Check />{plan.seats}</div>
                 <div className="flex items-center gap-2"><Check />Full evaluator access</div>
+                <div className="flex items-start gap-2"><Check /><span>Cancel anytime. Use unused paid evaluations for 30 days after your subscription ends; free-trial bonuses expire when the paid period ends.</span></div>
               </div>
               <div className="mt-7 rounded-xl bg-slate-50 px-4 py-3 text-center text-xs font-black text-slate-600">
                 {plan.note}

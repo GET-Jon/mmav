@@ -48,6 +48,13 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  // Stripe delivers signed, server-to-server POSTs without user cookies.
+  // Let only this exact webhook route reach its signature-verifying handler.
+  // All other API routes retain the normal authentication checks.
+  if (pathname === "/api/billing/webhook") {
+    return response;
+  }
+
   if (!supabaseUrl || !supabaseAnonKey) {
     if (isPublicPath(pathname)) {
       return response;

@@ -177,3 +177,102 @@ export function assertCompValuationRegressionCases() {
     },
   };
 }
+
+/**
+ * Anonymized 2018 Audi A3 MarketCheck audit, 53,000-mile subject.
+ * Numeric listing inputs come from the original and expanded-search exports;
+ * VINs and retail listing links are deliberately omitted from regression code.
+ */
+export function assertPrimaryPricingCohortRegressionCases() {
+  let passed = 0;
+  const check = (test: boolean, message: string) => {
+    assert(test, message);
+    passed++;
+  };
+  const entries: Array<[number, number, number, number]> = [
+    [2018, 51478, 20624, 97],
+    [2018, 90383, 13999, 87],
+    [2016, 84091, 11500, 76],
+    [2016, 83650, 11900, 75],
+    [2016, 87249, 9995, 74],
+    [2020, 94905, 14698, 71],
+    [2018, 78962, 9995, 91],
+    [2017, 45997, 17998, 90],
+    [2017, 67442, 16078, 89],
+    [2018, 92822, 10500, 87],
+    [2019, 77331, 13200, 84],
+    [2016, 78839, 14599, 79],
+    // Expanded search added 6 more comps.
+    [2019, 61103, 16495, 88],
+    [2018, 96121, 9900, 84],
+    [2020, 58423, 19900, 83],
+    [2020, 65704, 18651, 81],
+    [2018, 110882, 12700, 78],
+    [2020, 74077, 18998, 78],
+  ];
+  const audiComps = entries.map(([year,mileage,askingPrice,qualityScore],index) =>
+    makeComp({ id: `audi-anon-${index}`, year, mileage, askingPrice, qualityScore,
+      model: "Audi A3 Sedan", trim: "Premium", source: "MarketCheck/API",
+      equivalenceTier: "direct" }));
+  const summary = (comps: MarketComp[], opts: {
+    drivetrain?: string;
+    fuelType?: string;
+    engine?: string;
+  } = {}) => calculateCompSummary({
+    comps,
+    targetMileage: 53000,
+    targetYear: 2018,
+    targetDrivetrain: opts.drivetrain,
+    targetFuelType: opts.fuelType,
+    targetEngine: opts.engine,
+    assumptions: defaultAssumptions,
+  });
+
+  const initial = summary(audiComps.slice(0, 12));
+  check(initial.includedCount === 12, "Initial Audi comp count changed");
+  check(initial.pricingMode === "market-fallback" && initial.primaryCompCount === 3,
+    "Three close matches must not silently set the primary valuation");
+  check(initial.medianAdjusted === 16300 && initial.confidence === "Low",
+    "Initial Audi broad price and Low confidence must be preserved");
+
+  const expanded = summary(audiComps);
+  check(expanded.includedCount === 18 && expanded.primaryCompCount === 4,
+    "Expanded search must preserve all 18 comps and identify 4 reliable close peers");
+  check(expanded.pricingMode === "primary" && expanded.pricingCompCount === 4,
+    "Only the eligible close peers should establish the primary price");
+  check(expanded.marketMedianAdjusted === 17000 && expanded.medianAdjusted === 17700,
+    `Expected Audi $17,700 primary median vs $17,000 broad median, got $${expanded.medianAdjusted} / $${expanded.marketMedianAdjusted}`);
+  check(expanded.confidence === "Medium",
+    "Four coherent, uncapped close peers should permit Medium, not High confidence");
+  check(expanded.cappedAdjustmentCount === 11,
+    "Capped broader comps must remain auditable without dictating primary price");
+
+  const cleanPrimary = Array.from({length:8}, (_,i) => makeComp({
+    id:`clean-${i}`, year:2018, mileage:52500 + i*200,
+    askingPrice:17800 + i*100, qualityScore:94, source:"MarketCheck/API",
+    marketCheckDetails:{fuelType:"gasoline",drivetrain:"FWD",engine:"2.0 L"},
+  }));
+  const high = summary(cleanPrimary,{drivetrain:"FWD",fuelType:"gasoline",engine:"2.0 L"});
+  check(high.confidence === "High" && high.primaryCompCount === 8,
+    "Eight tightly agreeing verified primary peers should support High confidence");
+
+  const mismatch = cleanPrimary.slice(0,4).map((c,i)=>({
+    ...c,id:`known-mismatch-${i}`,
+    marketCheckDetails:{...c.marketCheckDetails,drivetrain:i===0?"quattro AWD":"FWD"},
+  }));
+  const mismatched = summary(mismatch,{drivetrain:"FWD",fuelType:"gasoline",engine:"2.0 L"});
+  check(mismatched.pricingMode === "market-fallback" && mismatched.primaryCompCount === 3 &&
+    mismatched.confidence === "Low",
+    "Known AWD/FWD mismatch must not qualify as a primary pricing peer");
+
+  const engineMismatch = cleanPrimary.slice(0,4).map((c,i)=>({
+    ...c,id:`different-engine-${i}`,
+    marketCheckDetails:{...c.marketCheckDetails,engine:i===0?"1.8 L":"2.0 L"},
+  }));
+  const powertrain = summary(engineMismatch,{drivetrain:"FWD",fuelType:"gasoline",engine:"2.0 L"});
+  check(powertrain.pricingMode === "market-fallback" && powertrain.primaryCompCount === 3,
+    "Known 1.8 vs 2.0 liter differences must not enter the primary cohort");
+
+  return { passed, failed: 0, audiInitialMedian:initial.medianAdjusted,
+    audiImprovedMedian:expanded.medianAdjusted, primaryCount:expanded.primaryCompCount };
+}

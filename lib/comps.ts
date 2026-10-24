@@ -1,5 +1,6 @@
 import type { Assumptions } from "@/types/assumptions";
 import type { CompSummary, MarketComp } from "@/types/comps";
+import { buildPrimaryPricingCohort, percentile } from "@/lib/comps-pricing-cohort";
 
 function roundToNearest(value: number, increment = 100) {
   return Math.round(value / increment) * increment;
@@ -222,10 +223,18 @@ function isHardRejected(comp: MarketComp) {
 export function calculateCompSummary({
   comps,
   targetMileage,
+  targetYear,
+  targetFuelType,
+  targetDrivetrain,
+  targetEngine,
   assumptions,
 }: {
   comps: MarketComp[];
   targetMileage: number;
+  targetYear?: number | null;
+  targetFuelType?: string | null;
+  targetDrivetrain?: string | null;
+  targetEngine?: string | null;
   assumptions: Assumptions;
 }): CompSummary {
   const rawIncludedComps = comps.filter((comp) => comp.included === true);
@@ -260,8 +269,23 @@ export function calculateCompSummary({
 
   const { kept, excluded } = removeRobustPriceOutliers(prepared);
   const validComps = kept.map((entry) => entry.comp);
-  const adjustedPrices = kept.map((entry) => entry.adjustedPrice);
-
+  const broadPrices = kept.map((entry) => entry.adjustedPrice);
+  const cohort = buildPrimaryPricingCohort(kept, {
+    year: targetYear,
+    mileage: targetMileage,
+    fuelType: targetFuelType,
+    drivetrain: targetDrivetrain,
+    engine: targetEngine,
+  }, Math.max(4, assumptions.compSettings.minimumCompsForMediumConfidence));
+  // No silent promotion of a tiny handful of good-looking comps. When there
+  // are fewer than four close, uncapped matches, fall back to the existing
+  // broad-market median with explicit low-confidence disclosure.
+  const pricingEntries = cohort.usable ? cohort.primary : kept;
+  const adjustedPrices = pricingEntries.map((entry) => entry.adjustedPrice);
+  const marketMedianAdjusted = roundToNearest(median(broadPrices));
+  const fullMarketSpread = marketMedianAdjusted > 0
+    ? (Math.max(...broadPrices) - Math.min(...broadPrices)) / marketMedianAdjusted
+    : 1;
   const includedCount = validComps.length;
   const lowAdjusted = adjustedPrices.length ? Math.min(...adjustedPrices) : 0;
   const highAdjusted = adjustedPrices.length ? Math.max(...adjustedPrices) : 0;
@@ -285,6 +309,12 @@ export function calculateCompSummary({
 
   const spread =
     medianAdjusted > 0 ? (highAdjusted - lowAdjusted) / medianAdjusted : 1;
+  const centralSpread = medianAdjusted > 0
+    ? (percentile(adjustedPrices, 0.75) - percentile(adjustedPrices, 0.25)) / medianAdjusted
+    : 1;
+  const marketDivergence = marketMedianAdjusted > 0
+    ? Math.abs(medianAdjusted - marketMedianAdjusted) / marketMedianAdjusted
+    : 0;
   const directCount = validComps.filter(
     (comp) => !comp.equivalenceTier || comp.equivalenceTier === "direct",
   ).length;
@@ -310,20 +340,59 @@ export function calculateCompSummary({
   ).length;
   const directRatio = includedCount > 0 ? directCount / includedCount : 0;
   const supportingRatio = includedCount > 0 ? supportingCount / includedCount : 0;
-  const averageQuality = includedCount
-    ? average(validComps.map((comp) => Number(comp.qualityScore || 0)))
+  const averageQuality = pricingEntries.length
+    ? average(pricingEntries.map((entry) => Number(entry.comp.qualityScore || 0)))
     : 0;
   const cappedAdjustmentCount = kept.filter((entry) => entry.mileage.capped).length;
   const lowReliabilityAdjustmentCount = kept.filter(
     (entry) => entry.mileage.reliability === "low",
+  ).length;
+  const primaryQuality = cohort.primary.length
+    ? average(cohort.primary.map((entry) => Number(entry.comp.qualityScore || 0)))
+    : 0;
+  const primaryProviderCount = cohort.primary.filter(
+    (entry) => entry.comp.source !== "Auto.dev",
   ).length;
   const cappedRatio = includedCount > 0
     ? cappedAdjustmentCount / includedCount
     : 1;
 
   const confidenceReasons: string[] = [];
-  if (independentlySourcedCount > 0 && marketCheckVerifiedCount < 2) {
-    confidenceReasons.push("national retail evidence has limited independent provider corroboration");
+  if (cohort.usable) {
+    confidenceReasons.push(
+      `${cohort.primary.length} close, uncapped pricing peers; ${cohort.supporting.length} broader comps retained as market context`,
+    );
+    if (cappedAdjustmentCount > 0) {
+      confidenceReasons.push(
+        `${cappedAdjustmentCount} broader listing${cappedAdjustmentCount === 1 ? "" : "s"} required capped mileage adjustments and did not set primary pricing`,
+      );
+    }
+    if (cohort.unverifiedConfigCount > 0) {
+      confidenceReasons.push(
+        `${cohort.unverifiedConfigCount} primary peer${cohort.unverifiedConfigCount === 1 ? " has" : "s have"} unverified powertrain or drivetrain attributes`,
+      );
+    }
+    if (marketDivergence > 0.2) {
+      confidenceReasons.push("closely matched prices diverge materially from the broader market");
+    }
+    if (spread > 0.35 || centralSpread > 0.2) {
+      confidenceReasons.push("primary pricing peers still disagree substantially");
+    }
+    if (fullMarketSpread > 0.35) {
+      confidenceReasons.push("broader market adjusted prices remain widely dispersed");
+    }
+  } else {
+    if (targetYear && kept.length) {
+      confidenceReasons.push(
+        `only ${cohort.primary.length} close, uncapped pricing peer${cohort.primary.length === 1 ? "" : "s"}; at least four are required to establish a separate primary price`,
+      );
+    }
+    if (spread > assumptions.compSettings.maxSpreadForHighConfidence) {
+      confidenceReasons.push("adjusted prices have a wide spread");
+    }
+    if (cappedRatio > 0.25 && includedCount > 0) {
+      confidenceReasons.push("multiple mileage adjustments reached the cap");
+    }
   }
   if (includedCount < assumptions.compSettings.minimumCompsForMediumConfidence) {
     confidenceReasons.push("too few reliable comps");
@@ -332,47 +401,61 @@ export function calculateCompSummary({
     confidenceReasons.push("most included comps are not Direct equivalents");
   }
   if (supportingCount > 0) {
-    confidenceReasons.push(`${supportingCount} Supporting comp${supportingCount === 1 ? " is" : "s are"} manually included`);
+    confidenceReasons.push(`${supportingCount} Supporting vehicle-equivalence comps were manually included`);
   }
   if (dealerHardOverrideCount > 0) {
     confidenceReasons.push(
-      `${dealerHardOverrideCount} dealer-selected comp${dealerHardOverrideCount === 1 ? " bypasses" : "s bypass"} Lot Logic's normal identity or quality rule`,
+      `${dealerHardOverrideCount} dealer-selected comps bypass Lot Logic's normal identity or quality rules`,
     );
   }
-  if (spread > assumptions.compSettings.maxSpreadForHighConfidence) {
-    confidenceReasons.push("adjusted prices have a wide spread");
-  }
-  if (averageQuality < 70 && includedCount > 0) {
-    confidenceReasons.push("average comp-fit quality is modest");
-  }
-  if (cappedRatio > 0.25 && includedCount > 0) {
-    confidenceReasons.push("multiple mileage adjustments reached the cap");
-  }
   if (lowReliabilityAdjustmentCount > 0) {
-    confidenceReasons.push("one or more mileage gaps are too large for strong normalization confidence");
+    confidenceReasons.push("one or more mileage gaps are too large for reliable normalization");
   }
   if (excluded.length > 0) {
     confidenceReasons.push(`${excluded.length} adjusted-price outlier${excluded.length === 1 ? " was" : "s were"} excluded`);
   }
+  if (independentlySourcedCount > 0 && marketCheckVerifiedCount < 2) {
+    confidenceReasons.push("national retail evidence has limited independent provider corroboration");
+  }
 
-  const highConfidence =
-    marketCheckVerifiedCount >= 2 &&
-    includedCount >= assumptions.compSettings.minimumCompsForHighConfidence &&
-    directRatio >= 0.5 &&
-    supportingCount === 0 &&
-    dealerHardOverrideCount === 0 &&
-    averageQuality >= 75 &&
-    spread <= assumptions.compSettings.maxSpreadForHighConfidence &&
-    cappedRatio <= 0.25 &&
-    lowReliabilityAdjustmentCount === 0;
+  const highConfidence = cohort.usable
+    ? cohort.primary.length >= Math.max(8, assumptions.compSettings.minimumCompsForHighConfidence) &&
+      primaryProviderCount >= 2 &&
+      primaryQuality >= 80 &&
+      spread <= assumptions.compSettings.maxSpreadForHighConfidence &&
+      centralSpread <= 0.12 &&
+      fullMarketSpread <= 0.35 &&
+      marketDivergence <= 0.15 &&
+      cohort.unverifiedConfigCount === 0 &&
+      dealerHardOverrideCount === 0 &&
+      supportingCount === 0 &&
+      excluded.length === 0
+    : !targetYear &&
+      marketCheckVerifiedCount >= 2 &&
+      includedCount >= assumptions.compSettings.minimumCompsForHighConfidence &&
+      directRatio >= 0.5 &&
+      supportingCount === 0 &&
+      dealerHardOverrideCount === 0 &&
+      averageQuality >= 75 &&
+      spread <= assumptions.compSettings.maxSpreadForHighConfidence &&
+      cappedRatio <= 0.25 &&
+      lowReliabilityAdjustmentCount === 0;
 
-  const mediumConfidence =
-    includedCount >= assumptions.compSettings.minimumCompsForMediumConfidence &&
-    averageQuality >= 60 &&
-    spread <= 0.35 &&
-    cappedRatio <= 0.5 &&
-    supportingRatio <= 0.5 &&
-    dealerHardOverrideCount === 0;
+  const mediumConfidence = cohort.usable
+    ? cohort.primary.length >= 4 &&
+      primaryQuality >= 75 &&
+      spread <= 0.35 &&
+      centralSpread <= 0.2 &&
+      marketDivergence <= 0.3 &&
+      dealerHardOverrideCount === 0 &&
+      supportingCount === 0
+    : !targetYear &&
+      includedCount >= assumptions.compSettings.minimumCompsForMediumConfidence &&
+      averageQuality >= 60 &&
+      spread <= 0.35 &&
+      cappedRatio <= 0.5 &&
+      supportingRatio <= 0.5 &&
+      dealerHardOverrideCount === 0;
 
   const confidence = highConfidence
     ? "High"
@@ -402,5 +485,13 @@ export function calculateCompSummary({
     dealerOverrideCount,
     dealerHardOverrideCount,
     confidenceReasons,
+    pricingMode: cohort.usable ? "primary" : "market-fallback",
+    primaryCompCount: cohort.primary.length,
+    pricingCompCount: pricingEntries.length,
+    primaryCompIds: cohort.usable ? cohort.primary.map((entry) => entry.comp.id) : [],
+    marketMedianAdjusted,
+    marketFullSpreadPercent: Math.round(fullMarketSpread * 1000) / 10,
+    primaryFullSpreadPercent: cohort.usable ? Math.round(spread * 1000) / 10 : null,
+    primaryCentralSpreadPercent: cohort.usable ? Math.round(centralSpread * 1000) / 10 : null,
   };
 }

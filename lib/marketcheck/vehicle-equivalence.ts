@@ -122,6 +122,12 @@ function detectSpecialVariant(vehicle: VehicleIdentity) {
     }
   }
 
+  if (make === "chevrolet" && modelFamily === "silverado 1500") {
+    // Trail Boss is a material 1500 package: normalize provider model names
+    // but never value an ordinary Silverado as an identical Trail Boss.
+    if (containsAny(text, ["trail boss", "trailboss"])) return "trail-boss";
+  }
+
   if (make === "ford" && modelFamily === "f 150") {
     if (containsAny(text, ["raptor r"])) return "raptor-r";
     if (containsAny(text, ["raptor"])) return "raptor";
@@ -435,7 +441,52 @@ const wranglerTjRule: VehicleTaxonomyRule = {
     "Separates Wrangler Unlimited/LJ and Rubicon from ordinary standard-wheelbase TJ variants before mileage normalization.",
 };
 
+const fourRunnerN280Rule: VehicleTaxonomyRule = {
+  id: "toyota-4runner-n280-trim",
+  make: "Toyota",
+  model: "4Runner",
+  yearStart: 2010,
+  yearEnd: 2024,
+  generation: "N280",
+  families: [
+    { id: "base", labels: ["Base", "Base Grade"] },
+    { id: "sr5", labels: ["SR5"] },
+    { id: "sr5-premium", labels: ["SR5 Premium"] },
+    { id: "trail", labels: ["Trail"] },
+    { id: "trail-premium", labels: ["Trail Premium"] },
+    { id: "limited", labels: ["Limited"] },
+    { id: "trd-pro", labels: ["TRD Pro"] },
+  ],
+  classify(vehicle) {
+    const trim = normalize(vehicle.trim);
+    if (!trim) return null;
+    const variant = [
+      ["trd-pro", ["trd pro"]],
+      ["sr5-premium", ["sr5 premium"]],
+      ["trail-premium", ["trail premium"]],
+      ["limited", ["limited"]],
+      ["trail", ["trail"]],
+      ["sr5", ["sr5"]],
+      ["base", ["base grade", "base"]],
+    ] as const;
+    for (const [id, aliases] of variant) {
+      if (aliases.some((alias) => phraseMatches(trim, alias))) return id;
+    }
+    return null;
+  },
+  compare(targetFamily, candidateFamily) {
+    if (!targetFamily || !candidateFamily) return "supporting";
+    if (targetFamily === candidateFamily) return "direct";
+    if (targetFamily === "trd-pro" || candidateFamily === "trd-pro") return "supporting";
+    // Other distinct trim configurations remain useful as related inventory,
+    // but cannot establish identical retail value without a supported adjustment.
+    return "near";
+  },
+  notes: "Recognizes verified Base/Base Grade aliases but keeps other 4Runner trims distinct for pricing.",
+};
+
 export const vehicleTaxonomyRules: VehicleTaxonomyRule[] = [
+  fourRunnerN280Rule,
   broncoU725Rule,
   wranglerTjRule,
   rav4Xa50Rule,
