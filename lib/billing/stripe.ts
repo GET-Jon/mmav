@@ -1,8 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { currentPreviewBillingIsolation } from "@/lib/billing/preview-isolation";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
 function stripeSecretKey() {
+  const isolation = currentPreviewBillingIsolation();
+  if (!isolation.safe) {
+    throw new Error(isolation.reason || "Preview billing is not isolated.");
+  }
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
     throw new Error("Stripe is not configured.");

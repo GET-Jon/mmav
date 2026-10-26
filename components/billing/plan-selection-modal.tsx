@@ -6,6 +6,12 @@ import { PricingPlanCards, type PricingPlan } from "@/components/marketing/prici
 type BillingAccess = {
   company?: { role?: string };
   billing?: { stripe_subscription_id?: string | null; plan_key?: string; status?: string };
+  usage?: {
+    postCancelActive?: boolean;
+    postCancelBalance?: number;
+    postCancelStartsAt?: string | null;
+    postCancelExpiresAt?: string | null;
+  };
   configuredPlans?: Record<string, boolean>;
   portalConfigured?: boolean;
 };
@@ -29,6 +35,19 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
 
   const existingSubscription = Boolean(data?.billing?.stripe_subscription_id && ["active", "trialing", "past_due"].includes(data.billing.status || ""));
   const isAdmin = data?.company?.role === "company_admin";
+  const creditStartMs = Date.parse(data?.usage?.postCancelStartsAt || "");
+  const creditExpiryMs = Date.parse(data?.usage?.postCancelExpiresAt || "");
+  const preservedPaidCredits = Math.max(0, Number(data?.usage?.postCancelBalance || 0));
+  const creditsAwaitingStart =
+    data?.billing?.status === "canceled" &&
+    preservedPaidCredits > 0 &&
+    Number.isFinite(creditStartMs) &&
+    Number.isFinite(creditExpiryMs) &&
+    Date.now() < creditStartMs;
+  const dateTime = (ms: number) => new Intl.DateTimeFormat("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  }).format(new Date(ms));
 
   async function choose(plan: PricingPlan) {
     setBusy(plan.key);
@@ -46,6 +65,48 @@ export function PlanSelectionModal({ message, onClose }: { message: string; onCl
       setError(error instanceof Error ? error.message : "Unable to open checkout.");
       setBusy(null);
     }
+  }
+
+  // A future-dated Stripe test-clock cancellation is not a depleted balance.
+  // Never pressure customers into buying again when their paid credits exist.
+  if (creditsAwaitingStart) {
+    return (
+      <div
+        className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+      >
+        <section role="dialog" aria-modal="true" aria-labelledby="scheduled-paid-credits-title"
+          className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+          <p className="text-xs font-black uppercase tracking-wide text-blue-700">Cancellation credit window</p>
+          <h2 id="scheduled-paid-credits-title" className="mt-2 text-2xl font-black text-slate-950">
+            Your paid evaluations are preserved.
+          </h2>
+          <p className="mt-3 text-sm font-semibold leading-6 text-slate-700">
+            You still have <strong>{preservedPaidCredits} unused paid evaluations</strong>.
+            Your canceled subscription's 30-day usage window hasn't begun yet.
+          </p>
+          <dl className="mt-5 space-y-3 rounded-xl bg-blue-50 p-4 text-sm">
+            <div><dt className="font-bold text-blue-800">Available starting</dt><dd className="mt-1 font-black text-blue-950">{dateTime(creditStartMs)}</dd></div>
+            <div><dt className="font-bold text-blue-800">Expire on</dt><dd className="mt-1 font-black text-blue-950">{dateTime(creditExpiryMs)}</dd></div>
+          </dl>
+          <p className="mt-4 text-xs font-semibold leading-5 text-slate-600">
+            No additional subscription is required to use these preserved credits once the window starts.
+            Existing evaluations, comps, and pipeline records remain available now.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button type="button" onClick={onClose} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white">
+              Got it
+            </button>
+            <a href="/settings?tab=billing" className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-blue-700">
+              View billing details
+            </a>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (

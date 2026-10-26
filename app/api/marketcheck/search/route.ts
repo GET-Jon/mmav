@@ -414,7 +414,10 @@ async function decodeCandidateVinIdentity(
       `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(
         normalizedVin,
       )}?format=json`,
-      { cache: "no-store" },
+      // VIN-decoded manufacturer identity is stable. Reuse successful fetch
+      // responses across overlapping market searches rather than repeatedly
+      // calling the public NHTSA service for the same VIN.
+      { next: { revalidate: 60 * 60 * 24 * 30 } },
     );
     if (!response.ok) return null;
 

@@ -41,6 +41,7 @@ export default async function SavedEvaluationPage({ params }: PageProps) {
     <EvaluationWorkspace
       initialSavedEvaluationId={data.id}
       initialSavedPayload={data.payload}
+      userId={user.id}
       userEmail={user.email}
     />
   );

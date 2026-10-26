@@ -8,6 +8,7 @@ export type CompSearchAction =
 
 export type CompSearchOrchestrationInput = {
   includedCount: number;
+  primaryCompCount?: number;
   confidence: string;
   returnedListings: number;
   usableListings: number;
@@ -51,7 +52,7 @@ export function recommendCompSearchAction(
 ): CompSearchRecommendation {
   const confidence = normalizedConfidence(input.confidence);
   const evidenceIsUsable =
-    input.includedCount >= 4 && confidence !== "low" && confidence !== "weak";
+    (input.primaryCompCount ?? input.includedCount) >= 4 && confidence !== "low" && confidence !== "weak";
   const regionalSearchIsMature = input.regionsSearched >= 5;
 
   if (evidenceIsUsable) {
@@ -60,6 +61,16 @@ export function recommendCompSearchAction(
       title: "Market evidence is usable",
       reason:
         "Lot Logic has enough qualifying evidence to continue without searching farther.",
+    };
+  }
+
+  // Related listings alone cannot satisfy the close-pricing evidence target.
+  // Continue targeting verified equivalent vehicles when primary pricing peers are scarce.
+  if (input.includedCount >= 4 && (input.primaryCompCount ?? input.includedCount) < 4 && !input.nationalDiscoveryAttempted && input.regionsSearched >= 3) {
+    return {
+      action: "national-discovery",
+      title: "Find closer vehicle configurations",
+      reason: "There are enough related listings, but not enough close pricing peers. Search nationally for the same trim and configuration rather than adding more loosely related vehicles.",
     };
   }
 

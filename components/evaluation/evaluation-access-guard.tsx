@@ -11,10 +11,14 @@ import {
 type UsageStatus = {
   canStartEvaluation?: boolean;
   evaluationAccessMessage?: string | null;
+  status?: string;
+  postCancelBalance?: number;
+  postCancelStartsAt?: string | null;
 };
 
 export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
   const [exhausted, setExhausted] = useState(false);
+  const [creditsScheduled, setCreditsScheduled] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,6 +31,7 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
 
         if (!cancelled && response.ok) {
           setExhausted(data.canStartEvaluation === false);
+          setCreditsScheduled(data.status === "canceled" && Number(data.postCancelBalance || 0) > 0 && Boolean(data.postCancelStartsAt) && Date.parse(data.postCancelStartsAt || "") > Date.now());
           setMessage(data.evaluationAccessMessage || null);
         }
       } catch {
@@ -47,7 +52,9 @@ export function EvaluationAccessGuard({ children }: { children: ReactNode }) {
   }, []);
 
   function entryAction(target: EventTarget | null) {
-    if (!exhausted || !(target instanceof Element)) return null;
+    // Let the evaluator show its persistent inline explanation for
+    // future-dated cancellation credits, rather than opening a paywall.
+    if (!exhausted || creditsScheduled || !(target instanceof Element)) return null;
     return target.closest<HTMLElement>(
       "[data-evaluation-entry-action='true']",
     );

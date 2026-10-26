@@ -6,6 +6,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { ConditionChoiceIcon } from "@/components/evaluation/condition-choice-icon";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
   MARKETCHECK_LAST_API_USAGE_STORAGE_KEY,
@@ -26,6 +27,7 @@ import {
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
+import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
@@ -40,7 +42,7 @@ import type {
   ConditionAnalysisIssue,
 } from "@/lib/ai/condition-analysis-types";
 
-import { evaluationDraftStorageKey as draftStorageKey } from "@/lib/evaluation-draft";
+import { evaluationDraftStorageKeyForUser } from "@/lib/evaluation-draft";
 
 const initialTargetMileage = 0;
 
@@ -274,10 +276,14 @@ function MarketConfidenceHelp({
   confidence,
   compCount,
   reasons,
+  primaryCount = 0,
+  pricingMode,
 }: {
   confidence: "Strong" | "Moderate" | "Limited";
   compCount: number;
   reasons: string[];
+  primaryCount?: number;
+  pricingMode?: "primary" | "market-fallback";
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -320,7 +326,9 @@ function MarketConfidenceHelp({
           Why {confidence.toLowerCase()} confidence?
         </span>
         <span className="mt-1 block text-xs font-medium leading-5 text-slate-600">
-          {compCount} selected comp{compCount === 1 ? "" : "s"} provide useful pricing evidence, but confidence measures how well listings match and agree, not just how many were found.
+          {pricingMode === "primary"
+            ? `${primaryCount} close peers set the primary price; ${compCount - primaryCount} broader listings remain as market context. Confidence measures the pricing agreement and reliability of those close peers.`
+            : `${compCount} comps provide market context, but fewer than four close, uncapped pricing peers are available. Confidence is conservative until better evidence is found.`}
         </span>
         {reasons.length > 0 ? (
           <span className="mt-2 block border-t border-slate-100 pt-2">
@@ -750,11 +758,14 @@ export function EvaluationWorkspace({
   initialSavedEvaluationId = null,
   initialSavedPayload = null,
   userEmail = null,
+  userId,
 }: {
+  userId: string;
   initialSavedEvaluationId?: string | null;
   initialSavedPayload?: SavedEvaluationPayload | null;
   userEmail?: string | null;
 }) {
+  const draftStorageKey = evaluationDraftStorageKeyForUser(userId);
   const [evaluation, setEvaluation] = useState<ValuationInput>(
     initialSavedPayload?.evaluation || initialEvaluation,
   );
@@ -1045,6 +1056,7 @@ export function EvaluationWorkspace({
   } | null>(null);
 
   const marketCheckInFlightRef = useRef(false);
+  const automaticMarketSearchKeyRef = useRef("");
   const vehicleIdentityRequestVinRef = useRef("");
   const vehicleIdentityProfilePromiseRef =
     useRef<Promise<VehicleIdentityProfile> | null>(null);
@@ -1055,6 +1067,7 @@ export function EvaluationWorkspace({
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
+  const [automaticMarketPassFinished, setAutomaticMarketPassFinished] = useState(false);
   const [automaticCompSearchCompleted, setAutomaticCompSearchCompleted] =
     useState(false);
   const [conditionSectionExpanded, setConditionSectionExpanded] = useState(false);
@@ -1475,7 +1488,19 @@ export function EvaluationWorkspace({
           : null,
       );
       setMarketCheckApiUsage(draft.marketCheckApiUsage || null);
-      const restoredStage = deriveEvaluationStage(draft as SavedEvaluationPayload);
+      const inferredStage = deriveEvaluationStage(draft as SavedEvaluationPayload);
+      // Explicit progress takes precedence over inferred data completeness: finding
+      // comps in the background does not mean the user advanced to Verdict.
+      const persistedStage = draft.activeStage;
+      const isValidStage = persistedStage === "vehicle" || persistedStage === "condition" ||
+        persistedStage === "market" || persistedStage === "verdict";
+      const restoredStage: EvaluationStage = isValidStage
+        ? (persistedStage === "verdict" && inferredStage !== "verdict"
+          ? inferredStage
+          : (persistedStage === "market" && (inferredStage === "vehicle" || inferredStage === "condition")
+            ? inferredStage
+            : persistedStage))
+        : (inferredStage === "verdict" ? "market" : inferredStage);
       setActiveStage(restoredStage);
       setVehicleStepConfirmed(restoredStage !== "vehicle");
       setConditionStepConfirmed(
@@ -1497,6 +1522,7 @@ export function EvaluationWorkspace({
       window.localStorage.setItem(
         draftStorageKey,
         JSON.stringify({
+          activeStage,
           evaluationUsageId,
           vin,
           auctionSite,
@@ -1528,6 +1554,7 @@ export function EvaluationWorkspace({
       console.error("Failed to save local evaluator draft:", error);
     }
   }, [
+    activeStage,
     evaluationUsageId,
     vin,
     auctionSite,
@@ -1562,10 +1589,33 @@ export function EvaluationWorkspace({
       calculateCompSummary({
         comps,
         targetMileage,
+        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+        targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
+        targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [comps, targetMileage, activeAssumptions],
+    [comps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
+
+  function downloadCompAudit() {
+    if (!comps.length) return;
+    const csv = createCompAuditCsv({
+      comps,
+      targetMileage,
+      assumptions: activeAssumptions,
+      summary: compSummary,
+    });
+    const objectUrl = URL.createObjectURL(new Blob([csv], {
+      type: "text/csv;charset=utf-8",
+    }));
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = "lot-logic-comp-audit.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
 
   const marketTimingAverageDealerDays =
     compSummary.averageDealerDays ||
@@ -2598,9 +2648,25 @@ export function EvaluationWorkspace({
 
     let activeVehicleIdentityProfile = vehicleIdentityProfile;
     if (useSemanticIdentity && vehicleIdentityProfilePromiseRef.current) {
-      setMarketCheckStatus("Finishing the vehicle identity profile…");
-      activeVehicleIdentityProfile =
-        await vehicleIdentityProfilePromiseRef.current;
+      // The optional identity enrichment occasionally takes ~30s or fails.
+      // Never hold an otherwise valid market search hostage to this request.
+      // If enrichment is not ready promptly, use the entered/decoded vehicle
+      // identity and keep the strict downstream equivalence checks intact.
+      setMarketCheckStatus("Checking vehicle identity…");
+      const identityProfile = await Promise.race([
+        vehicleIdentityProfilePromiseRef.current
+          .then((profile) => ({ profile }))
+          .catch(() => ({ profile: null })),
+        new Promise<{ profile: null }>((resolve) =>
+          window.setTimeout(() => resolve({ profile: null }), 2500),
+        ),
+      ]);
+      if (identityProfile.profile) {
+        activeVehicleIdentityProfile = identityProfile.profile;
+      } else {
+        activeVehicleIdentityProfile = null;
+        setMarketCheckStatus("Searching with decoded vehicle details…");
+      }
     }
 
     const year = vehicleOverride?.year || vehicleYear;
@@ -3323,6 +3389,7 @@ export function EvaluationWorkspace({
     discoveryOverride: typeof autoDevDiscovery = autoDevDiscovery,
     searchedZipsOverride?: string[],
     searchOperationId?: string,
+    maxMarkets = 3,
   ) {
     const discovery = discoveryOverride;
 
@@ -3332,11 +3399,20 @@ export function EvaluationWorkspace({
     }
 
     const searched = new Set(
-      searchedZipsOverride || marketCheckSearchMeta?.searchedZips || [],
+      (searchedZipsOverride || marketCheckSearchMeta?.searchedZips || [])
+        .map((zip) => String(zip).trim()),
     );
+    // Discovery can identify multiple clusters with the same ZIP. Verify a
+    // market once per pass rather than spending duplicate provider requests.
+    const selectedZips = new Set<string>();
     const regions = discovery.recommendedMarkets
-      .filter((market) => !searched.has(market.zip))
-      .slice(0, 3)
+      .filter((market) => {
+        const zip = String(market.zip || "").trim();
+        if (!zip || searched.has(zip) || selectedZips.has(zip)) return false;
+        selectedZips.add(zip);
+        return true;
+      })
+      .slice(0, Math.max(0, Math.min(3, maxMarkets)))
       .map((market, index) => ({
         market: `${market.market} · Auto.dev discovery`,
         zip: market.zip,
@@ -3367,13 +3443,10 @@ export function EvaluationWorkspace({
     });
 
     setAutoDevDiscoveryStatus(
-      "MarketCheck validation completed in " +
-        regions
-          .map((region) =>
-            region.market.replace(" · Auto.dev discovery", ""),
-          )
-          .join(", ") +
-        ".",
+      outcome
+        ? "MarketCheck verification completed in " +
+          regions.map((region) => region.market.replace(" · Auto.dev discovery", "")).join(", ") + "."
+        : "MarketCheck could not complete this verification pass. No additional market was confirmed as checked.",
     );
 
     return outcome;
@@ -3970,6 +4043,8 @@ export function EvaluationWorkspace({
   }
 
   function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
+    automaticMarketSearchKeyRef.current = "";
+    setAutomaticMarketPassFinished(false);
     // Prevent stale search state from carrying into another vehicle.
     marketCheckInFlightRef.current = false;
 
@@ -4450,7 +4525,16 @@ export function EvaluationWorkspace({
       const access = await response.json();
       if (!response.ok) throw new Error(access.error || "Unable to check your evaluation allowance. Please try again.");
       if (access.canStartEvaluation === false) {
-        setPlanSelectionMessage(access.evaluationAccessMessage || "Choose a plan to continue evaluating vehicles.");
+        const scheduledCredits = access.status === "canceled" &&
+          Number(access.postCancelBalance || 0) > 0 &&
+          Boolean(access.postCancelStartsAt) &&
+          Date.parse(access.postCancelStartsAt) > Date.now();
+        if (scheduledCredits) {
+          const start = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(access.postCancelStartsAt));
+          setEvaluationAccessError(`Your ${access.postCancelBalance} paid evaluations are preserved, but cannot be used until ${start}. You can review saved work now, or visit Billing to restart a subscription.`);
+        } else {
+          setPlanSelectionMessage(access.evaluationAccessMessage || "Choose a plan to continue evaluating vehicles.");
+        }
         setEvaluationRunning(false);
         return;
       }
@@ -4565,6 +4649,7 @@ export function EvaluationWorkspace({
 
   const rawCompSearchRecommendation = recommendCompSearchAction({
     includedCount: compSummary.includedCount,
+    primaryCompCount: compSummary.primaryCompCount || 0,
     confidence: String(compSummary.confidence || ""),
     returnedListings: compReturnedListings,
     usableListings: compUsableListings,
@@ -4597,20 +4682,23 @@ export function EvaluationWorkspace({
     .filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip))
     .length;
   const canContinueNationalSearch =
-    compSummary.includedCount < 4 && remainingNationalMarketCount > 0;
+    (compSummary.primaryCompCount || 0) < 4 && remainingNationalMarketCount > 0;
   const compSearchRecommendation = canContinueNationalSearch
     ? {
         action: "discovered-markets" as const,
         title: `Check ${remainingNationalMarketCount} remaining national market${remainingNationalMarketCount === 1 ? "" : "s"}`,
         reason: "National inventory discovery identified markets that have not yet been checked against strict vehicle-match rules.",
       }
-    : automaticCompSearchCompleted && compSummary.includedCount < 4
+    : automaticCompSearchCompleted && (compSummary.primaryCompCount || 0) < 4
       ? {
           action: "manual-review" as const,
           title: "Automatic market checks finished",
           reason: "No unsearched national discovery markets remain. Review the search evidence below, then consider other markets or supporting vehicles without changing strict direct-comp rules.",
         }
       : rawCompSearchRecommendation;
+
+  const recommendedCompSearchExhausted = automaticCompSearchCompleted &&
+    compSearchRecommendation.action === "manual-review";
 
   const compNextStep = {
     path:
@@ -4637,11 +4725,19 @@ export function EvaluationWorkspace({
       : compSummary.includedCount >= 4 && normalizedCompConfidence !== "low"
         ? "Moderate"
         : "Limited";
+  const marketEvidenceDisplay =
+    marketEvidenceStrength === "Limited" && compSummary.includedCount >= 4
+      ? "Low pricing confidence"
+      : marketEvidenceStrength === "Limited"
+        ? "Limited evidence"
+        : marketEvidenceStrength === "Strong"
+          ? "Strong pricing confidence"
+          : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
   const hasLowCompConfidence = hasLimitedMarketEvidence;
 
-  async function improveCompSearch() {
+  async function improveCompSearch(isAutomatic = false) {
     if (
       compSearchImproving ||
       marketCheckLoading ||
@@ -4655,17 +4751,16 @@ export function EvaluationWorkspace({
     }
 
     setCompSearchHandedOff(true);
-    setCompMarketEditorOpen(false);
+    // Keep the search dialog visible so progress and results are not hidden.
+    setCompSearchImprovementStatus("Preparing the next comparison search…");
     setCompSearchImproving(true);
     setAutomaticCompSearchCompleted(false);
+    if (isAutomatic) setAutomaticMarketPassFinished(false);
     const searchOperationId = `recommended-${evaluationUsageId || "evaluation"}-${Date.now()}`;
-
-    window.setTimeout(() => {
-      compSectionRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
+    // A normal evaluation may make up to three additional MarketCheck calls
+    // after the initial (up to three-call) regional search.
+    const additionalMarketCheckBudget = 3;
+    let additionalMarketCheckCalls = 0;
 
     try {
       if (compSearchRecommendation.action === "manual-review") {
@@ -4677,6 +4772,15 @@ export function EvaluationWorkspace({
       }
 
       let latestIncludedCount = compSummary.includedCount;
+      let latestPrimaryCount = compSummary.primaryCompCount || 0;
+      const countClosePeers = (candidates: MarketComp[]) => calculateCompSummary({
+        comps: candidates,
+        targetMileage,
+        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+        targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
+        targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
+        assumptions: activeAssumptions,
+      }).primaryCompCount || 0;
       let latestRegionCount = compSearchRegions;
       let latestSearchedZips = marketCheckSearchMeta?.searchedZips || [];
 
@@ -4692,40 +4796,50 @@ export function EvaluationWorkspace({
             (market) => !latestSearchedZips.includes(market.zip),
           ) || [];
 
+        // A second deliberate search should check another discovered market
+        // even when four broadly matched comps already exist.
         while (
-          latestIncludedCount < 4 &&
           remainingNationalMarkets.length > 0 &&
-          nationalBatches < 3
+          nationalBatches < 1 &&
+          additionalMarketCheckCalls < additionalMarketCheckBudget
         ) {
           const validation = await searchAutoDevRecommendedMarkets(
             discovery,
             latestSearchedZips,
             `${searchOperationId}-national-${nationalBatches + 1}`,
+            additionalMarketCheckBudget - additionalMarketCheckCalls,
           );
           nationalBatches += 1;
+          additionalMarketCheckCalls += Math.min(3, remainingNationalMarkets.length, additionalMarketCheckBudget - additionalMarketCheckCalls);
 
           if (!validation) break;
 
           latestIncludedCount = Number(
             validation.includedCount || latestIncludedCount,
           );
+          if (validation.mergedComps) latestPrimaryCount = countClosePeers(validation.mergedComps);
+          const previousZipCount = new Set(latestSearchedZips).size;
           latestSearchedZips =
             validation.searchedZips || latestSearchedZips;
+          if (new Set(latestSearchedZips).size <= previousZipCount) {
+            setCompSearchImprovementStatus("This verification pass did not confirm any new markets. Review the current evidence or try again.");
+            break;
+          }
           remainingNationalMarkets =
             discovery?.recommendedMarkets?.filter(
               (market) => !latestSearchedZips.includes(market.zip),
             ) || [];
 
-          if (latestIncludedCount < 4 && remainingNationalMarkets.length > 0) {
+          if (latestPrimaryCount < 4 && remainingNationalMarkets.length > 0) {
             setCompSearchImprovementStatus(
               `Still thin. Verifying ${Math.min(3, remainingNationalMarkets.length)} more national market${Math.min(3, remainingNationalMarkets.length) === 1 ? "" : "s"}…`,
             );
           }
         }
 
-        if (latestIncludedCount >= 4) {
+        if (latestPrimaryCount >= 4) {
           setCompSearchImprovementStatus(
-            "Reliable market evidence found. The comp set is ready for review.",
+            `This search pass finished with ${latestIncludedCount} selected comps. Choose whether to review the listings, check more markets, or continue to Verdict.`,
           );
           return;
         }
@@ -4733,7 +4847,7 @@ export function EvaluationWorkspace({
         setAutomaticCompSearchCompleted(remainingNationalMarkets.length === 0);
         setCompSearchImprovementStatus(
           remainingNationalMarkets.length
-            ? `This pass reached its search limit; ${remainingNationalMarkets.length} discovered market(s) remain. Run Recommended Search again to continue.`
+            ? `This search pass is complete. ${remainingNationalMarkets.length} identified market(s) remain available.`
             : "All recommended national markets have been checked. Review rejection reasons or adjust the manual search.",
         );
         return;
@@ -4753,13 +4867,14 @@ export function EvaluationWorkspace({
         latestIncludedCount = Number(
           broadened?.includedCount || latestIncludedCount,
         );
+        if (broadened?.mergedComps) latestPrimaryCount = countClosePeers(broadened.mergedComps);
         latestRegionCount = Number(
           broadened?.regionsChecked?.length || latestRegionCount,
         );
         latestSearchedZips =
           broadened?.searchedZips || latestSearchedZips;
 
-        if (latestIncludedCount >= 4) {
+        if (latestPrimaryCount >= 4) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after normalizing the vehicle match.",
           );
@@ -4767,21 +4882,23 @@ export function EvaluationWorkspace({
         }
       }
 
-      if (latestRegionCount < 5) {
+      if (latestRegionCount < 3 && latestIncludedCount === 0 && additionalMarketCheckCalls < additionalMarketCheckBudget) {
         setCompSearchImprovementStatus(
           "Checking the next best nearby markets before going national…",
         );
         const expanded = await expandMarketCheckSearch(searchOperationId);
+        additionalMarketCheckCalls += Math.min(3, compExpansionMarketsRemaining);
         latestIncludedCount = Number(
           expanded?.includedCount || latestIncludedCount,
         );
+        if (expanded?.mergedComps) latestPrimaryCount = countClosePeers(expanded.mergedComps);
         latestRegionCount = Number(
           expanded?.regionsChecked?.length || latestRegionCount,
         );
         latestSearchedZips =
           expanded?.searchedZips || latestSearchedZips;
 
-        if (latestIncludedCount >= 4) {
+        if (latestPrimaryCount >= 4) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after regional expansion.",
           );
@@ -4807,15 +4924,9 @@ export function EvaluationWorkspace({
             candidate.qualityScore >= activeAssumptions.compSettings.minimumQualityScore,
         }));
         const provisional = mergeCompCandidates(comps, checkedCandidates);
-        latestIncludedCount = Math.max(
-          latestIncludedCount,
-          calculateCompSummary({
-            comps: provisional,
-            targetMileage,
-            assumptions: activeAssumptions,
-          }).includedCount,
-        );
-        if (latestIncludedCount >= 4) {
+        latestIncludedCount = Math.max(latestIncludedCount, provisional.filter((comp) => comp.included).length);
+        latestPrimaryCount = Math.max(latestPrimaryCount, countClosePeers(provisional));
+        if (latestPrimaryCount >= 4) {
           setCompSearchImprovementStatus("National retail evidence is now sufficient for review. You can continue to Verdict or refine the comp set.");
           return;
         }
@@ -4828,9 +4939,10 @@ export function EvaluationWorkspace({
         );
 
         while (
-          latestIncludedCount < 4 &&
+          latestPrimaryCount < 4 &&
           remainingNationalMarkets.length > 0 &&
-          nationalBatches < 3
+          nationalBatches < 3 &&
+          additionalMarketCheckCalls < additionalMarketCheckBudget
         ) {
           setCompSearchImprovementStatus(
             nationalBatches === 0
@@ -4844,20 +4956,27 @@ export function EvaluationWorkspace({
             `${searchOperationId}-national-${nationalBatches + 1}`,
           );
           nationalBatches += 1;
+          additionalMarketCheckCalls += Math.min(3, remainingNationalMarkets.length);
 
           if (!validation) break;
 
           latestIncludedCount = Number(
             validation.includedCount || latestIncludedCount,
           );
+          if (validation.mergedComps) latestPrimaryCount = countClosePeers(validation.mergedComps);
+          const previousZipCount = new Set(latestSearchedZips).size;
           latestSearchedZips =
             validation.searchedZips || latestSearchedZips;
+          if (new Set(latestSearchedZips).size <= previousZipCount) {
+            setCompSearchImprovementStatus("This verification pass did not confirm any new markets. Review the current evidence or try again.");
+            break;
+          }
           remainingNationalMarkets = discovery.recommendedMarkets.filter(
             (market) => !latestSearchedZips.includes(market.zip),
           );
         }
 
-        if (latestIncludedCount >= 4) {
+        if (latestPrimaryCount >= 4) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after national discovery.",
           );
@@ -4870,13 +4989,19 @@ export function EvaluationWorkspace({
       setAutomaticCompSearchCompleted(remainingDiscovered === 0);
       setCompSearchImprovementStatus(
         remainingDiscovered
-          ? `${remainingDiscovered} discovered national market(s) still need validation. Run Recommended Search again to continue.`
+          ? `This search pass is complete. ${remainingDiscovered} identified market(s) remain available.`
           : discovery
             ? "All discovered national markets checked; review evidence and filtering before widening vehicle similarity."
             : "National discovery did not provide more markets. Review evidence and try a different geographic search.",
       );
+    } catch (error) {
+      setCompSearchImprovementStatus(error instanceof Error
+        ? `Search did not complete: ${error.message}`
+        : "Search did not complete. Please try again or use manual controls.");
     } finally {
+      if (isAutomatic) setAutomaticMarketPassFinished(true);
       setCompSearchImproving(false);
+      // Do not scroll away from the search outcome while the dialog is open.
     }
   }
 
@@ -5011,7 +5136,7 @@ export function EvaluationWorkspace({
     presentationDecision === "pursue" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    compSummary.includedCount > 0 ? marketEvidenceStrength : "—";
+    compSummary.includedCount > 0 ? marketEvidenceDisplay : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
@@ -5058,6 +5183,33 @@ export function EvaluationWorkspace({
     }
     return "Current inventory age is broadly in line with recent regional sell-through.";
   })();
+
+  // Start the single budgeted improvement pass once the initial market results
+  // have settled. The key prevents repeated provider calls on re-renders.
+  useEffect(() => {
+    if (activeStage !== "market" || !marketCheckSearchMeta || marketCheckLoading ||
+        evaluationRunning || compSearchImproving || compSearchHandedOff ||
+        automaticCompSearchCompleted || !draftReady || !targetMileage ||
+        (compSummary.primaryCompCount || 0) >= 4 ||
+        compSearchRecommendation.action === "complete" ||
+        compSearchRecommendation.action === "manual-review") return;
+    const key = [evaluationUsageId || vin || vehicleModel, targetMileage, marketCheckSearchMeta.searchStage].join(":");
+    if (automaticMarketSearchKeyRef.current === key) return;
+    automaticMarketSearchKeyRef.current = key;
+    void improveCompSearch(true);
+  // Runs when initial MarketCheck results finish; internal guards prevent repeat requests.
+  }, [activeStage, marketCheckLoading, evaluationRunning, compSearchImproving,
+      marketCheckSearchMeta, compSearchHandedOff, automaticCompSearchCompleted,
+      compSummary.primaryCompCount, draftReady, targetMileage]);
+
+  const compActionButtonLabels: Record<string, string> = {
+    "expand-geography": "Search Additional Nearby Markets →",
+    "broaden-vehicle": "Check Alternative Vehicle Names →",
+    "national-discovery": "Find Matching Inventory Nationwide →",
+    "discovered-markets": "Verify National Markets with MarketCheck →",
+    "manual-review": "Review Vehicle Match & Filters →",
+  };
+  const compActionButtonLabel = compActionButtonLabels[compSearchRecommendation.action] || "Improve Comparisons →";
 
   const vehicleMetaItems = [
     vin ? `VIN ${vin}` : null,
@@ -6246,58 +6398,97 @@ export function EvaluationWorkspace({
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="px-6 py-5">
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">
-                    Recommended next step
-                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.09em] text-blue-600">Comparison search</div>
                   <div className="mt-1 text-base font-black text-slate-950">
-                    {compSearchRecommendation.title}
+                    {compSearchImproving ? "Searching for better matches…" : (compSummary.primaryCompCount || 0) >= 4 ? "Close pricing matches found" : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete" ? "Review the market evidence" : "More close matches needed"}
                   </div>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
-                    {compSearchRecommendation.reason}
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
+                    {compSummary.primaryCompCount || 0} close pricing matches · {compSummary.includedCount} related listings selected
                   </p>
-                  {compSearchRecommendation.action !== "complete" ? (
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-600">
+                    {compSearchImproving
+                      ? compSearchImprovementStatus || "Checking additional market evidence."
+                      : compSearchRecommendation.action === "discovered-markets"
+                        ? automaticMarketPassFinished ? `Automatic search finished. ${remainingNationalMarketCount} additional market${remainingNationalMarketCount === 1 ? "" : "s"} available if you want to search further.` : `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
+                        : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete"
+                          ? "No further automatic search is recommended. Review the listings or continue with the stated confidence."
+                          : compSearchRecommendation.reason}
+                  </p>
+                  {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
+                    <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
+                  ) : null}
+                  <div className="mt-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                     <button
                       type="button"
                       onClick={() => void improveCompSearch()}
-                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
-                      className="mt-3 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300"
+                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading ||
+                        compSearchRecommendation.action === "complete" ||
+                        (automaticCompSearchCompleted && !canContinueNationalSearch)}
+                      className="min-h-12 flex-1 rounded-xl bg-blue-700 px-3 py-3 text-center text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                      {compSearchImproving
-                        ? "Running Search…"
-                        : compSearchRecommendation.action === "manual-review"
-                          ? "Review Vehicle Match →"
-                          : "Run Recommended Search →"}
+                      {compSearchImproving ? "Searching…" : "Search Further (Optional) →"}
                     </button>
-                  ) : null}
-                  {compSearchImprovementStatus ? (
-                    <div className="mt-2 text-[11px] font-bold leading-4 text-blue-900/70">
-                      {compSearchImprovementStatus}
+                    <span className="shrink-0 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">or</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompMarketEditorOpen(false);
+                        void continueToVerdict();
+                      }}
+                      disabled={verdictTransitioning || compSearchImproving}
+                      className="min-h-12 flex-1 rounded-xl border border-blue-300 bg-white px-3 py-3 text-center text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
+                    <button type="button" onClick={() => {
+                      setCompMarketEditorOpen(false);
+                      window.setTimeout(() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                    }} className="text-blue-800 underline underline-offset-2">
+                      Review comparable listings
+                    </button>
+                    <button type="button" onClick={openCompVehicleMatchEditor}
+                      className="text-slate-600 underline underline-offset-2">
+                      Adjust search settings
+                    </button>
+                  </div>
+                </div>
+                <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                  <summary className="cursor-pointer font-black text-blue-800">See search coverage and technical details ↓</summary>
+                  <div className="mt-3 font-black text-slate-900">Search coverage</div>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div><div className="text-[10px] font-bold text-slate-500">Comps selected</div><div className="mt-1 text-lg font-black text-slate-950">{compSummary.includedCount}</div></div>
+                    <div><div className="text-[10px] font-bold text-slate-500">Markets checked</div><div className="mt-1 text-lg font-black text-slate-950">{compSearchRegions}</div></div>
+                    <div><div className="text-[10px] font-bold text-slate-500">Markets to verify</div><div className="mt-1 text-lg font-black text-slate-950">{remainingNationalMarketCount}</div></div>
+                  </div>
+                  <p className="mt-2 font-semibold leading-5 text-slate-600">
+                    National discovery identifies where vehicles are advertised. MarketCheck verification checks those markets for usable retail comparisons; it may not retrieve the same listings.
+                  </p>
+                  <details className="mt-3 rounded-lg border border-slate-200 bg-white">
+                    <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-blue-700">Show full search diagnostics ↓</summary>
+                    <div className="border-t border-slate-200 px-3 py-3">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
+                        <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
+                        <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
+                        <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
+                        <span>Provider-usable: <b>{compUsableListings}</b></span>
+                        <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
+                        <span>Markets checked: <b>{compSearchRegions}</b></span>
+                        <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-600">
+                        Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPrice ?? 0} missing price, {autoDevDiscovery?.candidateDiagnostics?.missingMileage ?? 0} missing mileage, {autoDevDiscovery?.candidateDiagnostics?.missingVin ?? 0} missing VIN, {autoDevDiscovery?.candidateDiagnostics?.missingListingUrl ?? 0} missing listing link, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-600">
+                        Rejections (latest provider diagnostics): model {compModelMismatchCount}, generation {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.generationMismatch || 0}, quality {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.qualityBelowThreshold || 0}.
+                      </div>
+                      <p className="mt-2 text-slate-500">Different providers return different data sets. Counts may describe the latest response rather than cumulative search results.</p>
                     </div>
-                  ) : null}
-                </div>
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-                  <div className="font-black text-slate-900">Search evidence</div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
-                    <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
-                    <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
-                    <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
-                    <span>Provider-usable: <b>{compUsableListings}</b></span>
-                    <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
-                    <span>Markets checked: <b>{compSearchRegions}</b></span>
-                    <span>Discovered markets left: <b>{remainingNationalMarketCount}</b></span>
-                  </div>
-                  <div className="mt-2 font-semibold text-slate-600">
-                    Auto.dev screening: {autoDevDiscovery?.candidateDiagnostics?.direct ?? 0} Direct, {autoDevDiscovery?.candidateDiagnostics?.near ?? 0} Near, {autoDevDiscovery?.candidateDiagnostics?.supporting ?? 0} Supporting; {autoDevDiscovery?.candidateDiagnostics?.identityRejected ?? 0} identity mismatch, {autoDevDiscovery?.candidateDiagnostics?.missingPrice ?? 0} missing price, {autoDevDiscovery?.candidateDiagnostics?.missingMileage ?? 0} missing mileage, {autoDevDiscovery?.candidateDiagnostics?.missingVin ?? 0} missing VIN, {autoDevDiscovery?.candidateDiagnostics?.missingListingUrl ?? 0} missing listing link, {autoDevDiscovery?.candidateDiagnostics?.outOfYearRange ?? 0} outside target years.
-                  </div>
-                  <div className="mt-2 font-semibold text-slate-600">
-                    Rejections (latest provider diagnostics):
-                    {" "}model {compModelMismatchCount},
-                    {" "}generation {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.generationMismatch || 0},
-                    {" "}quality {marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.qualityBelowThreshold || 0}.
-                  </div>
-                  <p className="mt-2 text-slate-500">National listings and MarketCheck candidates are different data sets; discovery does not guarantee that the same listings can be retrieved as comps. These counts may represent the latest provider response, not cumulative totals.</p>
-                </div>
+                  </details>
+                  <p className="mt-2 text-[11px] font-semibold text-slate-500">More listings do not necessarily mean stronger pricing evidence.</p>
+                </details>
 
                 <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
                   <summary className="cursor-pointer list-none px-4 py-4">
@@ -7150,7 +7341,7 @@ export function EvaluationWorkspace({
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
                     />
                   ) : (
-                    <div className="grid grid-cols-[76px_1fr_1fr] gap-2">
+                    <div className="space-y-2"><div className="grid grid-cols-[76px_1fr_1fr] gap-2">
                       <input
                         value={manualVehicle.year}
                         onChange={(event) => updateManualVehicleField("year", event.target.value)}
@@ -7169,6 +7360,14 @@ export function EvaluationWorkspace({
                         placeholder="Model"
                         className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none"
                       />
+                    </div>
+                    <input
+                      value={manualVehicle.trim}
+                      onChange={(event) => updateManualVehicleField("trim", event.target.value)}
+                      placeholder="Trim (optional) — e.g. Limited, M Sport, Premium Plus"
+                      aria-label="Trim (optional)"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
+                    />
                     </div>
                   )}
 
@@ -7222,7 +7421,7 @@ export function EvaluationWorkspace({
                   {vinDecodeError ? (
                     <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{vinDecodeError}</div>
                   ) : null}
-                  {evaluationAccessError ? <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{evaluationAccessError}</div> : null}
+                  {evaluationAccessError ? <div role="alert" className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-bold leading-5 text-blue-900">{evaluationAccessError} <Link href="/settings?tab=billing" className="ml-1 underline">View billing →</Link></div> : null}
 
                   <button
                     type="button"
@@ -7336,7 +7535,10 @@ export function EvaluationWorkspace({
                   <div className="space-y-2 opacity-55">
                     {["No material issues", "Known issues", "Condition unknown"].map((label) => (
                       <div key={label} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        <span className="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white" />
+                        <ConditionChoiceIcon
+                          variant={label === "No material issues" ? "clear" : label === "Known issues" ? "issues" : "unknown"}
+                          muted
+                        />
                         {label}
                       </div>
                     ))}
@@ -7348,16 +7550,31 @@ export function EvaluationWorkspace({
                   {conditionReviewStatus === "unreviewed" ? (
                     <div className="space-y-2">
                       <button type="button" onClick={() => chooseConditionReview("no_material_issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50">
-                        <div className="text-sm font-black text-slate-900">No material issues apparent</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="clear" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">No material issues apparent</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Based on the listing, inspection, disclosures, and information available.</span>
+                          </span>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("issues")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-violet-300 hover:bg-violet-50">
-                        <div className="text-sm font-black text-slate-900">There are known issues</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="issues" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">There are known issues</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Paste the condition information you have and let Lot Logic structure it.</span>
+                          </span>
+                        </div>
                       </button>
                       <button type="button" onClick={() => chooseConditionReview("unknown")} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-amber-300 hover:bg-amber-50">
-                        <div className="text-sm font-black text-slate-900">Condition is unknown</div>
-                        <div className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</div>
+                        <div className="flex items-center gap-3">
+                          <ConditionChoiceIcon variant="unknown" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-slate-900">Condition is unknown</span>
+                            <span className="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">Use this when the available information is not good enough to establish condition confidently.</span>
+                          </span>
+                        </div>
                       </button>
                     </div>
                   ) : conditionReviewStatus === "issues" ? (
@@ -7534,10 +7751,12 @@ export function EvaluationWorkspace({
                   <h2 className="mt-1 text-lg font-black text-slate-950">
                     {!conditionStepConfirmed
                       ? "Market evidence"
-                      : evaluationRunning || marketCheckLoading
+                      : evaluationRunning || marketCheckLoading || compSearchImproving
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? `${compSummary.includedCount} valuation comp${compSummary.includedCount === 1 ? "" : "s"} · ${marketEvidenceStrength} evidence`
+                          ? (compSummary.primaryCompCount || 0) >= 4
+                            ? "Market pricing supported by close comparisons"
+                            : "Market estimate needs verification"
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7551,10 +7770,14 @@ export function EvaluationWorkspace({
                     {needsCompSearch ? (
                       <span className="group relative inline-flex">
                         <button type="button" aria-label="Why market evidence needs attention"
-                          title="No trusted comps yet. An unpriced Verdict does not charge a credit or provide a reliable sale or profit estimate."
+                          title={recommendedCompSearchExhausted
+                            ? "Recommended searches have finished. An unpriced review will not consume an evaluation credit."
+                            : "No trusted comps yet. Run the recommended search before deciding whether a valuation is possible."}
                           className="flex h-5 w-5 items-center justify-center rounded-full border border-amber-300 text-[11px] font-black text-amber-800 focus-visible:outline-2 focus-visible:outline-blue-600">!</button>
                         <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                          No trusted comparisons yet. Continue to Verdict opens an unpriced review without using an evaluation credit. Sale and profit estimates remain unavailable.
+                          {recommendedCompSearchExhausted
+                            ? "Recommended searches have finished without reliable comparisons. You can review an unpriced verdict without using an evaluation credit; no sale or profit estimate is available."
+                            : "The initial search has not established reliable comparisons. Run the recommended search for stronger market evidence before treating this as unpriceable."}
                         </span>
                       </span>
                     ) : null}
@@ -7586,11 +7809,11 @@ export function EvaluationWorkspace({
                 </div>
               ) : (
                 <div className="mt-4 flex-1">
-                  {evaluationRunning || marketCheckLoading ? (
-                    <div className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+                  {evaluationRunning || marketCheckLoading || compSearchImproving ? (
+                    <div role="status" aria-live="polite" className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-4">
                         <div className="text-sm font-black text-blue-700">
-                          Checking the market…
+                          {compSearchImproving ? "Improving market evidence…" : "Checking the market…"}
                         </div>
                         <div className="flex items-center gap-1.5" aria-hidden="true">
                           {[0, 1, 2].map((index) => (
@@ -7602,6 +7825,9 @@ export function EvaluationWorkspace({
                           ))}
                         </div>
                       </div>
+                      {compSearchImproving && compSearchImprovementStatus ? (
+                        <div className="mt-2 text-xs font-medium leading-5 text-blue-800">{compSearchImprovementStatus}</div>
+                      ) : null}
                       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-100">
                         <div className="h-full w-2/3 animate-pulse rounded-full bg-blue-600" />
                       </div>
@@ -7616,12 +7842,14 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xl font-black text-slate-950">{marketEvidenceStrength}</span>
-                            {marketEvidenceStrength === "Limited" ? (
+                            <span className="text-lg font-black text-slate-950">{marketEvidenceDisplay}</span>
+                            {(marketEvidenceStrength === "Limited" || compSummary.pricingMode === "primary") ? (
                               <MarketConfidenceHelp
                                 confidence={marketEvidenceStrength}
                                 compCount={compSummary.includedCount}
                                 reasons={compSummary.confidenceReasons || []}
+                                primaryCount={compSummary.primaryCompCount || 0}
+                                pricingMode={compSummary.pricingMode}
                               />
                             ) : null}
                           </div>
@@ -7629,9 +7857,20 @@ export function EvaluationWorkspace({
                       </div>
                       {activeStage === "market" ? (
                         <>
-                        {hasLimitedMarketEvidence ? (
-                          <div className="mt-3 text-xs font-semibold leading-5 text-amber-800">
-                            Limited evidence · {compSearchRecommendation.title}
+                        {compSummary.pricingMode === "primary" ? (
+                          <div className="mt-3 text-[11px] font-semibold leading-4 text-slate-600">
+                            <span className="font-semibold text-slate-700">{compSummary.primaryCompCount} close matches set this estimate.</span>
+                            {" "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} additional comps provide market context. Asking prices are not completed-sale prices.
+                          </div>
+                        ) : compSummary.includedCount > 0 ? (
+                          <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
+                            <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
+                            <span>Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate.</span>
+                          </div>
+                        ) : null}
+                        {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
+                          <div className="mt-3 text-xs font-medium leading-5 text-slate-600">
+                            Additional market verification may improve confidence.
                           </div>
                         ) : null}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -7711,7 +7950,7 @@ export function EvaluationWorkspace({
                       <>
                         <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
                           <div className="text-sm font-black text-amber-900">{compNextStep.title || "More market evidence needed"}</div>
-                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Improve comps or review the unpriced verdict.</div>
+                          <div className="mt-1 text-xs font-semibold text-amber-800">Market evidence is still thin. Run the recommended search to check for qualifying comparisons before treating the valuation as unavailable.</div>
                         </div>
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                           <button type="button" onClick={() => void improveCompSearch()}
@@ -7750,12 +7989,19 @@ export function EvaluationWorkspace({
           )}
 
           {activeStage === "market" && (comps.length > 0 || needsCompSearch) ? (
-            <section ref={compSectionRef} className="mt-4 scroll-mt-4">
+            <section ref={compSectionRef} className="mt-4 scroll-mt-4" aria-busy={compSearchImproving || marketCheckLoading}>
+              {(compSearchImproving || marketCheckLoading) ? (
+                <div role="status" aria-live="polite" className="mb-3 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-xs font-semibold text-blue-800">
+                  <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />
+                  <span>{compSearchImprovementStatus || "Updating comparable vehicles…"}</span>
+                </div>
+              ) : null}
               <SectionCard
                 title="Comparable Vehicles"
                 action={
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={openCompMarketEditor} disabled={marketCheckLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">Expand / Improve Comps</button>
+                    <button type="button" onClick={downloadCompAudit} disabled={!comps.length} title="Download all comp inputs for valuation review; no evaluation credit used" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Export comp audit</button>
                     <button type="button" onClick={openMethodology} className="text-xs font-black text-slate-400 hover:text-slate-700">Methodology</button>
                   </div>
                 }
@@ -7771,7 +8017,7 @@ export function EvaluationWorkspace({
                           Full comp set appears after Continue to Verdict.
                         </div>
                       </div>
-                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} />
+                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
                       {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
@@ -7863,7 +8109,9 @@ export function EvaluationWorkspace({
             <>
               {compSummary.includedCount === 0 ? (
                 <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950" role="status">
-                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. No evaluation credit was consumed for entering this unpriced verdict.
+                  <strong>Unpriced review — no trusted comparable vehicles.</strong> Lot Logic cannot establish a defensible sale value or profit estimate. You may review the vehicle and work on comps, but do not use this screen as a bid recommendation. {recommendedCompSearchExhausted
+                    ? "Recommended searches have been completed without qualifying comps; this unpriced review did not consume an evaluation credit."
+                    : "Recommended searches are still available. Return to Market and improve the comparison set before concluding this vehicle cannot be valued."}
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
@@ -7981,7 +8229,7 @@ export function EvaluationWorkspace({
                   }
                 >
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
+                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}

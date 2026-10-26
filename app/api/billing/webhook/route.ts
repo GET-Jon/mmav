@@ -6,6 +6,14 @@ import {
   verifyStripeWebhook,
 } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { firstPeriodTrialRollover } from "@/lib/billing/trial-rollover";
+import { ignoreSubscriptionEvent, invoiceBelongsToCurrentSubscription } from "@/lib/billing/subscription-event-guard";
+import { cancellationBalance } from "@/lib/billing/post-cancel";
+import { preserveInitialTrial, shouldMarkInvoicePastDue, shouldSyncSubscriptionStatus } from "@/lib/billing/payment-status";
+import {
+  configuredStripeLiveMode,
+  currentPreviewBillingIsolation,
+} from "@/lib/billing/preview-isolation";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -21,6 +29,17 @@ function firstSubscriptionPriceId(subscription: JsonRecord) {
   const first = record(data[0]);
   const price = record(first.price);
   return stringValue(price.id);
+}
+
+function subscriptionPeriodStart(subscription: JsonRecord) {
+  const direct = unixToIso(subscription.current_period_start);
+  if (direct) return direct;
+
+  // Newer Stripe subscription API versions expose billing periods on items.
+  const items = record(subscription.items);
+  const data = Array.isArray(items.data) ? items.data : [];
+  const first = record(data[0]);
+  return unixToIso(first.current_period_start);
 }
 
 function subscriptionPeriodEnd(subscription: JsonRecord) {
@@ -93,6 +112,14 @@ async function companyIdFromCustomer(
 }
 
 export async function POST(request: NextRequest) {
+  const isolation = currentPreviewBillingIsolation();
+  if (!isolation.safe) {
+    return NextResponse.json(
+      { error: isolation.reason || "Preview billing is not isolated." },
+      { status: 503 },
+    );
+  }
+
   const payload = await request.text();
   const signature = request.headers.get("stripe-signature");
 
@@ -108,6 +135,17 @@ export async function POST(request: NextRequest) {
   const eventType = stringValue(event.type);
   const eventData = record(event.data);
   const object = record(eventData.object);
+  const expectedLiveMode = configuredStripeLiveMode();
+  if (
+    expectedLiveMode === null ||
+    typeof event.livemode !== "boolean" ||
+    event.livemode !== expectedLiveMode
+  ) {
+    return NextResponse.json(
+      { error: "Stripe event mode does not match the configured billing environment." },
+      { status: 400 },
+    );
+  }
 
   if (!eventId || !eventType) {
     return NextResponse.json({ error: "Malformed Stripe event." }, { status: 400 });
@@ -135,6 +173,26 @@ export async function POST(request: NextRequest) {
     companyId = companyId || clientReferenceId;
 
     if (companyId) {
+      const incomingSubscriptionId = stringValue(object.subscription);
+      const { data: linkedBilling, error: linkedError } = await admin
+        .from("company_billing_accounts")
+        .select("status,stripe_subscription_id")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
+      if (
+        linkedBilling?.stripe_subscription_id &&
+        linkedBilling.stripe_subscription_id !== incomingSubscriptionId &&
+        !["canceled", "trialing", "unpaid", "not_configured"].includes(String(linkedBilling.status))
+      ) {
+        const { error: ignoredError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId, company_id: companyId, event_type: eventType,
+          stripe_object_id: incomingSubscriptionId,
+          metadata: { livemode: Boolean(event.livemode), ignored: "stale_checkout" },
+        });
+        if (ignoredError) return NextResponse.json({ error: ignoredError.message }, { status: 500 });
+        return NextResponse.json({ received: true, ignored: "stale_checkout" });
+      }
       const { error } = await admin
         .from("company_billing_accounts")
         .upsert(
@@ -161,10 +219,80 @@ export async function POST(request: NextRequest) {
       companyId ||
       (await companyIdFromCustomer(admin, customerId));
 
-    if (companyId) {
+    if (companyId && shouldSyncSubscriptionStatus(stringValue(object.status))) {
       const planKey = planKeyForSubscription(object);
-      const entitlements = planEntitlements(planKey);
       const rawStatus = stringValue(object.status) || "not_configured";
+      const periodStart = subscriptionPeriodStart(object);
+      const periodEnd = subscriptionPeriodEnd(object);
+      // An active Stripe subscription without both period boundaries cannot
+      // be used to replenish paid usage; return retryable failure so Stripe
+      // resends it instead of silently reverting to calendar-month resets.
+      if (
+        ["active", "trialing", "past_due", "unpaid", "paused"].includes(rawStatus) &&
+        (!periodStart || !periodEnd || periodStart >= periodEnd)
+      ) {
+        return NextResponse.json(
+          { error: "Stripe subscription event is missing a valid billing period." },
+          { status: 503 },
+        );
+      }
+
+      const { data: currentBilling, error: currentBillingError } = await admin
+        .from("company_billing_accounts")
+        .select("status,plan_key,current_period_start,current_period_end,cancel_at_period_end,stripe_subscription_id,trial_rollover_period_start,post_cancel_starts_at")
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (currentBillingError) {
+        return NextResponse.json({ error: currentBillingError.message }, { status: 500 });
+      }
+      if (ignoreSubscriptionEvent({
+        storedSubscriptionId: currentBilling?.stripe_subscription_id,
+        incomingSubscriptionId: subscriptionId,
+        storedStatus: currentBilling?.status,
+        incomingStatus: rawStatus,
+      })) {
+        const { error: ignoredError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId, company_id: companyId, event_type: eventType,
+          stripe_object_id: subscriptionId,
+          metadata: { livemode: Boolean(event.livemode), ignored: "outdated_subscription" },
+        });
+        if (ignoredError) return NextResponse.json({ error: ignoredError.message }, { status: 500 });
+        return NextResponse.json({ received: true, ignored: "outdated_subscription" });
+      }
+      if (preserveInitialTrial(String(currentBilling?.status || ""), currentBilling?.trial_rollover_period_start ?? null, rawStatus)) {
+        const { error: skipError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId, company_id: companyId, event_type: eventType,
+          stripe_object_id: subscriptionId, metadata: { livemode: Boolean(event.livemode), ignored: "initial_trial" },
+        });
+        if (skipError) return NextResponse.json({ error: skipError.message }, { status: 500 });
+        return NextResponse.json({ received: true, ignored: "initial_trial" });
+      }
+      const effectivePlanKey = rawStatus === "canceled" && currentBilling?.plan_key
+        ? String(currentBilling.plan_key)
+        : planKey;
+      const entitlements = planEntitlements(effectivePlanKey);
+      // A delayed older webhook must not rewind the company's quota window.
+      const oldStart = currentBilling?.current_period_start
+        ? new Date(currentBilling.current_period_start).getTime()
+        : null;
+      const newStart = periodStart ? new Date(periodStart).getTime() : null;
+      const stalePeriod = oldStart !== null && newStart !== null &&
+        oldStart > newStart &&
+        (!currentBilling?.stripe_subscription_id ||
+          currentBilling.stripe_subscription_id === subscriptionId);
+      if (stalePeriod) {
+        const { error: staleEventError } = await admin.from("billing_events").insert({
+          stripe_event_id: eventId,
+          company_id: companyId,
+          event_type: eventType,
+          stripe_object_id: stringValue(object.id),
+          metadata: { livemode: Boolean(event.livemode), ignored: "older_period" },
+        });
+        if (staleEventError) {
+          return NextResponse.json({ error: staleEventError.message }, { status: 500 });
+        }
+        return NextResponse.json({ received: true, ignored: "older_period" });
+      }
       const mappedStatus =
         rawStatus === "incomplete" || rawStatus === "incomplete_expired"
           ? "unpaid"
@@ -177,6 +305,65 @@ export async function POST(request: NextRequest) {
             ? rawStatus
             : "not_configured";
 
+      // A cancellation preserves only the unspent PAID portion of the last
+      // actually active period. A past-due/unpaid/failed subscription earns no
+      // grace credits; original trial-rollover credits never transfer.
+      let postCancelUpdate: {
+        post_cancel_evaluations: number;
+        post_cancel_starts_at: string | null;
+        post_cancel_expires_at: string | null;
+      } | null = null;
+      if (
+        rawStatus === "canceled" &&
+        currentBilling?.status === "active" &&
+        currentBilling.stripe_subscription_id === subscriptionId &&
+        !currentBilling.post_cancel_starts_at
+      ) {
+        const lastStart = currentBilling.current_period_start;
+        const lastEnd = currentBilling.current_period_end;
+        const endedAt = currentBilling.cancel_at_period_end
+          ? lastEnd
+          : (unixToIso(object.ended_at) || lastEnd);
+        const endedMs = Date.parse(endedAt || "");
+        const startMs = Date.parse(lastStart || "");
+        const endMs = Date.parse(lastEnd || "");
+        if (
+          !Number.isFinite(endedMs) || !Number.isFinite(startMs) ||
+          !Number.isFinite(endMs) || endedMs < startMs || endedMs > endMs
+        ) {
+          return NextResponse.json(
+            { error: "Cancellation cannot be anchored to a valid paid period." },
+            { status: 503 },
+          );
+        }
+        const { data: lastPeriodUsage, error: usageError } = await admin
+          .from("company_usage_events")
+          .select("units")
+          .eq("company_id", companyId)
+          .eq("event_type", "evaluation_completed")
+          .gte("created_at", lastStart)
+          .lt("created_at", endedAt!);
+        if (usageError) {
+          return NextResponse.json({ error: usageError.message }, { status: 500 });
+        }
+        const used = (lastPeriodUsage || []).reduce(
+          (sum, row) => sum + Number(row.units || 0), 0,
+        );
+        const finalPlan = planEntitlements(String(currentBilling.plan_key || "starter"));
+        const balance = cancellationBalance({
+          paidAllowance: finalPlan.evaluations_per_month,
+          evaluationsUsedInFinalPaidPeriod: used,
+          endedAt,
+        });
+        if (!balance) {
+          return NextResponse.json({ error: "Invalid cancellation date." }, { status: 503 });
+        }
+        postCancelUpdate = {
+          post_cancel_evaluations: balance.evaluations,
+          post_cancel_starts_at: balance.startsAt,
+          post_cancel_expires_at: balance.expiresAt,
+        };
+      }
       const { error } = await admin
         .from("company_billing_accounts")
         .upsert(
@@ -185,10 +372,19 @@ export async function POST(request: NextRequest) {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
             status: mappedStatus,
-            plan_key: planKey,
+            plan_key: effectivePlanKey,
+            ...(postCancelUpdate || {}),
+            ...(rawStatus === "active"
+              ? {
+                  post_cancel_evaluations: 0,
+                  post_cancel_starts_at: null,
+                  post_cancel_expires_at: null,
+                }
+              : {}),
             stripe_price_id: firstSubscriptionPriceId(object),
             trial_ends_at: unixToIso(object.trial_end),
-            current_period_end: subscriptionPeriodEnd(object),
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
             cancel_at_period_end: Boolean(object.cancel_at_period_end),
             updated_at: new Date().toISOString(),
           },
@@ -204,7 +400,7 @@ export async function POST(request: NextRequest) {
         .upsert(
           {
             company_id: companyId,
-            plan_key: planKey,
+            plan_key: effectivePlanKey,
             evaluations_per_month: entitlements.evaluations_per_month,
             seats_limit: entitlements.seats_limit,
             auto_dev_enabled: true,
@@ -219,34 +415,126 @@ export async function POST(request: NextRequest) {
       if (entitlementError) {
         return NextResponse.json({ error: entitlementError.message }, { status: 500 });
       }
+
+      // Record unused free-trial evaluations once, only when Stripe first
+      // confirms an active paid subscription. The credit is tied to this
+      // first billing period rather than adding to non-expiring gifts.
+      // A conditional update makes retries and competing events idempotent.
+      if (
+        rawStatus === "active" &&
+        periodStart &&
+        !currentBilling?.trial_rollover_period_start
+      ) {
+        const { data: companyRow, error: companyLookupError } = await admin
+          .from("companies")
+          .select("created_at")
+          .eq("id", companyId)
+          .single();
+        if (companyLookupError) {
+          return NextResponse.json({ error: companyLookupError.message }, { status: 500 });
+        }
+
+        const { data: trialEvaluations, error: trialUsageError } = await admin
+          .from("company_usage_events")
+          .select("units")
+          .eq("company_id", companyId)
+          .eq("event_type", "evaluation_completed")
+          .lt("created_at", periodStart);
+        if (trialUsageError) {
+          return NextResponse.json({ error: trialUsageError.message }, { status: 500 });
+        }
+
+        const trialUsed = (trialEvaluations || []).reduce(
+          (sum, row) => sum + Number(row.units || 0),
+          0,
+        );
+        const carryover = firstPeriodTrialRollover({
+          companyCreatedAt: companyRow?.created_at,
+          firstPeriodStart: periodStart,
+          trialEvaluationsUsed: trialUsed,
+        });
+
+        const { error: rolloverError } = await admin
+          .from("company_billing_accounts")
+          .update({
+            trial_rollover_evaluations: carryover,
+            trial_rollover_period_start: periodStart,
+          })
+          .eq("company_id", companyId)
+          .eq("stripe_subscription_id", subscriptionId)
+          .is("trial_rollover_period_start", null);
+        if (rolloverError) {
+          return NextResponse.json({ error: rolloverError.message }, { status: 500 });
+        }
+      }
     }
   }
 
   if (eventType === "invoice.payment_failed" && companyId) {
-    await admin
+    const { data: existingBilling, error: billingLookupError } = await admin
       .from("company_billing_accounts")
-      .update({
-        status: "past_due",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("company_id", companyId);
+      .select("status,stripe_subscription_id")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (billingLookupError) {
+      return NextResponse.json({ error: billingLookupError.message }, { status: 500 });
+    }
+
+    // Stripe Checkout can create an incomplete subscription and emit an invoice
+    // failure even though the customer never paid. Don't replace the free trial
+    // with past_due or give that attempted plan's monthly allowance.
+    const invoiceSubscriptionId =
+      stringValue(object.subscription) ||
+      stringValue(record(record(object.parent).subscription_details).subscription);
+    const matchesCurrentSubscription = invoiceBelongsToCurrentSubscription({
+      invoiceSubscriptionId,
+      storedSubscriptionId: existingBilling?.stripe_subscription_id,
+    });
+
+    if (
+      existingBilling &&
+      shouldMarkInvoicePastDue(String(existingBilling.status)) &&
+      matchesCurrentSubscription
+    ) {
+      const { error: failureUpdateError } = await admin
+        .from("company_billing_accounts")
+        .update({
+          status: "past_due",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+        .in("status", ["active", "past_due"]);
+      if (failureUpdateError) {
+        return NextResponse.json({ error: failureUpdateError.message }, { status: 500 });
+      }
+    }
   }
 
   if (eventType === "invoice.paid" && companyId) {
     const { data: billing } = await admin
       .from("company_billing_accounts")
-      .select("status")
+      .select("status,stripe_subscription_id")
       .eq("company_id", companyId)
       .maybeSingle();
-
-    if (billing?.status === "past_due" || billing?.status === "unpaid") {
-      await admin
+    const invoiceSubscriptionId = stringValue(object.subscription) ||
+      stringValue(record(record(object.parent).subscription_details).subscription);
+    if (
+      (billing?.status === "past_due" || billing?.status === "unpaid") &&
+      invoiceBelongsToCurrentSubscription({
+        invoiceSubscriptionId,
+        storedSubscriptionId: billing?.stripe_subscription_id,
+      })
+    ) {
+      const { error: paidError } = await admin
         .from("company_billing_accounts")
         .update({
           status: "active",
           updated_at: new Date().toISOString(),
         })
-        .eq("company_id", companyId);
+        .eq("company_id", companyId)
+        .eq("stripe_subscription_id", invoiceSubscriptionId)
+        .in("status", ["past_due", "unpaid"]);
+      if (paidError) return NextResponse.json({ error: paidError.message }, { status: 500 });
     }
   }
 

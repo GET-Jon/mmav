@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { LotLogicLogo } from "@/components/branding/lot-logic-logo";
 import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
+import { CancellationReturnNotice } from "@/components/billing/cancellation-return-notice";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export type AppTopNavPage =
@@ -24,9 +25,21 @@ type AppTopNavProps = {
 };
 
 type UsageStatus = {
+  company?: { companyId?: string };
   internalUnlimited?: boolean;
   trialActive?: boolean;
   paidActive?: boolean;
+  paidThroughCancellation?: boolean;
+  paidBillingPeriodReady?: boolean;
+  cancelAtPeriodEnd?: boolean;
+  currentPeriodEnd?: string | null;
+  postCancelActive?: boolean;
+  postCancelBalance?: number;
+  postCancelRemaining?: number;
+  postCancelStartsAt?: string | null;
+  postCancelExpiresAt?: string | null;
+  status?: string;
+  planKey?: "starter" | "dealer" | "dealer_pro";
   trialEvaluationsUsed?: number;
   trialEvaluationsRemaining?: number | null;
   monthlyEvaluationsUsed?: number;
@@ -34,6 +47,7 @@ type UsageStatus = {
   giftedEvaluationsRemaining?: number | null;
   effectiveEvaluationsRemaining?: number | null;
   canUsePaidProviders?: boolean;
+  canStartEvaluation?: boolean;
   limits?: {
     evaluationsPerMonth?: number;
   };
@@ -71,44 +85,132 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
   const evaluationUsage = (() => {
     if (!usage || usage.internalUnlimited) return null;
 
-    const gifted = Number(usage.giftedEvaluationsRemaining || 0);
+    const planName = usage.planKey === "dealer_pro"
+      ? "Dealer Pro"
+      : usage.planKey === "dealer"
+        ? "Dealer"
+        : "Starter";
+    const status = String(usage.status || "");
+    const gifted = Math.max(0, Number(usage.giftedEvaluationsRemaining || 0));
 
-    if (!usage.paidActive) {
+    // Stripe can create a subscription before payment is confirmed.
+    // Never label an unpaid subscription as a free trial.
+    if (["unpaid", "past_due", "paused"].includes(status)) {
+      return {
+        used: 0,
+        total: 1,
+        gifted: 0,
+        label: `${planName} · Payment due`,
+      };
+    }
+
+    if (usage.paidActive) {
+      if (usage.paidBillingPeriodReady === false) {
+        return {
+          used: 0,
+          total: 1,
+          gifted: 0,
+          label: `${planName} · Syncing billing`,
+        };
+      }
+
+      const monthlyLimit = Math.max(0, Number(usage.limits?.evaluationsPerMonth || 0));
+      if (!monthlyLimit) return null;
+      const total = monthlyLimit + gifted;
+      const remaining = Math.max(
+        0,
+        Number(usage.effectiveEvaluationsRemaining ?? usage.monthlyEvaluationsRemaining ?? 0),
+      );
+      // The header shows one current balance. Trial/paid credit distinctions
+      // and post-cancellation expiry remain clearly explained in Billing.
+      if ((status === "active" && usage.cancelAtPeriodEnd) || usage.paidThroughCancellation) {
+        return {
+          used: Math.max(0, total - remaining),
+          total,
+          gifted,
+          label: `Canceling · ${remaining} evals left`,
+        };
+      }
+      return {
+        used: Math.max(0, total - remaining),
+        total,
+        gifted,
+        label: `${planName} · ${remaining} evals left`,
+      };
+    }
+
+    if (status === "canceled") {
+      const expiryMs = Date.parse(usage.postCancelExpiresAt || "");
+      const validExpiry = Number.isFinite(expiryMs);
+      const creditCount = usage.postCancelActive
+        ? Math.max(0, Number(usage.postCancelRemaining || 0))
+        : Math.max(0, Number(usage.postCancelBalance || 0));
+      const hasUnexpiredCredits = validExpiry && expiryMs > Date.now() && creditCount > 0;
+      const expiryDate = validExpiry
+        ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(expiryMs))
+        : null;
+      return {
+        used: hasUnexpiredCredits ? 0 : 1,
+        total: 1,
+        gifted,
+        label: hasUnexpiredCredits
+          ? `Canceled · ${creditCount} paid left · expire ${expiryDate}`
+          : expiryDate && expiryMs <= Date.now()
+            ? `Canceled · Credits expired ${expiryDate}`
+            : "Canceled · No paid credits left",
+      };
+    }
+
+    if (usage.trialActive) {
       const used = Number(usage.trialEvaluationsUsed || 0);
       const total = 5;
       return {
         used,
         total,
         gifted,
-        label:
-          gifted > 0
-            ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
-            : `${Math.min(used, total)}/${total} free evals`,
+        label: gifted > 0
+          ? `${Math.min(used, total)}/${total} free · ${gifted} gifted`
+          : `${Math.min(used, total)}/${total} free evals`,
       };
     }
 
-    const total = Number(usage.limits?.evaluationsPerMonth || 0);
-    if (!total) return null;
-
-    const used = Number(usage.monthlyEvaluationsUsed || 0);
     return {
-      used,
-      total,
-      gifted,
-      label:
-        gifted > 0
-          ? `${used}/${total} evals · ${gifted} gifted`
-          : `${used}/${total} evals`,
+      used: 1,
+      total: 1,
+      gifted: 0,
+      label: "Trial ended · Choose plan",
     };
   })();
+
+  const cancellationPaywallReached =
+    usage?.status === "canceled" && usage?.canStartEvaluation === false;
 
   const trialPaywallReached =
     Boolean(usage) &&
     !usage?.paidActive &&
+    usage?.status === "trialing" &&
     usage?.canUsePaidProviders === false;
+
+  const paymentBlocksNewEvaluation =
+    Boolean(usage) &&
+    ["past_due", "unpaid", "paused"].includes(String(usage?.status || "")) &&
+    usage?.canStartEvaluation === false;
+
+  const billingSyncBlocksNewEvaluation =
+    Boolean(usage?.paidActive) &&
+    usage?.paidBillingPeriodReady === false &&
+    usage?.canStartEvaluation === false;
 
   const evaluationUsageTone = (() => {
     if (!evaluationUsage) return "border-slate-200 bg-slate-50 text-slate-600";
+
+    if (["unpaid", "past_due", "paused"].includes(String(usage?.status || ""))) {
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    }
+
+    if (usage?.status === "canceled") {
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    }
 
     if (Number(evaluationUsage.gifted || 0) > 0) {
       return "border-[#D4AF37] bg-[#FFF8E1] text-[#7A5A00] shadow-[0_0_0_1px_rgba(212,175,55,0.12)]";
@@ -295,7 +397,23 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             )
           ) : null}
 
-          {trialPaywallReached ? (
+          {cancellationPaywallReached ? null : billingSyncBlocksNewEvaluation ? (
+            <Link
+              href="/settings?tab=billing"
+              title="Paid evaluations are temporarily unavailable while the billing period is verified"
+              className="hidden rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-black text-amber-900 transition hover:bg-amber-100 lg:block"
+            >
+              Review billing
+            </Link>
+          ) : paymentBlocksNewEvaluation ? (
+            <Link
+              href="/settings?tab=billing"
+              title="Resolve payment to create a new evaluation"
+              className="hidden rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-black text-amber-900 transition hover:bg-amber-100 lg:block"
+            >
+              Resolve payment
+            </Link>
+          ) : trialPaywallReached ? (
             <button
               type="button"
               onClick={() => setPlanSelectionOpen(true)}
@@ -367,6 +485,7 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
         </div>
       </div>
       </header>
+      {userEmail ? <CancellationReturnNotice usage={usage} /> : null}
       {planSelectionOpen ? (
         <PlanSelectionModal
           message="You’ve used your free evaluations. Choose a plan to continue."
