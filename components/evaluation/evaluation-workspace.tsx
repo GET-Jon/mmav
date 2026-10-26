@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { DealSourcesEditor } from "@/components/evaluation/deal-sources-editor";
+import { defaultDealSources, dealSourceForValue, type DealSourceProfile } from "@/lib/deal-source-profiles";
 import { PlanSelectionModal } from "@/components/billing/plan-selection-modal";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -780,7 +782,7 @@ export function EvaluationWorkspace({
   );
 
   const [auctionSite, setAuctionSite] = useState(
-    initialSavedPayload?.auctionSite || "ACV Auctions",
+    initialSavedPayload?.auctionSite || "Auction — Local",
   );
 
   const [finalTargetOverride, setFinalTargetOverride] = useState<number | null>(
@@ -1113,6 +1115,11 @@ export function EvaluationWorkspace({
   const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
     useState(0);
   const [allInCostOpen, setAllInCostOpen] = useState(false);
+  const [dealSources,setDealSources] = useState<DealSourceProfile[]>(defaultDealSources);
+  const [dealSourcesOpen,setDealSourcesOpen] = useState(false);
+  const manuallyEditedCostsRef = useRef(false);
+  useEffect(()=>{let active=true;void (async()=>{try{const response=await fetch("/api/deal-sources",{cache:"no-store"});if(!response.ok)return;const data=await response.json();if(active&&Array.isArray(data.sources))setDealSources(data.sources);}catch{} })();return()=>{active=false};},[]);
+
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
@@ -1965,6 +1972,7 @@ export function EvaluationWorkspace({
   }
 
   function updateCost(key: keyof EvaluationCosts, value: number) {
+    manuallyEditedCostsRef.current = true;
     setEvaluation((previous) => ({
       ...previous,
       costs: {
@@ -1972,6 +1980,27 @@ export function EvaluationWorkspace({
         [key]: value,
       },
     }));
+  }
+
+  function selectDealSource(value: string) {
+    if (value === "__manage__") { setDealSourcesOpen(true); return; }
+    const profile = dealSourceForValue(dealSources,value);
+    if (profile && manuallyEditedCostsRef.current &&
+        !window.confirm("Apply this source's default costs? This replaces your manual cost adjustments for the current vehicle.")) return;
+    setAuctionSite(profile?.name || value);
+    if(profile) setEvaluation(previous=>({...previous,costs:{
+      ...previous.costs,auctionFee:profile.auctionFee,transport:profile.transport,
+      recon:profile.recon,detailAdmin:profile.detailAdmin,
+      generalRiskReserve:profile.generalRiskReserve,
+    }}));
+    manuallyEditedCostsRef.current=false;
+  }
+  function dealSourceChoices() {
+    return <>
+      {dealSources.map(profile=><option key={profile.id} value={profile.name}>{profile.name}</option>)}
+      {!dealSourceForValue(dealSources,auctionSite) && auctionSite?<option value={auctionSite}>{auctionSite} (previous source)</option>:null}
+      <option value="__manage__">⚙ Manage Sources…</option>
+    </>;
   }
 
   function updateAllInCostAmount(
@@ -1996,6 +2025,7 @@ export function EvaluationWorkspace({
     }
 
     if (key === "reconCombined") {
+      manuallyEditedCostsRef.current = true;
       setEvaluation((previous) => ({
         ...previous,
         costs: {
@@ -2249,15 +2279,16 @@ export function EvaluationWorkspace({
       },
     };
 
-    setEvaluation(
-      matchingCostDefault
-        ? applyCostDefaultToEvaluation(
-            baseEvaluation,
-            matchingCostDefault,
-            activeAssumptions,
-          )
-        : baseEvaluation,
-    );
+    const classifiedEvaluation = matchingCostDefault
+      ? applyCostDefaultToEvaluation(baseEvaluation,matchingCostDefault,activeAssumptions)
+      : baseEvaluation;
+    const selectedSource = dealSourceForValue(dealSources,auctionSite);
+    setEvaluation(selectedSource ? {...classifiedEvaluation,costs:{
+      ...classifiedEvaluation.costs,
+      auctionFee:selectedSource.auctionFee,transport:selectedSource.transport,
+      recon:selectedSource.recon,detailAdmin:selectedSource.detailAdmin,
+      generalRiskReserve:selectedSource.generalRiskReserve,
+    }} : classifiedEvaluation);
 
     setTargetMileage((previous) => previous);
     setFinalTargetOverride(null);
@@ -5410,16 +5441,10 @@ export function EvaluationWorkspace({
               <FormRow label="Vehicle Source">
                 <select
                   value={auctionSite}
-                  onChange={(event) => setAuctionSite(event.target.value)}
+                  onChange={(event) => selectDealSource(event.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                 >
-                  <option>ACV Auctions</option>
-                  <option>Manheim</option>
-                  <option>Cars & Bids</option>
-                  <option>Bring a Trailer</option>
-                  <option>Facebook</option>
-                  <option>Private Party</option>
-                  <option>Other</option>
+                  {dealSourceChoices()}
                 </select>
               </FormRow>
             </div>
@@ -7046,16 +7071,10 @@ export function EvaluationWorkspace({
               <FormRow label="Vehicle Source">
                 <select
                   value={auctionSite}
-                  onChange={(event) => setAuctionSite(event.target.value)}
+                  onChange={(event) => selectDealSource(event.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 shadow-sm outline-none"
                 >
-                  <option>ACV Auctions</option>
-                  <option>Manheim</option>
-                  <option>Cars & Bids</option>
-                  <option>Bring a Trailer</option>
-                  <option>Facebook</option>
-                  <option>Private Party</option>
-                  <option>Other</option>
+                  {dealSourceChoices()}
                 </select>
               </FormRow>
 
@@ -7405,16 +7424,10 @@ export function EvaluationWorkspace({
                     <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Source</span>
                     <select
                       value={auctionSite}
-                      onChange={(event) => setAuctionSite(event.target.value)}
+                      onChange={(event) => selectDealSource(event.target.value)}
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-300"
                     >
-                      <option>ACV Auctions</option>
-                      <option>Manheim</option>
-                      <option>Cars & Bids</option>
-                      <option>Bring a Trailer</option>
-                      <option>Facebook</option>
-                      <option>Private Party</option>
-                      <option>Other</option>
+                      {dealSourceChoices()}
                     </select>
                   </label>
 
@@ -8283,7 +8296,41 @@ export function EvaluationWorkspace({
             </>
           ) : null}
 
-          {allInCostOpen ? (
+          {dealSourcesOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto">
+            <DealSourcesEditor onClose={()=>setDealSourcesOpen(false)} onSaved={sources=>{
+                const previousSource=dealSourceForValue(dealSources,auctionSite);
+                setDealSources(sources);
+                const updated=previousSource?sources.find(source=>source.id===previousSource.id):null;
+                if (updated) {
+                  setAuctionSite(updated.name);
+                  if (window.confirm("Defaults saved. Apply these updated costs to the current vehicle too?")) {
+                    setEvaluation(previous=>({...previous,costs:{
+                      ...previous.costs,auctionFee:updated.auctionFee,transport:updated.transport,
+                      recon:updated.recon,detailAdmin:updated.detailAdmin,
+                      generalRiskReserve:updated.generalRiskReserve,
+                    }}));
+                    manuallyEditedCostsRef.current=false;
+                  }
+                }
+              }}
+              onApply={profile=>{
+                if (manuallyEditedCostsRef.current && !window.confirm("Replace manually edited costs for this vehicle?")) return;
+                setAuctionSite(profile.name);
+                setEvaluation(previous=>({...previous,costs:{
+                  ...previous.costs,auctionFee:profile.auctionFee,
+                  transport:profile.transport,recon:profile.recon,
+                  detailAdmin:profile.detailAdmin,generalRiskReserve:profile.generalRiskReserve,
+                }}));
+                manuallyEditedCostsRef.current=false;
+                setDealSourcesOpen(false);
+              }}/>
+          </div>
+        </div>
+      ) : null}
+
+      {allInCostOpen ? (
             <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
               <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
                 <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
