@@ -1,6 +1,7 @@
 import {
   canonicalBodyClass,
   canonicalDrivetrain,
+  dedicatedBmwMModel,
   canonicalFuelType,
   canonicalModelFamily,
   canonicalTractionClass,
@@ -560,6 +561,18 @@ export function evaluateVehicleEquivalence({
     };
   }
 
+  const dedicatedTarget = dedicatedBmwMModel(target.make, target.model, target.trim);
+  const dedicatedCandidate = dedicatedBmwMModel(candidate.make, candidate.model, candidate.trim);
+  // A genuine BMW M5 is not priced by a 525i, 540i, or M550i.
+  // Unrelated Series-bucket inventory is rejected, not even supporting evidence.
+  if ((dedicatedTarget || dedicatedCandidate) && dedicatedTarget !== dedicatedCandidate) {
+    return {
+      tier: "reject",
+      ...tierProperties("reject"),
+      reasons: [`dedicated BMW M model mismatch: ${dedicatedTarget || "standard"} vs ${dedicatedCandidate || "standard"}`],
+    };
+  }
+
   const targetModelFamily = canonicalModelFamily(target);
   const candidateModelFamily = canonicalModelFamily(candidate);
 
@@ -611,7 +624,18 @@ export function evaluateVehicleEquivalence({
     candidateClassification = candidateSpecial || normalize(candidate.trim) || null;
 
     if (targetSpecial || candidateSpecial) {
-      if (targetSpecial && candidateSpecial && targetSpecial === candidateSpecial) {
+      if (dedicatedTarget && dedicatedTarget === dedicatedCandidate) {
+        // M2/M3/M4/M5/M6/M8 are complete model identities without a
+        // required trim. A genuine matching M car can be a direct pricing peer.
+        const meaningfulTrim = (vehicle: VehicleIdentity) => {
+          const value = normalize(vehicle.trim);
+          return value === normalize(dedicatedTarget) ? "" : value;
+        };
+        const a = meaningfulTrim(target);
+        const b = meaningfulTrim(candidate);
+        tier = a && b && a !== b ? "near" : "direct";
+        if (tier === "near") reasons.push(`M-model equipment differs: ${a} vs ${b}`);
+      } else if (targetSpecial && candidateSpecial && targetSpecial === candidateSpecial) {
         // Matching the performance derivative (e.g. TTS) does not establish
         // identical equipment/trim. Prestige and Premium Plus are different
         // retail variants even though both are TTS, so use Near evidence.
