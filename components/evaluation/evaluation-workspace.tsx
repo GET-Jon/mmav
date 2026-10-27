@@ -28,6 +28,7 @@ import {
 } from "@/lib/evaluation/vehicle-identity-profile";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
+import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
@@ -1766,7 +1767,8 @@ export function EvaluationWorkspace({
 
   const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
   const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
-  const vehicleModel = decodedVehicle?.model || manualVehicle.model || "";
+  const rawVehicleModel = decodedVehicle?.model || manualVehicle.model || "";
+  const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, decodedVehicle?.trim || manualVehicle.trim) || rawVehicleModel;
   const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
   const compTaxonomyFallback = findModelTaxonomyFallback({
     make: vehicleMake,
@@ -2712,12 +2714,14 @@ export function EvaluationWorkspace({
     const exactVehicleModel = String(
       vehicleOverride?.model || vehicleModel || "",
     ).trim();
-    const model = exactVehicleModel || profileModel;
+    const model = dedicatedBmwMModel(make, exactVehicleModel || profileModel, vehicleOverride?.trim || vehicleTrim) || exactVehicleModel || profileModel;
     const profileVariant = String(
       activeVehicleIdentityProfile?.variant || "",
     ).trim();
     const trim =
-      !useSemanticIdentity &&
+      dedicatedBmwMModel(make, model, vehicleOverride?.trim || vehicleTrim)
+        ? String(vehicleOverride?.trim || vehicleTrim || "")
+        : !useSemanticIdentity &&
       vehicleOverride &&
       Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
         ? String(vehicleOverride.trim || "")
@@ -2797,9 +2801,11 @@ export function EvaluationWorkspace({
           qualificationModel:
             vehicleModel || activeVehicleIdentityProfile?.modelFamily,
           qualificationTrim:
-            activeVehicleIdentityProfile
-              ? activeVehicleIdentityProfile.variant
-              : vehicleTrim,
+            dedicatedBmwMModel(make, model, vehicleTrim)
+              ? vehicleTrim
+              : activeVehicleIdentityProfile
+                ? activeVehicleIdentityProfile.variant
+                : vehicleTrim,
           qualificationFuelType:
             activeVehicleIdentityProfile?.fuelType ||
             decodedVehicle?.fuelType ||
@@ -3290,7 +3296,10 @@ export function EvaluationWorkspace({
               .replace(/\s+/g, " ")
               .trim(),
             ...(vehicleIdentityProfile?.providerAliases || []),
-          ].filter(Boolean),
+          ].filter((alias) => Boolean(alias) && (
+            !dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim) ||
+            dedicatedBmwMModel(vehicleMake, alias) === dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim)
+          )),
           fuelType:
             vehicleIdentityProfile?.fuelType ||
             decodedVehicle?.fuelType ||
@@ -6436,36 +6445,33 @@ export function EvaluationWorkspace({
                       : compSearchRecommendation.action === "discovered-markets"
                         ? automaticMarketPassFinished ? `Automatic search finished. ${remainingNationalMarketCount} additional market${remainingNationalMarketCount === 1 ? "" : "s"} available if you want to search further.` : `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
                         : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete"
-                          ? "No further automatic search is recommended. Review the listings or continue with the stated confidence."
+                          ? "Automatic search is complete; there are no additional identified markets to search. Review manual search settings for other options or continue with limited evidence."
                           : compSearchRecommendation.reason}
                   </p>
                   {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
                     <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
                   ) : null}
-                  <div className="mt-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                    <button
-                      type="button"
-                      onClick={() => void improveCompSearch()}
-                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading ||
-                        compSearchRecommendation.action === "complete" ||
-                        (automaticCompSearchCompleted && !canContinueNationalSearch)}
-                      className="min-h-12 flex-1 rounded-xl bg-blue-700 px-3 py-3 text-center text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {compSearchImproving ? "Searching…" : "Search Further (Optional) →"}
-                    </button>
-                    <span className="shrink-0 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">or</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompMarketEditorOpen(false);
-                        void continueToVerdict();
-                      }}
+                  {compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete" ? (
+                    <button type="button" onClick={() => { setCompMarketEditorOpen(false); void continueToVerdict(); }}
                       disabled={verdictTransitioning || compSearchImproving}
-                      className="min-h-12 flex-1 rounded-xl border border-blue-300 bg-white px-3 py-3 text-center text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50"
-                    >
+                      className="mt-4 min-h-12 w-full rounded-xl border border-blue-300 bg-white px-3 py-3 text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50">
                       {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
                     </button>
-                  </div>
+                  ) : (
+                    <div className="mt-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                      <button type="button" onClick={() => void improveCompSearch()}
+                        disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch)}
+                        className="min-h-12 flex-1 rounded-xl bg-blue-700 px-3 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300">
+                        {compSearchImproving ? "Searching…" : "Search Further (Optional) →"}
+                      </button>
+                      <span className="shrink-0 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">or</span>
+                      <button type="button" onClick={() => { setCompMarketEditorOpen(false); void continueToVerdict(); }}
+                        disabled={verdictTransitioning || compSearchImproving}
+                        className="min-h-12 flex-1 rounded-xl border border-blue-300 bg-white px-3 py-3 text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+                        {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
+                      </button>
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
                     <button type="button" onClick={() => {
                       setCompMarketEditorOpen(false);
