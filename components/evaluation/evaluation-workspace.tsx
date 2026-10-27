@@ -6696,7 +6696,7 @@ export function EvaluationWorkspace({
                             Lot Logic is matching
                           </div>
                           <div className="mt-1 text-base font-black text-slate-950">
-                            {[vehicleIdentityProfile?.make || vehicleMake, vehicleIdentityProfile?.modelFamily || vehicleModel, vehicleIdentityProfile?.variant].filter(Boolean).join(" · ") || "Vehicle details unavailable"}
+                            {[vehicleIdentityProfile?.make || vehicleMake, vehicleModel || vehicleIdentityProfile?.modelFamily, dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim) ? null : vehicleIdentityProfile?.variant].filter(Boolean).join(" · ") || "Vehicle details unavailable"}
                           </div>
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-500">
                             {vehicleIdentityProfile?.bodyClass ? <span>{vehicleIdentityProfile.bodyClass}</span> : null}
