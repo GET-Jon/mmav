@@ -99,7 +99,10 @@ export async function POST(request: Request) {
       year: result.ModelYear || "",
       make: normalizeMake(result.Make || ""),
       model: dedicatedBmwMModel(normalizeMake(result.Make || ""), result.Model, result.Trim || result.Series) || result.Model || "",
-      trim: result.Trim || result.Series || "",
+      // Series is the family (e.g. "5-Series"), not a trim for a dedicated M5.
+      trim: dedicatedBmwMModel(normalizeMake(result.Make || ""), result.Model, result.Trim || result.Series)
+        ? (result.Trim || "")
+        : (result.Trim || result.Series || ""),
       bodyClass: result.BodyClass || "",
       doors: result.Doors || "",
       engineCylinders: result.EngineCylinders || "",
