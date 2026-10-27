@@ -6451,7 +6451,7 @@ export function EvaluationWorkspace({
                   {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
                     <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
                   ) : null}
-                  {compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete" ? (
+                  {compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete" || (automaticCompSearchCompleted && !canContinueNationalSearch) ? (
                     <button type="button" onClick={() => { setCompMarketEditorOpen(false); void continueToVerdict(); }}
                       disabled={verdictTransitioning || compSearchImproving}
                       className="mt-4 min-h-12 w-full rounded-xl border border-blue-300 bg-white px-3 py-3 text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50">
