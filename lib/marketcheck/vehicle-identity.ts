@@ -62,6 +62,22 @@ function canonicalAudiFamily(modelCompact: string) {
   return null;
 }
 
+/**
+ * BMW's dedicated M cars are separate retail models, even when VIN feeds
+ * describe them as a numbered Series. Do not confuse M Sport packages or
+ * M340i/M550i M Performance derivatives with M3/M5.
+ */
+export function dedicatedBmwMModel(make: unknown, model: unknown, trim?: unknown): string | null {
+  if (canonicalVehicleMake(make) !== "bmw") return null;
+  const modelText = normalizeVehicleText(model);
+  const trimText = normalizeVehicleText(trim);
+  for (const id of ["2", "3", "4", "5", "6", "8"]) {
+    const token = new RegExp(`\\bm${id}\\b`);
+    if (token.test(modelText) || token.test(trimText)) return `M${id}`;
+  }
+  return null;
+}
+
 function canonicalBmwFamily(model: string, modelCompact: string) {
   const normalized = normalizeVehicleText(model);
 
