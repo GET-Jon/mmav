@@ -372,6 +372,7 @@ function CompFitExplanation({
 export function MarketCompsTable({
   comps,
   targetMileage,
+  targetDrivetrain,
   assumptions,
   onToggleIncluded,
   maxVisibleRows,
@@ -379,6 +380,7 @@ export function MarketCompsTable({
 }: {
   comps: MarketComp[];
   targetMileage: number;
+  targetDrivetrain?: string | null;
   assumptions: Assumptions;
   onToggleIncluded: (id: string) => void;
   maxVisibleRows?: number;
@@ -406,7 +408,7 @@ export function MarketCompsTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           target: {year: d.targetYear, make:d.targetMake,model:d.targetModel,trim:d.targetTrim,
-            drivetrain: null, fuelType:d.targetFuelType},
+            drivetrain: targetDrivetrain || null, fuelType:d.targetFuelType},
           candidate:{year:comp.year,make:d.targetMake,model:comp.model,trim:comp.trim,
             drivetrain:d.drivetrain,fuelType:d.fuelType,engine:d.engine,bodyType:d.bodyType},
         }),
