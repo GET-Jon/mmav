@@ -1611,9 +1611,9 @@ export function EvaluationWorkspace({
   );
 
   function downloadCompAudit() {
-    if (!comps.length) return;
+    if (!independentComps.length) return;
     const csv = createCompAuditCsv({
-      comps,
+      comps: independentComps,
       targetMileage,
       assumptions: activeAssumptions,
       summary: compSummary,
