@@ -4772,6 +4772,12 @@ export function EvaluationWorkspace({
           : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
+  // Do not present broad-market fallback asking-price evidence as a verified retail value.
+  const provisionalFallbackPricing =
+    compSummary.pricingMode === "market-fallback" && compSummary.pricingCompCount > 0;
+  const fallbackEvidenceDisclosure = provisionalFallbackPricing
+    ? `Provisional estimate from ${compSummary.pricingCompCount} broader asking-price comps; only ${compSummary.primaryCompCount} close, uncapped pricing peers (minimum 4). ${compSummary.cappedAdjustmentCount} retained comps needed capped mileage corrections. Sale estimate and projected profit require independent verification.`
+    : null;
   const hasLowCompConfidence = hasLimitedMarketEvidence;
 
   async function improveCompSearch(isAutomatic = false) {
@@ -7857,6 +7863,7 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          {provisionalFallbackPricing ? <div className="mt-1 text-[10px] font-bold text-amber-700">Provisional · verify before purchase</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
@@ -7884,7 +7891,7 @@ export function EvaluationWorkspace({
                         ) : compSummary.includedCount > 0 ? (
                           <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
                             <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
-                            <span>Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate.</span>
+                            <span>{fallbackEvidenceDisclosure || "Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate."}</span>
                           </div>
                         ) : null}
                         {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
@@ -8202,6 +8209,12 @@ export function EvaluationWorkspace({
                       <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice && compSummary.includedCount > 0 ? money(valuation.expectedGrossProfit) : "—"}</div>
                     </div>
                   </div>
+                  {provisionalFallbackPricing && hasEvaluationData ? (
+                    <div role="note" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-900">
+                      <span className="font-black">Provisional sale and profit estimates.</span>{" "}
+                      {fallbackEvidenceDisclosure}
+                    </div>
+                  ) : null}
                   {presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
