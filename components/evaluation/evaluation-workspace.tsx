@@ -7863,7 +7863,7 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
-                          {provisionalFallbackPricing ? <div className="mt-1 text-[10px] font-bold text-amber-700">Provisional · verify before purchase</div> : null}
+                          {provisionalFallbackPricing ? <div className="mt-1 text-[10px] font-bold text-amber-700">Provisional · asking-price evidence</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
