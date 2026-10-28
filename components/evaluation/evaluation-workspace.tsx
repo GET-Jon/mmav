@@ -30,7 +30,7 @@ import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { calculateCompSummary } from "@/lib/comps";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
-import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
+import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
@@ -1591,17 +1591,23 @@ export function EvaluationWorkspace({
     initialSavedEvaluationId,
   ]);
 
+  // Filter before both valuation and rendering, including restored older drafts.
+  const independentComps = useMemo(
+    () => excludeSubjectVinComps(comps, decodedVehicle?.vin || vin),
+    [comps, decodedVehicle?.vin, vin],
+  );
+
   const compSummary = useMemo(
     () =>
       calculateCompSummary({
-        comps,
+        comps: independentComps,
         targetMileage,
         targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
         targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
         targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [comps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
+    [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
 
   function downloadCompAudit() {
@@ -2966,7 +2972,7 @@ export function EvaluationWorkspace({
       // fallback rows client-side just because MarketCheck returned inventory:
       // that can temporarily manufacture a sale value/profit verdict before
       // vehicle-equivalence checks have established usable comps.
-      const normalizedComps: MarketComp[] = pulledComps.map(
+      const normalizedComps: MarketComp[] = excludeSubjectVinComps(pulledComps, decodedVehicle?.vin || vin).map(
         (comp: MarketComp) => ({
           ...comp,
           included: comp.included === true,
@@ -2984,7 +2990,7 @@ export function EvaluationWorkspace({
         : normalizedComps;
 
       setComps((current) => options?.mergeResults
-        ? mergeCompCandidates(current, normalizedComps)
+        ? excludeSubjectVinComps(mergeCompCandidates(current, normalizedComps), decodedVehicle?.vin || vin)
         : normalizedComps,
       );
       setMarketCheckApiUsage(data.apiUsage || null);
@@ -3322,7 +3328,7 @@ export function EvaluationWorkspace({
             included: candidate.included === true &&
               candidate.qualityScore >= activeAssumptions.compSettings.minimumQualityScore,
           }));
-        setComps((current) => mergeCompCandidates(current, qualifiedCandidates));
+        setComps((current) => excludeSubjectVinComps(mergeCompCandidates(current, qualifiedCandidates), decodedVehicle?.vin || vin));
       }
 
       const total = Number(data.total || 0);
@@ -8030,7 +8036,7 @@ export function EvaluationWorkspace({
                           Full comp set appears after Continue to Verdict.
                         </div>
                       </div>
-                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
+                      <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
                       {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
@@ -8242,7 +8248,7 @@ export function EvaluationWorkspace({
                   }
                 >
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
+                    <MarketCompsTable comps={independentComps} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}
