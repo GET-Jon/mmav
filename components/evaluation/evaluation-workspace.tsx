@@ -4774,7 +4774,7 @@ export function EvaluationWorkspace({
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
   // Do not present broad-market fallback asking-price evidence as a verified retail value.
   const provisionalFallbackPricing =
-    compSummary.pricingMode === "market-fallback" && compSummary.pricingCompCount > 0;
+    compSummary.pricingMode === "market-fallback" && (compSummary.pricingCompCount ?? 0) > 0;
   const fallbackEvidenceDisclosure = provisionalFallbackPricing
     ? `Provisional estimate from ${compSummary.pricingCompCount} broader asking-price comps; only ${compSummary.primaryCompCount} close, uncapped pricing peers (minimum 4). ${compSummary.cappedAdjustmentCount} retained comps needed capped mileage corrections. Sale estimate and projected profit require independent verification.`
     : null;
