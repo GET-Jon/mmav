@@ -8211,11 +8211,19 @@ export function EvaluationWorkspace({
                   </div>
                   {provisionalFallbackPricing && hasEvaluationData ? (
                     <div role="note" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-900">
-                      <span className="font-black">Provisional sale and profit estimates.</span>{" "}
-                      {fallbackEvidenceDisclosure}
+                      <span className="font-black">Market pricing needs verification.</span>{" "}
+                      Based on {compSummary.pricingCompCount ?? compSummary.includedCount} related asking-price listings, but {compSummary.primaryCompCount === 0
+                        ? "none closely match this vehicle"
+                        : `only ${compSummary.primaryCompCount} qualify as close pricing peers`}.
+                      {(compSummary.cappedAdjustmentCount ?? 0) > 0
+                        ? ` ${compSummary.cappedAdjustmentCount} required capped mileage adjustments.`
+                        : ""}
+                      {" "}Verify the estimated sale price before purchasing.
+                      {presentationDecision === "review" && reviewReasons.some((reason) => !reason.startsWith("market evidence is limited")) ? (
+                        <p className="mt-2">Also review: {reviewReasons.filter((reason) => !reason.startsWith("market evidence is limited")).join("; ")}.</p>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {presentationDecision === "review" && reviewReasons.length ? (
+                  ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
                   {!needsCompSearch && currentCostPosition ? (
