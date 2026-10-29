@@ -30,6 +30,7 @@ import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
+import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
@@ -706,6 +707,7 @@ type SavedEvaluationPayload = {
   conditionAnalysisApplied?: boolean;
   conditionReviewStatus?: ConditionReviewStatus;
   notes?: string;
+  refinementEvents?: RefinementEvent[];
 };
 
 type EvaluationStage = "vehicle" | "condition" | "market" | "verdict";
@@ -801,6 +803,11 @@ export function EvaluationWorkspace({
       ? initialSavedPayload.comps
       : initialComps,
   );
+  const [refinementEvents, setRefinementEvents] = useState<RefinementEvent[]>(
+    initialSavedPayload?.refinementEvents || [],
+  );
+  const pendingRefinementRef = useRef<{ before: RefinementSnapshot; action: "search" | "selection" } | null>(null);
+  const [refinementTracking, setRefinementTracking] = useState(false);
 
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null,
@@ -1413,6 +1420,7 @@ export function EvaluationWorkspace({
       if (Array.isArray(draft.comps)) {
         setComps(draft.comps);
       }
+      if (Array.isArray(draft.refinementEvents)) setRefinementEvents(draft.refinementEvents);
 
       if (Array.isArray(draft.selectedConditions)) {
         setSelectedConditions(draft.selectedConditions);
@@ -1541,6 +1549,7 @@ export function EvaluationWorkspace({
           targetMileage,
           evaluation,
           comps,
+          refinementEvents,
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
@@ -1573,6 +1582,7 @@ export function EvaluationWorkspace({
     targetMileage,
     evaluation,
     comps,
+    refinementEvents,
     selectedConditions,
     conditionAssessments,
     conditionAssessmentsTouched,
@@ -1610,6 +1620,33 @@ export function EvaluationWorkspace({
       }),
     [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
+
+  const refinementSnapshot: RefinementSnapshot = {
+    comps: independentComps,
+    selected: compSummary.includedCount,
+    primaryIds: compSummary.primaryCompIds || [],
+    retail: compSummary.includedCount > 0 ? compSummary.fastSaleTarget : null,
+    confidence: compSummary.confidence,
+    regions: marketCheckSearchMeta?.regionsChecked || [],
+  };
+  const latestRefinementSnapshotRef = useRef(refinementSnapshot);
+  latestRefinementSnapshotRef.current = refinementSnapshot;
+
+  function beginRefinement(action: "search" | "selection") {
+    if (pendingRefinementRef.current) return;
+    pendingRefinementRef.current = { before: latestRefinementSnapshotRef.current, action };
+    setRefinementTracking(true);
+  }
+
+  useEffect(() => {
+    if (!refinementTracking || marketCheckLoading || autoDevDiscoveryLoading || compSearchImproving) return;
+    const pending = pendingRefinementRef.current;
+    if (!pending) return;
+    pendingRefinementRef.current = null;
+    setRefinementTracking(false);
+    const event = buildRefinementEvent(pending.before, refinementSnapshot, pending.action);
+    setRefinementEvents(previous => [event, ...previous].slice(0, 30));
+  }, [refinementTracking, marketCheckLoading, autoDevDiscoveryLoading, compSearchImproving, comps, compSummary, marketCheckSearchMeta]);
 
   function downloadCompAudit() {
     if (!independentComps.length) return;
@@ -2370,6 +2407,7 @@ export function EvaluationWorkspace({
   }
 
   function toggleCompIncluded(id: string) {
+    beginRefinement("selection");
     setComps((previous) =>
       previous.map((comp) => {
         if (comp.id !== id) return comp;
@@ -2676,6 +2714,7 @@ export function EvaluationWorkspace({
       return;
     }
 
+    if (options?.mergeResults) beginRefinement("search");
     marketCheckInFlightRef.current = true;
 
     const overrideVin =
@@ -3271,6 +3310,7 @@ export function EvaluationWorkspace({
   }
 
   async function runAutoDevDiscovery() {
+    beginRefinement("search");
     if (!vehicleYear || !vehicleMake || !vehicleModel || autoDevDiscoveryLoading) {
       return;
     }
@@ -4047,6 +4087,7 @@ export function EvaluationWorkspace({
           valuation,
           compSummary,
           comps,
+          refinementEvents,
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
@@ -4089,6 +4130,9 @@ export function EvaluationWorkspace({
   }
 
   function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
+    pendingRefinementRef.current = null;
+    setRefinementTracking(false);
+    setRefinementEvents([]);
     automaticMarketSearchKeyRef.current = "";
     setAutomaticMarketPassFinished(false);
     // Prevent stale search state from carrying into another vehicle.
@@ -4806,6 +4850,7 @@ export function EvaluationWorkspace({
       return;
     }
 
+    beginRefinement("search");
     setCompSearchHandedOff(true);
     // Keep the search dialog visible so progress and results are not hidden.
     setCompSearchImprovementStatus("Preparing the next comparison search…");
