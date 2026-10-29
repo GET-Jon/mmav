@@ -8,6 +8,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { CompRefinementUpdate } from "@/components/comps/comp-refinement-update";
 import { ConditionChoiceIcon } from "@/components/evaluation/condition-choice-icon";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
@@ -8079,6 +8080,7 @@ export function EvaluationWorkspace({
                   <span>{compSearchImprovementStatus || "Updating comparable vehicles…"}</span>
                 </div>
               ) : null}
+              <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} />
               <SectionCard
                 title="Comparable Vehicles"
                 action={
