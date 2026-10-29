@@ -628,13 +628,21 @@ export function evaluateVehicleEquivalence({
         // M2/M3/M4/M5/M6/M8 are complete model identities without a
         // required trim. A genuine matching M car can be a direct pricing peer.
         const meaningfulTrim = (vehicle: VehicleIdentity) => {
-          const value = normalize(vehicle.trim);
-          return value === normalize(dedicatedTarget) ? "" : value;
+          const value = normalize(vehicle.trim).replace(/\bm[234568]\b/g, "").trim();
+          const combined = [vehicle.model, vehicle.trim].map(normalize).join(" ");
+          const competition = /\bcompetition\b/.test(combined);
+          const xdrive = /\bxdrive\b/.test(combined) ||
+            (competition && /\b(awd|all wheel drive|quattro)\b/.test(normalize(vehicle.drivetrain)));
+          if (competition) return xdrive ? "competition xdrive" : "competition";
+          if (/\bcs\b/.test(value)) return "cs";
+          return value || "unspecified";
         };
         const a = meaningfulTrim(target);
         const b = meaningfulTrim(candidate);
-        tier = a && b && a !== b ? "near" : "direct";
-        if (tier === "near") reasons.push(`M-model equipment differs: ${a} vs ${b}`);
+        // Unknown package information is not proof of an identical configuration.
+        // Preserve legacy trimless M5 matching when neither listing specifies a variant.
+        tier = a === b ? "direct" : a === "unspecified" || b === "unspecified" ? "supporting" : "near";
+        if (tier !== "direct") reasons.push(`M-model equipment differs or is unspecified: ${a} vs ${b}`);
       } else if (targetSpecial && candidateSpecial && targetSpecial === candidateSpecial) {
         // Matching the performance derivative (e.g. TTS) does not establish
         // identical equipment/trim. Prestige and Premium Plus are different
