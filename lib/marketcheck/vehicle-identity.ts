@@ -110,11 +110,19 @@ function canonicalMercedesFamily(model: string, modelCompact: string) {
     "e class",
     "s class",
     "cla class",
+    "m class",
+    "ml class",
     "glc",
     "gle",
     "gls",
   ];
 
+  // Pre-GLE Mercedes SUVs appear as M-Class, ML-Class, ML350 and ML 350.
+  // Keep their family separate from later GLE despite shared lineage.
+  if (["m class", "ml class", "mclass", "mlclass"].includes(normalized) ||
+      /^ml(?:250|280|300|320|350|400|450|500|550|63)(?:\b|$)/.test(modelCompact)) {
+    return "m class";
+  }
   if (namedClasses.includes(normalized)) return normalized;
 
   if (
