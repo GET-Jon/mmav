@@ -20,6 +20,42 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Mercedes ML-Class VIN identity and M-Class provider listing share model family",
+    target: { year: 2014, make: "Mercedes-Benz", model: "ML-Class", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2014, make: "Mercedes-Benz", model: "M-Class", trim: "ML350", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Mercedes ML350 spelled with spaces is not rejected from M-Class family",
+    target: { year: 2014, make: "Mercedes-Benz", model: "ML-Class ML350", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2014, make: "Mercedes-Benz", model: "ML 350 4MATIC", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Mercedes ML350 BlueTEC diesel must not price gasoline ML350",
+    target: { year: 2014, make: "Mercedes-Benz", model: "ML350", trim: "4MATIC", fuelType: "Gasoline" },
+    candidate: { year: 2014, make: "Mercedes-Benz", model: "ML350", trim: "BlueTEC", fuelType: "Diesel" },
+    expected: "reject",
+  },
+  {
+    name: "BMW M3 Competition AWD matches explicit Competition xDrive trim",
+    target: { year: 2026, make: "BMW", model: "M3", trim: "M3 Competition", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2026, make: "BMW", model: "M3", trim: "Competition xDrive", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "BMW M3 Competition RWD remains distinct from Competition xDrive",
+    target: { year: 2026, make: "BMW", model: "M3", trim: "Competition", drivetrain: "RWD", fuelType: "Gasoline" },
+    candidate: { year: 2026, make: "BMW", model: "M3", trim: "Competition xDrive", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Unspecified M3 trim is not direct evidence for Competition xDrive",
+    target: { year: 2026, make: "BMW", model: "M3", trim: "Competition xDrive", drivetrain: "AWD" },
+    candidate: { year: 2026, make: "BMW", model: "M3", trim: "M3" },
+    expected: "supporting",
+  },
+  {
     name: "2000 M5 VIN-style M5 5-Series target matches genuine M5",
     target: { year: 2000, make: "BMW", model: "M5 5-Series", trim: "", bodyType: "Sedan" },
     candidate: { year: 2001, make: "BMW", model: "M5", trim: "", bodyType: "Sedan" },
