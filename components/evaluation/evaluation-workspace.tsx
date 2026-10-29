@@ -808,6 +808,7 @@ export function EvaluationWorkspace({
     initialSavedPayload?.refinementEvents || [],
   );
   const pendingRefinementRef = useRef<{ before: RefinementSnapshot; action: "search" | "selection" } | null>(null);
+  const refinementErrorRef = useRef<string | null>(null);
   const [refinementTracking, setRefinementTracking] = useState(false);
 
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
@@ -1636,6 +1637,7 @@ export function EvaluationWorkspace({
 
   function beginRefinement(action: "search" | "selection") {
     if (pendingRefinementRef.current) return;
+    refinementErrorRef.current = null;
     pendingRefinementRef.current = { before: latestRefinementSnapshotRef.current, action };
     setRefinementTracking(true);
   }
@@ -1646,7 +1648,8 @@ export function EvaluationWorkspace({
     if (!pending) return;
     pendingRefinementRef.current = null;
     setRefinementTracking(false);
-    const event = buildRefinementEvent(pending.before, refinementSnapshot, pending.action);
+    const event = buildRefinementEvent(pending.before, refinementSnapshot, pending.action, refinementErrorRef.current || undefined);
+    refinementErrorRef.current = null;
     setRefinementEvents(previous => [event, ...previous].slice(0, 30));
   }, [refinementTracking, marketCheckLoading, autoDevDiscoveryLoading, compSearchImproving, comps, compSummary, marketCheckSearchMeta]);
 
@@ -3107,6 +3110,7 @@ export function EvaluationWorkspace({
         searchedZips: combinedSearchedZips,
       };
     } catch (error) {
+      if (pendingRefinementRef.current) refinementErrorRef.current = error instanceof Error ? error.message : "MarketCheck search failed.";
       setMarketCheckStatus(
         error instanceof Error ? error.message : "MarketCheck search failed.",
       );
@@ -3448,6 +3452,7 @@ export function EvaluationWorkspace({
         error instanceof Error
           ? error.message
           : "Auto.dev national discovery failed.";
+      if (pendingRefinementRef.current) refinementErrorRef.current = message;
       setAutoDevDiscovery(null);
       setAutoDevDiscoveryStatus(message);
       setCompSearchHistory((current) =>
@@ -4132,6 +4137,7 @@ export function EvaluationWorkspace({
   }
 
   function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
+    refinementErrorRef.current = null;
     pendingRefinementRef.current = null;
     setRefinementTracking(false);
     setRefinementEvents([]);
@@ -5098,6 +5104,7 @@ export function EvaluationWorkspace({
             : "National discovery did not provide more markets. Review evidence and try a different geographic search.",
       );
     } catch (error) {
+      if (pendingRefinementRef.current) refinementErrorRef.current = error instanceof Error ? error.message : "Search did not complete.";
       setCompSearchImprovementStatus(error instanceof Error
         ? `Search did not complete: ${error.message}`
         : "Search did not complete. Please try again or use manual controls.");
