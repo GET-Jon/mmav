@@ -4,6 +4,7 @@ export type RefinementSnapshot = {
   comps: MarketComp[];
   selected: number;
   primaryIds: string[];
+  primaryCount: number;
   retail: number | null;
   confidence: "Low" | "Medium" | "High";
   regions: string[];
@@ -49,7 +50,7 @@ export function buildRefinementEvent(
     comp.qualityScore >= 0,
   );
   const newRegions = after.regions.filter(region => !before.regions.includes(region));
-  const primaryDelta = after.primaryIds.length - before.primaryIds.length;
+  const primaryDelta = after.primaryCount - before.primaryCount;
   const confidenceRank = { Low: 0, Medium: 1, High: 2 };
   const priceChanged = before.retail !== after.retail;
   const evidenceImproved = primaryDelta > 0 ||
