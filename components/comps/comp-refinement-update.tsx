@@ -10,10 +10,11 @@ export function CompRefinementUpdate({ events, searching }: { events: Refinement
   if (!latest && !searching) return null;
   const tone = latest?.status === "improved" ? "text-emerald-700" :
     latest?.status === "partial" ? "text-amber-700" : "text-slate-600";
-  const headline = latest?.status === "improved" ? "Pricing evidence improved" :
-    latest?.status === "partial" ? "More market evidence found" :
+  const headline = latest?.action === "selection" ? "Comparison selection updated" :
+    latest?.status === "improved" ? "Pricing evidence improved" :
+    latest?.status === "partial" && latest.newRelated > 0 ? "More comparisons found" :
+    latest?.status === "partial" ? "Additional search completed" :
     latest?.status === "failed" ? "Search could not finish" :
-    latest?.action === "selection" ? "Comparison selection updated" :
     "No additional useful comparisons";
   return (
     <section aria-live="polite" className="mb-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
@@ -33,7 +34,7 @@ export function CompRefinementUpdate({ events, searching }: { events: Refinement
           {latest.error || (latest.beforeConfidence !== latest.afterConfidence
             ? `Pricing confidence: ${latest.beforeConfidence} → ${latest.afterConfidence}.`
             : latest.status === "improved" ? "The price is supported by stronger comparable evidence." :
-              latest.status === "partial" ? "Additional evidence found; pricing confidence did not improve." :
+              latest.status === "partial" ? (latest.newRelated > 0 ? "More related listings found; pricing confidence did not improve." : "The search or selection changed, but no new related listings improved pricing confidence.") :
               "The existing pricing evidence remains unchanged.")}
         </p>
         <details className="mt-2 border-t border-slate-100 pt-2">
