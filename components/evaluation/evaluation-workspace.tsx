@@ -1626,6 +1626,7 @@ export function EvaluationWorkspace({
     comps: independentComps,
     selected: compSummary.includedCount,
     primaryIds: compSummary.primaryCompIds || [],
+    primaryCount: compSummary.primaryCompCount || 0,
     retail: compSummary.includedCount > 0 ? compSummary.fastSaleTarget : null,
     confidence: compSummary.confidence,
     regions: marketCheckSearchMeta?.regionsChecked || [],
@@ -2715,7 +2716,7 @@ export function EvaluationWorkspace({
       return;
     }
 
-    if (options?.mergeResults) beginRefinement("search");
+    if (options?.mergeResults && compSearchHandedOff) beginRefinement("search");
     marketCheckInFlightRef.current = true;
 
     const overrideVin =
@@ -3311,7 +3312,7 @@ export function EvaluationWorkspace({
   }
 
   async function runAutoDevDiscovery() {
-    beginRefinement("search");
+    if (compSearchHandedOff) beginRefinement("search");
     if (!vehicleYear || !vehicleMake || !vehicleModel || autoDevDiscoveryLoading) {
       return;
     }
