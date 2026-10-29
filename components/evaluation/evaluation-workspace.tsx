@@ -4687,6 +4687,10 @@ export function EvaluationWorkspace({
     marketCheckApiUsage?.filterDiagnostics?.usableListings || 0;
   const compModelMismatchCount =
     marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.modelMismatch || 0;
+  const allReturnedModelsRejected =
+    compSummary.includedCount === 0 &&
+    compReturnedListings > 0 &&
+    compModelMismatchCount >= compReturnedListings;
 
   const compExpansionMarketsRemaining = getCompExpansionMarkets().filter(
     (market) =>
@@ -6457,7 +6461,9 @@ export function EvaluationWorkspace({
                       : compSearchRecommendation.action === "discovered-markets"
                         ? automaticMarketPassFinished ? `Automatic search finished. ${remainingNationalMarketCount} additional market${remainingNationalMarketCount === 1 ? "" : "s"} available if you want to search further.` : `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
                         : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete"
-                          ? "Automatic search is complete; there are no additional identified markets to search. Review manual search settings for other options or continue with limited evidence."
+                          ? allReturnedModelsRejected
+                            ? `MarketCheck returned ${compReturnedListings} listings, but model matching rejected all of them. This is not evidence that no comparable vehicles exist. Review the provider model names under Manual search controls, or continue to an unpriced review.`
+                            : "Automatic search is complete; no further identified markets are queued. You can review manual search controls or continue with the stated confidence."
                           : compSearchRecommendation.reason}
                   </p>
                   {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
