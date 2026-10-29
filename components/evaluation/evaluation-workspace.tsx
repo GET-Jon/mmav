@@ -2719,7 +2719,7 @@ export function EvaluationWorkspace({
       return;
     }
 
-    if (options?.mergeResults && compSearchHandedOff) beginRefinement("search");
+    if (options?.mergeResults && (compSearchHandedOff || compMarketEditorOpen)) beginRefinement("search");
     marketCheckInFlightRef.current = true;
 
     const overrideVin =
@@ -3316,7 +3316,7 @@ export function EvaluationWorkspace({
   }
 
   async function runAutoDevDiscovery() {
-    if (compSearchHandedOff) beginRefinement("search");
+    if (compSearchHandedOff || compMarketEditorOpen) beginRefinement("search");
     if (!vehicleYear || !vehicleMake || !vehicleModel || autoDevDiscoveryLoading) {
       return;
     }
