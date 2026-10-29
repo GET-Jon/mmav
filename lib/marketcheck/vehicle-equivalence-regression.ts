@@ -3,7 +3,7 @@ import {
   type VehicleEquivalenceTier,
   type VehicleIdentity,
 } from "./vehicle-equivalence";
-import { canonicalIdentitySnapshot } from "./vehicle-identity";
+import { canonicalIdentitySnapshot, dedicatedBmwMModel } from "./vehicle-identity";
 
 type RegressionCase = {
   name: string;
@@ -19,6 +19,78 @@ const base = {
 } as const;
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
+  {
+    name: "Mercedes ML-Class VIN identity and M-Class provider listing share model family",
+    target: { year: 2014, make: "Mercedes-Benz", model: "ML-Class", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2014, make: "Mercedes-Benz", model: "M-Class", trim: "ML350", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Mercedes ML350 spelled with spaces is not rejected from M-Class family",
+    target: { year: 2014, make: "Mercedes-Benz", model: "ML-Class ML350", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2014, make: "Mercedes-Benz", model: "ML 350 4MATIC", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Mercedes ML350 BlueTEC diesel must not price gasoline ML350",
+    target: { year: 2014, make: "Mercedes-Benz", model: "ML350", trim: "4MATIC", fuelType: "Gasoline" },
+    candidate: { year: 2014, make: "Mercedes-Benz", model: "ML350", trim: "BlueTEC", fuelType: "Diesel" },
+    expected: "reject",
+  },
+  {
+    name: "BMW M3 Competition AWD matches explicit Competition xDrive trim",
+    target: { year: 2026, make: "BMW", model: "M3", trim: "M3 Competition", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2026, make: "BMW", model: "M3", trim: "Competition xDrive", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "BMW M3 Competition RWD remains distinct from Competition xDrive",
+    target: { year: 2026, make: "BMW", model: "M3", trim: "Competition", drivetrain: "RWD", fuelType: "Gasoline" },
+    candidate: { year: 2026, make: "BMW", model: "M3", trim: "Competition xDrive", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Unspecified M3 trim is not direct evidence for Competition xDrive",
+    target: { year: 2026, make: "BMW", model: "M3", trim: "Competition xDrive", drivetrain: "AWD" },
+    candidate: { year: 2026, make: "BMW", model: "M3", trim: "M3" },
+    expected: "supporting",
+  },
+  {
+    name: "2000 M5 VIN-style M5 5-Series target matches genuine M5",
+    target: { year: 2000, make: "BMW", model: "M5 5-Series", trim: "", bodyType: "Sedan" },
+    candidate: { year: 2001, make: "BMW", model: "M5", trim: "", bodyType: "Sedan" },
+    expected: "direct",
+  },
+  {
+    name: "2000 BMW M5 rejects ordinary 525i",
+    target: { year: 2000, make: "BMW", model: "M5", trim: "", bodyType: "Sedan" },
+    candidate: { year: 2002, make: "BMW", model: "5 Series", trim: "525i", bodyType: "Sedan" },
+    expected: "reject",
+  },
+  {
+    name: "2000 BMW M5 rejects ordinary 540i",
+    target: { year: 2000, make: "BMW", model: "M5", trim: "", bodyType: "Sedan" },
+    candidate: { year: 2003, make: "BMW", model: "5 Series", trim: "540i", bodyType: "Sedan" },
+    expected: "reject",
+  },
+  {
+    name: "BMW M5 rejects M550i M Performance",
+    target: { ...base, make: "BMW", model: "M5", trim: "" },
+    candidate: { ...base, make: "BMW", model: "M550i", trim: "" },
+    expected: "reject",
+  },
+  {
+    name: "Provider 5 Series M5 trim matches the dedicated M5 model",
+    target: { year: 2000, make: "BMW", model: "M5", trim: "" },
+    candidate: { year: 2000, make: "BMW", model: "5 Series", trim: "M5" },
+    expected: "direct",
+  },
+  {
+    name: "BMW M3 cannot be valued using 330i",
+    target: { ...base, make: "BMW", model: "M3", trim: "" },
+    candidate: { ...base, make: "BMW", model: "330i", trim: "" },
+    expected: "reject",
+  },
   {
     name: "Canadian Audi A3 Komfort and US Premium stay near pending verified equipment equivalence",
     target: { year: 2018, make: "Audi", model: "A3 Sedan", trim: "Premium, Komfort (Canada)", bodyType: "Sedan", drivetrain: "FWD", fuelType: "Gasoline" },
@@ -360,7 +432,7 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
     expected: "direct",
   },
   {
-    name: "BMW 4 Series 428i does not treat M4 as a direct comp",
+    name: "BMW 428i cannot use dedicated M4 for pricing",
     target: {
       year: 2016,
       make: "BMW",
@@ -379,7 +451,7 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
       drivetrain: "RWD",
       fuelType: "Gasoline",
     },
-    expected: "supporting",
+    expected: "reject",
   },
   {
     name: "Mercedes C300 model code vs C-Class normalizes to same family",
@@ -865,6 +937,18 @@ export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
 
 export function assertVehicleEquivalenceRegressionCases() {
   const failures: string[] = [];
+
+  for (const [name, make, model, trim, expected] of [
+    ["VIN decoder M5 5-Series", "BMW", "M5 5-Series", "", "M5"],
+    ["BMW Series model with M5 trim", "BMW", "5 Series", "M5", "M5"],
+    ["Ordinary 540i", "BMW", "540i", "", null],
+    ["M550i is not M5", "BMW", "M550i", "", null],
+    ["M Sport package is not M model", "BMW", "5 Series", "M Sport", null],
+    ["BMW M3 canonical model", "BMW", "M3 3-Series", "", "M3"],
+  ] as Array<[string,string,string,string,string|null]>) {
+    const actual = dedicatedBmwMModel(make, model, trim);
+    if (actual !== expected) failures.push(`${name}: expected ${expected}, got ${actual}`);
+  }
 
   for (const testCase of vehicleEquivalenceRegressionCases) {
     const actual = evaluateVehicleEquivalence({

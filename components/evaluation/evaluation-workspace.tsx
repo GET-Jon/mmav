@@ -28,9 +28,10 @@ import {
 } from "@/lib/evaluation/vehicle-identity-profile";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
+import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
-import { mergeCompCandidates } from "@/lib/autodev/qualified-comps";
+import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
@@ -1591,23 +1592,29 @@ export function EvaluationWorkspace({
     initialSavedEvaluationId,
   ]);
 
+  // Filter before both valuation and rendering, including restored older drafts.
+  const independentComps = useMemo(
+    () => excludeSubjectVinComps(comps, decodedVehicle?.vin || vin),
+    [comps, decodedVehicle?.vin, vin],
+  );
+
   const compSummary = useMemo(
     () =>
       calculateCompSummary({
-        comps,
+        comps: independentComps,
         targetMileage,
         targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
         targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
         targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [comps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
+    [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
 
   function downloadCompAudit() {
-    if (!comps.length) return;
+    if (!independentComps.length) return;
     const csv = createCompAuditCsv({
-      comps,
+      comps: independentComps,
       targetMileage,
       assumptions: activeAssumptions,
       summary: compSummary,
@@ -1766,7 +1773,8 @@ export function EvaluationWorkspace({
 
   const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
   const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
-  const vehicleModel = decodedVehicle?.model || manualVehicle.model || "";
+  const rawVehicleModel = decodedVehicle?.model || manualVehicle.model || "";
+  const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, decodedVehicle?.trim || manualVehicle.trim) || rawVehicleModel;
   const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
   const compTaxonomyFallback = findModelTaxonomyFallback({
     make: vehicleMake,
@@ -2712,12 +2720,14 @@ export function EvaluationWorkspace({
     const exactVehicleModel = String(
       vehicleOverride?.model || vehicleModel || "",
     ).trim();
-    const model = exactVehicleModel || profileModel;
+    const model = dedicatedBmwMModel(make, exactVehicleModel || profileModel, vehicleOverride?.trim || vehicleTrim) || exactVehicleModel || profileModel;
     const profileVariant = String(
       activeVehicleIdentityProfile?.variant || "",
     ).trim();
     const trim =
-      !useSemanticIdentity &&
+      dedicatedBmwMModel(make, model, vehicleOverride?.trim || vehicleTrim)
+        ? String(vehicleOverride?.trim || vehicleTrim || "")
+        : !useSemanticIdentity &&
       vehicleOverride &&
       Object.prototype.hasOwnProperty.call(vehicleOverride, "trim")
         ? String(vehicleOverride.trim || "")
@@ -2797,9 +2807,11 @@ export function EvaluationWorkspace({
           qualificationModel:
             vehicleModel || activeVehicleIdentityProfile?.modelFamily,
           qualificationTrim:
-            activeVehicleIdentityProfile
-              ? activeVehicleIdentityProfile.variant
-              : vehicleTrim,
+            dedicatedBmwMModel(make, model, vehicleTrim)
+              ? vehicleTrim
+              : activeVehicleIdentityProfile
+                ? activeVehicleIdentityProfile.variant
+                : vehicleTrim,
           qualificationFuelType:
             activeVehicleIdentityProfile?.fuelType ||
             decodedVehicle?.fuelType ||
@@ -2966,7 +2978,7 @@ export function EvaluationWorkspace({
       // fallback rows client-side just because MarketCheck returned inventory:
       // that can temporarily manufacture a sale value/profit verdict before
       // vehicle-equivalence checks have established usable comps.
-      const normalizedComps: MarketComp[] = pulledComps.map(
+      const normalizedComps: MarketComp[] = excludeSubjectVinComps(pulledComps, decodedVehicle?.vin || vin).map(
         (comp: MarketComp) => ({
           ...comp,
           included: comp.included === true,
@@ -2984,7 +2996,7 @@ export function EvaluationWorkspace({
         : normalizedComps;
 
       setComps((current) => options?.mergeResults
-        ? mergeCompCandidates(current, normalizedComps)
+        ? excludeSubjectVinComps(mergeCompCandidates(current, normalizedComps), decodedVehicle?.vin || vin)
         : normalizedComps,
       );
       setMarketCheckApiUsage(data.apiUsage || null);
@@ -3290,7 +3302,10 @@ export function EvaluationWorkspace({
               .replace(/\s+/g, " ")
               .trim(),
             ...(vehicleIdentityProfile?.providerAliases || []),
-          ].filter(Boolean),
+          ].filter((alias) => Boolean(alias) && (
+            !dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim) ||
+            dedicatedBmwMModel(vehicleMake, alias) === dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim)
+          )),
           fuelType:
             vehicleIdentityProfile?.fuelType ||
             decodedVehicle?.fuelType ||
@@ -3322,7 +3337,7 @@ export function EvaluationWorkspace({
             included: candidate.included === true &&
               candidate.qualityScore >= activeAssumptions.compSettings.minimumQualityScore,
           }));
-        setComps((current) => mergeCompCandidates(current, qualifiedCandidates));
+        setComps((current) => excludeSubjectVinComps(mergeCompCandidates(current, qualifiedCandidates), decodedVehicle?.vin || vin));
       }
 
       const total = Number(data.total || 0);
@@ -4672,6 +4687,10 @@ export function EvaluationWorkspace({
     marketCheckApiUsage?.filterDiagnostics?.usableListings || 0;
   const compModelMismatchCount =
     marketCheckApiUsage?.filterDiagnostics?.rejectionCounts?.modelMismatch || 0;
+  const allReturnedModelsRejected =
+    compSummary.includedCount === 0 &&
+    compReturnedListings > 0 &&
+    compModelMismatchCount >= compReturnedListings;
 
   const compExpansionMarketsRemaining = getCompExpansionMarkets().filter(
     (market) =>
@@ -4766,6 +4785,12 @@ export function EvaluationWorkspace({
           : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
     compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
+  // Do not present broad-market fallback asking-price evidence as a verified retail value.
+  const provisionalFallbackPricing =
+    compSummary.pricingMode === "market-fallback" && (compSummary.pricingCompCount ?? 0) > 0;
+  const fallbackEvidenceDisclosure = provisionalFallbackPricing
+    ? `Provisional estimate from ${compSummary.pricingCompCount} broader asking-price comps; only ${compSummary.primaryCompCount} close, uncapped pricing peers (minimum 4). ${compSummary.cappedAdjustmentCount} retained comps needed capped mileage corrections. Sale estimate and projected profit require independent verification.`
+    : null;
   const hasLowCompConfidence = hasLimitedMarketEvidence;
 
   async function improveCompSearch(isAutomatic = false) {
@@ -6436,36 +6461,35 @@ export function EvaluationWorkspace({
                       : compSearchRecommendation.action === "discovered-markets"
                         ? automaticMarketPassFinished ? `Automatic search finished. ${remainingNationalMarketCount} additional market${remainingNationalMarketCount === 1 ? "" : "s"} available if you want to search further.` : `${remainingNationalMarketCount} identified market${remainingNationalMarketCount === 1 ? "" : "s"} remain to check.`
                         : compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete"
-                          ? "No further automatic search is recommended. Review the listings or continue with the stated confidence."
+                          ? allReturnedModelsRejected
+                            ? `MarketCheck returned ${compReturnedListings} listings, but model matching rejected all of them. This is not evidence that no comparable vehicles exist. Review the provider model names under Manual search controls, or continue to an unpriced review.`
+                            : "Automatic search is complete; no further identified markets are queued. You can review manual search controls or continue with the stated confidence."
                           : compSearchRecommendation.reason}
                   </p>
                   {!compSearchImproving && compSearchImprovementStatus && compSearchImprovementStatus.toLowerCase().includes("failed") ? (
                     <p role="alert" className="mt-2 text-xs font-semibold text-amber-800">{compSearchImprovementStatus}</p>
                   ) : null}
-                  <div className="mt-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                    <button
-                      type="button"
-                      onClick={() => void improveCompSearch()}
-                      disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading ||
-                        compSearchRecommendation.action === "complete" ||
-                        (automaticCompSearchCompleted && !canContinueNationalSearch)}
-                      className="min-h-12 flex-1 rounded-xl bg-blue-700 px-3 py-3 text-center text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {compSearchImproving ? "Searching…" : "Search Further (Optional) →"}
-                    </button>
-                    <span className="shrink-0 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">or</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompMarketEditorOpen(false);
-                        void continueToVerdict();
-                      }}
+                  {compSearchRecommendation.action === "manual-review" || compSearchRecommendation.action === "complete" || (automaticCompSearchCompleted && !canContinueNationalSearch) ? (
+                    <button type="button" onClick={() => { setCompMarketEditorOpen(false); void continueToVerdict(); }}
                       disabled={verdictTransitioning || compSearchImproving}
-                      className="min-h-12 flex-1 rounded-xl border border-blue-300 bg-white px-3 py-3 text-center text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50"
-                    >
+                      className="mt-4 min-h-12 w-full rounded-xl border border-blue-300 bg-white px-3 py-3 text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50">
                       {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
                     </button>
-                  </div>
+                  ) : (
+                    <div className="mt-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                      <button type="button" onClick={() => void improveCompSearch()}
+                        disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading || (automaticCompSearchCompleted && !canContinueNationalSearch)}
+                        className="min-h-12 flex-1 rounded-xl bg-blue-700 px-3 py-3 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-wait disabled:bg-slate-300">
+                        {compSearchImproving ? "Searching…" : "Search Further (Optional) →"}
+                      </button>
+                      <span className="shrink-0 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">or</span>
+                      <button type="button" onClick={() => { setCompMarketEditorOpen(false); void continueToVerdict(); }}
+                        disabled={verdictTransitioning || compSearchImproving}
+                        className="min-h-12 flex-1 rounded-xl border border-blue-300 bg-white px-3 py-3 text-sm font-black text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+                        {verdictTransitioning ? "Opening Verdict…" : "Continue to Verdict →"}
+                      </button>
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
                     <button type="button" onClick={() => {
                       setCompMarketEditorOpen(false);
@@ -6690,7 +6714,7 @@ export function EvaluationWorkspace({
                             Lot Logic is matching
                           </div>
                           <div className="mt-1 text-base font-black text-slate-950">
-                            {[vehicleIdentityProfile?.make || vehicleMake, vehicleIdentityProfile?.modelFamily || vehicleModel, vehicleIdentityProfile?.variant].filter(Boolean).join(" · ") || "Vehicle details unavailable"}
+                            {[vehicleIdentityProfile?.make || vehicleMake, vehicleModel || vehicleIdentityProfile?.modelFamily, dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim) ? null : vehicleIdentityProfile?.variant].filter(Boolean).join(" · ") || "Vehicle details unavailable"}
                           </div>
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-500">
                             {vehicleIdentityProfile?.bodyClass ? <span>{vehicleIdentityProfile.bodyClass}</span> : null}
@@ -7851,6 +7875,7 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          {provisionalFallbackPricing ? <div className="mt-1 text-[10px] font-bold text-amber-700">Provisional · asking-price evidence</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
@@ -7878,7 +7903,7 @@ export function EvaluationWorkspace({
                         ) : compSummary.includedCount > 0 ? (
                           <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
                             <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
-                            <span>Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate.</span>
+                            <span>{fallbackEvidenceDisclosure || "Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate."}</span>
                           </div>
                         ) : null}
                         {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
@@ -8030,7 +8055,7 @@ export function EvaluationWorkspace({
                           Full comp set appears after Continue to Verdict.
                         </div>
                       </div>
-                      <MarketCompsTable comps={[...comps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
+                      <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
                       {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
@@ -8196,7 +8221,21 @@ export function EvaluationWorkspace({
                       <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice && compSummary.includedCount > 0 ? money(valuation.expectedGrossProfit) : "—"}</div>
                     </div>
                   </div>
-                  {presentationDecision === "review" && reviewReasons.length ? (
+                  {provisionalFallbackPricing && hasEvaluationData ? (
+                    <div role="note" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-900">
+                      <span className="font-black">Market pricing needs verification.</span>{" "}
+                      Based on {compSummary.pricingCompCount ?? compSummary.includedCount} related asking-price listings, but {compSummary.primaryCompCount === 0
+                        ? "none closely match this vehicle"
+                        : `only ${compSummary.primaryCompCount} qualify as close pricing peers`}.
+                      {(compSummary.cappedAdjustmentCount ?? 0) > 0
+                        ? ` ${compSummary.cappedAdjustmentCount} required capped mileage adjustments.`
+                        : ""}
+                      {" "}Verify the estimated sale price before purchasing.
+                      {presentationDecision === "review" && reviewReasons.some((reason) => !reason.startsWith("market evidence is limited")) ? (
+                        <p className="mt-2">Also review: {reviewReasons.filter((reason) => !reason.startsWith("market evidence is limited")).join("; ")}.</p>
+                      ) : null}
+                    </div>
+                  ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
                   {!needsCompSearch && currentCostPosition ? (
@@ -8242,7 +8281,7 @@ export function EvaluationWorkspace({
                   }
                 >
                   {comps.length ? (
-                    <MarketCompsTable comps={comps} targetMileage={targetMileage} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
+                    <MarketCompsTable comps={independentComps} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} maxVisibleRows={15} />
                   ) : (
                     <div className="rounded-xl bg-slate-50 px-5 py-5 text-sm font-semibold text-slate-500">No comparable vehicles available.</div>
                   )}

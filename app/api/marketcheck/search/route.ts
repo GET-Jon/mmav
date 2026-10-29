@@ -1,3 +1,4 @@
+import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 import { loadCompanyAssumptions } from "@/lib/company/dealership-profile";
 import { loadCompanyMarketCheckControls } from "@/lib/marketcheck/company-controls";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -772,7 +773,11 @@ function rerankByCompFit(payload: Record<string, unknown>, target: TargetIdentit
       usableCompCount: qualityPassingEquivalentCount,
       stopReason: finalStopReason,
     },
-    comps: withInclusions,
+    // Keep rejected ordinary 5-Series bucket results in diagnostics, not in
+    // the dealer's M5 comparable-vehicle table.
+    comps: dedicatedBmwMModel(target.make, target.model, target.trim)
+      ? withInclusions.filter((comp) => comp.equivalenceTier !== "reject")
+      : withInclusions,
     equivalenceSummary: {
       directCount,
       nearCount,

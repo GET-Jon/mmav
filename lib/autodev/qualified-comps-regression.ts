@@ -1,5 +1,5 @@
 import { buildDiscoveryModels } from "./discovery-models";
-import { buildAutoDevCompCandidates, mergeCompCandidates } from "./qualified-comps";
+import { buildAutoDevCompCandidates, excludeSubjectVinComps, mergeCompCandidates } from "./qualified-comps";
 import type { VehicleIdentity } from "../marketcheck/vehicle-equivalence";
 import type { MarketComp } from "../../types/comps";
 
@@ -58,6 +58,15 @@ export function assertAutoDevCompRegressionCases() {
     "missing mileage cannot manufacture a valuation comparison");
   test(data.comps.some(x => x.marketCheckDetails?.vin === "TRUK1AFK2B1016845" && !x.included), "missing listing URL needs dealer input");
   test(data.comps.some(x => x.marketCheckDetails?.vin === "TRUK1AFK2B1016846" && !x.included), "missing trim cannot auto-include");
+
+  const subjectFiltered = excludeSubjectVinComps(data.comps, row.vin.toLowerCase());
+  test(subjectFiltered.length === data.comps.length - 1 &&
+    !subjectFiltered.some(x => x.marketCheckDetails?.vin === row.vin),
+    "subject listing VIN excluded regardless of casing");
+  test(excludeSubjectVinComps(data.comps, "invalid").length === data.comps.length,
+    "invalid subject VIN never excludes unrelated listings");
+  test(excludeSubjectVinComps(data.comps, "TRUK1AFK2B1016849").length === data.comps.length,
+    "unrelated listing VIN remains valid comparable");
 
   const prior: MarketComp = { ...exact!, id: "mc-row", source: "MarketCheck", included: false, dealerDecision: "exclude" };
   test(mergeCompCandidates([prior], [exact!]).length === 1, "cross-provider VIN is not double counted");

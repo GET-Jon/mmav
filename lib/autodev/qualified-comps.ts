@@ -202,6 +202,14 @@ export function buildAutoDevCompCandidates(
   return { comps, diagnostics };
 }
 
+// A listing for the subject vehicle is not independent market evidence.
+// Only enforce when both identities are complete 17-character VINs.
+export function excludeSubjectVinComps(comps: MarketComp[], subjectVin: string | null | undefined): MarketComp[] {
+  const normalized = String(subjectVin || "").trim().toUpperCase();
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(normalized)) return comps;
+  return comps.filter((comp) => String(comp.marketCheckDetails?.vin || "").trim().toUpperCase() !== normalized);
+}
+
 // Cross-provider identity is the VIN, not provider row ID. Prefer an existing
 // dealer choice and existing MarketCheck evidence when both describe one car.
 export function mergeCompCandidates(existing: MarketComp[], additional: MarketComp[]) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import type { VinDecodeResult } from "@/types/vin";
+import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 
 type NhtsaDecodeResponse = {
   Results?: Array<Record<string, string>>;
@@ -97,8 +98,11 @@ export async function POST(request: Request) {
       status: getStatus(result),
       year: result.ModelYear || "",
       make: normalizeMake(result.Make || ""),
-      model: result.Model || "",
-      trim: result.Trim || result.Series || "",
+      model: dedicatedBmwMModel(normalizeMake(result.Make || ""), result.Model, result.Trim || result.Series) || result.Model || "",
+      // Series is the family (e.g. "5-Series"), not a trim for a dedicated M5.
+      trim: dedicatedBmwMModel(normalizeMake(result.Make || ""), result.Model, result.Trim || result.Series)
+        ? (result.Trim || "")
+        : (result.Trim || result.Series || ""),
       bodyClass: result.BodyClass || "",
       doors: result.Doors || "",
       engineCylinders: result.EngineCylinders || "",

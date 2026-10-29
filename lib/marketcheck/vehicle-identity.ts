@@ -62,6 +62,22 @@ function canonicalAudiFamily(modelCompact: string) {
   return null;
 }
 
+/**
+ * BMW's dedicated M cars are separate retail models, even when VIN feeds
+ * describe them as a numbered Series. Do not confuse M Sport packages or
+ * M340i/M550i M Performance derivatives with M3/M5.
+ */
+export function dedicatedBmwMModel(make: unknown, model: unknown, trim?: unknown): string | null {
+  if (canonicalVehicleMake(make) !== "bmw") return null;
+  const modelText = normalizeVehicleText(model);
+  const trimText = normalizeVehicleText(trim);
+  for (const id of ["2", "3", "4", "5", "6", "8"]) {
+    const token = new RegExp(`\\bm${id}\\b`);
+    if (token.test(modelText) || token.test(trimText)) return `M${id}`;
+  }
+  return null;
+}
+
 function canonicalBmwFamily(model: string, modelCompact: string) {
   const normalized = normalizeVehicleText(model);
 
@@ -94,11 +110,20 @@ function canonicalMercedesFamily(model: string, modelCompact: string) {
     "e class",
     "s class",
     "cla class",
+    "m class",
+    "ml class",
     "glc",
     "gle",
     "gls",
   ];
 
+  // Pre-GLE Mercedes SUVs appear as M-Class, ML-Class, ML350 and ML 350.
+  // Keep their family separate from later GLE despite shared lineage.
+  if (["m class", "ml class", "mclass", "mlclass"].includes(normalized) ||
+      modelCompact.startsWith("mlclass") ||
+      /^ml(?:250|280|300|320|350|400|450|500|550|63)/.test(modelCompact)) {
+    return "m class";
+  }
   if (namedClasses.includes(normalized)) return normalized;
 
   if (
