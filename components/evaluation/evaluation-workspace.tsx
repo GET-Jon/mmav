@@ -7957,7 +7957,7 @@ export function EvaluationWorkspace({
                         ) : compSummary.includedCount > 0 ? (
                           <div className="mt-3 text-xs leading-5 text-slate-600">
                             <span className="font-bold text-slate-800">Pricing review recommended.</span>{" "}
-                            {compSummary.cappedAdjustmentCount > 0
+                            {(compSummary.cappedAdjustmentCount ?? 0) > 0
                               ? "Relevant vehicles were found, but mileage differences required capped price adjustments."
                               : "Relevant vehicles were found, but there are not yet enough close pricing peers."}
                             <details className="mt-1">
