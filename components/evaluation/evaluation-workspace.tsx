@@ -4829,7 +4829,7 @@ export function EvaluationWorkspace({
         : "Limited";
   const marketEvidenceDisplay =
     marketEvidenceStrength === "Limited" && compSummary.includedCount >= 4
-      ? "Low pricing confidence"
+      ? "Provisional retail estimate"
       : marketEvidenceStrength === "Limited"
         ? "Limited evidence"
         : marketEvidenceStrength === "Strong"
@@ -7318,7 +7318,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
+                  {compSummary.includedCount} relevant comparison{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong price evidence" : compSummary.confidence === "Medium" ? "Moderate price evidence" : "Price review recommended"}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -7847,7 +7847,7 @@ export function EvaluationWorkspace({
                         : compSummary.includedCount > 0
                           ? (compSummary.primaryCompCount || 0) >= 4
                             ? "Market pricing supported by close comparisons"
-                            : "Market estimate needs verification"
+                            : "Market analysis complete"
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7955,9 +7955,15 @@ export function EvaluationWorkspace({
                             {" "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} additional comps provide market context. Asking prices are not completed-sale prices.
                           </div>
                         ) : compSummary.includedCount > 0 ? (
-                          <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
-                            <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
-                            <span>{fallbackEvidenceDisclosure || "Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate."}</span>
+                          <div className="mt-3 text-xs leading-5 text-slate-600">
+                            <span className="font-bold text-slate-800">Pricing review recommended.</span>{" "}
+                            {compSummary.cappedAdjustmentCount > 0
+                              ? "Relevant vehicles were found, but mileage differences required capped price adjustments."
+                              : "Relevant vehicles were found, but there are not yet enough close pricing peers."}
+                            <details className="mt-1">
+                              <summary className="w-fit cursor-pointer text-[11px] font-semibold text-blue-700 hover:text-blue-900">Why is this estimate provisional?</summary>
+                              <p className="mt-1 text-[11px] text-slate-600">{fallbackEvidenceDisclosure || "The selected comparisons do not establish a sufficiently close primary pricing cohort."}</p>
+                            </details>
                           </div>
                         ) : null}
                         {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
@@ -8088,7 +8094,6 @@ export function EvaluationWorkspace({
                   <span>{compSearchImprovementStatus || "Updating comparable vehicles…"}</span>
                 </div>
               ) : null}
-              <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} />
               <SectionCard
                 title="Comparable Vehicles"
                 action={
@@ -8100,6 +8105,7 @@ export function EvaluationWorkspace({
                 }
               >
                 <div className="space-y-3">
+                  <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} nextStep={canContinueNationalSearch || compExpansionMarketsRemaining > 0 ? "search" : "review"} />
                   {comps.length ? (
                     <>
                       <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
