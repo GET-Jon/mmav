@@ -8353,7 +8353,7 @@ export function EvaluationWorkspace({
 
           {dealSourcesOpen ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto">
             <DealSourcesEditor onClose={()=>setDealSourcesOpen(false)} onSaved={sources=>{
                 const previousSource=dealSourceForValue(dealSources,auctionSite);
                 setDealSources(sources);
