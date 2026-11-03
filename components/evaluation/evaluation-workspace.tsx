@@ -8113,7 +8113,6 @@ export function EvaluationWorkspace({
                         <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
                         Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
                       </div>
-                    </>
 
                   {autoDevDiscovery?.listings?.length ? (
                     <details className="rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
