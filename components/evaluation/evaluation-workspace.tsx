@@ -18,6 +18,7 @@ import {
   type MarketCheckApiControls,
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
+import { VinPhotoCapture } from "@/components/evaluation/vin-photo-capture";
 import {
   describeMarketCheckAttempt,
   recommendCompSearchAction,
@@ -5378,6 +5379,8 @@ export function EvaluationWorkspace({
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
                     />
                   </FormRow>
+
+                  <VinPhotoCapture onConfirm={(photoVin) => { setVin(photoVin); setVinDecodeError(""); }} disabled={vinDecodeLoading} />
 
                   {vinDecodeError ? (
                     <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
