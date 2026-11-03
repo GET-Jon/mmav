@@ -5319,7 +5319,7 @@ export function EvaluationWorkspace({
       {planSelectionMessage ? <PlanSelectionModal message={planSelectionMessage} onClose={() => setPlanSelectionMessage(null)} /> : null}
       {quickEvalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 px-6 py-5">
               <div>
                 <h2 className="text-[20px] font-extrabold tracking-[-0.025em] text-slate-950">
@@ -7410,12 +7410,20 @@ export function EvaluationWorkspace({
                   </div>
 
                   {quickEvalMode === "vin" ? (
-                    <input
-                      value={vin}
-                      onChange={(event) => setVin(event.target.value.toUpperCase())}
-                      placeholder="17-character VIN"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        value={vin}
+                        onChange={(event) => setVin(event.target.value.toUpperCase())}
+                        placeholder="17-character VIN"
+                        aria-label="Vehicle VIN"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
+                      />
+                      <VinPhotoCapture
+                        onConfirm={(photoVin) => { setVin(photoVin); setVinDecodeError(""); }}
+                        disabled={vinDecodeLoading || evaluationRunning}
+                      />
+                      {vinDecodeError ? <p role="alert" className="text-xs font-semibold text-red-700">{vinDecodeError}</p> : null}
+                    </div>
                   ) : (
                     <div className="space-y-2"><div className="grid grid-cols-[76px_1fr_1fr] gap-2">
                       <input
