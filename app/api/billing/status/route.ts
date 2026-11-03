@@ -2,9 +2,49 @@ import { NextResponse } from "next/server";
 
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import { getUsageSummary } from "@/lib/billing/usage";
-import { isStripePlanConfigured } from "@/lib/billing/checkout-prices";
+import { isStripePlanConfigured, stripePriceIdForPlan, type BillingPlanKey } from "@/lib/billing/checkout-prices";
+import { stripeGet } from "@/lib/billing/stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/server-auth";
+
+type StripeRecord = Record<string, unknown>;
+function object(value: unknown): StripeRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as StripeRecord : {};
+}
+function stripeId(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  const id = object(value).id;
+  return typeof id === "string" ? id : null;
+}
+
+type ScheduledPlanChange = { planKey: BillingPlanKey; effectiveAt: string };
+
+/** Stripe's portal attaches a subscription schedule for end-of-period downgrades.
+ * Read the future phase, not stale subscription metadata, so the UI reflects
+ * changes made or undone directly in Stripe.
+ */
+async function scheduledPlanChange(subscriptionId: string, currentPlan: string): Promise<ScheduledPlanChange | null> {
+  if (!/^sub_[A-Za-z0-9]+$/.test(subscriptionId)) return null;
+  const subscription = await stripeGet(`/subscriptions/${subscriptionId}`);
+  const scheduleId = stripeId(subscription.schedule);
+  if (!scheduleId || !/^sub_sched_[A-Za-z0-9]+$/.test(scheduleId)) return null;
+  const schedule = await stripeGet(`/subscription_schedules/${scheduleId}`);
+  if (schedule.status !== "active") return null;
+  const phases = Array.isArray(schedule.phases) ? schedule.phases : [];
+  const nowSeconds = Date.now() / 1000;
+  const futurePhases = phases.map(object).filter(phase =>
+    typeof phase.start_date === "number" && phase.start_date > nowSeconds
+  ).sort((a, b) => Number(a.start_date) - Number(b.start_date));
+  const next = futurePhases[0];
+  if (!next) return null;
+  const items = Array.isArray(next.items) ? next.items : [];
+  const priceId = stripeId(object(items[0]).price);
+  if (!priceId) return null;
+  const keys: BillingPlanKey[] = ["starter", "dealer", "dealer_pro"];
+  const nextPlan = keys.find(key => stripePriceIdForPlan(key) === priceId);
+  if (!nextPlan || nextPlan === currentPlan) return null;
+  return { planKey: nextPlan, effectiveAt: new Date(Number(next.start_date) * 1000).toISOString() };
+}
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -61,7 +101,19 @@ export async function GET() {
     recentCheckoutPaymentFailed = lastInvoiceEvent?.event_type === "invoice.payment_failed";
   }
 
+  // A missing Stripe schedule never blocks billing status or existing access.
+  // The active plan still comes from subscription webhooks.
+  let pendingPlanChange: ScheduledPlanChange | null = null;
+  if (billing?.status === "active" && billing.stripe_subscription_id && !billing.cancel_at_period_end) {
+    try {
+      pendingPlanChange = await scheduledPlanChange(String(billing.stripe_subscription_id), String(billing.plan_key || ""));
+    } catch (error) {
+      console.warn("Unable to fetch scheduled Stripe plan change", error instanceof Error ? error.message : "unknown error");
+    }
+  }
+
   return NextResponse.json({
+    pendingPlanChange,
     recentCheckoutPaymentFailed,
     company: {
       id: company.companyId,
