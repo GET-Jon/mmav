@@ -39,6 +39,21 @@ export async function stripePost(
   return data;
 }
 
+/** Read-only Stripe API lookup used for scheduled plan changes. */
+export async function stripeGet(path: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${STRIPE_API_BASE}${path}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${stripeSecretKey()}` },
+    cache: "no-store",
+  });
+  const data = await response.json() as Record<string, unknown>;
+  if (!response.ok) {
+    const error = data.error as { message?: string } | undefined;
+    throw new Error(error?.message || "Stripe lookup failed.");
+  }
+  return data;
+}
+
 export function getBillingSiteUrl(requestUrl?: string) {
   // Checkout must return to the same host that started it. This keeps
   // preview authentication on the preview domain and production auth on
