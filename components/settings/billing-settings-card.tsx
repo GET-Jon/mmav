@@ -204,7 +204,7 @@ export function BillingSettingsCard() {
             <Link href="/evaluate" className="mt-3 inline-block text-sm font-bold text-blue-700 hover:underline">Return to your evaluation →</Link>
           </div>
           <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">
-            {readableStatus(billing?.status)}
+            {cancellationScheduled ? "Cancels Nov " + new Date(cancellationEnd || 0).getDate() : readableStatus(billing?.status)}
           </span>
         </div>
 
@@ -219,11 +219,17 @@ export function BillingSettingsCard() {
             {paymentDue ? <div className="mt-1 text-[11px] font-bold text-amber-800">Plan benefit · payment required</div> : null}
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Trial ends</div>
-            <div className="mt-2 text-lg font-black text-slate-950">{dateLabel(billing?.trial_ends_at)}</div>
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+              {usage?.paidActive ? "Evaluations left" : "Trial ends"}
+            </div>
+            <div className="mt-2 text-lg font-black text-slate-950">
+              {usage?.paidActive
+                ? billingPeriodUnavailable ? "Unavailable" : (usage.effectiveEvaluationsRemaining ?? "—")
+                : dateLabel(billing?.trial_ends_at)}
+            </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Current period</div>
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{cancellationScheduled ? "Plan ends" : "Current period ends"}</div>
             <div className="mt-2 text-lg font-black text-slate-950">{dateLabel(billing?.current_period_end)}</div>
           </div>
         </div>
@@ -313,17 +319,36 @@ export function BillingSettingsCard() {
         ) : null}
 
         {cancellationScheduled && cancellationEnd && cancellationGraceUntil ? (
-          <div role="status" className="mt-4 space-y-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950">
-            <div className="font-black">Cancellation scheduled · No further monthly renewals</div>
-            <p className="font-semibold leading-6">
-              Your plan remains active until <strong>{exactDeadline(cancellationEnd)}</strong>.
-              After it ends, you can use any unused <strong>paid</strong> evaluations for 30 more days,
-              through <strong>{exactDeadline(cancellationGraceUntil)}</strong>.
+          <div role="status" className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-700 text-sm font-black text-white" aria-hidden="true">✓</span>
+              <div className="font-black text-blue-950">Cancellation scheduled</div>
+            </div>
+            <p className="mt-2 leading-6 text-slate-800">
+              Your Starter plan remains active through <strong>{dateLabel(cancellationEnd)}</strong>.
+              You won't be charged for another month.
             </p>
-            <p className="font-black">Currently {paidEvaluationsLeft} paid evaluations could carry over. This number decreases as you complete evaluations.</p>
-            <p className="text-xs font-semibold leading-5 text-blue-900">
-              No new monthly allowance is added after cancellation. Unused free-trial bonus evaluations expire on the original billing-period end date and do not carry over. Your saved evaluations and pipeline stay accessible.
-            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-blue-100 bg-white px-3 py-3">
+                <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Available now</div>
+                <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{usage?.effectiveEvaluationsRemaining ?? "—"}</div>
+                <p className="mt-1 text-[11px] leading-4 text-slate-600">Evaluations until {dateLabel(cancellationEnd)}</p>
+              </div>
+              <div className="rounded-lg border border-blue-100 bg-white px-3 py-3">
+                <div className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Can carry over</div>
+                <div className="mt-1 text-xl font-black tabular-nums text-slate-950">{paidEvaluationsLeft}</div>
+                <p className="mt-1 text-[11px] leading-4 text-slate-600">Unused paid evaluations, until {dateLabel(cancellationGraceUntil)}</p>
+              </div>
+            </div>
+            <details className="mt-3 group">
+              <summary className="cursor-pointer text-xs font-bold text-blue-800 hover:underline">How do remaining evaluations work?</summary>
+              <p className="mt-2 text-xs leading-5 text-slate-700">
+                Your available balance includes {usage?.trialRolloverEvaluationsRemaining ?? 0} unused first-period trial bonuses.
+                Those bonuses expire when your plan ends. Only unused paid evaluations carry over for 30 days.
+                Each evaluation you complete can reduce the balance that carries over.
+                No new monthly evaluations are added after cancellation. Saved work and your pipeline remain accessible.
+              </p>
+            </details>
           </div>
         ) : null}
 
@@ -409,7 +434,7 @@ export function BillingSettingsCard() {
             ) : null}
             {usage?.paidActive && usage?.paidBillingPeriodReady && billing?.current_period_end ? (
               <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                Renews {dateLabel(billing.current_period_end)}
+                {cancellationScheduled ? "Plan ends" : "Renews"} {dateLabel(billing.current_period_end)}
               </div>
             ) : null}
           </div>
