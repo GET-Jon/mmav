@@ -428,6 +428,19 @@ export function AppTopNav({ active, userEmail = null, userRole = null, onNewEval
             <Link href="/evaluate/new" prefetch={false} className="hidden rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 lg:block">New Evaluation</Link>
           )}
 
+          {/* Mobile primary action: desktop already has a New Evaluation button. */}
+          {cancellationPaywallReached ? (
+            <Link href="/settings?tab=billing" className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-extrabold text-amber-900 lg:hidden">Billing</Link>
+          ) : billingSyncBlocksNewEvaluation || paymentBlocksNewEvaluation ? (
+            <Link href="/settings?tab=billing" className="inline-flex shrink-0 items-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-extrabold text-amber-900 lg:hidden">Review billing</Link>
+          ) : trialPaywallReached ? (
+            <button type="button" onClick={() => setPlanSelectionOpen(true)} className="inline-flex shrink-0 items-center rounded-lg bg-blue-700 px-2.5 py-2 text-[11px] font-extrabold text-white lg:hidden">Choose Plan</button>
+          ) : onNewEvaluation ? (
+            <button type="button" onClick={onNewEvaluation} aria-label="Start new evaluation" className="inline-flex shrink-0 items-center rounded-lg bg-blue-700 px-2.5 py-2 text-[11px] font-extrabold text-white shadow-sm lg:hidden">+ New Evaluation</button>
+          ) : (
+            <Link href="/evaluate/new" prefetch={false} aria-label="Start new evaluation" className="inline-flex shrink-0 items-center rounded-lg bg-blue-700 px-2.5 py-2 text-[11px] font-extrabold text-white shadow-sm lg:hidden">+ New Evaluation</Link>
+          )}
+
           <div ref={menuRef} className="relative">
             <button type="button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex items-center gap-3 rounded-xl px-1.5 py-1 transition hover:bg-slate-50">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">{initials}</div>
