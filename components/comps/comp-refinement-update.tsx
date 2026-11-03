@@ -19,11 +19,10 @@ function RefinementIcon({ kind, className = "" }: { kind: "search" | "map" | "ca
 }
 
 export function CompRefinementUpdate({
-  events, searching, nextStep, technicalDetails,
+  events, searching, technicalDetails,
 }: {
   events: RefinementEvent[];
   searching: boolean;
-  nextStep: "search" | "review";
   technicalDetails?: ReactNode;
 }) {
   const latest = events[0];
@@ -34,10 +33,6 @@ export function CompRefinementUpdate({
     failed ? "Search was incomplete" :
     improved ? "Pricing evidence strengthened" :
     latest?.newRelated ? "Additional comparisons found" : "Search complete · no closer matches";
-  const nextAction = failed ? "Retry the search or review the current comparisons." :
-    improved ? "Review the updated estimate or continue to Verdict." :
-    nextStep === "search" ? "For better pricing evidence, try another market or focus on closer mileage matches." :
-    "Review the available listings or continue to Verdict with the provisional estimate.";
 
   return <div aria-live="polite" className={`rounded-lg ${latest || searching ? "border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:px-4" : ""}`}>
     {searching ? <div role="status" className="flex items-center gap-2 text-xs font-semibold text-blue-700"><RefinementIcon kind="search"/> Checking additional comparisons…</div> : null}
@@ -53,9 +48,9 @@ export function CompRefinementUpdate({
           <span className="inline-flex items-center gap-1"><RefinementIcon kind="target" className={latest.primaryDelta > 0 ? "text-emerald-700" : "text-slate-400"}/>{latest.primaryDelta > 0 ? "+" : ""}{latest.primaryDelta} close pricing peers</span>
         </div>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="text-xs text-slate-600">{latest.error || nextAction}</p>
-        <details className="group w-full text-xs">
+      {latest.error ? <p className="mt-1 text-xs font-semibold text-amber-700">{latest.error}</p> : null}
+      <div className="mt-1.5">
+        <details className="group text-xs">
           <summary className="cursor-pointer font-bold text-blue-700 hover:text-blue-900">Search details &amp; history ({events.length})</summary>
           <div className="mt-2 w-full space-y-2 border-t border-slate-200 pt-2">
             {events.map(event => <div key={event.id} className="rounded-md bg-white p-2 text-xs text-slate-700">
