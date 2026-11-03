@@ -4214,27 +4214,12 @@ export function EvaluationWorkspace({
   }
 
   function clearLocalDraft() {
-    setEvaluationUsageId(createEvaluationUsageId());
-
-    try {
-      window.localStorage.removeItem(draftStorageKey);
-    } catch (error) {
-      console.error("Failed to clear local evaluator draft:", error);
-    }
-
-    resetPreviousEvaluationResults();
-
-    setVin("");
-    setAuctionSite("ACV Auctions");
-    setDecodedVehicle(null);
-    setManualVehicle(initialManualVehicle);
-    setTargetMileage(initialTargetMileage);
-    setEvaluation(initialEvaluation);
-    setQuickEvalMode("vin");
-    setVehicleStepConfirmed(false);
-    setConditionStepConfirmed(false);
-    setVerdictTransitioning(false);
-    setVerdictEntered(false);
+    // A new evaluation must start in a fresh workspace. Resetting in-place
+    // can race with the evaluator draft autosave effect and re-persist the
+    // previous vehicle (including its Verdict stage) on refresh.
+    // The dedicated reset route clears user-scoped storage after this
+    // workspace unmounts, then reloads with a new evaluationUsageId.
+    window.location.assign("/evaluate/new");
   }
 
   const representativeCompImage = useMemo(() => {
@@ -7249,16 +7234,7 @@ export function EvaluationWorkspace({
         <AppTopNav
           active="evaluator"
           userEmail={userEmail}
-          onNewEvaluation={() => {
-            setActiveStage("vehicle");
-            clearLocalDraft();
-            setVehicleStepConfirmed(false);
-            setConditionStepConfirmed(false);
-            setVerdictTransitioning(false);
-            setVerdictEntered(false);
-            setQuickEvalMode("vin");
-            setQuickEvalOpen(false);
-          }}
+          onNewEvaluation={clearLocalDraft}
         />
 
         <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
