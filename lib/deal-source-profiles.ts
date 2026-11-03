@@ -9,11 +9,11 @@ export type DealSourceProfile = {
 };
 
 export const defaultDealSources: DealSourceProfile[] = [
-  { id: "auction-local", name: "Auction — Local", auctionFee: 700, transport: 250, recon: 0, detailAdmin: 350, generalRiskReserve: 500 },
+  { id: "auction-local", name: "Auction — Local", auctionFee: 700, transport: 250, recon: 0, detailAdmin: 250, generalRiskReserve: 300 },
   { id: "auction-out", name: "Auction — Out of State", auctionFee: 700, transport: 900, recon: 0, detailAdmin: 350, generalRiskReserve: 500 },
-  { id: "private-local", name: "Private Sale — Local", auctionFee: 0, transport: 100, recon: 0, detailAdmin: 350, generalRiskReserve: 500 },
+  { id: "private-local", name: "Private Sale — Local", auctionFee: 0, transport: 100, recon: 0, detailAdmin: 250, generalRiskReserve: 500 },
   { id: "private-out", name: "Private Sale — Out of State", auctionFee: 0, transport: 900, recon: 0, detailAdmin: 350, generalRiskReserve: 500 },
-  { id: "facebook", name: "Facebook", auctionFee: 0, transport: 100, recon: 0, detailAdmin: 350, generalRiskReserve: 500 },
+  { id: "facebook", name: "Facebook", auctionFee: 0, transport: 100, recon: 0, detailAdmin: 250, generalRiskReserve: 500 },
 ];
 
 const amount = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1_000_000, value)) : 0;
