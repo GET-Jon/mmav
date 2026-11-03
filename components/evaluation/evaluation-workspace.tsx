@@ -7929,48 +7929,27 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
-                          {provisionalFallbackPricing ? <div className="mt-1 text-[10px] font-bold text-amber-700">Provisional · asking-price evidence</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="text-lg font-black text-slate-950">{marketEvidenceDisplay}</span>
-                            {(marketEvidenceStrength === "Limited" || compSummary.pricingMode === "primary") ? (
-                              <MarketConfidenceHelp
-                                confidence={marketEvidenceStrength}
-                                compCount={compSummary.includedCount}
-                                reasons={compSummary.confidenceReasons || []}
-                                primaryCount={compSummary.primaryCompCount || 0}
-                                pricingMode={compSummary.pricingMode}
-                              />
-                            ) : null}
-                          </div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Pricing evidence</div>
+                          <div className="mt-1 text-lg font-black text-slate-950">{compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Provisional"}</div>
+                          <div className="mt-1 text-[10px] font-semibold text-slate-500">{compSummary.confidence === "Low" ? "Closer pricing peers needed" : "Based on qualified price comparisons"}</div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
                         <>
-                        {compSummary.pricingMode === "primary" ? (
-                          <div className="mt-3 text-[11px] font-semibold leading-4 text-slate-600">
-                            <span className="font-semibold text-slate-700">{compSummary.primaryCompCount} close matches set this estimate.</span>
-                            {" "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} additional comps provide market context. Asking prices are not completed-sale prices.
-                          </div>
-                        ) : compSummary.includedCount > 0 ? (
-                          <div className="mt-3 text-xs leading-5 text-slate-600">
-                            <span className="font-bold text-slate-800">Pricing review recommended.</span>{" "}
-                            {(compSummary.cappedAdjustmentCount ?? 0) > 0
-                              ? "Relevant vehicles were found, but mileage differences required capped price adjustments."
-                              : "Relevant vehicles were found, but there are not yet enough close pricing peers."}
-                            <details className="mt-1">
-                              <summary className="w-fit cursor-pointer text-[11px] font-semibold text-blue-700 hover:text-blue-900">Why is this estimate provisional?</summary>
-                              <p className="mt-1 text-[11px] text-slate-600">{fallbackEvidenceDisclosure || "The selected comparisons do not establish a sufficiently close primary pricing cohort."}</p>
-                            </details>
-                          </div>
-                        ) : null}
-                        {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
-                          <div className="mt-3 text-xs font-medium leading-5 text-slate-600">
-                            Additional market verification may improve confidence.
-                          </div>
-                        ) : null}
+                        <div className="mt-3 text-xs leading-5 text-slate-600">
+                          {compSummary.pricingMode === "primary"
+                            ? `${compSummary.primaryCompCount} close pricing peers support the estimate. Asking prices are not completed sales.`
+                            : `${compSummary.includedCount} relevant comparisons found, but only ${compSummary.primaryCompCount || 0} qualify as close pricing peers. Verify retail pricing before purchasing.`}
+                          <details className="mt-1">
+                            <summary className="w-fit cursor-pointer text-[11px] font-semibold text-blue-700 hover:text-blue-900">Pricing evidence details</summary>
+                            <div className="mt-1 space-y-1 text-[11px] text-slate-600">
+                              <p>{fallbackEvidenceDisclosure || `${compSummary.primaryCompCount || 0} close pricing peers and ${compSummary.includedCount} selected comparisons.`}</p>
+                              {(compSummary.confidenceReasons || []).length > 0 ? <ul className="list-disc pl-4">{(compSummary.confidenceReasons || []).map((reason, index) => <li key={index}>{reason}</li>)}</ul> : null}
+                            </div>
+                          </details>
+                        </div>
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                           {(hasLimitedMarketEvidence || compSearchHandedOff) ? (
                             <>
@@ -8105,19 +8084,7 @@ export function EvaluationWorkspace({
                 }
               >
                 <div className="space-y-3">
-                  <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} nextStep={canContinueNationalSearch || compExpansionMarketsRemaining > 0 ? "search" : "review"} />
-                  {comps.length ? (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
-                        <div className="text-xs font-bold text-slate-500">
-                          {Math.min(5, comps.length)} of {comps.length} candidate listing{comps.length === 1 ? "" : "s"} shown · {compSummary.includedCount} trusted selected
-                        </div>
-                        <div className="text-[11px] font-semibold text-slate-400">
-                          Full comp set appears after Continue to Verdict.
-                        </div>
-                      </div>
-                      <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
-                      {marketCheckSearchMeta?.regionsChecked?.length ? (
+                  <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} nextStep={canContinueNationalSearch || compExpansionMarketsRemaining > 0 ? "search" : "review"} technicalDetails={<>                      {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
                           {marketCheckSearchMeta.regionsChecked.join(" → ")}
@@ -8147,7 +8114,6 @@ export function EvaluationWorkspace({
                         Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
                       </div>
                     </>
-                  ) : null}
 
                   {autoDevDiscovery?.listings?.length ? (
                     <details className="rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
@@ -8198,6 +8164,18 @@ export function EvaluationWorkspace({
                           : ""}
                       </div>
                     </details>
+</>} />
+                  {comps.length ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                        <div className="text-xs font-bold text-slate-500">
+                          {Math.min(5, comps.length)} of {comps.length} candidate listing{comps.length === 1 ? "" : "s"} shown · {compSummary.includedCount} trusted selected
+                        </div>
+                        <div className="text-[11px] font-semibold text-slate-400">
+                          Full comp set appears after Continue to Verdict.
+                        </div>
+                      </div>
+                      <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
                   ) : null}
                 </div>
               </SectionCard>
