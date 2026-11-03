@@ -8163,6 +8163,7 @@ export function EvaluationWorkspace({
                           : ""}
                       </div>
                     </details>
+                  ) : null}
 </>} />
                   {comps.length ? (
                     <>
