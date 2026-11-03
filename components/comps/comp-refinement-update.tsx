@@ -1,5 +1,6 @@
 "use client";
 import type { RefinementEvent } from "@/lib/comps-refinement-history";
+import type { ReactNode } from "react";
 
 function Money({ value }: { value: number | null }) {
   return <>{value === null ? "Unavailable" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)}</>;
@@ -18,14 +19,15 @@ function RefinementIcon({ kind, className = "" }: { kind: "search" | "map" | "ca
 }
 
 export function CompRefinementUpdate({
-  events, searching, nextStep,
+  events, searching, nextStep, technicalDetails,
 }: {
   events: RefinementEvent[];
   searching: boolean;
   nextStep: "search" | "review";
+  technicalDetails?: ReactNode;
 }) {
   const latest = events[0];
-  if (!latest && !searching) return null;
+  if (!latest && !searching && !technicalDetails) return null;
   const failed = latest?.status === "failed";
   const improved = latest?.status === "improved";
   const headline = latest?.action === "selection" ? "Comparison selection updated" :
@@ -37,7 +39,7 @@ export function CompRefinementUpdate({
     nextStep === "search" ? "For better pricing evidence, try another market or focus on closer mileage matches." :
     "Review the available listings or continue to Verdict with the provisional estimate.";
 
-  return <div aria-live="polite" className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:px-4">
+  return <div aria-live="polite" className={`rounded-lg ${latest || searching ? "border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:px-4" : ""}`}>
     {searching ? <div role="status" className="flex items-center gap-2 text-xs font-semibold text-blue-700"><RefinementIcon kind="search"/> Checking additional comparisons…</div> : null}
     {latest ? <>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -53,7 +55,7 @@ export function CompRefinementUpdate({
       </div>
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <p className="text-xs text-slate-600">{latest.error || nextAction}</p>
-        <details className="group text-xs">
+        <details className="group w-full text-xs">
           <summary className="cursor-pointer font-bold text-blue-700 hover:text-blue-900">Search details &amp; history ({events.length})</summary>
           <div className="mt-2 w-full space-y-2 border-t border-slate-200 pt-2">
             {events.map(event => <div key={event.id} className="rounded-md bg-white p-2 text-xs text-slate-700">
@@ -62,9 +64,10 @@ export function CompRefinementUpdate({
               <p className="mt-1">Selected {event.beforeSelected} → {event.afterSelected} · Retail <Money value={event.beforeRetail}/> → <Money value={event.afterRetail}/> · Confidence {event.beforeConfidence} → {event.afterConfidence}</p>
               {event.error ? <p className="mt-1 text-amber-700">{event.error}</p> : null}
             </div>)}
+            {technicalDetails ? <div className="mt-2 space-y-2 border-t border-slate-200 pt-2">{technicalDetails}</div> : null}
           </div>
         </details>
       </div>
-    </> : null}
+    </> : technicalDetails ? <details className="text-xs"><summary className="cursor-pointer font-semibold text-blue-700">Search details &amp; methodology</summary><div className="mt-2 space-y-2">{technicalDetails}</div></details> : null}
   </div>;
 }
