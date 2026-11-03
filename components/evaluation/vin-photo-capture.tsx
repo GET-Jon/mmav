@@ -13,6 +13,9 @@ export function VinPhotoCapture({ onConfirm, disabled = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanRequestRef = useRef<AbortController | null>(null);
+  const scannerHistoryIdRef = useRef(`vin-scanner-${Math.random().toString(36).slice(2)}`);
+  const scannerHistoryOpenRef = useRef(false);
+  const cameraAttemptRef = useRef(0);
   const id = useId();
   const [dialog, setDialog] = useState<"choice" | "camera" | "review" | null>(null);
   const [proposed, setProposed] = useState("");
@@ -26,7 +29,8 @@ export function VinPhotoCapture({ onConfirm, disabled = false }: Props) {
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
   }
-  function close() {
+  function dismiss() {
+    cameraAttemptRef.current += 1;
     scanRequestRef.current?.abort();
     scanRequestRef.current = null;
     stopCamera();
@@ -36,6 +40,31 @@ export function VinPhotoCapture({ onConfirm, disabled = false }: Props) {
     setBusy(false);
     setOpeningCamera(false);
   }
+  function close() {
+    // Remove only our own temporary history entry; never navigate out of Lot Logic.
+    if (scannerHistoryOpenRef.current && window.history.state?.vinScannerId === scannerHistoryIdRef.current) {
+      scannerHistoryOpenRef.current = false;
+      window.history.back();
+    }
+    dismiss();
+  }
+
+  useEffect(() => {
+    // A mobile edge-swipe/back action should dismiss the scanner, not leave the app.
+    function onBack() {
+      if (!scannerHistoryOpenRef.current) return;
+      scannerHistoryOpenRef.current = false;
+      dismiss();
+    }
+    window.addEventListener("popstate", onBack);
+    return () => window.removeEventListener("popstate", onBack);
+  }, []);
+
+  useEffect(() => {
+    if (!dialog || scannerHistoryOpenRef.current) return;
+    window.history.pushState({ ...window.history.state, vinScannerId: scannerHistoryIdRef.current }, "", window.location.href);
+    scannerHistoryOpenRef.current = true;
+  }, [dialog]);
 
   useEffect(() => {
     return () => {
@@ -52,6 +81,7 @@ export function VinPhotoCapture({ onConfirm, disabled = false }: Props) {
   }, [dialog, openingCamera]);
 
   async function startCamera(nextFacing: "environment" | "user" = "environment") {
+    const attempt = ++cameraAttemptRef.current;
     setError("");
     stopCamera();
     setOpeningCamera(true);
@@ -75,13 +105,19 @@ export function VinPhotoCapture({ onConfirm, disabled = false }: Props) {
           audio: false, video: { facingMode: { ideal: nextFacing } },
         });
       }
+      if (attempt !== cameraAttemptRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       setDialog("camera");
     } catch {
-      setDialog("choice");
-      setError("Camera could not open. Check browser permissions or choose a photo from your gallery.");
+      if (attempt === cameraAttemptRef.current) {
+        setDialog("choice");
+        setError("Camera could not open. Check browser permissions or choose a photo from your gallery.");
+      }
     } finally {
-      setOpeningCamera(false);
+      if (attempt === cameraAttemptRef.current) setOpeningCamera(false);
     }
   }
 
