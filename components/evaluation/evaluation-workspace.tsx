@@ -8480,10 +8480,11 @@ export function EvaluationWorkspace({
           <div className="mt-4 flex justify-end">
             <button
               type="button"
-              onClick={clearLocalDraft}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 hover:text-red-600"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
-              Clear Draft
+              <span aria-hidden="true">↑</span>
+              Back to Top
             </button>
           </div>
         </div>
