@@ -8084,7 +8084,7 @@ export function EvaluationWorkspace({
                 }
               >
                 <div className="space-y-3">
-                  <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} nextStep={canContinueNationalSearch || compExpansionMarketsRemaining > 0 ? "search" : "review"} technicalDetails={<>                      {marketCheckSearchMeta?.regionsChecked?.length ? (
+                  <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} technicalDetails={<>                      {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
                           {marketCheckSearchMeta.regionsChecked.join(" → ")}
