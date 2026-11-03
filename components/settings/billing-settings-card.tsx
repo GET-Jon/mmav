@@ -40,6 +40,7 @@ type BillingStatus = {
     paidActive?: boolean;
     paidThroughCancellation?: boolean;
     paidBillingPeriodReady?: boolean;
+    currentPeriodStart?: string | null;
     trialEvaluationsUsed?: number;
     trialEvaluationsRemaining?: number | null;
     monthlyEvaluationsUsed?: number;
@@ -194,6 +195,9 @@ export function BillingSettingsCard() {
   const graceExpired = hasCancellationWindow && !usage?.postCancelActive && !gracePending;
   const paymentDue = ["past_due", "unpaid", "paused"].includes(billing?.status || "");
   const billingPeriodUnavailable = usage?.paidActive && usage.paidBillingPeriodReady === false;
+  const billingPeriodStartMs = Date.parse(usage?.currentPeriodStart || "");
+  const futureBillingPeriod = billingPeriodUnavailable &&
+    Number.isFinite(billingPeriodStartMs) && billingPeriodStartMs > Date.now();
 
   return (
     <section className="space-y-5">
@@ -318,7 +322,22 @@ export function BillingSettingsCard() {
 
         {billingPeriodUnavailable ? (
           <div role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-900">
-            Your subscription is active, but Lot Logic cannot validate its current billing period yet. Paid evaluations are temporarily unavailable; saved work is unaffected. If this persists after refreshing, please contact support.
+            {futureBillingPeriod ? (
+              <>
+                <span className="block font-black">Billing period date mismatch</span>
+                Stripe reports that this subscription's current period starts on {dateLabel(usage?.currentPeriodStart)},
+                which is later than today's date. Lot Logic temporarily pauses paid evaluations until
+                the billing dates are current. This can occur when advancing a Stripe test simulation.
+                Saved evaluations are unaffected. If this occurs without testing, contact support.
+              </>
+            ) : (
+              <>
+                <span className="block font-black">Billing period cannot be verified</span>
+                Lot Logic cannot confirm a current billing period for this active subscription.
+                Paid evaluations are temporarily unavailable, but saved work is unaffected.
+                Refresh Billing, and contact support if the issue continues.
+              </>
+            )}
           </div>
         ) : null}
 
