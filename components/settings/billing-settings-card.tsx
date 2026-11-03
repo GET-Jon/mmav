@@ -5,6 +5,7 @@ import Link from "next/link";
 import { EvaluationPlanHelpDialog } from "@/components/settings/evaluation-plan-help-dialog";
 
 type BillingStatus = {
+  pendingPlanChange?: { planKey: "starter" | "dealer" | "dealer_pro"; effectiveAt: string } | null;
   company?: {
     id: string;
     name: string;
@@ -168,6 +169,9 @@ export function BillingSettingsCard() {
     );
   }
 
+  const pendingPlanChange = data?.pendingPlanChange;
+  const nextPlanLabel = pendingPlanChange?.planKey === "dealer_pro" ? "Dealer Pro" : pendingPlanChange?.planKey === "dealer" ? "Dealer" : "Starter";
+  const nextPlanAmount = pendingPlanChange?.planKey === "dealer_pro" ? "$149" : pendingPlanChange?.planKey === "dealer" ? "$79" : "$29";
   const billing = data?.billing;
   const entitlements = data?.entitlements;
   const usage = data?.usage;
@@ -349,6 +353,24 @@ export function BillingSettingsCard() {
                 No new monthly evaluations are added after cancellation. Saved work and your pipeline remain accessible.
               </p>
             </details>
+          </div>
+        ) : null}
+
+        {pendingPlanChange && !cancellationScheduled && !canceled ? (
+          <div role="status" className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-slate-900">
+            <div className="flex items-center gap-2 font-black text-blue-950">
+              <span aria-hidden="true" className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-700 text-white">✓</span>
+              Plan change scheduled
+            </div>
+            <p className="mt-2 leading-6">
+              Your current <strong>{billing?.plan_key === "dealer_pro" ? "Dealer Pro" : billing?.plan_key === "dealer" ? "Dealer" : "Starter"}</strong> benefits
+              remain available through <strong>{dateLabel(pendingPlanChange.effectiveAt)}</strong>.
+            </p>
+            <p className="mt-1 leading-6">
+              On <strong>{dateLabel(pendingPlanChange.effectiveAt)}</strong>, your plan changes to
+              <strong> {nextPlanLabel} ({nextPlanAmount}/month)</strong>.
+              Your evaluation allowance and seat limit will adjust when the new billing period begins.
+            </p>
           </div>
         ) : null}
 
