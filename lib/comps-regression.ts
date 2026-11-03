@@ -5,6 +5,7 @@ import {
   calculateMileageAdjustment,
 } from "@/lib/comps";
 import type { MarketComp } from "@/types/comps";
+import { buildRefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 
 let regressionId = 0;
 
@@ -34,6 +35,25 @@ function assert(condition: boolean, message: string) {
 export function assertCompValuationRegressionCases() {
   regressionId = 0;
   const targetMileage = 70000;
+  const snapshot = (comps: MarketComp[], primaryCount: number, regions: string[]): RefinementSnapshot => ({
+    comps, primaryIds: comps.slice(0, primaryCount).map(comp => comp.id), primaryCount,
+    selected: comps.filter(comp => comp.included).length,
+    retail: 20000, confidence: "Low", regions,
+  });
+  const existing = makeComp({ id:"refine-existing" });
+  const newPeer = makeComp({ id:"refine-added", marketCheckDetails: { vin: "TRUK1AFK2B1016841" } as MarketComp["marketCheckDetails"] });
+  const before = snapshot([existing], 0, ["Charleston"]);
+  const after = snapshot([existing,newPeer], 1, ["Charleston","Atlanta"]);
+  const improvement = buildRefinementEvent(before, after, "search");
+  assert(improvement.status === "improved" && improvement.primaryDelta === 1 &&
+    improvement.newUnique === 1 && improvement.newRegions.length === 1,
+    "Net-new qualifying peers and markets must be reported even below the four-peer pricing threshold.");
+  const duplicate = buildRefinementEvent(after, snapshot([existing,newPeer,
+    makeComp({ id:"different-provider-row", marketCheckDetails: { vin:"TRUK1AFK2B1016841" } as MarketComp["marketCheckDetails"] })], 1, ["Charleston","Atlanta"]), "search");
+  assert(duplicate.newUnique === 0 && duplicate.newRelated === 0,
+    "The same VIN from multiple providers must not count as a new vehicle.");
+  const unchanged = buildRefinementEvent(after, after, "search");
+  assert(unchanged.status === "unchanged", "An unchanged search must never report success.");
 
   const wranglerHighMile = makeComp({
     id: "wrangler-high-mile",

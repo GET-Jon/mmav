@@ -8,6 +8,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AppTopNav } from "@/components/navigation/app-top-nav";
 import { MarketCompsTable } from "@/components/comps/market-comps-table";
+import { CompRefinementUpdate } from "@/components/comps/comp-refinement-update";
 import { ConditionChoiceIcon } from "@/components/evaluation/condition-choice-icon";
 import {
   MARKETCHECK_API_CONTROLS_STORAGE_KEY,
@@ -30,6 +31,7 @@ import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
+import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
@@ -706,6 +708,7 @@ type SavedEvaluationPayload = {
   conditionAnalysisApplied?: boolean;
   conditionReviewStatus?: ConditionReviewStatus;
   notes?: string;
+  refinementEvents?: RefinementEvent[];
 };
 
 type EvaluationStage = "vehicle" | "condition" | "market" | "verdict";
@@ -801,6 +804,12 @@ export function EvaluationWorkspace({
       ? initialSavedPayload.comps
       : initialComps,
   );
+  const [refinementEvents, setRefinementEvents] = useState<RefinementEvent[]>(
+    initialSavedPayload?.refinementEvents || [],
+  );
+  const pendingRefinementRef = useRef<{ before: RefinementSnapshot; action: "search" | "selection" } | null>(null);
+  const refinementErrorRef = useRef<string | null>(null);
+  const [refinementTracking, setRefinementTracking] = useState(false);
 
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null,
@@ -1413,6 +1422,7 @@ export function EvaluationWorkspace({
       if (Array.isArray(draft.comps)) {
         setComps(draft.comps);
       }
+      if (Array.isArray(draft.refinementEvents)) setRefinementEvents(draft.refinementEvents);
 
       if (Array.isArray(draft.selectedConditions)) {
         setSelectedConditions(draft.selectedConditions);
@@ -1541,6 +1551,7 @@ export function EvaluationWorkspace({
           targetMileage,
           evaluation,
           comps,
+          refinementEvents,
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
@@ -1573,6 +1584,7 @@ export function EvaluationWorkspace({
     targetMileage,
     evaluation,
     comps,
+    refinementEvents,
     selectedConditions,
     conditionAssessments,
     conditionAssessmentsTouched,
@@ -1610,6 +1622,36 @@ export function EvaluationWorkspace({
       }),
     [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
+
+  const refinementSnapshot: RefinementSnapshot = {
+    comps: independentComps,
+    selected: compSummary.includedCount,
+    primaryIds: compSummary.primaryCompIds || [],
+    primaryCount: compSummary.primaryCompCount || 0,
+    retail: compSummary.includedCount > 0 ? compSummary.fastSaleTarget : null,
+    confidence: compSummary.confidence,
+    regions: marketCheckSearchMeta?.regionsChecked || [],
+  };
+  const latestRefinementSnapshotRef = useRef(refinementSnapshot);
+  latestRefinementSnapshotRef.current = refinementSnapshot;
+
+  function beginRefinement(action: "search" | "selection") {
+    if (pendingRefinementRef.current) return;
+    refinementErrorRef.current = null;
+    pendingRefinementRef.current = { before: latestRefinementSnapshotRef.current, action };
+    setRefinementTracking(true);
+  }
+
+  useEffect(() => {
+    if (!refinementTracking || marketCheckLoading || autoDevDiscoveryLoading || compSearchImproving) return;
+    const pending = pendingRefinementRef.current;
+    if (!pending) return;
+    pendingRefinementRef.current = null;
+    setRefinementTracking(false);
+    const event = buildRefinementEvent(pending.before, refinementSnapshot, pending.action, refinementErrorRef.current || undefined);
+    refinementErrorRef.current = null;
+    setRefinementEvents(previous => [event, ...previous].slice(0, 30));
+  }, [refinementTracking, marketCheckLoading, autoDevDiscoveryLoading, compSearchImproving, comps, compSummary, marketCheckSearchMeta]);
 
   function downloadCompAudit() {
     if (!independentComps.length) return;
@@ -2370,6 +2412,7 @@ export function EvaluationWorkspace({
   }
 
   function toggleCompIncluded(id: string) {
+    beginRefinement("selection");
     setComps((previous) =>
       previous.map((comp) => {
         if (comp.id !== id) return comp;
@@ -2676,6 +2719,7 @@ export function EvaluationWorkspace({
       return;
     }
 
+    if (options?.mergeResults && (compSearchHandedOff || compMarketEditorOpen)) beginRefinement("search");
     marketCheckInFlightRef.current = true;
 
     const overrideVin =
@@ -3066,6 +3110,7 @@ export function EvaluationWorkspace({
         searchedZips: combinedSearchedZips,
       };
     } catch (error) {
+      if (pendingRefinementRef.current) refinementErrorRef.current = error instanceof Error ? error.message : "MarketCheck search failed.";
       setMarketCheckStatus(
         error instanceof Error ? error.message : "MarketCheck search failed.",
       );
@@ -3271,6 +3316,7 @@ export function EvaluationWorkspace({
   }
 
   async function runAutoDevDiscovery() {
+    if (compSearchHandedOff || compMarketEditorOpen) beginRefinement("search");
     if (!vehicleYear || !vehicleMake || !vehicleModel || autoDevDiscoveryLoading) {
       return;
     }
@@ -3406,6 +3452,7 @@ export function EvaluationWorkspace({
         error instanceof Error
           ? error.message
           : "Auto.dev national discovery failed.";
+      if (pendingRefinementRef.current) refinementErrorRef.current = message;
       setAutoDevDiscovery(null);
       setAutoDevDiscoveryStatus(message);
       setCompSearchHistory((current) =>
@@ -4047,6 +4094,7 @@ export function EvaluationWorkspace({
           valuation,
           compSummary,
           comps,
+          refinementEvents,
           selectedConditions,
           conditionAssessments,
           conditionAssessmentsTouched,
@@ -4089,6 +4137,10 @@ export function EvaluationWorkspace({
   }
 
   function resetPreviousEvaluationResults(options?: { preserveVehicleInfo?: boolean }) {
+    refinementErrorRef.current = null;
+    pendingRefinementRef.current = null;
+    setRefinementTracking(false);
+    setRefinementEvents([]);
     automaticMarketSearchKeyRef.current = "";
     setAutomaticMarketPassFinished(false);
     // Prevent stale search state from carrying into another vehicle.
@@ -4162,27 +4214,12 @@ export function EvaluationWorkspace({
   }
 
   function clearLocalDraft() {
-    setEvaluationUsageId(createEvaluationUsageId());
-
-    try {
-      window.localStorage.removeItem(draftStorageKey);
-    } catch (error) {
-      console.error("Failed to clear local evaluator draft:", error);
-    }
-
-    resetPreviousEvaluationResults();
-
-    setVin("");
-    setAuctionSite("ACV Auctions");
-    setDecodedVehicle(null);
-    setManualVehicle(initialManualVehicle);
-    setTargetMileage(initialTargetMileage);
-    setEvaluation(initialEvaluation);
-    setQuickEvalMode("vin");
-    setVehicleStepConfirmed(false);
-    setConditionStepConfirmed(false);
-    setVerdictTransitioning(false);
-    setVerdictEntered(false);
+    // A new evaluation must start in a fresh workspace. Resetting in-place
+    // can race with the evaluator draft autosave effect and re-persist the
+    // previous vehicle (including its Verdict stage) on refresh.
+    // The dedicated reset route clears user-scoped storage after this
+    // workspace unmounts, then reloads with a new evaluationUsageId.
+    window.location.assign("/evaluate/new");
   }
 
   const representativeCompImage = useMemo(() => {
@@ -4777,7 +4814,7 @@ export function EvaluationWorkspace({
         : "Limited";
   const marketEvidenceDisplay =
     marketEvidenceStrength === "Limited" && compSummary.includedCount >= 4
-      ? "Low pricing confidence"
+      ? "Provisional retail estimate"
       : marketEvidenceStrength === "Limited"
         ? "Limited evidence"
         : marketEvidenceStrength === "Strong"
@@ -4806,6 +4843,7 @@ export function EvaluationWorkspace({
       return;
     }
 
+    beginRefinement("search");
     setCompSearchHandedOff(true);
     // Keep the search dialog visible so progress and results are not hidden.
     setCompSearchImprovementStatus("Preparing the next comparison search…");
@@ -5051,6 +5089,7 @@ export function EvaluationWorkspace({
             : "National discovery did not provide more markets. Review evidence and try a different geographic search.",
       );
     } catch (error) {
+      if (pendingRefinementRef.current) refinementErrorRef.current = error instanceof Error ? error.message : "Search did not complete.";
       setCompSearchImprovementStatus(error instanceof Error
         ? `Search did not complete: ${error.message}`
         : "Search did not complete. Please try again or use manual controls.");
@@ -7195,16 +7234,7 @@ export function EvaluationWorkspace({
         <AppTopNav
           active="evaluator"
           userEmail={userEmail}
-          onNewEvaluation={() => {
-            setActiveStage("vehicle");
-            clearLocalDraft();
-            setVehicleStepConfirmed(false);
-            setConditionStepConfirmed(false);
-            setVerdictTransitioning(false);
-            setVerdictEntered(false);
-            setQuickEvalMode("vin");
-            setQuickEvalOpen(false);
-          }}
+          onNewEvaluation={clearLocalDraft}
         />
 
         <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
@@ -7264,7 +7294,7 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} valuation comp{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Weak"}
+                  {compSummary.includedCount} relevant comparison{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong price evidence" : compSummary.confidence === "Medium" ? "Moderate price evidence" : "Price review recommended"}
                 </div>
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
@@ -7793,7 +7823,7 @@ export function EvaluationWorkspace({
                         : compSummary.includedCount > 0
                           ? (compSummary.primaryCompCount || 0) >= 4
                             ? "Market pricing supported by close comparisons"
-                            : "Market estimate needs verification"
+                            : "Market analysis complete"
                           : "Market evidence"}
                   </h2>
                 </div>
@@ -7875,42 +7905,27 @@ export function EvaluationWorkspace({
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
-                          {provisionalFallbackPricing ? <div className="mt-1 text-[10px] font-bold text-amber-700">Provisional · asking-price evidence</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Confidence</div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="text-lg font-black text-slate-950">{marketEvidenceDisplay}</span>
-                            {(marketEvidenceStrength === "Limited" || compSummary.pricingMode === "primary") ? (
-                              <MarketConfidenceHelp
-                                confidence={marketEvidenceStrength}
-                                compCount={compSummary.includedCount}
-                                reasons={compSummary.confidenceReasons || []}
-                                primaryCount={compSummary.primaryCompCount || 0}
-                                pricingMode={compSummary.pricingMode}
-                              />
-                            ) : null}
-                          </div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Pricing evidence</div>
+                          <div className="mt-1 text-lg font-black text-slate-950">{compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Provisional"}</div>
+                          <div className="mt-1 text-[10px] font-semibold text-slate-500">{compSummary.confidence === "Low" ? "Closer pricing peers needed" : "Based on qualified price comparisons"}</div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
                         <>
-                        {compSummary.pricingMode === "primary" ? (
-                          <div className="mt-3 text-[11px] font-semibold leading-4 text-slate-600">
-                            <span className="font-semibold text-slate-700">{compSummary.primaryCompCount} close matches set this estimate.</span>
-                            {" "}{compSummary.includedCount - (compSummary.primaryCompCount || 0)} additional comps provide market context. Asking prices are not completed-sale prices.
-                          </div>
-                        ) : compSummary.includedCount > 0 ? (
-                          <div className="mt-3 flex items-start gap-2 text-xs font-medium leading-5 text-slate-600">
-                            <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">i</span>
-                            <span>{fallbackEvidenceDisclosure || "Lot Logic found related vehicles, but not enough close pricing peers. Different trims or configurations may affect the estimate."}</span>
-                          </div>
-                        ) : null}
-                        {hasLimitedMarketEvidence && compSummary.pricingMode === "primary" ? (
-                          <div className="mt-3 text-xs font-medium leading-5 text-slate-600">
-                            Additional market verification may improve confidence.
-                          </div>
-                        ) : null}
+                        <div className="mt-3 text-xs leading-5 text-slate-600">
+                          {compSummary.pricingMode === "primary"
+                            ? `${compSummary.primaryCompCount} close pricing peers support the estimate. Asking prices are not completed sales.`
+                            : `${compSummary.includedCount} relevant comparisons found, but only ${compSummary.primaryCompCount || 0} qualify as close pricing peers. Verify retail pricing before purchasing.`}
+                          <details className="mt-1">
+                            <summary className="w-fit cursor-pointer text-[11px] font-semibold text-blue-700 hover:text-blue-900">Pricing evidence details</summary>
+                            <div className="mt-1 space-y-1 text-[11px] text-slate-600">
+                              <p>{fallbackEvidenceDisclosure || `${compSummary.primaryCompCount || 0} close pricing peers and ${compSummary.includedCount} selected comparisons.`}</p>
+                              {(compSummary.confidenceReasons || []).length > 0 ? <ul className="list-disc pl-4">{(compSummary.confidenceReasons || []).map((reason, index) => <li key={index}>{reason}</li>)}</ul> : null}
+                            </div>
+                          </details>
+                        </div>
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                           {(hasLimitedMarketEvidence || compSearchHandedOff) ? (
                             <>
@@ -8045,18 +8060,7 @@ export function EvaluationWorkspace({
                 }
               >
                 <div className="space-y-3">
-                  {comps.length ? (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
-                        <div className="text-xs font-bold text-slate-500">
-                          {Math.min(5, comps.length)} of {comps.length} candidate listing{comps.length === 1 ? "" : "s"} shown · {compSummary.includedCount} trusted selected
-                        </div>
-                        <div className="text-[11px] font-semibold text-slate-400">
-                          Full comp set appears after Continue to Verdict.
-                        </div>
-                      </div>
-                      <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
-                      {marketCheckSearchMeta?.regionsChecked?.length ? (
+                  <CompRefinementUpdate events={refinementEvents} searching={refinementTracking && (compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading)} technicalDetails={<>                      {marketCheckSearchMeta?.regionsChecked?.length ? (
                         <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs font-semibold text-slate-600">
                           <span className="font-black text-slate-800">Search coverage:</span>{" "}
                           {marketCheckSearchMeta.regionsChecked.join(" → ")}
@@ -8085,8 +8089,6 @@ export function EvaluationWorkspace({
                         <span className="font-black text-slate-900">Comp hierarchy:</span>{" "}
                         Direct and Near comps may be auto-included when they pass the quality floor. Supporting comps require a dealer check. Rejected matches stay excluded unless you deliberately select them; dealer overrides lower confidence. Mileage normalization is nonlinear and capped.
                       </div>
-                    </>
-                  ) : null}
 
                   {autoDevDiscovery?.listings?.length ? (
                     <details className="rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-3">
@@ -8137,6 +8139,20 @@ export function EvaluationWorkspace({
                           : ""}
                       </div>
                     </details>
+                  ) : null}
+</>} />
+                  {comps.length ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                        <div className="text-xs font-bold text-slate-500">
+                          {Math.min(5, comps.length)} of {comps.length} candidate listing{comps.length === 1 ? "" : "s"} shown · {compSummary.includedCount} trusted selected
+                        </div>
+                        <div className="text-[11px] font-semibold text-slate-400">
+                          Full comp set appears after Continue to Verdict.
+                        </div>
+                      </div>
+                      <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
+                    </>
                   ) : null}
                 </div>
               </SectionCard>
@@ -8464,10 +8480,11 @@ export function EvaluationWorkspace({
           <div className="mt-4 flex justify-end">
             <button
               type="button"
-              onClick={clearLocalDraft}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 hover:text-red-600"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
-              Clear Draft
+              <span aria-hidden="true">↑</span>
+              Back to Top
             </button>
           </div>
         </div>
