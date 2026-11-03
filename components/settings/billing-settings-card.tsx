@@ -204,7 +204,7 @@ export function BillingSettingsCard() {
             <Link href="/evaluate" className="mt-3 inline-block text-sm font-bold text-blue-700 hover:underline">Return to your evaluation →</Link>
           </div>
           <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700">
-            {cancellationScheduled ? "Cancels Nov " + new Date(cancellationEnd || 0).getDate() : readableStatus(billing?.status)}
+            {cancellationScheduled ? "Cancellation scheduled" : readableStatus(billing?.status)}
           </span>
         </div>
 
@@ -325,7 +325,7 @@ export function BillingSettingsCard() {
               <div className="font-black text-blue-950">Cancellation scheduled</div>
             </div>
             <p className="mt-2 leading-6 text-slate-800">
-              Your Starter plan remains active through <strong>{dateLabel(cancellationEnd)}</strong>.
+              Your {billing?.plan_key === "dealer_pro" ? "Dealer Pro" : billing?.plan_key === "dealer" ? "Dealer" : "Starter"} plan remains active through <strong>{dateLabel(cancellationEnd)}</strong>.
               You won't be charged for another month.
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
