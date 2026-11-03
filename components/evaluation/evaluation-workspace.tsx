@@ -5370,17 +5370,16 @@ export function EvaluationWorkspace({
               {quickEvalMode === "vin" ? (
                 <>
                   <FormRow label="VIN">
-                    <input
-                      value={vin}
-                      onChange={(event) =>
-                        setVin(event.target.value.toUpperCase())
-                      }
-                      placeholder="e.g. 5UXCR6C00L9U123456"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        value={vin}
+                        onChange={(event) => setVin(event.target.value.toUpperCase())}
+                        placeholder="e.g. 5UXCR6C00L9U123456"
+                        className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-14 text-sm font-semibold text-slate-900 shadow-sm outline-none"
+                      />
+                      <VinPhotoCapture onConfirm={(photoVin) => { setVin(photoVin); setVinDecodeError(""); }} disabled={vinDecodeLoading} />
+                    </div>
                   </FormRow>
-
-                  <VinPhotoCapture onConfirm={(photoVin) => { setVin(photoVin); setVinDecodeError(""); }} disabled={vinDecodeLoading} />
 
                   {vinDecodeError ? (
                     <div className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
@@ -7411,17 +7410,19 @@ export function EvaluationWorkspace({
 
                   {quickEvalMode === "vin" ? (
                     <div className="space-y-2">
-                      <input
-                        value={vin}
-                        onChange={(event) => setVin(event.target.value.toUpperCase())}
-                        placeholder="17-character VIN"
-                        aria-label="Vehicle VIN"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"
-                      />
-                      <VinPhotoCapture
-                        onConfirm={(photoVin) => { setVin(photoVin); setVinDecodeError(""); }}
-                        disabled={vinDecodeLoading || evaluationRunning}
-                      />
+                      <div className="relative">
+                        <input
+                          value={vin}
+                          onChange={(event) => setVin(event.target.value.toUpperCase())}
+                          placeholder="17-character VIN"
+                          aria-label="Vehicle VIN"
+                          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-14 text-sm font-semibold outline-none focus:border-blue-300"
+                        />
+                        <VinPhotoCapture
+                          onConfirm={(photoVin) => { setVin(photoVin); setVinDecodeError(""); }}
+                          disabled={vinDecodeLoading || evaluationRunning}
+                        />
+                      </div>
                       {vinDecodeError ? <p role="alert" className="text-xs font-semibold text-red-700">{vinDecodeError}</p> : null}
                     </div>
                   ) : (
