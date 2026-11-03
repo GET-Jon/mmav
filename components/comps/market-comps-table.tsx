@@ -112,7 +112,10 @@ function tableRelationshipLabel(comp: MarketComp) {
     return "Powertrain unverified";
   }
 
-  return tierLabel(comp);
+  if (comp.equivalenceTier === "direct") return "Configuration match";
+  if (comp.equivalenceTier === "near") return "Similar configuration";
+  if (comp.equivalenceTier === "reject") return "Not equivalent";
+  return "Supporting match";
 }
 
 function scoreImpactRows(comp: MarketComp) {
@@ -568,7 +571,7 @@ export function MarketCompsTable({
       },
       {
         accessorKey: "qualityScore",
-        header: "Pricing Relevance",
+        header: "Pricing Suitability",
         cell: ({ row }) => {
           const comp = row.original;
           const rejected = comp.equivalenceTier === "reject";
@@ -578,9 +581,9 @@ export function MarketCompsTable({
             : primary
               ? "Strong pricing peer"
               : comp.equivalenceTier === "direct"
-                ? "Related vehicle"
+                ? "Pricing context"
                 : comp.equivalenceTier === "near"
-                  ? "Different configuration"
+                  ? "Related configuration"
                   : "Market context";
           const tone = rejected
             ? "bg-red-100 text-red-800"
