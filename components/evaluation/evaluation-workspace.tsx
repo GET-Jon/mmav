@@ -8176,6 +8176,7 @@ export function EvaluationWorkspace({
                         </div>
                       </div>
                       <MarketCompsTable comps={[...independentComps].sort((a, b) => Number(b.included) - Number(a.included) || b.qualityScore - a.qualityScore).slice(0, 5)} targetMileage={targetMileage} targetDrivetrain={vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null} assumptions={activeAssumptions} primaryCompIds={compSummary.primaryCompIds || []} onToggleIncluded={toggleCompIncluded} />
+                    </>
                   ) : null}
                 </div>
               </SectionCard>
