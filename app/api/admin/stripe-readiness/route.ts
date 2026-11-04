@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { getPlatformAdminAccess } from "@/lib/admin/platform-admin";
 import { configuredStripeLiveMode, checkPreviewBillingIsolation } from "@/lib/billing/preview-isolation";
@@ -17,32 +17,31 @@ const PLANS = [
  * This verifies the environment-appropriate API key and catalog. A signed live webhook delivery
  * must still be verified separately; Stripe does not reveal webhook signing secrets via API.
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   const headers = { "Cache-Control": "private, no-store" };
-  // Netlify's build CONTEXT is not guaranteed to exist in the function runtime.
-  // Classify only our known public hosts; never trust an absent CONTEXT to decide key mode.
-  const host = request.nextUrl.hostname.toLowerCase();
-  const context = /^deploy-preview-\d+--mmav\.netlify\.app$/.test(host)
-    ? "deploy-preview"
-    : (host === "yourlotlogic.com" || host === "www.yourlotlogic.com")
-      ? "production"
-      : null;
-  if (!context) {
-    return NextResponse.json({ error: "Not available in this deployment." }, { status: 404, headers });
-  }
 
-  if (context === "deploy-preview" && !checkPreviewBillingIsolation({
-    context: "deploy-preview",
-    stripeSecretKey: process.env.STRIPE_SECRET_KEY,
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  }).safe) {
-    return NextResponse.json({ error: "Preview billing is not isolated." }, { status: 503, headers });
-  }
-
+  // Only authenticated platform administrators can use the diagnostic.
   const access = await getPlatformAdminAccess();
   if (!access) {
     return NextResponse.json({ error: "Not found." }, { status: 404, headers });
   }
+
+  // Netlify's Next.js server handler may rewrite the request host, and CONTEXT
+  // is not guaranteed in runtime. Use the configured Supabase project to
+  // establish which billing environment this function actually serves.
+  // A mismatched Stripe key is reported as a failed check, never assumed live.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const productionSupabaseUrl = "https://ymlleqpbpgzydyzwhlqq.supabase.co";
+  const isProduction = supabaseUrl.replace(/\\/$/, "") === productionSupabaseUrl;
+  const isIsolatedPreview = !isProduction && checkPreviewBillingIsolation({
+    context: "deploy-preview",
+    stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+    supabaseUrl,
+  }).safe;
+  if (!isProduction && !isIsolatedPreview) {
+    return NextResponse.json({ error: "Billing environment is not safely configured." }, { status: 503, headers });
+  }
+  const context = isProduction ? "production" : "deploy-preview";
 
   const mode = configuredStripeLiveMode();
   const secretKey = process.env.STRIPE_SECRET_KEY;
