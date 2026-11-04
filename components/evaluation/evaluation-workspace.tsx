@@ -19,6 +19,7 @@ import {
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { VinPhotoCapture } from "@/components/evaluation/vin-photo-capture";
+import { isPromisingNegotiationOpportunity } from "@/lib/evaluation/verdict-presentation";
 import {
   describeMarketCheckAttempt,
   recommendCompSearchAction,
@@ -5131,6 +5132,23 @@ export function EvaluationWorkspace({
     !conditionReviewPending &&
     (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
 
+  const promisingNegotiation =
+    hasEvaluationData && hasAcquisitionPrice && isAboveRecommendedBuy &&
+    isPromisingNegotiationOpportunity({
+      allInCost: valuation.allInCost,
+      recommendedAllInCost,
+      expectedGrossProfit: valuation.expectedGrossProfit,
+      saleEstimate: finalTargetUsed,
+      dealEconomicsScore: profitabilityScoreDisplay,
+      dealerFitScore: dealerFitScoreDisplay,
+      hasLimitedMarketEvidence,
+      hasMaterialConditionRisk,
+      conditionUnknown,
+      hasHardPass,
+      needsCompSearch,
+      conditionReviewPending,
+    });
+
   const requiresReview =
     hasEvaluationData &&
     !needsCompSearch &&
@@ -5162,6 +5180,8 @@ export function EvaluationWorkspace({
           ? "CONDITION REVIEW NEEDED"
         : hasHardPass
           ? "PASS"
+        : promisingNegotiation
+          ? "PROMISING — NEGOTIATE"
         : isAboveRecommendedBuy
           ? "ABOVE TARGET COST"
           : requiresReview
@@ -5179,6 +5199,8 @@ export function EvaluationWorkspace({
             ? "condition"
           : hasHardPass
             ? "pass"
+            : promisingNegotiation
+              ? "promising"
             : requiresReview
               ? "review"
               : "pursue";
@@ -5188,6 +5210,8 @@ export function EvaluationWorkspace({
       ? "bg-blue-100 text-blue-700"
       : presentationDecision === "pass"
         ? "bg-red-100 text-red-700"
+      : presentationDecision === "promising"
+        ? "bg-teal-100 text-teal-800"
       : presentationDecision === "comps"
         ? "bg-amber-100 text-amber-800"
         : presentationDecision === "condition"
@@ -5203,6 +5227,8 @@ export function EvaluationWorkspace({
       ? "border-blue-200/80 bg-blue-50/40 text-blue-950"
       : presentationDecision === "pass"
         ? "border-red-200/80 bg-red-50/60 text-red-950"
+      : presentationDecision === "promising"
+        ? "border-teal-200/80 bg-teal-50/35 text-teal-950"
       : presentationDecision === "comps"
         ? "border-amber-200/80 bg-amber-50/35 text-amber-950"
         : presentationDecision === "condition"
@@ -5218,6 +5244,8 @@ export function EvaluationWorkspace({
       ? "text-blue-700"
       : presentationDecision === "pass"
         ? "text-red-700"
+      : presentationDecision === "promising"
+        ? "text-teal-700"
       : presentationDecision === "comps"
         ? "text-amber-700"
         : presentationDecision === "condition"
@@ -5229,7 +5257,7 @@ export function EvaluationWorkspace({
           : "text-slate-400";
 
   const lotLogicIcon =
-    presentationDecision === "pursue" ? "✓ " : "";
+    presentationDecision === "pursue" || presentationDecision === "promising" ? "✓ " : "";
 
   const compConfidenceDisplay =
     compSummary.includedCount > 0 ? marketEvidenceDisplay : "—";
@@ -8263,11 +8291,15 @@ export function EvaluationWorkspace({
                         <p className="mt-2">Also review: {reviewReasons.filter((reason) => !reason.startsWith("market evidence is limited")).join("; ")}.</p>
                       ) : null}
                     </div>
+                  ) : promisingNegotiation ? (
+                    <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 px-3 py-3 text-center text-xs font-semibold leading-5 text-teal-900">
+                      <strong>Positive projected economics.</strong> The current cost is {money(currentAllInDifference)} above the recommended buy target. Negotiate toward that target before committing; the purchase still requires review.
+                    </div>
                   ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
                   {!needsCompSearch && currentCostPosition ? (
-                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-red-100 text-red-700" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
+                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
                   ) : null}
                   <div className="mt-auto pt-5">
                     <button
