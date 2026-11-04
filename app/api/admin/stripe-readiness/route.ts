@@ -32,7 +32,7 @@ export async function GET() {
   // A mismatched Stripe key is reported as a failed check, never assumed live.
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const productionSupabaseUrl = "https://ymlleqpbpgzydyzwhlqq.supabase.co";
-  const isProduction = supabaseUrl.replace(/\\/$/, "") === productionSupabaseUrl;
+  const isProduction = supabaseUrl.replace(/[/]$/, "") === productionSupabaseUrl;
   const isIsolatedPreview = !isProduction && checkPreviewBillingIsolation({
     context: "deploy-preview",
     stripeSecretKey: process.env.STRIPE_SECRET_KEY,
