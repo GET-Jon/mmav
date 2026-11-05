@@ -169,6 +169,8 @@ function LoginForm() {
             ) : null}
           </form>
 
+          <p className="mt-4 text-center text-sm"><Link href="/forgot-password" className="font-bold text-blue-700 hover:underline">Forgot your password?</Link></p>
+
           <p className="mt-5 text-center text-sm font-semibold text-slate-500">
             New to Lot Logic?{" "}
             <Link href="/signup" className="font-bold text-blue-700 hover:underline">Create an account</Link>
