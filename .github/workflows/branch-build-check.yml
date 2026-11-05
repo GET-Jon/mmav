@@ -32,6 +32,8 @@ jobs:
         run: node scripts/run-supabase-email-template-regressions.mjs
       - name: Authentication email regression suite
         run: npx --yes tsx@4.20.6 scripts/run-auth-email-regressions.ts
+      - name: Billing email design regressions
+        run: npx --yes tsx@4.20.6 scripts/run-billing-email-template-regressions.ts
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build
