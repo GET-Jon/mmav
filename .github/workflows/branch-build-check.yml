@@ -28,6 +28,8 @@ jobs:
         run: npx --yes tsx@4.20.6 scripts/run-post-cancel-regressions.ts
       - name: Stripe event ordering regressions
         run: npx --yes tsx@4.20.6 scripts/run-subscription-event-regressions.ts
+      - name: Supabase email template checks
+        run: node scripts/run-supabase-email-template-regressions.mjs
       - name: Authentication email regression suite
         run: npx --yes tsx@4.20.6 scripts/run-auth-email-regressions.ts
       - name: TypeScript check
