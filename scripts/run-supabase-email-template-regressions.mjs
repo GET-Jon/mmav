@@ -20,4 +20,5 @@ assert.ok(requestPage.includes("resetPasswordForEmail"));
 assert.ok(requestPage.includes("/auth/confirm?next=%2Fset-password"));
 const login = readFileSync("app/login/page.tsx","utf8");
 assert.ok(login.includes('href="/forgot-password"'));
+assert.ok(login.includes("shouldCreateUser: false"), "magic link must not silently create a user");
 console.log("Supabase email template regression suite passed: 5 templates and password recovery route.");
