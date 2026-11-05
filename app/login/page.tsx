@@ -34,6 +34,9 @@ function LoginForm() {
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
+            // Magic-link sign-in must not silently create an account that bypasses
+            // dealership metadata collected by the dedicated signup workflow.
+            shouldCreateUser: false,
             emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(next)}`,
           },
         });
