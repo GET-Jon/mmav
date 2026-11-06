@@ -20,6 +20,24 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Mercedes S63 formatting AMG S63 versus AMG S 63 is a direct identity match",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S 63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Matching S63 trim cannot override unknown convertible body",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S 63", bodyType: "Car", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Mercedes S63 different verified equipment remains near, not direct",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63 Designo Edition", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
     name: "S63 Convertible with unspecified listing body cannot auto-price",
     target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
     candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 63 AMG 4MATIC", bodyType: "", drivetrain: "AWD", fuelType: "Gasoline" },
