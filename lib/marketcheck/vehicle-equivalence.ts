@@ -11,6 +11,7 @@ import {
   compactVehicleText,
   normalizeVehicleText,
 } from "./vehicle-identity";
+import { applyConfigurationTierCeiling, materialConfigurationGuards } from "./pricing-critical-configuration";
 
 export type VehicleEquivalenceTier =
   | "direct"
@@ -696,23 +697,11 @@ export function evaluateVehicleEquivalence({
     };
   }
 
-  const targetBody = canonicalBodyClass(target);
-  const candidateBody = canonicalBodyClass(candidate);
-  // A convertible is a distinct retail configuration. A listing with no
-  // verifiable body style is not evidence that it is the same convertible,
-  // even when trim/year/powertrain match (e.g. AMG S63 sedan vs cabriolet).
-  // Keep it available as context, never an automatically selected pricing comp.
-  if (targetBody === "convertible" && !candidateBody && tier !== "reject") {
-    tier = "supporting";
-    reasons.push("convertible body style not verified for candidate");
-  }
-  if (targetBody && candidateBody && targetBody !== candidateBody) {
-    const fundamentallyDifferent =
-      (targetBody === "pickup" && candidateBody !== "pickup") ||
-      (candidateBody === "pickup" && targetBody !== "pickup");
-    tier = fundamentallyDifferent ? "reject" : "supporting";
-    reasons.push(`body configuration differs: ${targetBody} vs ${candidateBody}`);
-  }
+  // Single policy across makes: body and transmission differences are
+  // pricing-critical even if provider trims otherwise compare as identical.
+  const material = materialConfigurationGuards(target, candidate);
+  tier = applyConfigurationTierCeiling(tier, material.maxTier);
+  reasons.push(...material.reasons);
 
   const targetCab = canonicalCabClass(target);
   const candidateCab = canonicalCabClass(candidate);
@@ -747,18 +736,6 @@ export function evaluateVehicleEquivalence({
   ) {
     tier = "supporting";
     reasons.push(`engine family differs: ${target.cylinders} vs ${candidate.cylinders} cylinders`);
-  }
-
-  const targetTransmission = canonicalTransmission(target.transmission);
-  const candidateTransmission = canonicalTransmission(candidate.transmission);
-  if (
-    targetTransmission &&
-    candidateTransmission &&
-    targetTransmission !== candidateTransmission &&
-    tier === "direct"
-  ) {
-    tier = "near";
-    reasons.push(`transmission differs: ${targetTransmission} vs ${candidateTransmission}`);
   }
 
   const needsClassificationReview =
