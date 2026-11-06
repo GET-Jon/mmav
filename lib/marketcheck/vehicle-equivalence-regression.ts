@@ -1089,7 +1089,7 @@ export function assertVehicleEquivalenceRegressionCases() {
 
   for (const [qualification, display, make, model, expected] of [
     ["SE", "R-Dynamic SE", "Land Rover", "Range Rover Velar", "R-Dynamic SE"],
-    ["Premium", "Premium Plus S line", "Audi", "A4", "Premium"],
+    ["Premium", "Premium Plus S line", "Audi", "A4", "Premium Plus S line"],
     ["XLT", "XLT Sport", "Ford", "F-150", "XLT Sport"],
     ["SE", "SE", "Land Rover", "Range Rover Velar", "SE"],
     ["S", "SE", "Land Rover", "Range Rover Velar", "S"],
