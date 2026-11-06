@@ -36,12 +36,12 @@ export function materialConfigurationGuards(
   // Recognize the same marker across makes without assuming that it implies
   // identical equipment or assigning a speculative dollar adjustment.
   const packageMarkers: Array<[string, RegExp]> = [
-    ["R-Dynamic", /\\br dynamic\\b/],
-    ["M Sport", /\\bm sport\\b/],
-    ["S line", /\\bs line\\b/],
-    ["F Sport", /\\bf sport\\b/],
-    ["TRD Pro", /\\btrd pro\\b/],
-    ["TRD Off-Road", /\\btrd off road\\b/],
+    ["R-Dynamic", /\br dynamic\b/],
+    ["M Sport", /\bm sport\b/],
+    ["S line", /\bs line\b/],
+    ["F Sport", /\bf sport\b/],
+    ["TRD Pro", /\btrd pro\b/],
+    ["TRD Off-Road", /\btrd off road\b/],
   ];
   const targetPackages = normalizeVehicleText([target.model, target.trim, target.configuration].filter(Boolean).join(" "));
   const candidatePackages = normalizeVehicleText([candidate.model, candidate.trim, candidate.configuration].filter(Boolean).join(" "));
