@@ -16,7 +16,7 @@ import { verifyConvertibleBodies } from "@/lib/autodev/verify-convertible-bodies
 
 export const dynamic = "force-dynamic";
 
-type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
+type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; bodyVerificationSource?: "nhtsa-vin" | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
 type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number; trimFilter?: string };
 
 function toNumber(value: unknown): number | null { if (value === null || value === undefined || String(value).trim() === "") return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
