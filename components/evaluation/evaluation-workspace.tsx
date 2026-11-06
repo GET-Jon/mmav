@@ -2450,14 +2450,7 @@ export function EvaluationWorkspace({
           ? finalTargetUsed - evaluation.currentBid - modeledCostAdders
           : null;
 
-      const compConfidence =
-        totalCompCount === 0
-          ? "No comps available"
-          : includedCompCount === 0
-            ? "No included comps"
-            : includedCompCount < 3
-              ? "Low / limited comp set"
-              : "Usable comp set";
+      const compConfidence = pricingEvidence.label;
 
       const response = await fetch("/api/evaluations/summary", {
         method: "POST",
@@ -2476,14 +2469,15 @@ export function EvaluationWorkspace({
           marketCompAverage: compSummary.averageAdjusted || null,
           medianAdjusted:
             (compSummary as { medianAdjusted?: number }).medianAdjusted || null,
-          finalRetailTarget: finalTargetUsed || null,
-          safeBid: valuation.safeBid || null,
-          maxSmartBid: valuation.maxSmartBid || null,
-          stretchBid: valuation.stretchBid || null,
-          expectedGrossProfit,
+          finalRetailTarget: pricingEvidence.decisionReady ? finalTargetUsed || null : null,
+          safeBid: pricingEvidence.decisionReady ? valuation.safeBid || null : null,
+          maxSmartBid: pricingEvidence.decisionReady ? valuation.maxSmartBid || null : null,
+          stretchBid: pricingEvidence.decisionReady ? valuation.stretchBid || null : null,
+          expectedGrossProfit: pricingEvidence.decisionReady ? expectedGrossProfit : null,
+          pricingEvidenceNote: pricingEvidence.explanation,
 
           riskGrade: valuation.riskGrade,
-          decision: valuation.decision,
+          decision: pricingEvidence.decisionReady ? valuation.decision : "Pricing Verification Required",
           compConfidence,
           includedCompCount,
           totalCompCount,
