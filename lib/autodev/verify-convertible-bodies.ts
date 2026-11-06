@@ -27,6 +27,7 @@ export function convertibleVinVerificationCandidates<T extends ConvertibleDiscov
   listings: T[],
   target: VehicleIdentity,
   max = 8,
+  targetMileage = 0,
 ) {
   if (!/convertible|cabriolet/.test(normalized(target.bodyType)) ||
       !normalized(target.make).includes("mercedes") ||
@@ -41,10 +42,8 @@ export function convertibleVinVerificationCandidates<T extends ConvertibleDiscov
       Number(listing.miles || 0) > 0 &&
       Math.abs(Number(listing.year || 0) - Number(target.year)) <= 1,
     )
-    .sort((a,b) =>
-      Math.abs(Number(a.miles) - Number(target.year ? (target as VehicleIdentity & { mileage?: number }).mileage || 46000 : 46000)) -
-      Math.abs(Number(b.miles) - Number(target.year ? (target as VehicleIdentity & { mileage?: number }).mileage || 46000 : 46000)),
-    ).slice(0,max);
+    .sort((a,b) => Math.abs(Number(a.miles) - targetMileage) - Math.abs(Number(b.miles) - targetMileage))
+    .slice(0,max);
 }
 
 export function useVerifiedBodyType(currentBody: string | null, decodedBody: string | null) {
@@ -60,8 +59,9 @@ export async function verifyConvertibleBodies<T extends ConvertibleDiscoveryList
   listings: T[],
   target: VehicleIdentity,
   remaining: number,
+  targetMileage: number,
 ): Promise<{ listings: T[]; attempted: number; convertible: number; otherBody: number }> {
-  const candidates = convertibleVinVerificationCandidates(listings, target, remaining);
+  const candidates = convertibleVinVerificationCandidates(listings, target, remaining, targetMileage);
   if (!candidates.length) return { listings, attempted: 0, convertible: 0, otherBody: 0 };
   const results = await Promise.all(candidates.map(async listing => {
     try {
