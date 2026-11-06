@@ -21,8 +21,14 @@ export type PricingEvidence = {
 export function classifyPricingEvidence(
   summary: Pick<CompSummary, "includedCount" | "primaryCompCount" | "pricingMode" | "confidence" | "valuationAvailable">,
 ): PricingEvidence {
-  const selectedCount = Math.max(0, Number(summary.includedCount || 0));
-  const closePeerCount = Math.max(0, Number(summary.primaryCompCount || 0));
+  // Provider summaries and saved drafts may contain malformed counts. Never
+  // promote a malformed or impossible cohort into an acquisition verdict.
+  const safeCount = (value: unknown): number => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
+  };
+  const selectedCount = safeCount(summary.includedCount);
+  const closePeerCount = Math.min(selectedCount, safeCount(summary.primaryCompCount));
   const hasPriceIndication = selectedCount > 0 && summary.valuationAvailable !== false;
   const decisionReady = hasPriceIndication &&
     summary.pricingMode === "primary" &&
