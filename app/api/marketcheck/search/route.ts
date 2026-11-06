@@ -1022,6 +1022,7 @@ export async function POST(request: Request) {
         "",
       normalizedBody.trim ||
         normalizedBody.vehicleTrim ||
+        nestedVehicle.trim ||
         "",
       normalizedBody.qualificationMake || normalizedBody.make || decodedVehicle.make || nestedVehicle.make,
       normalizedBody.qualificationModel || normalizedBody.model || decodedVehicle.model || nestedVehicle.model,
@@ -1041,7 +1042,7 @@ export async function POST(request: Request) {
         "",
       trim: preserveSpecificSubjectTrim(
         normalizedBody.qualificationTrim || decodedVehicle.trim || nestedVehicle.trim || "",
-        normalizedBody.trim || normalizedBody.vehicleTrim || "",
+        normalizedBody.trim || normalizedBody.vehicleTrim || nestedVehicle.trim || "",
         normalizedBody.qualificationMake || normalizedBody.make || decodedVehicle.make || nestedVehicle.make,
         normalizedBody.qualificationModel || normalizedBody.model || decodedVehicle.model || nestedVehicle.model,
       ),
