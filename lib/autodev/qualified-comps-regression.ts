@@ -67,8 +67,8 @@ export function assertAutoDevCompRegressionCases() {
   const s63Filter = buildDiscoveryTrimFilter("Mercedes-Benz", "S-Class", "AMG S63");
   test(Boolean(s63Filter?.includes("AMG S63") && s63Filter.includes("S 63 AMG 4MATIC")),
     "rare S63 gets targeted Auto.dev trim query before broad S-Class pages");
-  test(buildDiscoveryTrimFilter("Mercedes-Benz", "S-Class", "S 550 4MATIC") === null,
-    "ordinary S-Class does not add unnecessary derivative query");
+  test(buildDiscoveryTrimFilter("Mercedes-Benz", "S-Class", "S 550 4MATIC") === "S 550 4MATIC",
+    "ordinary S-Class may use a narrow trim-first query with the same broad fallback");
   test(buildDiscoveryTrimFilter("BMW", "5 Series", "M5") === null,
     "other makes retain normal discovery behavior");
   const s63Target: VehicleIdentity = { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" };
