@@ -45,15 +45,32 @@ export function buildDiscoveryTrimFilter(make: string, model: string, trim: stri
   const normalizedMake = normalizeText(make);
   const normalizedModel = normalizeText(model);
   const compactTrim = normalizeText([model, trim].join(" ")).replace(/\s+/g, "");
-  if (!normalizedMake.includes("mercedes")) return null;
-  if (!/(?:s class|s ?63|s ?65)/.test(normalizedModel)) return null;
-  const derivative = compactTrim.includes("s63") ? "63" : compactTrim.includes("s65") ? "65" : null;
-  if (!derivative) return null;
-  return [
-    `AMG S${derivative}`,
-    `S ${derivative} AMG 4MATIC`,
-    `S${derivative} AMG`,
-    `S ${derivative} AMG`,
-    `AMG S ${derivative}`,
-  ].join(",");
+  // Preserve the proven S63/S65 aliases, then use the same focused-first
+  // strategy for any manufacturer with a specific, unambiguous trim.
+  if (normalizedMake.includes("mercedes") && /(?:s class|s ?63|s ?65)/.test(normalizedModel)) {
+    const derivative = compactTrim.includes("s63") ? "63" : compactTrim.includes("s65") ? "65" : null;
+    if (derivative) {
+      return [
+        `AMG S${derivative}`,
+        `S ${derivative} AMG 4MATIC`,
+        `S${derivative} AMG`,
+        `S ${derivative} AMG`,
+        `AMG S ${derivative}`,
+      ].join(",");
+    }
+  }
+
+  const proposed = String(trim || "").trim();
+  const normalized = normalizeText(proposed);
+  const compactProposed = normalized.replace(/[^a-z0-9]/g, "");
+  const compactModel = normalizedModel.replace(/[^a-z0-9]/g, "");
+  // Avoid extra calls for absent, ambiguous or purely drivetrain labels.
+  if (!normalized || compactProposed.length < 3 ||
+      compactProposed === compactModel ||
+      /^(base|standard|unknown|other|all|unspecified|awd|4wd|fwd|rwd|quattro|xdrive|4matic)$/.test(compactProposed) ||
+      /[,;/|]/.test(proposed) || normalized.split(" ").length > 5) return null;
+
+  // Retrieval hint only: the provider may use a different trim spelling.
+  // A broad model query always follows if the focused search is insufficient.
+  return proposed;
 }
