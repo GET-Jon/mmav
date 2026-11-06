@@ -696,6 +696,14 @@ export function evaluateVehicleEquivalence({
 
   const targetBody = canonicalBodyClass(target);
   const candidateBody = canonicalBodyClass(candidate);
+  // A convertible is a distinct retail configuration. A listing with no
+  // verifiable body style is not evidence that it is the same convertible,
+  // even when trim/year/powertrain match (e.g. AMG S63 sedan vs cabriolet).
+  // Keep it available as context, never an automatically selected pricing comp.
+  if (targetBody === "convertible" && !candidateBody && tier !== "reject") {
+    tier = "supporting";
+    reasons.push("convertible body style not verified for candidate");
+  }
   if (targetBody && candidateBody && targetBody !== candidateBody) {
     const fundamentallyDifferent =
       (targetBody === "pickup" && candidateBody !== "pickup") ||
