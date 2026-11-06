@@ -11,12 +11,12 @@ import {
 } from "@/lib/marketcheck/vehicle-equivalence";
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
-import { buildDiscoveryModels } from "@/lib/autodev/discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter } from "@/lib/autodev/discovery-models";
 
 export const dynamic = "force-dynamic";
 
 type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
-type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number };
+type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number; trimFilter?: string };
 
 function toNumber(value: unknown): number | null { if (value === null || value === undefined || String(value).trim() === "") return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
 function haversineMiles(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
@@ -183,20 +183,25 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .slice(0, 8)
     : [];
-  const attempts: DiscoveryAttempt[] = buildDiscoveryModels(
-    make,
-    model,
-    trim,
-    providerAliases,
-  ).map((candidateModel, index) => ({
-    label: index === 0 ? "exact decoded model" : "normalized provider model",
-    make,
-    model: candidateModel,
-    yearMin,
-    yearMax,
-  }));
+  const models = buildDiscoveryModels(make, model, trim, providerAliases);
+  const specificTrimFilter = buildDiscoveryTrimFilter(make, model, trim);
+  const attempts: DiscoveryAttempt[] = [
+    // An explicit derivative query samples actual S63/S65 inventory before
+    // spending our limited pages on the much larger S-Class population.
+    ...(specificTrimFilter && models.length
+      ? [{
+          label: "performance derivative trim",
+          make, model: models[0], yearMin, yearMax,
+          trimFilter: specificTrimFilter,
+        }]
+      : []),
+    ...models.map((candidateModel, index) => ({
+      label: index === 0 ? "exact decoded model" : "normalized provider model",
+      make, model: candidateModel, yearMin, yearMax,
+    })),
+  ];
   const attemptsResult: Array<{
-    label: string; model: string; returned: number; total: number;
+    label: string; model: string; trimFilter?: string; returned: number; total: number;
     directNear: number; supporting: number; qualifiedCandidates: number;
     autoSelected: number; missingPriceOrMileage: number;
     identityRejected: number; outOfYearRange: number;
@@ -234,6 +239,7 @@ export async function POST(request: Request) {
       "limit": "20",
       "sort": "updatedAt.desc",
     });
+    if (attempt.trimFilter) params.set("vehicle.trim", attempt.trimFilter);
     const upstream = await fetch(`https://api.auto.dev/listings?${params}`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
       cache: "no-store",
@@ -260,7 +266,7 @@ export async function POST(request: Request) {
     lastAttempt = attempt;
     let batch = mapListings(payload);
     const total = typeof payload?.total === "number" ? payload.total : batch.length;
-    if (attemptIndex === 0) exactTotal = total;
+    if (!attempt.trimFilter && exactTotal === 0) exactTotal = total;
 
     // Auto.dev Free-plan pages may be capped at 20. When a broad provider
     // alias contains more than one page, inspect page two only if page one
@@ -335,7 +341,7 @@ export async function POST(request: Request) {
     const combined = buildAutoDevCompCandidates(listings, target, targetMileage);
     latestCombinedEvidence = combined;
     attemptsResult.push({
-      label: attempt.label, model: attempt.model,
+      label: attempt.label, model: attempt.model, trimFilter: attempt.trimFilter,
       returned: batch.length, total,
       directNear: tiers.filter(t => t === "direct" || t === "near").length,
       supporting: tiers.filter(t => t === "supporting").length,
@@ -363,6 +369,7 @@ export async function POST(request: Request) {
     callsMade, attemptResults: attemptsResult,
     screening: candidateEvidence.diagnostics,
     returned: listings.length, exactModelTotal: exactTotal, total,
+    inspectedListingRows: attemptsResult.reduce((sum, attempt) => sum + attempt.returned, 0),
     sampleFieldCoverage: {
       priced: listings.filter(x => x.price !== null && x.price !== undefined && x.price > 0).length,
       withMileage: listings.filter(x => x.miles !== null && x.miles !== undefined).length,
