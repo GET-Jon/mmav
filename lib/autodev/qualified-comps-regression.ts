@@ -24,6 +24,46 @@ export function assertAutoDevCompRegressionCases() {
   let passed = 0;
   const test = (condition: unknown, message: string) => { check(condition, message); passed++; };
 
+  // The targeted-first search must work for common and specialty variants
+  // across brands, not depend on Mercedes-specific trim dictionaries.
+  test(buildDiscoveryTrimFilter("Toyota", "Tacoma", "TRD Pro") === "TRD Pro",
+    "Toyota trim-first query is available with broad Tacoma fallback");
+  test(buildDiscoveryTrimFilter("Ford", "F-150", "Lariat") === "Lariat",
+    "Ford pickup trim-first query is available with broad fallback");
+  test(buildDiscoveryTrimFilter("Porsche", "911", "Carrera 4S") === "Carrera 4S",
+    "Porsche trim-first discovery is not Mercedes-specific");
+  test(buildDiscoveryTrimFilter("Honda", "Civic", "Sport") === "Sport",
+    "ordinary Honda trims can be searched precisely before broad Civic listings");
+  test(buildDiscoveryTrimFilter("Honda", "Civic", "Base") === null,
+    "generic Base is not used as a narrow trim search");
+  test(buildDiscoveryTrimFilter("Audi", "TTS", "TTS") === null,
+    "same model and trim cannot waste a query");
+  const porscheBodyTarget: VehicleIdentity = {
+    year: 2018, make: "Porsche", model: "911", trim: "Carrera", bodyType: "Coupe",
+    fuelType: "Gasoline",
+  };
+  const genericUnknownBody = {
+    vin: "WP0AA2A94JS107254", year: 2018, make: "Porsche",
+    model: "911", trim: "Carrera", bodyType: "Car",
+    price: 63000, miles: 46000,
+  };
+  test(convertibleVinVerificationCandidates([genericUnknownBody], porscheBodyTarget, 8, 46000).length === 1,
+    "Porsche coupe missing body details is eligible for bounded identity verification");
+  test(convertibleVinVerificationCandidates([
+    { ...genericUnknownBody, trim: "Turbo" },
+  ], porscheBodyTarget, 8, 46000).length === 0,
+    "different Porsche variant does not waste VIN verification allowance");
+  const fordBodyTarget: VehicleIdentity = {
+    year: 2020, make: "Ford", model: "F-150", trim: "XLT", bodyType: "Pickup",
+    fuelType: "Gasoline",
+  };
+  test(convertibleVinVerificationCandidates([{
+    vin: "1FTFW1E50LFA00100", year: 2020, make: "Ford",
+    model: "F-150", trim: "XLT", bodyType: "Car", price: 34000, miles: 46000,
+  }], fordBodyTarget, 8, 46000).length === 1,
+    "Ford pickup unknown body is eligible for the same bounded VIN check");
+  test(useVerifiedBodyType("Car","Pickup Truck") === "Pickup",
+    "validated VIN can resolve pickup body style");
   const s63Filter = buildDiscoveryTrimFilter("Mercedes-Benz", "S-Class", "AMG S63");
   test(Boolean(s63Filter?.includes("AMG S63") && s63Filter.includes("S 63 AMG 4MATIC")),
     "rare S63 gets targeted Auto.dev trim query before broad S-Class pages");
