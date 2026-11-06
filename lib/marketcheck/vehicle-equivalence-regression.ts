@@ -19,6 +19,49 @@ const base = {
 } as const;
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
+  // Shared pricing-critical configuration policies, independent of make.
+  {
+    name: "Porsche 911 coupe cannot value an unverified body style automatically",
+    target: { year: 2018, make: "Porsche", model: "911", trim: "Carrera", bodyType: "Coupe", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Porsche", model: "911", trim: "Carrera", bodyType: "Car", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "VW Golf R hatchback remains direct when configuration is verified",
+    target: { year: 2022, make: "Volkswagen", model: "Golf R", trim: "Golf R", bodyType: "Hatchback", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2022, make: "Volkswagen", model: "Golf R", trim: "Golf R", bodyType: "Hatchback", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "BMW manual versus automatic is not an automatic pricing peer",
+    target: { year: 2013, make: "BMW", model: "328i", trim: "328i", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline", transmission: "Manual" },
+    candidate: { year: 2013, make: "BMW", model: "328i", trim: "328i", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline", transmission: "Automatic" },
+    expected: "supporting",
+  },
+  {
+    name: "Honda Civic manual versus automatic cannot silently set a price",
+    target: { year: 2020, make: "Honda", model: "Civic", trim: "Sport", bodyType: "Sedan", fuelType: "Gasoline", transmission: "Manual" },
+    candidate: { year: 2020, make: "Honda", model: "Civic", trim: "Sport", bodyType: "Sedan", fuelType: "Gasoline", transmission: "Automatic" },
+    expected: "supporting",
+  },
+  {
+    name: "Subaru wagon needs verified body style for direct pricing",
+    target: { year: 2018, make: "Subaru", model: "Outback", trim: "Limited", bodyType: "Wagon", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Subaru", model: "Outback", trim: "Limited", bodyType: "Car", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Ford F150 pickup with unverified body class cannot set price",
+    target: { year: 2020, make: "Ford", model: "F-150", trim: "XLT", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Ford", model: "F-150", trim: "XLT", bodyType: "Car", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Toyota RAV4 same verified SUV and powertrain remains direct",
+    target: { year: 2023, make: "Toyota", model: "RAV4 Hybrid", trim: "XLE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Hybrid" },
+    candidate: { year: 2023, make: "Toyota", model: "RAV4 Hybrid", trim: "XLE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Hybrid" },
+    expected: "direct",
+  },
   {
     name: "Mercedes S63 formatting AMG S63 versus AMG S 63 is a direct identity match",
     target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
