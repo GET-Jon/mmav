@@ -20,6 +20,18 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "S63 Convertible with unspecified listing body cannot auto-price",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 63 AMG 4MATIC", bodyType: "", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "S63 Convertible with verified cabriolet body remains comparable",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 63 AMG 4MATIC", bodyType: "Cabriolet", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
     name: "Mercedes S63 AMG Convertible must not auto-price from ordinary S550 4MATIC",
     target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
     candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 550 4MATIC", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
