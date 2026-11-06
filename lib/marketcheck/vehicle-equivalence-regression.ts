@@ -273,7 +273,7 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
     expected: "reject",
   },
   {
-    name: "Audi A5 VIN naming vs A5 Sportback is near, not rejected",
+    name: "Audi A5 S Line package is supporting versus ordinary A5 Sportback Premium",
     target: {
       year: 2025,
       make: "Audi",
@@ -292,7 +292,7 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
       drivetrain: "4WD",
       fuelType: "Gasoline",
     },
-    expected: "near",
+    expected: "supporting",
   },
   {
     name: "Audi A5 vs S5 Sportback preserves performance distinction",
