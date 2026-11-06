@@ -3,7 +3,7 @@ import {
   type VehicleEquivalenceTier,
   type VehicleIdentity,
 } from "./vehicle-equivalence";
-import { canonicalIdentitySnapshot, dedicatedBmwMModel, preserveSpecificSubjectTrim } from "./vehicle-identity";
+import { canonicalIdentitySnapshot, dedicatedBmwMModel, preserveSpecificSubjectTrim, preserveAdvertisedCandidateTrim } from "./vehicle-identity";
 
 type RegressionCase = {
   name: string;
@@ -1076,6 +1076,16 @@ export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
 
 export function assertVehicleEquivalenceRegressionCases() {
   const failures: string[] = [];
+
+  for (const [advertised, decoder, expected] of [
+    ["SE", "R-Dynamic SE", "SE"],
+    ["R-Dynamic SE", "SE", "R-Dynamic SE"],
+    ["", "R-Dynamic SE", "R-Dynamic SE"],
+    ["Premium", "Premium Plus", "Premium"],
+  ] as Array<[string, string, string]>) {
+    const actual = preserveAdvertisedCandidateTrim(advertised, decoder, "Land Rover", "Range Rover Velar");
+    if (actual !== expected) failures.push(`Candidate trim ${advertised}/${decoder}: expected ${expected}, got ${actual}`);
+  }
 
   for (const [qualification, display, make, model, expected] of [
     ["SE", "R-Dynamic SE", "Land Rover", "Range Rover Velar", "R-Dynamic SE"],
