@@ -33,6 +33,7 @@ import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
+import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
 import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
@@ -1624,6 +1625,8 @@ export function EvaluationWorkspace({
       }),
     [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
+
+  const pricingEvidence = classifyPricingEvidence(compSummary);
 
   const refinementSnapshot: RefinementSnapshot = {
     comps: independentComps,
@@ -4095,6 +4098,7 @@ export function EvaluationWorkspace({
           valuationInput,
           valuation,
           compSummary,
+          pricingEvidence,
           comps,
           refinementEvents,
           selectedConditions,
@@ -4823,7 +4827,7 @@ export function EvaluationWorkspace({
           ? "Strong pricing confidence"
           : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
-    compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
+    !pricingEvidence.decisionReady;
   // Do not present broad-market fallback asking-price evidence as a verified retail value.
   const provisionalFallbackPricing =
     compSummary.pricingMode === "market-fallback" && (compSummary.pricingCompCount ?? 0) > 0;
@@ -5128,6 +5132,7 @@ export function EvaluationWorkspace({
 
   const hasHardPass =
     hasEvaluationData &&
+    pricingEvidence.decisionReady &&
     !needsCompSearch &&
     !conditionReviewPending &&
     (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
@@ -5178,6 +5183,8 @@ export function EvaluationWorkspace({
         ? "COMP SEARCH NEEDED"
         : conditionReviewPending
           ? "CONDITION REVIEW NEEDED"
+        : !pricingEvidence.decisionReady
+          ? "VERIFY PRICING"
         : hasHardPass
           ? "PASS"
         : promisingNegotiation
@@ -5197,6 +5204,8 @@ export function EvaluationWorkspace({
           ? "comps"
           : conditionReviewPending
             ? "condition"
+          : !pricingEvidence.decisionReady
+            ? "comps"
           : hasHardPass
             ? "pass"
             : promisingNegotiation
@@ -6941,12 +6950,12 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Expected profit</dt>
                       <dd className="mt-1 font-black text-emerald-700">
-                        {!needsCompSearch && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}
+                        {pricingEvidence.decisionReady && !needsCompSearch && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}
                       </dd>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Recommended max buy</dt>
-                      <dd className="mt-1 font-black text-blue-700">{suggestedBid > 0 ? money(suggestedBid) : "—"}</dd>
+                      <dd className="mt-1 font-black text-blue-700">{pricingEvidence.decisionReady && suggestedBid > 0 ? money(suggestedBid) : "—"}</dd>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
@@ -7900,7 +7909,7 @@ export function EvaluationWorkspace({
                       <div className="mt-1 text-lg font-black text-slate-300">—</div>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
                       <div className="mt-1 text-lg font-black text-slate-300">—</div>
                     </div>
                   </div>
@@ -7948,20 +7957,21 @@ export function EvaluationWorkspace({
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Pricing evidence</div>
-                          <div className="mt-1 text-lg font-black text-slate-950">{compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Provisional"}</div>
-                          <div className="mt-1 text-[10px] font-semibold text-slate-500">{compSummary.confidence === "Low" ? "Closer pricing peers needed" : "Based on qualified price comparisons"}</div>
+                          <div className="mt-1 text-lg font-black text-slate-950">{pricingEvidence.label}</div>
+                          <div className="mt-1 text-[10px] font-semibold text-slate-500">{pricingEvidence.decisionReady ? "Based on qualified close pricing peers" : "Acquisition decision not yet supported"}</div>
                         </div>
                       </div>
                       {activeStage === "market" ? (
                         <>
                         <div className="mt-3 text-xs leading-5 text-slate-600">
-                          {compSummary.pricingMode === "primary"
+                          {pricingEvidence.decisionReady
                             ? `${compSummary.primaryCompCount} close pricing peers support the estimate. Asking prices are not completed sales.`
                             : `${compSummary.includedCount} relevant comparisons found, but only ${compSummary.primaryCompCount || 0} qualify as close pricing peers. Verify retail pricing before purchasing.`}
                           <details className="mt-1">
                             <summary className="w-fit cursor-pointer text-[11px] font-semibold text-blue-700 hover:text-blue-900">Pricing evidence details</summary>
                             <div className="mt-1 space-y-1 text-[11px] text-slate-600">
-                              <p>{fallbackEvidenceDisclosure || `${compSummary.primaryCompCount || 0} close pricing peers and ${compSummary.includedCount} selected comparisons.`}</p>
+                              <p>{pricingEvidence.explanation}</p>
+                              {fallbackEvidenceDisclosure ? <p>{fallbackEvidenceDisclosure}</p> : null}
                               {(compSummary.confidenceReasons || []).length > 0 ? <ul className="list-disc pl-4">{(compSummary.confidenceReasons || []).map((reason, index) => <li key={index}>{reason}</li>)}</ul> : null}
                             </div>
                           </details>
@@ -8269,24 +8279,24 @@ export function EvaluationWorkspace({
                       ) : null}
                     </button>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Sale Estimate</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Sale Estimate" : "Unverified Retail Indication"}</div>
                       <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                     </div>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Estimated Profit</div>
-                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice && compSummary.includedCount > 0 ? money(valuation.expectedGrossProfit) : "—"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Estimated Profit" : "Profit Pending Verification"}</div>
+                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</div>
                     </div>
                   </div>
-                  {provisionalFallbackPricing && hasEvaluationData ? (
+                  {!pricingEvidence.decisionReady && hasEvaluationData ? (
                     <div role="note" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-900">
-                      <span className="font-black">Market pricing needs verification.</span>{" "}
+                      <span className="font-black">{pricingEvidence.label}.</span>{" "}
                       Based on {compSummary.pricingCompCount ?? compSummary.includedCount} related asking-price listings, but {compSummary.primaryCompCount === 0
                         ? "none closely match this vehicle"
                         : `only ${compSummary.primaryCompCount} qualify as close pricing peers`}.
                       {(compSummary.cappedAdjustmentCount ?? 0) > 0
                         ? ` ${compSummary.cappedAdjustmentCount} required capped mileage adjustments.`
                         : ""}
-                      {" "}Verify the estimated sale price before purchasing.
+                      {" "}No confident BUY/PASS or profit recommendation is supported. {pricingEvidence.explanation}
                       {presentationDecision === "review" && reviewReasons.some((reason) => !reason.startsWith("market evidence is limited")) ? (
                         <p className="mt-2">Also review: {reviewReasons.filter((reason) => !reason.startsWith("market evidence is limited")).join("; ")}.</p>
                       ) : null}
@@ -8298,7 +8308,7 @@ export function EvaluationWorkspace({
                   ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
-                  {!needsCompSearch && currentCostPosition ? (
+                  {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
                     <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
                   ) : null}
                   <div className="mt-auto pt-5">
