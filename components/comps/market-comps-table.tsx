@@ -581,7 +581,7 @@ export function MarketCompsTable({
             : primary
               ? "Strong pricing peer"
               : comp.equivalenceTier === "direct"
-                ? "Pricing context"
+                ? comp.included ? "Provisional price input" : "Pricing context"
                 : comp.equivalenceTier === "near"
                   ? "Related configuration"
                   : "Market context";
