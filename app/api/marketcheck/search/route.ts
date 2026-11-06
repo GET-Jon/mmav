@@ -20,6 +20,7 @@ import {
 import {
   isLikelyVariantEnumeration,
   preserveSpecificSubjectTrim,
+  preserveAdvertisedCandidateTrim,
   resolveSemanticFuelType,
 } from "@/lib/marketcheck/vehicle-identity";
 
@@ -195,12 +196,9 @@ function buildCandidateVehicle(
   // A VIN decoder often reports only a generic Series; it cannot promote
   // an explicitly advertised SE listing into an R-Dynamic SE. Prefer the
   // listing's own concrete trim; decoder data fills missing/ambiguous labels.
-  const displayedTrim = String(comp.trim || "").trim();
-  const trim = String(
-    displayedTrim && !isLikelyVariantEnumeration({ make, model: String(rawModel || ""), trim: displayedTrim })
-      ? displayedTrim
-      : verification.trim || build.trim || raw.trim || "",
-  ).trim();
+  const trim = preserveAdvertisedCandidateTrim(
+    comp.trim, verification.trim || build.trim || raw.trim || "", make, String(rawModel || ""),
+  );
 
   return {
     year: Number(
