@@ -658,7 +658,9 @@ export function evaluateVehicleEquivalence({
         if (!targetTrim || !candidateTrim) {
           tier = "supporting";
           reasons.push("special derivative aligned but trim is incomplete");
-        } else if (targetTrim !== candidateTrim) {
+        } else if (compact(targetTrim) !== compact(candidateTrim)) {
+          // Mercedes providers interchange S63 and S 63, while Audi and
+          // other true equipment variants must remain distinct.
           tier = "near";
           reasons.push(`special derivative aligned; trim differs: ${targetTrim} vs ${candidateTrim}`);
         } else {
