@@ -46,7 +46,7 @@ export function buildDiscoveryTrimFilter(make: string, model: string, trim: stri
   const normalizedModel = normalizeText(model);
   const compactTrim = normalizeText([model, trim].join(" ")).replace(/\s+/g, "");
   if (!normalizedMake.includes("mercedes")) return null;
-  if (!/(?:sclass|s\s?63|s\s?65)/.test(normalizedModel.replace(/[-]+/g, " "))) return null;
+  if (!/(?:s class|s ?63|s ?65)/.test(normalizedModel)) return null;
   const derivative = compactTrim.includes("s63") ? "63" : compactTrim.includes("s65") ? "65" : null;
   if (!derivative) return null;
   return [
