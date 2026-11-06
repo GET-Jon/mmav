@@ -32,3 +32,28 @@ export function buildDiscoveryModels(
   return uniqueStrings(models).slice(0, 4);
 }
 
+
+/**
+ * Search rare, high-value Mercedes derivatives before paging through a broad
+ * S-Class model population. This is a provider retrieval hint, NOT evidence
+ * that a returned listing qualifies for pricing.
+ *
+ * Auto.dev documents vehicle.trim as a comma-separated OR filter.
+ * The unfiltered model attempts must always remain available as fallback.
+ */
+export function buildDiscoveryTrimFilter(make: string, model: string, trim: string): string | null {
+  const normalizedMake = normalizeText(make);
+  const normalizedModel = normalizeText(model);
+  const compactTrim = normalizeText([model, trim].join(" ")).replace(/\s+/g, "");
+  if (!normalizedMake.includes("mercedes")) return null;
+  if (!/(?:sclass|s\s?63|s\s?65)/.test(normalizedModel.replace(/[-]+/g, " "))) return null;
+  const derivative = compactTrim.includes("s63") ? "63" : compactTrim.includes("s65") ? "65" : null;
+  if (!derivative) return null;
+  return [
+    `AMG S${derivative}`,
+    `S ${derivative} AMG 4MATIC`,
+    `S${derivative} AMG`,
+    `S ${derivative} AMG`,
+    `AMG S ${derivative}`,
+  ].join(",");
+}
