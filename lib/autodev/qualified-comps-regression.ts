@@ -1,4 +1,4 @@
-import { buildDiscoveryModels } from "./discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter } from "./discovery-models";
 import { buildAutoDevCompCandidates, excludeSubjectVinComps, mergeCompCandidates } from "./qualified-comps";
 import type { VehicleIdentity } from "../marketcheck/vehicle-equivalence";
 import type { MarketComp } from "../../types/comps";
@@ -23,6 +23,13 @@ export function assertAutoDevCompRegressionCases() {
   let passed = 0;
   const test = (condition: unknown, message: string) => { check(condition, message); passed++; };
 
+  const s63Filter = buildDiscoveryTrimFilter("Mercedes-Benz", "S-Class", "AMG S63");
+  test(Boolean(s63Filter?.includes("AMG S63") && s63Filter.includes("S 63 AMG 4MATIC")),
+    "rare S63 gets targeted Auto.dev trim query before broad S-Class pages");
+  test(buildDiscoveryTrimFilter("Mercedes-Benz", "S-Class", "S 550 4MATIC") === null,
+    "ordinary S-Class does not add unnecessary derivative query");
+  test(buildDiscoveryTrimFilter("BMW", "5 Series", "M5") === null,
+    "other makes retain normal discovery behavior");
   const order = buildDiscoveryModels("Audi", "TTS", "quattro Prestige", ["TT", "TTS"]);
   test(order[0] === "TTS" && order[1] === "TT", "exact TTS searched before broad TT provider aliases");
   test(buildDiscoveryModels("Audi", "TTS", "Prestige", ["tt", "TT", "TTS"]).length === 2,
