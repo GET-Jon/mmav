@@ -7872,30 +7872,26 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading || compSearchImproving
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? (compSummary.primaryCompCount || 0) >= 4
-                            ? "Market pricing supported by close comparisons"
-                            : "Market analysis complete"
+                          ? pricingEvidence.decisionReady
+                            ? "Market valuation supported by close comparisons"
+                            : "Price indication needs verification"
                           : "Market evidence"}
                   </h2>
                 </div>
                 {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" ? (
                   <div className="relative flex shrink-0 items-center gap-1.5">
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
-                    needsCompSearch ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
+                    !pricingEvidence.decisionReady ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
                   }`}>
-                    {needsCompSearch ? "Needs attention" : "Ready ✓"}
+                    {pricingEvidence.decisionReady ? "Ready ✓" : "Needs attention"}
                     </span>
-                    {needsCompSearch ? (
+                    {!pricingEvidence.decisionReady ? (
                       <span className="group relative inline-flex">
                         <button type="button" aria-label="Why market evidence needs attention"
-                          title={recommendedCompSearchExhausted
-                            ? "Recommended searches have finished. An unpriced review will not consume an evaluation credit."
-                            : "No trusted comps yet. Run the recommended search before deciding whether a valuation is possible."}
+                          title={pricingEvidence.explanation}
                           className="flex h-5 w-5 items-center justify-center rounded-full border border-amber-300 text-[11px] font-black text-amber-800 focus-visible:outline-2 focus-visible:outline-blue-600">!</button>
                         <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                          {recommendedCompSearchExhausted
-                            ? "Recommended searches have finished without reliable comparisons. You can review an unpriced verdict without using an evaluation credit; no sale or profit estimate is available."
-                            : "The initial search has not established reliable comparisons. Run the recommended search for stronger market evidence before treating this as unpriceable."}
+                          {pricingEvidence.explanation}
                         </span>
                       </span>
                     ) : null}
