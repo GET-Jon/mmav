@@ -107,7 +107,9 @@ function detectSpecialVariant(vehicle: VehicleIdentity) {
   }
 
   if (make === "mercedes benz") {
-    // S63/S65 are materially different performance derivatives from S550/S560.\n    // Without these identities, generic S-Class Near matches can be auto-priced.\n    const variants = ["s65", "s63", "c63 s", "c63", "c43", "e63 s", "e63", "e53", "a45", "a35", "cla45", "cla35"];
+    // S63/S65 are materially different performance derivatives from S550/S560.
+    // Without these identities, generic S-Class Near matches can be auto-priced.
+    const variants = ["s65", "s63", "c63 s", "c63", "c43", "e63 s", "e63", "e53", "a45", "a35", "cla45", "cla35"];
     for (const variant of variants) {
       if (phraseMatches(text, variant) || phraseMatches(text, `amg ${variant}`) || (variant.startsWith("s6") && phraseMatches(text, `s ${variant.slice(1)}`)) || compact(vehicle.model).includes(compact(variant))) {
         return `amg-${compact(variant)}`;
