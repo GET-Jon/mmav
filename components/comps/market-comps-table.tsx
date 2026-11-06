@@ -825,7 +825,9 @@ export function MarketCompsTable({
                     value={
                       selectedComp.marketCheckDetails?.identityVerification?.source ===
                       "nhtsa-vin"
-                        ? "Verified from listing VIN"
+                        ? selectedComp.marketCheckDetails.identityVerification.status === "partial"
+                          ? "Body style checked via VIN"
+                          : "Verified from listing VIN"
                         : selectedComp.needsClassificationReview
                           ? "Needs verification"
                           : "Provider data"
