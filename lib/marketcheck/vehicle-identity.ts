@@ -30,6 +30,24 @@ export function compactVehicleText(value: unknown) {
  * This is not a claim that an unverified listing has that package: candidate
  * listing labels and decoder descriptions are handled separately.
  */
+/**
+ * A provider's displayed trim describes the advertised retail listing.
+ * NHTSA VIN Series data may be broad or ambiguous; do not silently replace
+ * "SE" with a more expensive subtrim from a generic VIN Series field.
+ */
+export function preserveAdvertisedCandidateTrim(
+  advertisedTrim: unknown,
+  decoderTrim: unknown,
+  make: unknown,
+  model: unknown,
+): string {
+  const advertised = String(advertisedTrim || "").trim();
+  const decoded = String(decoderTrim || "").trim();
+  if (advertised && !isLikelyVariantEnumeration({ make, model, trim: advertised })) return advertised;
+  if (decoded && !isLikelyVariantEnumeration({ make, model, trim: decoded })) return decoded;
+  return "";
+}
+
 export function preserveSpecificSubjectTrim(
   qualificationTrim: unknown,
   displayTrim: unknown,
