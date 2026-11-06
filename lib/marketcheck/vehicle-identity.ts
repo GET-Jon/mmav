@@ -22,6 +22,38 @@ export function compactVehicleText(value: unknown) {
   return normalizeVehicleText(value).replace(/\s+/g, "");
 }
 
+/**
+ * Keep an explicitly supplied, more specific trim when a decoder or search
+ * qualification field has reduced it to a shorter base trim.
+ *
+ * Example: qualification "SE" must not erase the evaluator's "R-Dynamic SE".
+ * This is not a claim that an unverified listing has that package: candidate
+ * listing labels and decoder descriptions are handled separately.
+ */
+export function preserveSpecificSubjectTrim(
+  qualificationTrim: unknown,
+  displayTrim: unknown,
+  make: unknown,
+  model: unknown,
+): string {
+  const qualified = String(qualificationTrim || "").trim();
+  const displayed = String(displayTrim || "").trim();
+  if (!qualified) return displayed;
+  if (!displayed) return qualified;
+  if (isLikelyVariantEnumeration({ make, model, trim: displayed })) return qualified;
+  if (isLikelyVariantEnumeration({ make, model, trim: qualified })) return displayed;
+
+  const base = normalizeVehicleText(qualified);
+  const specific = normalizeVehicleText(displayed);
+  // Require whole words, not arbitrary substrings ("S" must not match "SE").
+  // A longer trim is retained only when it contains the qualified trim.
+  if (specific.length > base.length &&
+      ` ${specific} `.includes(` ${base} `)) {
+    return displayed;
+  }
+  return qualified;
+}
+
 export function canonicalVehicleMake(value: unknown) {
   const make = normalizeVehicleText(value);
 
