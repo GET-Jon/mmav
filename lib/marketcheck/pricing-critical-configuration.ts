@@ -1,4 +1,4 @@
-import { canonicalBodyClass, canonicalTransmission } from "./vehicle-identity";
+import { canonicalBodyClass, canonicalTransmission, normalizeVehicleText } from "./vehicle-identity";
 import type { VehicleIdentity, VehicleEquivalenceTier } from "./vehicle-equivalence";
 
 /**
@@ -30,6 +30,28 @@ export function materialConfigurationGuards(
   if (subjectBody && listingBody && subjectBody !== listingBody) {
     maxTier = subjectBody === "pickup" || listingBody === "pickup" ? "reject" : "supporting";
     reasons.push(`body configuration differs: ${subjectBody} vs ${listingBody}`);
+  }
+
+  // Named, retail-significant package families are not generic trim suffixes.
+  // Recognize the same marker across makes without assuming that it implies
+  // identical equipment or assigning a speculative dollar adjustment.
+  const packageMarkers: Array<[string, RegExp]> = [
+    ["R-Dynamic", /\\br dynamic\\b/],
+    ["M Sport", /\\bm sport\\b/],
+    ["S line", /\\bs line\\b/],
+    ["F Sport", /\\bf sport\\b/],
+    ["TRD Pro", /\\btrd pro\\b/],
+    ["TRD Off-Road", /\\btrd off road\\b/],
+  ];
+  const targetPackages = normalizeVehicleText([target.model, target.trim, target.configuration].filter(Boolean).join(" "));
+  const candidatePackages = normalizeVehicleText([candidate.model, candidate.trim, candidate.configuration].filter(Boolean).join(" "));
+  for (const [label, marker] of packageMarkers) {
+    const subjectHas = marker.test(targetPackages);
+    const listingHas = marker.test(candidatePackages);
+    if (subjectHas !== listingHas && maxTier !== "reject") {
+      maxTier = "supporting";
+      reasons.push(`value-significant equipment package differs or is unverified: ${label}`);
+    }
   }
 
   const subjectTransmission = canonicalTransmission(target.transmission);
