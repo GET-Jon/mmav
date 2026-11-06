@@ -20,6 +20,36 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Mercedes S63 AMG Convertible must not auto-price from ordinary S550 4MATIC",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 550 4MATIC", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Mercedes S63 AMG Convertible must not auto-price from S560",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Mercedes-Benz", model: "S-Class", trim: "S 560 4MATIC", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Matching Mercedes S63 AMG Convertible remains direct",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "S63 AMG Convertible and S63 AMG Sedan are not pricing peers",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Mercedes S65 AMG is distinct from S63 AMG",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S65", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
     name: "Mercedes ML-Class VIN identity and M-Class provider listing share model family",
     target: { year: 2014, make: "Mercedes-Benz", model: "ML-Class", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
     candidate: { year: 2014, make: "Mercedes-Benz", model: "M-Class", trim: "ML350", drivetrain: "AWD", fuelType: "Gasoline" },
