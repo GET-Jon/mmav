@@ -4471,10 +4471,10 @@ export function EvaluationWorkspace({
     .sort((a, b) => b.planningEstimate - a.planningEstimate);
 
   const dealStrengthBullets = [
-    profitabilityScore >= 82 && valuation.expectedGrossProfit > 0
+    pricingEvidence.decisionReady && profitabilityScore >= 82 && valuation.expectedGrossProfit > 0
       ? `Strong economics: ${money(valuation.expectedGrossProfit)} expected gross at the current assumptions.`
       : null,
-    compSummary.includedCount >= 6 && finalTargetUsed > 0
+    pricingEvidence.decisionReady && compSummary.includedCount >= 6 && finalTargetUsed > 0
       ? `${compSummary.includedCount} valuation comps support an expected sale value near ${money(finalTargetUsed)}.`
       : null,
     conditionAnalysisApplied && getEffectiveConditionPlanningEstimate() > 0
@@ -4518,7 +4518,9 @@ export function EvaluationWorkspace({
         ? "bg-amber-100 text-amber-700"
         : "bg-red-100 text-red-700";
 
-  const suggestedBidDisplay = !hasEvaluationData
+  const suggestedBidDisplay = !pricingEvidence.decisionReady
+    ? "Pending price verification"
+    : !hasEvaluationData
     ? "—"
     : valuationInput.currentBid <= 0
       ? "Enter bid to calculate"
@@ -5269,7 +5271,7 @@ export function EvaluationWorkspace({
     presentationDecision === "pursue" || presentationDecision === "promising" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    compSummary.includedCount > 0 ? marketEvidenceDisplay : "—";
+    compSummary.includedCount > 0 ? pricingEvidence.label : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
@@ -7248,7 +7250,7 @@ export function EvaluationWorkspace({
                         : "text-red-700"
                     }`}
                   >
-                    {hasEvaluationData
+                    {pricingEvidence.decisionReady && hasEvaluationData
                       ? money(valuation.expectedGrossProfit)
                       : "—"}
                   </div>
@@ -7952,7 +7954,7 @@ export function EvaluationWorkspace({
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
                           <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
@@ -8327,7 +8329,7 @@ export function EvaluationWorkspace({
                 <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
                   <h2 className="text-base font-black text-slate-950">Deal Snapshot</h2>
                   <div className="mt-4 grid grid-cols-2 gap-4">
-                    <button type="button" aria-label="View Deal Economics decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} /></button>
+                    <button type="button" aria-label="View Deal Economics decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch || !pricingEvidence.decisionReady} /></button>
                     <button type="button" aria-label="View Dealer Fit decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} /></button>
                   </div>
                   <button type="button" aria-label="View Current Market Age decision details" onClick={() => setWhyLotLogicOpen(true)} className="mt-4 w-full border-t border-slate-100 pt-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600">
