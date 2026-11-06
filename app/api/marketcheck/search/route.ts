@@ -19,6 +19,7 @@ import {
 } from "@/lib/marketcheck/vehicle-equivalence";
 import {
   isLikelyVariantEnumeration,
+  preserveSpecificSubjectTrim,
   resolveSemanticFuelType,
 } from "@/lib/marketcheck/vehicle-identity";
 
@@ -191,8 +192,14 @@ function buildCandidateVehicle(
     raw.model ||
     stripMakeFromModel(comp.model, make || target.make) ||
     target.model;
+  // A VIN decoder often reports only a generic Series; it cannot promote
+  // an explicitly advertised SE listing into an R-Dynamic SE. Prefer the
+  // listing's own concrete trim; decoder data fills missing/ambiguous labels.
+  const displayedTrim = String(comp.trim || "").trim();
   const trim = String(
-    verification.trim || comp.trim || build.trim || raw.trim || "",
+    displayedTrim && !isLikelyVariantEnumeration({ make, model: String(rawModel || ""), trim: displayedTrim })
+      ? displayedTrim
+      : verification.trim || build.trim || raw.trim || "",
   ).trim();
 
   return {
@@ -1008,13 +1015,17 @@ export async function POST(request: Request) {
         nestedVehicle.model ||
         "",
     ).trim(),
-    trim: String(
+    trim: preserveSpecificSubjectTrim(
       normalizedBody.qualificationTrim ||
-        normalizedBody.trim ||
         decodedVehicle.trim ||
         nestedVehicle.trim ||
         "",
-    ).trim(),
+      normalizedBody.trim ||
+        normalizedBody.vehicleTrim ||
+        "",
+      normalizedBody.qualificationMake || normalizedBody.make || decodedVehicle.make || nestedVehicle.make,
+      normalizedBody.qualificationModel || normalizedBody.model || decodedVehicle.model || nestedVehicle.model,
+    ),
     fuelType: resolveSemanticFuelType({
       make:
         normalizedBody.qualificationMake ||
@@ -1028,12 +1039,12 @@ export async function POST(request: Request) {
         decodedVehicle.model ||
         nestedVehicle.model ||
         "",
-      trim:
-        normalizedBody.qualificationTrim ||
-        normalizedBody.trim ||
-        decodedVehicle.trim ||
-        nestedVehicle.trim ||
-        "",
+      trim: preserveSpecificSubjectTrim(
+        normalizedBody.qualificationTrim || decodedVehicle.trim || nestedVehicle.trim || "",
+        normalizedBody.trim || normalizedBody.vehicleTrim || "",
+        normalizedBody.qualificationMake || normalizedBody.make || decodedVehicle.make || nestedVehicle.make,
+        normalizedBody.qualificationModel || normalizedBody.model || decodedVehicle.model || nestedVehicle.model,
+      ),
       fuelType:
         normalizedBody.qualificationFuelType ||
         normalizedBody.fuelType ||
