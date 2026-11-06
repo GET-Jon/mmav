@@ -3,7 +3,7 @@ import {
   type VehicleEquivalenceTier,
   type VehicleIdentity,
 } from "./vehicle-equivalence";
-import { canonicalIdentitySnapshot, dedicatedBmwMModel } from "./vehicle-identity";
+import { canonicalIdentitySnapshot, dedicatedBmwMModel, preserveSpecificSubjectTrim } from "./vehicle-identity";
 
 type RegressionCase = {
   name: string;
@@ -1076,6 +1076,18 @@ export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
 
 export function assertVehicleEquivalenceRegressionCases() {
   const failures: string[] = [];
+
+  for (const [qualification, display, make, model, expected] of [
+    ["SE", "R-Dynamic SE", "Land Rover", "Range Rover Velar", "R-Dynamic SE"],
+    ["Premium", "Premium Plus S line", "Audi", "A4", "Premium"],
+    ["XLT", "XLT Sport", "Ford", "F-150", "XLT Sport"],
+    ["SE", "SE", "Land Rover", "Range Rover Velar", "SE"],
+    ["S", "SE", "Land Rover", "Range Rover Velar", "S"],
+    ["", "R-Dynamic SE", "Land Rover", "Range Rover Velar", "R-Dynamic SE"],
+  ] as Array<[string, string, string, string, string]>) {
+    const actual = preserveSpecificSubjectTrim(qualification, display, make, model);
+    if (actual !== expected) failures.push(`Subject trim ${qualification}/${display}: expected ${expected}, got ${actual}`);
+  }
 
   for (const [name, make, model, trim, expected] of [
     ["VIN decoder M5 5-Series", "BMW", "M5 5-Series", "", "M5"],
