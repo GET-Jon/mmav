@@ -291,6 +291,21 @@ export function assertPrimaryPricingCohortRegressionCases() {
     "Four strong close peers can support an acquisition verdict");
   check(evidence(8, 8, "High", "primary").decisionReady,
     "Well-supported high confidence is decision-ready");
+  check(!classifyPricingEvidence({
+    includedCount: 1, primaryCompCount: 4, confidence: "High",
+    pricingMode: "primary", valuationAvailable: true,
+  }).decisionReady,
+    "Contradictory provider counts must not create four close peers");
+  check(!classifyPricingEvidence({
+    includedCount: Number.NaN, primaryCompCount: Number.POSITIVE_INFINITY,
+    confidence: "High", pricingMode: "primary", valuationAvailable: true,
+  }).decisionReady,
+    "Malformed provider counts must never authorize a BUY/PASS verdict");
+  check(!classifyPricingEvidence({
+    includedCount: 4, primaryCompCount: 4, confidence: "High",
+    pricingMode: "primary", valuationAvailable: false,
+  }).decisionReady,
+    "Unavailable valuation must not become decision-ready even with four peers");
 
   const cleanPrimary = Array.from({length:8}, (_,i) => makeComp({
     id:`clean-${i}`, year:2018, mileage:52500 + i*200,
