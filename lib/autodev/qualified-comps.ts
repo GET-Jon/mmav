@@ -176,7 +176,7 @@ export function buildAutoDevCompCandidates(
           ? { source: "nhtsa-vin" as const, status: "partial" as const, bodyType: listing.bodyType || null,
               note: "NHTSA VIN decoding corroborated the body style. Other listing specifications still come from the provider." }
           : undefined,
-        drivetrain: listing.drivetrain || null;
+        drivetrain: listing.drivetrain || null,
         fuelType: listing.fuelType || null,
         city: listing.city || null,
         state: listing.state || null,
