@@ -15,6 +15,7 @@ export type ConvertibleDiscoveryListing = {
   model: string | null;
   trim: string | null;
   bodyType: string | null;
+  bodyVerificationSource?: "nhtsa-vin" | null;
   price: number | null;
   miles: number | null;
 };
@@ -120,7 +121,7 @@ export async function verifyConvertibleBodies<T extends ConvertibleDiscoveryList
     const body = useVerifiedBodyType(listing.bodyType, mapped.get(vin) || null);
     if (body === "Convertible") convertible++;
     else if (body === "Sedan" || body === "Coupe") otherBody++;
-    return { ...listing, bodyType: body };
+    return { ...listing, bodyType: body, bodyVerificationSource: body !== listing.bodyType && body !== null ? "nhtsa-vin" as const : listing.bodyVerificationSource };
   });
   return { listings: enriched, attempted: candidates.length, convertible, otherBody };
 }
