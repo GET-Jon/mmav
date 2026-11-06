@@ -1,4 +1,5 @@
 import { buildDiscoveryModels, buildDiscoveryTrimFilter } from "./discovery-models";
+import { convertibleVinVerificationCandidates, useVerifiedBodyType } from "./verify-convertible-bodies";
 import { buildAutoDevCompCandidates, excludeSubjectVinComps, mergeCompCandidates } from "./qualified-comps";
 import type { VehicleIdentity } from "../marketcheck/vehicle-equivalence";
 import type { MarketComp } from "../../types/comps";
@@ -30,6 +31,22 @@ export function assertAutoDevCompRegressionCases() {
     "ordinary S-Class does not add unnecessary derivative query");
   test(buildDiscoveryTrimFilter("BMW", "5 Series", "M5") === null,
     "other makes retain normal discovery behavior");
+  const s63Target: VehicleIdentity = { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" };
+  const ambiguousS63 = { vin: "WDDJK7JB5HA023044", year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Car", price: 65000, miles: 43000 };
+  test(convertibleVinVerificationCandidates([ambiguousS63],s63Target,8,46000).length === 1,
+    "ambiguous S63 body type is eligible for bounded VIN verification");
+  test(convertibleVinVerificationCandidates([{...ambiguousS63,trim:"S550"}],s63Target,8,46000).length === 0,
+    "ordinary S550 does not trigger specialty VIN verification");
+  test(convertibleVinVerificationCandidates([{...ambiguousS63,bodyType:"Sedan"}],s63Target,8,46000).length === 0,
+    "known sedan is never reclassified based on speculative VIN evidence");
+  test(useVerifiedBodyType("Car","Convertible/Cabriolet") === "Convertible",
+    "confirmed convertible VIN can establish correct body class");
+  test(useVerifiedBodyType("Car","Sedan/Saloon") === "Sedan",
+    "confirmed sedan VIN stays excluded from convertible valuation");
+  test(useVerifiedBodyType("Car",null) === "Car",
+    "missing VIN evidence never invents convertible identity");
+  test(useVerifiedBodyType("Sedan","Convertible") === "Sedan",
+    "VIN probe cannot overwrite explicit contrary provider body style");
   const order = buildDiscoveryModels("Audi", "TTS", "quattro Prestige", ["TT", "TTS"]);
   test(order[0] === "TTS" && order[1] === "TT", "exact TTS searched before broad TT provider aliases");
   test(buildDiscoveryModels("Audi", "TTS", "Prestige", ["tt", "TT", "TTS"]).length === 2,
