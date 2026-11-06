@@ -88,7 +88,7 @@ async function recordEvaluationPredictions(args: {
           maxSmartBid: toNumber(valuation.maxSmartBid),
           stretchBid: toNumber(valuation.stretchBid),
           expectedGrossProfit: toNumber(valuation.expectedGrossProfit),
-          decision: evidence.decisionReady ? toStringOrNull(valuation.decision) : "Pricing Verification Required",
+          decision: toStringOrNull(valuation.decision),
           riskGrade: toStringOrNull(valuation.riskGrade),
           finalRetailTarget: toNumber(
             body.finalRetailTarget ?? valuationInput.targetResaleUsed,
@@ -210,7 +210,7 @@ export async function POST(request: Request) {
       stretch_bid: evidence.decisionReady ? toNumber(valuation.stretchBid) : null,
       expected_gross_profit: evidence.decisionReady ? toNumber(valuation.expectedGrossProfit) : null,
 
-      decision: toStringOrNull(valuation.decision),
+      decision: evidence.decisionReady ? toStringOrNull(valuation.decision) : "Pricing Verification Required",
       risk_grade: toStringOrNull(valuation.riskGrade),
 
       updated_by: user.id,
@@ -232,7 +232,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        await recordEvaluationPredictions({
+        if (evidence.decisionReady) await recordEvaluationPredictions({
           supabase,
           companyId: company.companyId,
           userId: user.id,
@@ -278,7 +278,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      await recordEvaluationPredictions({
+      if (evidence.decisionReady) await recordEvaluationPredictions({
         supabase,
         companyId: company.companyId,
         userId: user.id,
