@@ -339,15 +339,14 @@ export async function POST(request: Request) {
       },
     }).tier);
     for (const [index, listing] of batch.entries()) {
-      // Keep verified Direct/Near evidence for valuation, and a limited
-      // selection of relevant S63 Supporting listings for dealer review.
-      // Supporting comps never become auto-selected pricing evidence.
+      // Across all makes, retain bounded contextual results from a precise
+      // trim-filtered query. They are never automatically selected for pricing.
       const qualifiesForPricing = ["direct", "near"].includes(tiers[index]);
-      const relatedS63 = Boolean(attempt.trimFilter) && tiers[index] === "supporting" &&
-        /\bs\s?63\b/i.test([listing.model, listing.trim].join(" ")) &&
+      const relatedTargetTrim = Boolean(attempt.trimFilter) &&
+        tiers[index] === "supporting" &&
         contextCandidatesRetained < 12;
-      if (!qualifiesForPricing && !relatedS63) continue;
-      if (relatedS63) contextCandidatesRetained++;
+      if (!qualifiesForPricing && !relatedTargetTrim) continue;
+      if (relatedTargetTrim) contextCandidatesRetained++;
       const key = listing.vin ||
         [listing.year, listing.make, listing.model, listing.trim,
           listing.miles, listing.price, listing.url].join("|").toLowerCase();
