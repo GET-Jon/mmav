@@ -19,6 +19,42 @@ const base = {
 } as const;
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
+  {
+    name: "Velar R-Dynamic SE must not auto-price from standard SE",
+    target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Velar R-Dynamic SE must not auto-price from ordinary S",
+    target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "S", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Velar matching R Dynamic SE and R-Dynamic SE remain direct",
+    target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "BMW M Sport cannot auto-price an ordinary Sport Line solely on model family",
+    target: { year: 2017, make: "BMW", model: "330i", trim: "M Sport", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "BMW", model: "330i", trim: "Sport Line", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Audi S line cannot auto-price non S line Premium Plus",
+    target: { year: 2019, make: "Audi", model: "A4", trim: "Premium Plus S line", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2019, make: "Audi", model: "A4", trim: "Premium Plus", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Toyota TRD Pro pickup cannot auto-price regular TRD Off-Road",
+    target: { year: 2021, make: "Toyota", model: "Tacoma", trim: "TRD Pro", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2021, make: "Toyota", model: "Tacoma", trim: "TRD Off-Road", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
   // Shared pricing-critical configuration policies, independent of make.
   {
     name: "Porsche 911 coupe cannot value an unverified body style automatically",
