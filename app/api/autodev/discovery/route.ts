@@ -408,11 +408,11 @@ export async function POST(request: Request) {
     userId: user.id, provider: "auto_dev", endpoint: "/listings",
     vehicleYear: year, vehicleMake: make, vehicleModel: model,
     apiCallsMade: callsMade, status: 200,
-    stopReason: candidateEvidence.comps.length
+    stopReason: candidateEvidence.diagnostics.autoIncluded > 0
       ? "National discovery found qualifying retail candidates."
-      : listings.length
-        ? "National discovery found listings but they lacked qualifying valuation data."
-        : "No matching derivative listings in exact or provider-alias searches.",
+      : candidateEvidence.comps.length > 0
+        ? "National discovery found related listings requiring identity verification; no trusted pricing peers established."
+        : "No matching derivative listings survived the current search and qualification checks.",
     metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, ...metadata },
   });
 
