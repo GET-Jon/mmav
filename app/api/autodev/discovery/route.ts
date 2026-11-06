@@ -12,6 +12,7 @@ import {
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
 import { buildDiscoveryModels, buildDiscoveryTrimFilter } from "@/lib/autodev/discovery-models";
+import { verifyConvertibleBodies } from "@/lib/autodev/verify-convertible-bodies";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,11 @@ export async function POST(request: Request) {
   const seenListings = new Set<string>();
   let lastAttempt: DiscoveryAttempt | null = null;
   let latestCombinedEvidence: ReturnType<typeof buildAutoDevCompCandidates> | null = null;
+  let vinChecksRemaining = 8;
+  let vinVerificationAttempted = 0;
+  let vinVerifiedConvertibles = 0;
+  let vinVerifiedOtherBodies = 0;
+  let contextCandidatesRetained = 0;
   const targetMileage = Number(body.targetMileage || 0);
 
   for (const [attemptIndex, attempt] of attempts.entries()) {
@@ -311,6 +317,14 @@ export async function POST(request: Request) {
         }
       }
     }
+    // The provider often calls AMG convertibles simply "Car". Validate a
+    // bounded set of likely S63 candidate VINs before equivalence filtering.
+    const verified = await verifyConvertibleBodies(batch, target, vinChecksRemaining, targetMileage);
+    batch = verified.listings;
+    vinChecksRemaining -= verified.attempted;
+    vinVerificationAttempted += verified.attempted;
+    vinVerifiedConvertibles += verified.convertible;
+    vinVerifiedOtherBodies += verified.otherBody;
     const tiers = batch.map((listing) => evaluateVehicleEquivalence({
       target,
       candidate: {
@@ -325,9 +339,15 @@ export async function POST(request: Request) {
       },
     }).tier);
     for (const [index, listing] of batch.entries()) {
-      // A broader provider alias must not add standard TT/TT RS to a TTS
-      // valuation. Keep only Direct/Near for this national discovery pool.
-      if (!["direct", "near"].includes(tiers[index])) continue;
+      // Keep verified Direct/Near evidence for valuation, and a limited
+      // selection of relevant S63 Supporting listings for dealer review.
+      // Supporting comps never become auto-selected pricing evidence.
+      const qualifiesForPricing = ["direct", "near"].includes(tiers[index]);
+      const relatedS63 = Boolean(attempt.trimFilter) && tiers[index] === "supporting" &&
+        /\bs\s?63\b/i.test([listing.model, listing.trim].join(" ")) &&
+        contextCandidatesRetained < 12;
+      if (!qualifiesForPricing && !relatedS63) continue;
+      if (relatedS63) contextCandidatesRetained++;
       const key = listing.vin ||
         [listing.year, listing.make, listing.model, listing.trim,
           listing.miles, listing.price, listing.url].join("|").toLowerCase();
@@ -369,6 +389,8 @@ export async function POST(request: Request) {
     callsMade, attemptResults: attemptsResult,
     screening: candidateEvidence.diagnostics,
     returned: listings.length, exactModelTotal: exactTotal, total,
+    vinVerificationAttempted, vinVerifiedConvertibles, vinVerifiedOtherBodies,
+    contextCandidatesRetained,
     inspectedListingRows: attemptsResult.reduce((sum, attempt) => sum + attempt.returned, 0),
     sampleFieldCoverage: {
       priced: listings.filter(x => x.price !== null && x.price !== undefined && x.price > 0).length,
