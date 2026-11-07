@@ -24,7 +24,7 @@ export function buildDiscoveryModels(
   // "Cayenne Coupe" or "Cayenne Turbo Coupe") rather than a Cayenne trim.
   // These are RETRIEVAL aliases only: returned cars still pass the same
   // independent identity, body and pricing-qualification checks.
-  const bodyDerivative = normalizeText(trim).match(/\\b(coupe|convertible|cabriolet|wagon|sedan)\\b/)?.[1];
+  const bodyDerivative = normalizeText(trim).match(/\b(coupe|convertible|cabriolet|wagon|sedan)\b/)?.[1];
   if (bodyDerivative && !normalizedModelIncludesBody(model, bodyDerivative)) {
     const bodyLabel = bodyDerivative.charAt(0).toUpperCase() + bodyDerivative.slice(1);
     models.push(`${model} ${bodyLabel}`);
