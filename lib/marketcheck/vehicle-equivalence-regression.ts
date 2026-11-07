@@ -20,6 +20,18 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Turbo Coupe in trim matches Turbo in Coupe model",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "Turbo", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Turbo Coupe still differs from GTS in Coupe model",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "GTS", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
     name: "Cayenne Turbo Coupe provider model alias remains a direct trim match",
     target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
     candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
