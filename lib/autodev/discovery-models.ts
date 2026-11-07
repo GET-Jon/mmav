@@ -26,7 +26,8 @@ export function buildDiscoveryModels(
   // independent identity, body and pricing-qualification checks.
   const bodyDerivative = normalizeText(trim).match(/\\b(coupe|convertible|cabriolet|wagon|sedan)\\b/)?.[1];
   if (bodyDerivative && !normalizedModelIncludesBody(model, bodyDerivative)) {
-    models.push(`${model} ${bodyDerivative}`);
+    const bodyLabel = bodyDerivative.charAt(0).toUpperCase() + bodyDerivative.slice(1);
+    models.push(`${model} ${bodyLabel}`);
     const specificTrim = String(trim || "").trim();
     if (normalizeText(specificTrim) !== bodyDerivative &&
         normalizeText(specificTrim).length <= 28) {
