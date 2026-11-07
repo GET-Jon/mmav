@@ -94,6 +94,11 @@ export function calculateDesiredProfitTarget(
   totalCostAdders = calculateTotalCostAdders(input),
 ) {
   const manualFloor = Math.max(0, input.targetProfit || 0);
+  // A fixed target is an explicit dealer choice, not a floor that the
+  // automatic 20% rule can raise. Zero or invalid values fall back to auto.
+  if (input.profitTargetMode === "fixed" && manualFloor > 0 && Number.isFinite(manualFloor)) {
+    return manualFloor;
+  }
   const preReconFixedCosts = calculatePreReconFixedCosts(input);
   let desiredProfit = Math.max(AUTO_PROFIT_FLOOR, manualFloor);
 
@@ -203,7 +208,8 @@ export function calculateValuation(
   // Dynamic desired-profit ceiling:
   // - never less than $2,500
   // - scales to roughly 20% of the pre-recon acquisition basis
-  // - a user-entered target can raise, but never lower, the system target.
+  // - minimum mode: a user-entered target can raise, but never lower, the system target.
+  // - fixed mode: an explicit positive dealer target replaces the automatic rule.
   const desiredProfitTarget = calculateDesiredProfitTarget(
     input,
     totalCostAdders,

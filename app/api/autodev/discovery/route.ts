@@ -11,12 +11,13 @@ import {
 } from "@/lib/marketcheck/vehicle-equivalence";
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
-import { buildDiscoveryModels } from "@/lib/autodev/discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter, buildBodyModelTrimSearch, countCloseDiscoveryCandidates } from "@/lib/autodev/discovery-models";
+import { verifyConvertibleBodies } from "@/lib/autodev/verify-convertible-bodies";
 
 export const dynamic = "force-dynamic";
 
-type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
-type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number };
+type AutoDevListing = { vin: string | null; year: number | null; make: string | null; model: string | null; trim: string | null; drivetrain: string | null; fuelType: string | null; bodyType: string | null; bodyVerificationSource?: "nhtsa-vin" | null; price: number | null; miles: number | null; dealer: string | null; city: string | null; state: string | null; zip: string | null; url: string | null; longitude: number | null; latitude: number | null; equivalenceTier?: VehicleEquivalenceTier; };
+type DiscoveryAttempt = { label: string; make: string; model: string; yearMin: number; yearMax: number; trimFilter?: string };
 
 function toNumber(value: unknown): number | null { if (value === null || value === undefined || String(value).trim() === "") return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
 function haversineMiles(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
@@ -183,20 +184,33 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .slice(0, 8)
     : [];
-  const attempts: DiscoveryAttempt[] = buildDiscoveryModels(
-    make,
-    model,
-    trim,
-    providerAliases,
-  ).map((candidateModel, index) => ({
-    label: index === 0 ? "exact decoded model" : "normalized provider model",
-    make,
-    model: candidateModel,
-    yearMin,
-    yearMax,
-  }));
+  const models = buildDiscoveryModels(make, model, trim, providerAliases);
+  const specificTrimFilter = buildDiscoveryTrimFilter(make, model, trim);
+  const bodyTrimSearch = buildBodyModelTrimSearch(model, trim);
+  const attempts: DiscoveryAttempt[] = [
+    // An explicit derivative query samples actual S63/S65 inventory before
+    // spending our limited pages on the much larger S-Class population.
+    ...(specificTrimFilter && models.length
+      ? [{
+          label: "performance derivative trim",
+          make, model: models[0], yearMin, yearMax,
+          trimFilter: specificTrimFilter,
+        }]
+      : []),
+    ...(bodyTrimSearch
+      ? [{
+          label: "specific body derivative and trim",
+          make, model: bodyTrimSearch.model, yearMin, yearMax,
+          trimFilter: bodyTrimSearch.trimFilter,
+        }]
+      : []),
+    ...models.map((candidateModel, index) => ({
+      label: index === 0 ? "exact decoded model" : "normalized provider model",
+      make, model: candidateModel, yearMin, yearMax,
+    })),
+  ];
   const attemptsResult: Array<{
-    label: string; model: string; returned: number; total: number;
+    label: string; model: string; trimFilter?: string; returned: number; total: number;
     directNear: number; supporting: number; qualifiedCandidates: number;
     autoSelected: number; missingPriceOrMileage: number;
     identityRejected: number; outOfYearRange: number;
@@ -207,6 +221,11 @@ export async function POST(request: Request) {
   const seenListings = new Set<string>();
   let lastAttempt: DiscoveryAttempt | null = null;
   let latestCombinedEvidence: ReturnType<typeof buildAutoDevCompCandidates> | null = null;
+  let vinChecksRemaining = 8;
+  let vinVerificationAttempted = 0;
+  let vinVerifiedConvertibles = 0;
+  let vinVerifiedOtherBodies = 0;
+  let contextCandidatesRetained = 0;
   const targetMileage = Number(body.targetMileage || 0);
 
   for (const [attemptIndex, attempt] of attempts.entries()) {
@@ -234,6 +253,7 @@ export async function POST(request: Request) {
       "limit": "20",
       "sort": "updatedAt.desc",
     });
+    if (attempt.trimFilter) params.set("vehicle.trim", attempt.trimFilter);
     const upstream = await fetch(`https://api.auto.dev/listings?${params}`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
       cache: "no-store",
@@ -260,7 +280,7 @@ export async function POST(request: Request) {
     lastAttempt = attempt;
     let batch = mapListings(payload);
     const total = typeof payload?.total === "number" ? payload.total : batch.length;
-    if (attemptIndex === 0) exactTotal = total;
+    if (!attempt.trimFilter && exactTotal === 0) exactTotal = total;
 
     // Auto.dev Free-plan pages may be capped at 20. When a broad provider
     // alias contains more than one page, inspect page two only if page one
@@ -268,8 +288,7 @@ export async function POST(request: Request) {
     // provider usage allowance or add unrelated TT variants to valuation.
     if (
       total > batch.length && batch.length > 0 &&
-      buildAutoDevCompCandidates(batch, target, targetMileage)
-        .diagnostics.autoIncluded < 4 &&
+      countCloseDiscoveryCandidates(buildAutoDevCompCandidates(batch, target, targetMileage).comps, year, targetMileage) < 4 &&
       callsMade < 6
     ) {
       const pageAllowance = await checkUsageAllowance({
@@ -305,6 +324,14 @@ export async function POST(request: Request) {
         }
       }
     }
+    // The provider often calls AMG convertibles simply "Car". Validate a
+    // bounded set of likely S63 candidate VINs before equivalence filtering.
+    const verified = await verifyConvertibleBodies(batch, target, vinChecksRemaining, targetMileage);
+    batch = verified.listings;
+    vinChecksRemaining -= verified.attempted;
+    vinVerificationAttempted += verified.attempted;
+    vinVerifiedConvertibles += verified.convertible;
+    vinVerifiedOtherBodies += verified.otherBody;
     const tiers = batch.map((listing) => evaluateVehicleEquivalence({
       target,
       candidate: {
@@ -319,9 +346,14 @@ export async function POST(request: Request) {
       },
     }).tier);
     for (const [index, listing] of batch.entries()) {
-      // A broader provider alias must not add standard TT/TT RS to a TTS
-      // valuation. Keep only Direct/Near for this national discovery pool.
-      if (!["direct", "near"].includes(tiers[index])) continue;
+      // Across all makes, retain bounded contextual results from a precise
+      // trim-filtered query. They are never automatically selected for pricing.
+      const qualifiesForPricing = ["direct", "near"].includes(tiers[index]);
+      const relatedTargetTrim = Boolean(attempt.trimFilter) &&
+        tiers[index] === "supporting" &&
+        contextCandidatesRetained < 12;
+      if (!qualifiesForPricing && !relatedTargetTrim) continue;
+      if (relatedTargetTrim) contextCandidatesRetained++;
       const key = listing.vin ||
         [listing.year, listing.make, listing.model, listing.trim,
           listing.miles, listing.price, listing.url].join("|").toLowerCase();
@@ -335,7 +367,7 @@ export async function POST(request: Request) {
     const combined = buildAutoDevCompCandidates(listings, target, targetMileage);
     latestCombinedEvidence = combined;
     attemptsResult.push({
-      label: attempt.label, model: attempt.model,
+      label: attempt.label, model: attempt.model, trimFilter: attempt.trimFilter,
       returned: batch.length, total,
       directNear: tiers.filter(t => t === "direct" || t === "near").length,
       supporting: tiers.filter(t => t === "supporting").length,
@@ -347,9 +379,9 @@ export async function POST(request: Request) {
     });
 
     // Continue to the next provider alias when the exact model matches but
-    // fails to supply four usable price/mileage candidates. Matching a name
-    // is not proof that valuation evidence is sufficient.
-    if (combined.diagnostics.autoIncluded >= 4) break;
+    // fails to supply four genuinely close, quality-passing pricing candidates.
+    // Related/near auto-selections must never stop the search prematurely.
+    if (countCloseDiscoveryCandidates(combined.comps, year, targetMileage) >= 4) break;
   }
 
   const byState = listings.reduce((acc: Record<string, number>, listing) => {
@@ -363,6 +395,9 @@ export async function POST(request: Request) {
     callsMade, attemptResults: attemptsResult,
     screening: candidateEvidence.diagnostics,
     returned: listings.length, exactModelTotal: exactTotal, total,
+    vinVerificationAttempted, vinVerifiedConvertibles, vinVerifiedOtherBodies,
+    contextCandidatesRetained,
+    inspectedListingRows: attemptsResult.reduce((sum, attempt) => sum + attempt.returned, 0),
     sampleFieldCoverage: {
       priced: listings.filter(x => x.price !== null && x.price !== undefined && x.price > 0).length,
       withMileage: listings.filter(x => x.miles !== null && x.miles !== undefined).length,
@@ -379,18 +414,21 @@ export async function POST(request: Request) {
     userId: user.id, provider: "auto_dev", endpoint: "/listings",
     vehicleYear: year, vehicleMake: make, vehicleModel: model,
     apiCallsMade: callsMade, status: 200,
-    stopReason: candidateEvidence.comps.length
-      ? "National discovery found qualifying retail candidates."
-      : listings.length
-        ? "National discovery found listings but they lacked qualifying valuation data."
-        : "No matching derivative listings in exact or provider-alias searches.",
+    stopReason: countCloseDiscoveryCandidates(candidateEvidence.comps, year, targetMileage) > 0
+      ? "National discovery found close pricing candidates for further valuation checks."
+      : candidateEvidence.comps.length > 0
+        ? "National discovery found related listings requiring identity verification; no trusted pricing peers established."
+        : "No matching derivative listings survived the current search and qualification checks.",
     metadata: { durationMs: Date.now() - startedAt, yearMin, yearMax, ...metadata },
   });
 
   return NextResponse.json({
     source: "auto.dev", role: "discovery-and-qualified-candidates",
     candidateComps: candidateEvidence.comps,
-    candidateDiagnostics: candidateEvidence.diagnostics,
+    candidateDiagnostics: {
+      ...candidateEvidence.diagnostics,
+      closeDiscoveryCandidates: countCloseDiscoveryCandidates(candidateEvidence.comps, year, targetMileage),
+    },
     query: {
       year, make, model, trim: trim || null, yearMin, yearMax,
       generation: generation?.generation || null, sampleLimit: 20,

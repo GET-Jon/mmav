@@ -22,6 +22,56 @@ export function compactVehicleText(value: unknown) {
   return normalizeVehicleText(value).replace(/\s+/g, "");
 }
 
+/**
+ * Keep an explicitly supplied, more specific trim when a decoder or search
+ * qualification field has reduced it to a shorter base trim.
+ *
+ * Example: qualification "SE" must not erase the evaluator's "R-Dynamic SE".
+ * This is not a claim that an unverified listing has that package: candidate
+ * listing labels and decoder descriptions are handled separately.
+ */
+/**
+ * A provider's displayed trim describes the advertised retail listing.
+ * NHTSA VIN Series data may be broad or ambiguous; do not silently replace
+ * "SE" with a more expensive subtrim from a generic VIN Series field.
+ */
+export function preserveAdvertisedCandidateTrim(
+  advertisedTrim: unknown,
+  decoderTrim: unknown,
+  make: unknown,
+  model: unknown,
+): string {
+  const advertised = String(advertisedTrim || "").trim();
+  const decoded = String(decoderTrim || "").trim();
+  if (advertised && !isLikelyVariantEnumeration({ make, model, trim: advertised })) return advertised;
+  if (decoded && !isLikelyVariantEnumeration({ make, model, trim: decoded })) return decoded;
+  return "";
+}
+
+export function preserveSpecificSubjectTrim(
+  qualificationTrim: unknown,
+  displayTrim: unknown,
+  make: unknown,
+  model: unknown,
+): string {
+  const qualified = String(qualificationTrim || "").trim();
+  const displayed = String(displayTrim || "").trim();
+  if (!qualified) return displayed;
+  if (!displayed) return qualified;
+  if (isLikelyVariantEnumeration({ make, model, trim: displayed })) return qualified;
+  if (isLikelyVariantEnumeration({ make, model, trim: qualified })) return displayed;
+
+  const base = normalizeVehicleText(qualified);
+  const specific = normalizeVehicleText(displayed);
+  // Require whole words, not arbitrary substrings ("S" must not match "SE").
+  // A longer trim is retained only when it contains the qualified trim.
+  if (specific.length > base.length &&
+      ` ${specific} `.includes(` ${base} `)) {
+    return displayed;
+  }
+  return qualified;
+}
+
 export function canonicalVehicleMake(value: unknown) {
   const make = normalizeVehicleText(value);
 
@@ -267,6 +317,11 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   }
 
   if (make === "porsche") {
+    // Providers index Coupe and performance derivatives as model names.
+    // Keep them in the Cayenne family, then let trim/body equivalence decide
+    // whether they are genuinely the same retail configuration.
+    if (modelCompact === "cayenne" ||
+        /^cayenne(?:coupe|turbo|gts|s|e?hybrid)/.test(modelCompact)) return "cayenne";
     if (modelCompact.startsWith("911")) return "911";
     if (modelCompact.startsWith("718cayman")) return "cayman";
     if (modelCompact.startsWith("718boxster")) return "boxster";
