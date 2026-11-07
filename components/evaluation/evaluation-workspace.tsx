@@ -7946,8 +7946,8 @@ export function EvaluationWorkspace({
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
-                          <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{pricingEvidence.closePeerCount === 0 ? "Not established" : finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Pricing evidence</div>
@@ -8273,8 +8273,8 @@ export function EvaluationWorkspace({
                       ) : null}
                     </button>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Sale Estimate" : "Unverified Retail Indication"}</div>
-                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Sale Estimate" : "Unverified Retail Indication"}</div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{pricingEvidence.closePeerCount === 0 ? "Not established" : compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                     </div>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
                       <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Estimated Profit" : "Profit Pending Verification"}</div>
