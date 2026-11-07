@@ -317,6 +317,11 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   }
 
   if (make === "porsche") {
+    // Providers index Coupe and performance derivatives as model names.
+    // Keep them in the Cayenne family, then let trim/body equivalence decide
+    // whether they are genuinely the same retail configuration.
+    if (modelCompact === "cayenne" ||
+        /^cayenne(?:coupe|turbo|gts|s|e?hybrid)/.test(modelCompact)) return "cayenne";
     if (modelCompact.startsWith("911")) return "911";
     if (modelCompact.startsWith("718cayman")) return "cayman";
     if (modelCompact.startsWith("718boxster")) return "boxster";
