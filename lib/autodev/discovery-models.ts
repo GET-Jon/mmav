@@ -9,6 +9,10 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   });
 }
 
+function normalizedModelIncludesBody(model: string, body: string) {
+  return normalizeText(model).split(" ").includes(body);
+}
+
 export function buildDiscoveryModels(
   make: string,
   model: string,
@@ -16,6 +20,19 @@ export function buildDiscoveryModels(
   providerAliases: string[] = [],
 ) {
   const models = [model, ...providerAliases];
+  // Providers may index a body-style derivative as its own model (e.g.
+  // "Cayenne Coupe" or "Cayenne Turbo Coupe") rather than a Cayenne trim.
+  // These are RETRIEVAL aliases only: returned cars still pass the same
+  // independent identity, body and pricing-qualification checks.
+  const bodyDerivative = normalizeText(trim).match(/\\b(coupe|convertible|cabriolet|wagon|sedan)\\b/)?.[1];
+  if (bodyDerivative && !normalizedModelIncludesBody(model, bodyDerivative)) {
+    models.push(`${model} ${bodyDerivative}`);
+    const specificTrim = String(trim || "").trim();
+    if (normalizeText(specificTrim) !== bodyDerivative &&
+        normalizeText(specificTrim).length <= 28) {
+      models.push(`${model} ${specificTrim}`);
+    }
+  }
   const normalizedMake = normalizeText(make);
   const normalizedModel = normalizeText(model);
   const normalizedTrim = normalizeText(trim);
@@ -29,7 +46,7 @@ export function buildDiscoveryModels(
     const withoutClass = model.replace(/[-\s]*class\b/gi, "").replace(/\s+/g, " ").trim();
     if (withoutClass && withoutClass !== model) models.push(withoutClass);
   }
-  return uniqueStrings(models).slice(0, 4);
+  return uniqueStrings(models).slice(0, 5);
 }
 
 
