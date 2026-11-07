@@ -518,6 +518,21 @@ function genericTrimTier(target: VehicleIdentity, candidate: VehicleIdentity) {
   if (!targetVariant || !candidateVariant) return "supporting" as const;
   if (targetVariant === candidateVariant) return "direct" as const;
 
+  // Some providers put an explicit body derivative in the model while
+  // others put it in the trim. Only reconcile that label when BOTH identities
+  // explicitly establish the same body and the remaining trim is identical.
+  // E.g. Cayenne / Turbo Coupe == Cayenne Coupe / Turbo, but never GTS.
+  const bodyNames = ["coupe", "convertible", "cabriolet", "wagon", "sedan"];
+  for (const bodyName of bodyNames) {
+    const tokens = (vehicle: VehicleIdentity) =>
+      normalize([vehicle.model, vehicle.trim].filter(Boolean).join(" ")).split(" ");
+    if (!tokens(target).includes(bodyName) || !tokens(candidate).includes(bodyName)) continue;
+    const stripBody = (value: string) => value.split(" ").filter(token => token !== bodyName).join(" ").trim();
+    const targetTrim = stripBody(targetVariant);
+    const candidateTrim = stripBody(candidateVariant);
+    if (targetTrim && candidateTrim && targetTrim === candidateTrim) return "direct" as const;
+  }
+
   // Distinct trim strings remain Near even when one contains the other.
   // Containment is unsafe for automotive derivatives: XL vs XLT, Premium vs
   // Premium Plus, and similar names can represent materially different trims.
