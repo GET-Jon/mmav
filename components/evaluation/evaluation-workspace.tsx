@@ -863,6 +863,7 @@ export function EvaluationWorkspace({
       near: number;
       supporting: number;
       autoIncluded: number;
+      closeDiscoveryCandidates?: number;
     };
     query: {
       year: number;
