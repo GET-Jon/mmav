@@ -6594,7 +6594,8 @@ export function EvaluationWorkspace({
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
                         <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
-                        <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
+                        <span>Auto.dev listings auto-selected: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b> (may include broader market context)</span>
+                        <span>Auto.dev close pricing candidates: <b>{autoDevDiscovery?.candidateDiagnostics?.closeDiscoveryCandidates ?? 0}</b> (subject to final valuation checks)</span>
                         <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
                         <span>Provider-usable: <b>{compUsableListings}</b></span>
                         <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
