@@ -11,7 +11,7 @@ import {
 } from "@/lib/marketcheck/vehicle-equivalence";
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
-import { buildDiscoveryModels, buildDiscoveryTrimFilter, countCloseDiscoveryCandidates } from "@/lib/autodev/discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter, buildBodyModelTrimSearch, countCloseDiscoveryCandidates } from "@/lib/autodev/discovery-models";
 import { verifyConvertibleBodies } from "@/lib/autodev/verify-convertible-bodies";
 
 export const dynamic = "force-dynamic";
@@ -186,6 +186,7 @@ export async function POST(request: Request) {
     : [];
   const models = buildDiscoveryModels(make, model, trim, providerAliases);
   const specificTrimFilter = buildDiscoveryTrimFilter(make, model, trim);
+  const bodyTrimSearch = buildBodyModelTrimSearch(model, trim);
   const attempts: DiscoveryAttempt[] = [
     // An explicit derivative query samples actual S63/S65 inventory before
     // spending our limited pages on the much larger S-Class population.
@@ -194,6 +195,13 @@ export async function POST(request: Request) {
           label: "performance derivative trim",
           make, model: models[0], yearMin, yearMax,
           trimFilter: specificTrimFilter,
+        }]
+      : []),
+    ...(bodyTrimSearch
+      ? [{
+          label: "specific body derivative and trim",
+          make, model: bodyTrimSearch.model, yearMin, yearMax,
+          trimFilter: bodyTrimSearch.trimFilter,
         }]
       : []),
     ...models.map((candidateModel, index) => ({
