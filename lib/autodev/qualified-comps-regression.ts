@@ -40,7 +40,7 @@ export function assertAutoDevCompRegressionCases() {
   test(countCloseDiscoveryCandidates([{included:true,equivalenceTier:"direct",qualityScore:90,year:2020,mileage:38000}],2020,0) === 0,
     "a missing subject mileage must not establish a confident discovery cohort");
   const coupeModels = buildDiscoveryModels("Porsche","Cayenne","Turbo Coupe");
-  test(coupeModels.includes("Cayenne coupe") && coupeModels.includes("Cayenne Turbo Coupe"),
+  test(coupeModels.includes("Cayenne Coupe") && coupeModels.includes("Cayenne Turbo Coupe"),
     "national search should try body-derivative provider model aliases for Turbo Coupe");
   test(buildDiscoveryModels("Honda","Civic","Sport").length === 1,
     "ordinary trims should not incur extra model-alias calls");
