@@ -91,3 +91,32 @@ export function buildDiscoveryTrimFilter(make: string, model: string, trim: stri
   // A broad model query always follows if the focused search is insufficient.
   return proposed;
 }
+
+/**
+ * Discovery stop gate, deliberately stricter than provider auto-selection.
+ * An auto-selected Supporting vehicle is useful context, not a close pricing
+ * peer. This only decides whether to keep searching; calculateCompSummary
+ * remains authoritative for actual acquisition readiness.
+ */
+export function countCloseDiscoveryCandidates(
+  comps: Array<{
+    included?: boolean;
+    equivalenceTier?: string | null;
+    qualityScore?: number | null;
+    year?: number | null;
+    mileage?: number | null;
+  }>,
+  targetYear: number,
+  targetMileage: number,
+): number {
+  if (!Number.isFinite(targetYear) || !Number.isFinite(targetMileage) || targetMileage < 0) return 0;
+  return comps.filter(comp =>
+    comp.included === true &&
+    comp.equivalenceTier === "direct" &&
+    Number(comp.qualityScore) >= 75 &&
+    Number.isFinite(comp.year) &&
+    Math.abs(Number(comp.year) - targetYear) <= 1 &&
+    Number.isFinite(comp.mileage) &&
+    Math.abs(Number(comp.mileage) - targetMileage) <= 20000
+  ).length;
+}
