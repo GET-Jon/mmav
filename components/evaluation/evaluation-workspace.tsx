@@ -5330,7 +5330,7 @@ export function EvaluationWorkspace({
   // Runs when initial MarketCheck results finish; internal guards prevent repeat requests.
   }, [activeStage, marketCheckLoading, evaluationRunning, compSearchImproving,
       marketCheckSearchMeta, compSearchHandedOff, automaticCompSearchCompleted,
-      compSummary.primaryCompCount, draftReady, targetMileage]);
+      compSummary.primaryCompCount, pricingEvidence.decisionReady, draftReady, targetMileage]);
 
   const compActionButtonLabels: Record<string, string> = {
     "expand-geography": "Search Additional Nearby Markets →",
