@@ -4772,14 +4772,14 @@ export function EvaluationWorkspace({
     .filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip))
     .length;
   const canContinueNationalSearch =
-    (compSummary.primaryCompCount || 0) < 4 && remainingNationalMarketCount > 0;
+    !pricingEvidence.decisionReady && remainingNationalMarketCount > 0;
   const compSearchRecommendation = canContinueNationalSearch
     ? {
         action: "discovered-markets" as const,
         title: `Check ${remainingNationalMarketCount} remaining national market${remainingNationalMarketCount === 1 ? "" : "s"}`,
         reason: "National inventory discovery identified markets that have not yet been checked against strict vehicle-match rules.",
       }
-    : automaticCompSearchCompleted && (compSummary.primaryCompCount || 0) < 4
+    : automaticCompSearchCompleted && !pricingEvidence.decisionReady
       ? {
           action: "manual-review" as const,
           title: "Automatic market checks finished",
@@ -5320,7 +5320,7 @@ export function EvaluationWorkspace({
     if (activeStage !== "market" || !marketCheckSearchMeta || marketCheckLoading ||
         evaluationRunning || compSearchImproving || compSearchHandedOff ||
         automaticCompSearchCompleted || !draftReady || !targetMileage ||
-        (compSummary.primaryCompCount || 0) >= 4 ||
+        pricingEvidence.decisionReady ||
         compSearchRecommendation.action === "complete" ||
         compSearchRecommendation.action === "manual-review") return;
     const key = [evaluationUsageId || vin || vehicleModel, targetMileage, marketCheckSearchMeta.searchStage].join(":");
