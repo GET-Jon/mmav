@@ -1,4 +1,4 @@
-import { buildDiscoveryModels, buildDiscoveryTrimFilter } from "./discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter, countCloseDiscoveryCandidates } from "./discovery-models";
 import { convertibleVinVerificationCandidates, useVerifiedBodyType } from "./verify-convertible-bodies";
 import { buildAutoDevCompCandidates, excludeSubjectVinComps, mergeCompCandidates } from "./qualified-comps";
 import type { VehicleIdentity } from "../marketcheck/vehicle-equivalence";
@@ -23,6 +23,27 @@ const row = {
 export function assertAutoDevCompRegressionCases() {
   let passed = 0;
   const test = (condition: unknown, message: string) => { check(condition, message); passed++; };
+
+  // The search should not stop after seeing four loosely related vehicles.
+  const discoveryCounts = [
+    {included:true,equivalenceTier:"supporting",qualityScore:90,year:2020,mileage:38000},
+    {included:true,equivalenceTier:"near",qualityScore:92,year:2020,mileage:38000},
+    {included:true,equivalenceTier:"direct",qualityScore:94,year:2020,mileage:88000},
+    {included:true,equivalenceTier:"direct",qualityScore:94,year:2020,mileage:39000},
+  ];
+  test(countCloseDiscoveryCandidates(discoveryCounts,2020,38000) === 1,
+    "related and mileage-distant cars must not prematurely end national discovery");
+  test(countCloseDiscoveryCandidates(Array.from({length:4},(_,i)=>({
+    included:true,equivalenceTier:"direct",qualityScore:85,year:2020,mileage:38000+i*500,
+  })),2020,38000) === 4,
+    "four genuine close candidates can stop discovery pending final valuation qualification");
+  test(countCloseDiscoveryCandidates([{included:true,equivalenceTier:"direct",qualityScore:90,year:2020,mileage:38000}],2020,0) === 0,
+    "a missing subject mileage must not establish a confident discovery cohort");
+  const coupeModels = buildDiscoveryModels("Porsche","Cayenne","Turbo Coupe");
+  test(coupeModels.includes("Cayenne coupe") && coupeModels.includes("Cayenne Turbo Coupe"),
+    "national search should try body-derivative provider model aliases for Turbo Coupe");
+  test(buildDiscoveryModels("Honda","Civic","Sport").length === 1,
+    "ordinary trims should not incur extra model-alias calls");
 
   // The targeted-first search must work for common and specialty variants
   // across brands, not depend on Mercedes-specific trim dictionaries.
