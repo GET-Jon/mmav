@@ -40,7 +40,7 @@ import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/quali
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
-import { calculateDealEconomicsScore, calculateValuation } from "@/lib/valuation";
+import { calculateDealEconomicsScore, calculateDesiredProfitTarget, calculateValuation } from "@/lib/valuation";
 import { trackEvent } from "@/lib/analytics/client";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
@@ -1818,6 +1818,14 @@ export function EvaluationWorkspace({
     () => calculateValuation(valuationInput, activeAssumptions),
     [valuationInput, activeAssumptions],
   );
+  const automaticProfitTarget = calculateDesiredProfitTarget({
+    ...valuationInput,
+    targetProfit: 0,
+  });
+  const dealerProfitMinimum = Math.max(0, valuationInput.targetProfit || 0);
+  const profitTargetSource = dealerProfitMinimum > automaticProfitTarget
+    ? "Dealer minimum"
+    : "Lot Logic automatic target";
 
   const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
   const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
@@ -6963,9 +6971,41 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
                       <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
-                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit profit target →</button>
+                      <p className="mt-1 text-[10px] font-semibold text-slate-500">{profitTargetSource}</p>
+                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit profit minimum →</button>
                     </div>
                   </dl>
+                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs leading-5 text-slate-700">
+                    <p className="font-black text-slate-950">How desired profit is established</p>
+                    <p className="mt-1">
+                      Lot Logic starts with a minimum of {money(2500)} or roughly 20% of the recommended acquisition
+                      basis before reconditioning, whichever is higher. This target is calculated from the recommended
+                      acquisition price, not the changing auction bid.
+                    </p>
+                    <dl className="mt-3 space-y-1.5">
+                      <div className="flex justify-between gap-3">
+                        <dt>Lot Logic automatic target</dt>
+                        <dd className="font-black text-slate-950">{money(automaticProfitTarget)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt>Dealer-entered minimum</dt>
+                        <dd className="font-black text-slate-950">{dealerProfitMinimum > 0 ? money(dealerProfitMinimum) : "Not set"}</dd>
+                      </div>
+                      <div className="flex justify-between gap-3 border-t border-blue-200 pt-2 font-bold">
+                        <dt>Desired profit used for this evaluation</dt>
+                        <dd className="font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
+                      </div>
+                    </dl>
+                    <p className="mt-2 text-slate-600">
+                      Expected profit is different: estimated sale value minus the current all-in cost.
+                      The desired profit establishes the acquisition ceiling. Entering {money(5000)} today means
+                      “at least {money(5000)},” not a fixed {money(5000)} target.
+                    </p>
+                    <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }}
+                      className="mt-3 font-black text-blue-700 hover:underline">
+                      Change dealer minimum profit →
+                    </button>
+                  </div>
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 p-5">
@@ -7208,7 +7248,7 @@ export function EvaluationWorkspace({
                 </div>
               </FormRow>
 
-              <FormRow label="Profit Target Override">
+              <FormRow label="Dealer Minimum Profit (optional)">
                 <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                   <span className="pl-3 text-sm text-slate-400">$</span>
                   <input
@@ -7226,7 +7266,7 @@ export function EvaluationWorkspace({
                   />
                 </div>
                 <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
-                  Leave at $0 to use the Lot Logic automatic target: at least $2,500, scaling to roughly 20% of the pre-recon acquisition basis. Current target: {money(valuation.desiredProfitTarget)}.
+                  Enter $0 for the automatic target. A positive number sets a minimum, not a fixed target: Lot Logic uses whichever is higher. Current desired profit: {money(valuation.desiredProfitTarget)}.
                 </p>
               </FormRow>
 
