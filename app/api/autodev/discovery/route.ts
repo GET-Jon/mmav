@@ -11,7 +11,7 @@ import {
 } from "@/lib/marketcheck/vehicle-equivalence";
 import { resolveSemanticFuelType } from "@/lib/marketcheck/vehicle-identity";
 import { buildAutoDevCompCandidates } from "@/lib/autodev/qualified-comps";
-import { buildDiscoveryModels, buildDiscoveryTrimFilter } from "@/lib/autodev/discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter, countCloseDiscoveryCandidates } from "@/lib/autodev/discovery-models";
 import { verifyConvertibleBodies } from "@/lib/autodev/verify-convertible-bodies";
 
 export const dynamic = "force-dynamic";
@@ -280,8 +280,7 @@ export async function POST(request: Request) {
     // provider usage allowance or add unrelated TT variants to valuation.
     if (
       total > batch.length && batch.length > 0 &&
-      buildAutoDevCompCandidates(batch, target, targetMileage)
-        .diagnostics.autoIncluded < 4 &&
+      countCloseDiscoveryCandidates(buildAutoDevCompCandidates(batch, target, targetMileage).comps, year, targetMileage) < 4 &&
       callsMade < 6
     ) {
       const pageAllowance = await checkUsageAllowance({
@@ -372,9 +371,9 @@ export async function POST(request: Request) {
     });
 
     // Continue to the next provider alias when the exact model matches but
-    // fails to supply four usable price/mileage candidates. Matching a name
-    // is not proof that valuation evidence is sufficient.
-    if (combined.diagnostics.autoIncluded >= 4) break;
+    // fails to supply four genuinely close, quality-passing pricing candidates.
+    // Related/near auto-selections must never stop the search prematurely.
+    if (countCloseDiscoveryCandidates(combined.comps, year, targetMileage) >= 4) break;
   }
 
   const byState = listings.reduce((acc: Record<string, number>, listing) => {
@@ -407,8 +406,8 @@ export async function POST(request: Request) {
     userId: user.id, provider: "auto_dev", endpoint: "/listings",
     vehicleYear: year, vehicleMake: make, vehicleModel: model,
     apiCallsMade: callsMade, status: 200,
-    stopReason: candidateEvidence.diagnostics.autoIncluded > 0
-      ? "National discovery found qualifying retail candidates."
+    stopReason: countCloseDiscoveryCandidates(candidateEvidence.comps, year, targetMileage) > 0
+      ? "National discovery found close pricing candidates for further valuation checks."
       : candidateEvidence.comps.length > 0
         ? "National discovery found related listings requiring identity verification; no trusted pricing peers established."
         : "No matching derivative listings survived the current search and qualification checks.",
@@ -418,7 +417,10 @@ export async function POST(request: Request) {
   return NextResponse.json({
     source: "auto.dev", role: "discovery-and-qualified-candidates",
     candidateComps: candidateEvidence.comps,
-    candidateDiagnostics: candidateEvidence.diagnostics,
+    candidateDiagnostics: {
+      ...candidateEvidence.diagnostics,
+      closeDiscoveryCandidates: countCloseDiscoveryCandidates(candidateEvidence.comps, year, targetMileage),
+    },
     query: {
       year, make, model, trim: trim || null, yearMin, yearMax,
       generation: generation?.generation || null, sampleLimit: 20,
