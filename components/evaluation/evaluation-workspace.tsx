@@ -4870,14 +4870,19 @@ export function EvaluationWorkspace({
 
       let latestIncludedCount = compSummary.includedCount;
       let latestPrimaryCount = compSummary.primaryCompCount || 0;
-      const countClosePeers = (candidates: MarketComp[]) => calculateCompSummary({
-        comps: candidates,
-        targetMileage,
-        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
-        targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
-        targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
-        assumptions: activeAssumptions,
-      }).primaryCompCount || 0;
+      let latestDecisionReady = pricingEvidence.decisionReady;
+      const countClosePeers = (candidates: MarketComp[]) => {
+        const latestSummary = calculateCompSummary({
+          comps: candidates,
+          targetMileage,
+          targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+          targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
+          targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
+          assumptions: activeAssumptions,
+        });
+        latestDecisionReady = classifyPricingEvidence(latestSummary).decisionReady;
+        return latestSummary.primaryCompCount || 0;
+      };
       let latestRegionCount = compSearchRegions;
       let latestSearchedZips = marketCheckSearchMeta?.searchedZips || [];
 
@@ -4927,14 +4932,14 @@ export function EvaluationWorkspace({
               (market) => !latestSearchedZips.includes(market.zip),
             ) || [];
 
-          if (latestPrimaryCount < 4 && remainingNationalMarkets.length > 0) {
+          if (!latestDecisionReady && remainingNationalMarkets.length > 0) {
             setCompSearchImprovementStatus(
               `Still thin. Verifying ${Math.min(3, remainingNationalMarkets.length)} more national market${Math.min(3, remainingNationalMarkets.length) === 1 ? "" : "s"}…`,
             );
           }
         }
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             `This search pass finished with ${latestIncludedCount} selected comps. Choose whether to review the listings, check more markets, or continue to Verdict.`,
           );
@@ -4971,7 +4976,7 @@ export function EvaluationWorkspace({
         latestSearchedZips =
           broadened?.searchedZips || latestSearchedZips;
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after normalizing the vehicle match.",
           );
@@ -4995,7 +5000,7 @@ export function EvaluationWorkspace({
         latestSearchedZips =
           expanded?.searchedZips || latestSearchedZips;
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after regional expansion.",
           );
@@ -5023,7 +5028,7 @@ export function EvaluationWorkspace({
         const provisional = mergeCompCandidates(comps, checkedCandidates);
         latestIncludedCount = Math.max(latestIncludedCount, provisional.filter((comp) => comp.included).length);
         latestPrimaryCount = Math.max(latestPrimaryCount, countClosePeers(provisional));
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus("National retail evidence is now sufficient for review. You can continue to Verdict or refine the comp set.");
           return;
         }
@@ -5036,7 +5041,7 @@ export function EvaluationWorkspace({
         );
 
         while (
-          latestPrimaryCount < 4 &&
+          !latestDecisionReady &&
           remainingNationalMarkets.length > 0 &&
           nationalBatches < 3 &&
           additionalMarketCheckCalls < additionalMarketCheckBudget
@@ -5073,7 +5078,7 @@ export function EvaluationWorkspace({
           );
         }
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after national discovery.",
           );
