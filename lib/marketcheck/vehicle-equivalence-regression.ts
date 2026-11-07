@@ -20,6 +20,24 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "Cayenne Turbo Coupe provider model alias remains a direct trim match",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Cayenne Turbo Coupe remains distinct from ordinary Cayenne base",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Base", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Cayenne Turbo Coupe must not price GTS Coupe as exact",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "GTS Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
     name: "Velar R-Dynamic SE must not auto-price from standard SE",
     target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
     candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
