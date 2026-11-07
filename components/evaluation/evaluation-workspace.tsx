@@ -2339,7 +2339,10 @@ export function EvaluationWorkspace({
       ...initialEvaluation,
       currentBid: valuationInput.currentBid,
       targetResaleUsed: valuationInput.targetResaleUsed,
-      targetProfit: valuation.desiredProfitTarget,
+      // Carry the dealer's chosen strategy, not the computed target from
+      // the previous vehicle (which would silently turn auto into a floor).
+      targetProfit: valuationInput.targetProfit,
+      profitTargetMode: valuationInput.profitTargetMode,
       hasAvoidFlag: false,
       costs: {
         ...initialEvaluation.costs,
