@@ -19,7 +19,7 @@ export function buildDiscoveryModels(
   trim: string,
   providerAliases: string[] = [],
 ) {
-  const models = [model, ...providerAliases];
+  const models = [model];
   // Providers may index a body-style derivative as its own model (e.g.
   // "Cayenne Coupe" or "Cayenne Turbo Coupe") rather than a Cayenne trim.
   // These are RETRIEVAL aliases only: returned cars still pass the same
@@ -34,6 +34,7 @@ export function buildDiscoveryModels(
       models.push(`${model} ${specificTrim}`);
     }
   }
+  models.push(...providerAliases);
   const normalizedMake = normalizeText(make);
   const normalizedModel = normalizeText(model);
   const normalizedTrim = normalizeText(trim);
@@ -91,6 +92,26 @@ export function buildDiscoveryTrimFilter(make: string, model: string, trim: stri
   // Retrieval hint only: the provider may use a different trim spelling.
   // A broad model query always follows if the focused search is insufficient.
   return proposed;
+}
+
+/**
+ * When a provider indexes a derivative in model rather than trim, try the
+ * remaining performance trim explicitly (Cayenne Coupe + Turbo). Retrieval
+ * hints do not bypass independent body/trim identity qualification.
+ */
+export function buildBodyModelTrimSearch(
+  model: string,
+  trim: string,
+): { model: string; trimFilter: string } | null {
+  const normalized = normalizeText(trim);
+  const body = normalized.match(/\b(coupe|convertible|cabriolet|wagon|sedan)\b/)?.[1];
+  if (!body || normalizedModelIncludesBody(model, body)) return null;
+  const performanceTrim = String(trim || "").replace(new RegExp(`\\b${body}\\b`, "ig"), "").trim();
+  if (!performanceTrim || normalizeText(performanceTrim) === "base") return null;
+  return {
+    model: `${model} ${body.charAt(0).toUpperCase() + body.slice(1)}`,
+    trimFilter: performanceTrim,
+  };
 }
 
 /**
