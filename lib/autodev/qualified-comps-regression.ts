@@ -1,4 +1,4 @@
-import { buildDiscoveryModels, buildDiscoveryTrimFilter, countCloseDiscoveryCandidates } from "./discovery-models";
+import { buildDiscoveryModels, buildDiscoveryTrimFilter, buildBodyModelTrimSearch, countCloseDiscoveryCandidates } from "./discovery-models";
 import { convertibleVinVerificationCandidates, useVerifiedBodyType } from "./verify-convertible-bodies";
 import { buildAutoDevCompCandidates, excludeSubjectVinComps, mergeCompCandidates } from "./qualified-comps";
 import type { VehicleIdentity } from "../marketcheck/vehicle-equivalence";
@@ -39,6 +39,11 @@ export function assertAutoDevCompRegressionCases() {
     "four genuine close candidates can stop discovery pending final valuation qualification");
   test(countCloseDiscoveryCandidates([{included:true,equivalenceTier:"direct",qualityScore:90,year:2020,mileage:38000}],2020,0) === 0,
     "a missing subject mileage must not establish a confident discovery cohort");
+  const focusedCayenne = buildBodyModelTrimSearch("Cayenne", "Turbo Coupe");
+  test(focusedCayenne?.model === "Cayenne Coupe" && focusedCayenne?.trimFilter === "Turbo",
+    "a performance derivative must search its provider model plus the specific remaining trim");
+  test(buildBodyModelTrimSearch("Civic","Sport") === null,
+    "ordinary cars must not incur unnecessary body-derivative API searches");
   const coupeModels = buildDiscoveryModels("Porsche","Cayenne","Turbo Coupe");
   test(coupeModels.includes("Cayenne Coupe") && coupeModels.includes("Cayenne Turbo Coupe"),
     "national search should try body-derivative provider model aliases for Turbo Coupe");
