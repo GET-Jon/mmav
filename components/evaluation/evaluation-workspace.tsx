@@ -1079,6 +1079,7 @@ export function EvaluationWorkspace({
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
+  const [confirmedVinTrim, setConfirmedVinTrim] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
@@ -2280,7 +2281,12 @@ export function EvaluationWorkspace({
         throw new Error(data.error || "VIN decode failed.");
       }
 
-      const decoded = data as VinDecodeResult;
+      const decodedFromProvider = data as VinDecodeResult;
+      // The dealer may know the retail grade even when NHTSA supplies only
+      // a generation/Series label. Preserve that explicit identification.
+      const decoded = confirmedVinTrim.trim()
+        ? { ...decodedFromProvider, trim: confirmedVinTrim.trim() }
+        : decodedFromProvider;
 
       handleDecodedVinAndReset(decoded);
       startVehicleIdentityProfileEnrichment(decoded);
@@ -7592,7 +7598,7 @@ export function EvaluationWorkspace({
                       <div className="relative">
                         <input
                           value={vin}
-                          onChange={(event) => setVin(event.target.value.toUpperCase())}
+                          onChange={(event) => { setVin(event.target.value.toUpperCase()); setConfirmedVinTrim(""); }}
                           placeholder="17-character VIN"
                           aria-label="Vehicle VIN"
                           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-14 text-sm font-semibold outline-none focus:border-blue-300"
@@ -7602,6 +7608,23 @@ export function EvaluationWorkspace({
                           disabled={vinDecodeLoading || evaluationRunning}
                         />
                       </div>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
+                          Retail trim / grade (if known)
+                        </span>
+                        <input type="text"
+                          aria-label="Verified retail trim or grade"
+                          value={confirmedVinTrim}
+                          onChange={(event) => setConfirmedVinTrim(event.target.value)}
+                          placeholder={decodedVehicle?.trim || "e.g. LE, SE, XLE, XSE"}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"/>
+                        {!confirmedVinTrim.trim() && decodedVehicle &&
+                          (!decodedVehicle.trim || /^\\d{1,3}\\s+series$/i.test(decodedVehicle.trim)) ? (
+                          <span className="mt-1 block text-[11px] font-semibold leading-4 text-amber-700">
+                            VIN data has not confirmed a retail trim. Enter the actual grade to enable reliable trim-matched pricing. Do not guess.
+                          </span>
+                        ) : null}
+                      </label>
                       {vinDecodeError ? <p role="alert" className="text-xs font-semibold text-red-700">{vinDecodeError}</p> : null}
                     </div>
                   ) : (
