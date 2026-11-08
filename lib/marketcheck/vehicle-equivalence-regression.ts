@@ -20,6 +20,36 @@ const base = {
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
   {
+    name: "2025 Camry unknown retail grade keeps LE as related evidence despite engine-only gasoline fuel label",
+    target: {year:2025,make:"Toyota",model:"Camry",trim:"",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "supporting",
+  },
+  {
+    name: "2025 Camry exact LE grade may match provider gasoline engine label",
+    target: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "direct",
+  },
+  {
+    name: "2025 Camry LE is not direct pricing peer for XLE",
+    target: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Toyota",model:"Camry",trim:"XLE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "near",
+  },
+  {
+    name: "2024 Camry true gasoline vs hybrid is still a mismatch",
+    target: {year:2024,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2024,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "reject",
+  },
+  {
+    name: "Different fuel types remain rejected for unrelated vehicles",
+    target: {year:2025,make:"Honda",model:"Accord",trim:"EX",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Honda",model:"Accord",trim:"EX",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "reject",
+  },
+  {
     name: "Turbo Coupe in trim matches Turbo in Coupe model",
     target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
     candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "Turbo", bodyType: "SUV", fuelType: "Gasoline" },
