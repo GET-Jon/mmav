@@ -30,6 +30,26 @@ export function isNonRetailTrimLabel(value: unknown): boolean {
     /^(?:generation|gen) \\d{1,3}$/.test(normalized);
 }
 
+/**
+ * Resolve VIN-decoder fuel labels. NHTSA sometimes reports the combustion
+ * component as primary fuel on a hybrid vehicle.
+ */
+export function decodedPowertrainFuel(result: Record<string, string>): string {
+  const fuel = String(result.FuelTypePrimary || "").trim();
+  const electrification = String(result.ElectrificationLevel || "").toLowerCase();
+  const secondaryFuel = String(result.FuelTypeSecondary || "").toLowerCase();
+  const make = normalizeVehicleText(result.Make);
+  const model = normalizeVehicleText(result.Model);
+  const year = Number(result.ModelYear);
+  if (/plug.?in hybrid|phev/.test(electrification)) return "Plug-in Hybrid";
+  if (/hybrid|\\bhev\\b/.test(electrification) ||
+      (/gasoline|petrol|gas/i.test(fuel) && /electric/.test(secondaryFuel)) ||
+      (make === "toyota" && model === "camry" && year === 2025)) {
+    return "Hybrid";
+  }
+  return fuel;
+}
+
 export function compactVehicleText(value: unknown) {
   return normalizeVehicleText(value).replace(/\s+/g, "");
 }
