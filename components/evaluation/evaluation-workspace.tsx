@@ -7185,8 +7185,8 @@ export function EvaluationWorkspace({
               <div className="rounded-xl border border-slate-200 p-4">
                 <h3 className="text-xs font-black text-slate-950">Set desired profit</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Automatic: higher of $2,500, roughly 20% of the recommended pre-reconditioning
-                  acquisition basis, or your minimum. A fixed target uses exactly the amount you set.
+                  Automatic: the higher of dealer minimum (below) or 20% of the recommended pre-reconditioning
+                  acquisition basis. Fixed target: uses exactly the amount you set.
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button type="button"
