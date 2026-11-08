@@ -3,7 +3,7 @@ import {
   type VehicleEquivalenceTier,
   type VehicleIdentity,
 } from "./vehicle-equivalence";
-import { canonicalIdentitySnapshot, dedicatedBmwMModel, preserveSpecificSubjectTrim, preserveAdvertisedCandidateTrim } from "./vehicle-identity";
+import { canonicalIdentitySnapshot, dedicatedBmwMModel, preserveSpecificSubjectTrim, preserveAdvertisedCandidateTrim, isNonRetailTrimLabel, decodedPowertrainFuel, canonicalVehicleVariant } from "./vehicle-identity";
 
 type RegressionCase = {
   name: string;
@@ -1106,6 +1106,19 @@ export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
 
 export function assertVehicleEquivalenceRegressionCases() {
   const failures: string[] = [];
+  if (!isNonRetailTrimLabel("80 Series")) failures.push("Camry 80 Series must be treated as a generation label");
+  if (isNonRetailTrimLabel("LE")) failures.push("Camry LE must remain a genuine retail trim");
+  if (canonicalVehicleVariant({year:2025,make:"Toyota",model:"Camry",trim:"80 Series"}) !== "")
+    failures.push("An 80 Series VIN must not establish an invented Camry retail grade");
+  if (preserveSpecificSubjectTrim("", "80 Series", "Toyota", "Camry") !== "")
+    failures.push("Empty qualification must not restore Series as a retail trim");
+  if (decodedPowertrainFuel({Make:"TOYOTA",Model:"Camry",ModelYear:"2025",FuelTypePrimary:"Gasoline"}) !== "Hybrid")
+    failures.push("2025 Camry VIN fuel must be correctly identified as hybrid");
+  if (decodedPowertrainFuel({Make:"TOYOTA",Model:"Camry",ModelYear:"2024",FuelTypePrimary:"Gasoline"}) !== "Gasoline")
+    failures.push("Prior-year Camry gasoline must not be reclassified as hybrid");
+  if (decodedPowertrainFuel({Make:"Honda",Model:"Accord",ModelYear:"2024",FuelTypePrimary:"Gasoline",FuelTypeSecondary:"Electric"}) !== "Hybrid")
+    failures.push("Explicit hybrid source metadata should generalize across manufacturers");
+
 
   for (const [advertised, decoder, expected] of [
     ["SE", "R-Dynamic SE", "SE"],
@@ -1172,7 +1185,7 @@ export function assertVehicleEquivalenceRegressionCases() {
   return {
     passed:
       vehicleEquivalenceRegressionCases.length +
-      vehicleIdentityRegressionCases.length,
+      vehicleIdentityRegressionCases.length + 7,
     failed: 0,
   };
 }
