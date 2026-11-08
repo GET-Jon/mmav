@@ -1141,6 +1141,7 @@ export function EvaluationWorkspace({
   const [vehicleThumbnailLoading, setVehicleThumbnailLoading] = useState(false);
   const [vehicleThumbnailError, setVehicleThumbnailError] = useState("");
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
+  const [profitDetailsOpen, setProfitDetailsOpen] = useState(false);
   const [compMarketEditorOpen, setCompMarketEditorOpen] = useState(false);
   const [compEditorTab, setCompEditorTab] = useState<"geography" | "vehicle">("geography");
   const [selectedCompMarketZips, setSelectedCompMarketZips] = useState<string[]>([]);
@@ -6978,41 +6979,16 @@ export function EvaluationWorkspace({
                       <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
                       <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
                       <p className="mt-1 text-[10px] font-semibold text-slate-500">{profitTargetSource}</p>
-                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit profit strategy →</button>
+                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setProfitDetailsOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Profit details →</button>
                     </div>
                   </dl>
-                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs leading-5 text-slate-700">
-                    <p className="font-black text-slate-950">How desired profit is established</p>
-                    <p className="mt-1">
-                      By default, Lot Logic uses the higher of {money(2500)}, roughly 20% of the recommended
-                      acquisition basis before reconditioning, or the dealer-entered minimum. It uses the recommended
-                      acquisition price—not the changing auction bid. A dealer can instead select a fixed dollar target.
-                    </p>
-                    <dl className="mt-3 space-y-1.5">
-                      <div className="flex justify-between gap-3">
-                        <dt>Lot Logic automatic target</dt>
-                        <dd className="font-black text-slate-950">{money(automaticProfitTarget)}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt>Dealer-entered {fixedProfitMode ? "fixed target" : "minimum"}</dt>
-                        <dd className="font-black text-slate-950">{dealerProfitMinimum > 0 ? money(dealerProfitMinimum) : "Not set"}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3 border-t border-blue-200 pt-2 font-bold">
-                        <dt>Desired profit used for this evaluation</dt>
-                        <dd className="font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
-                      </div>
-                    </dl>
-                    <p className="mt-2 text-slate-600">
-                      Expected profit is different: estimated sale value minus the current all-in cost.
-                      The desired profit establishes the acquisition ceiling. {fixedProfitMode
-                        ? `Fixed target selected: Lot Logic uses ${money(dealerProfitMinimum)} without increasing it to the automatic target.`
-                        : `In minimum mode, entering ${money(5000)} means at least ${money(5000)}, not a fixed amount.`}
-                    </p>
-                    <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }}
-                      className="mt-3 font-black text-blue-700 hover:underline">
-                      Change profit strategy →
-                    </button>
-                  </div>
+                  <button type="button"
+                    onClick={() => { setWhyLotLogicOpen(false); setProfitDetailsOpen(true); }}
+                    className="mt-4 flex w-full items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-left text-xs font-semibold text-blue-800 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-blue-600"
+                  >
+                    <span>How profit is calculated · {profitTargetSource}</span>
+                    <span className="shrink-0 font-black">Profit details →</span>
+                  </button>
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 p-5">
@@ -7159,6 +7135,98 @@ export function EvaluationWorkspace({
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Planned: upload a dealership buying guide or deal-spec document so Lot Logic can incorporate those rules into dealer fit.</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {profitDetailsOpen ? (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setProfitDetailsOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Profit details"
+            className="flex max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}>
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-950">Profit details</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Understand the profit estimate and choose your target.</p>
+              </div>
+              <button type="button" onClick={() => setProfitDetailsOpen(false)}
+                aria-label="Close profit details"
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100">✕</button>
+            </div>
+            <div className="min-h-0 overflow-y-auto space-y-4 px-5 py-5 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">Expected gross profit</div>
+                  <div className="mt-1 text-xl font-black text-slate-950">
+                    {pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "Not verified"}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">Desired profit target</div>
+                  <div className="mt-1 text-xl font-black text-slate-950">{money(valuation.desiredProfitTarget)}</div>
+                  <p className="mt-1 text-[10px] text-slate-500">{profitTargetSource}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-black text-slate-950">How the numbers work</h3>
+                <p className="mt-2 text-xs leading-5 text-slate-600">
+                  Expected gross profit = estimated retail value minus the current all-in acquisition cost.
+                  This is a projection, not a guaranteed sale. Desired profit is the minimum margin Lot Logic
+                  uses to calculate its recommended maximum purchase price.
+                </p>
+                <div className="mt-3 space-y-1 text-xs">
+                  <div className="flex justify-between gap-3"><span>Expected retail</span><strong>{pricingEvidence.decisionReady ? money(finalTargetUsed) : "Unverified"}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Current all-in cost</span><strong>{money(displayedCurrentCost)}</strong></div>
+                  <div className="flex justify-between gap-3 border-t border-slate-200 pt-2"><span>Projected gross profit</span><strong>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</strong></div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-black text-slate-950">Set desired profit</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Automatic: higher of $2,500, roughly 20% of the recommended pre-reconditioning
+                  acquisition basis, or your minimum. A fixed target uses exactly the amount you set.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button"
+                    onClick={() => setEvaluation((previous) => ({ ...previous, profitTargetMode: "minimum" }))}
+                    aria-pressed={!fixedProfitMode}
+                    className={`rounded-lg border p-3 text-left text-xs font-black ${!fixedProfitMode ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}>
+                    Automatic minimum
+                  </button>
+                  <button type="button"
+                    onClick={() => setEvaluation((previous) => ({
+                      ...previous, profitTargetMode: "fixed",
+                      targetProfit: previous.targetProfit > 0 ? previous.targetProfit : 5000,
+                    }))}
+                    aria-pressed={valuationInput.profitTargetMode === "fixed"}
+                    className={`rounded-lg border p-3 text-left text-xs font-black ${valuationInput.profitTargetMode === "fixed" ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}>
+                    Fixed dollar target
+                  </button>
+                </div>
+                <label className="mt-3 block text-xs font-bold text-slate-700" htmlFor="profit-details-target">
+                  {valuationInput.profitTargetMode === "fixed" ? "Your fixed gross profit target" : "Optional dealer minimum"}
+                </label>
+                <div className="mt-1 flex items-center rounded-lg border border-slate-200">
+                  <span className="px-3 text-slate-500">$</span>
+                  <input id="profit-details-target" type="text" inputMode="numeric"
+                    value={formatNumberInput(valuationInput.targetProfit)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => updateEvaluationField("targetProfit", toNumber(event.target.value))}
+                    className="w-full rounded-lg py-2 pr-3 text-right font-semibold outline-none"/>
+                </div>
+                <dl className="mt-3 space-y-1.5 text-xs">
+                  <div className="flex justify-between gap-2"><dt>Automatic benchmark</dt><dd className="font-bold">{money(automaticProfitTarget)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Dealer setting</dt><dd className="font-bold">{dealerProfitMinimum > 0 ? money(dealerProfitMinimum) : "Not set"}</dd></div>
+                  <div className="flex justify-between gap-2 border-t border-slate-200 pt-2"><dt className="font-black">Desired profit used</dt><dd className="font-black">{money(valuation.desiredProfitTarget)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Recommended maximum bid</dt><dd className="font-bold">{pricingEvidence.decisionReady && suggestedBid > 0 ? money(suggestedBid) : "Pricing verification needed"}</dd></div>
+                </dl>
+              </div>
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={() => setProfitDetailsOpen(false)}
+                className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800">Done</button>
             </div>
           </div>
         </div>
@@ -8355,6 +8423,12 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
                       <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Estimated Profit" : "Profit Pending Verification"}</div>
                       <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</div>
+                      <button type="button"
+                        onClick={() => setProfitDetailsOpen(true)}
+                        className="mt-1.5 text-[10px] font-black text-blue-700 hover:text-blue-900 hover:underline focus-visible:outline-2 focus-visible:outline-blue-600"
+                      >
+                        Profit details →
+                      </button>
                     </div>
                   </div>
                   {!pricingEvidence.decisionReady && hasEvaluationData ? (
