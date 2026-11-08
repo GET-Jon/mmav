@@ -8091,6 +8091,16 @@ export function EvaluationWorkspace({
                 </div>
               ) : (
                 <div className="mt-4 flex-1">
+                  {!evaluationRunning && !marketCheckLoading && !compSearchImproving && retailTrimNeedsConfirmation ? (
+                    <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
+                      <p className="font-black">Exact retail trim has not been established</p>
+                      <p>Lot Logic found related inventory, but cannot claim LE, SE, XLE, or XSE is an exact pricing match without evidence of this vehicle's grade. More geographic searches alone will not resolve it.</p>
+                      <button type="button" className="mt-2 font-black text-blue-700 hover:underline"
+                        onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}>
+                        Confirm retail trim in Vehicle →
+                      </button>
+                    </div>
+                  ) : null}
                   {evaluationRunning || marketCheckLoading || compSearchImproving ? (
                     <div role="status" aria-live="polite" className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-4">
@@ -8129,16 +8139,6 @@ export function EvaluationWorkspace({
                       </div>
                       {activeStage === "market" ? (
                         <>
-                        {retailTrimNeedsConfirmation ? (
-                          <div role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
-                            <p className="font-black">Retail trim not verified</p>
-                            <p>The VIN identified the model but not its exact retail grade. More geographic searches cannot establish trim-equivalent pricing until this is confirmed.</p>
-                            <button type="button" className="mt-2 font-black text-blue-700 hover:underline"
-                              onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}>
-                              Confirm retail trim in Vehicle →
-                            </button>
-                          </div>
-                        ) : null}
                         <div className="mt-3 text-xs leading-5 text-slate-600">
                           {pricingEvidence.decisionReady
                             ? `${compSummary.primaryCompCount} close pricing peers support the estimate. Asking prices are not completed sales.`
@@ -8212,10 +8212,13 @@ export function EvaluationWorkspace({
                           </div>
                         </div>
                         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <button type="button" onClick={openCompMarketEditor}
+                          <button type="button"
+                            onClick={retailTrimNeedsConfirmation
+                              ? () => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }
+                              : openCompMarketEditor}
                             disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
                             className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
-                            {compSearchImproving ? "Searching…" : "Improve Search"}
+                            {compSearchImproving ? "Searching…" : retailTrimNeedsConfirmation ? "Confirm Retail Trim" : "Improve Search"}
                           </button>
                           <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">or</span>
                           <button type="button" onClick={() => void continueToVerdict()}
