@@ -88,8 +88,8 @@ export function preserveSpecificSubjectTrim(
 ): string {
   const qualified = String(qualificationTrim || "").trim();
   const displayed = String(displayTrim || "").trim();
-  if (!qualified) return displayed;
-  if (!displayed) return qualified;
+  if (!qualified) return isNonRetailTrimLabel(displayed) ? "" : displayed;
+  if (!displayed) return isNonRetailTrimLabel(qualified) ? "" : qualified;
   if (isLikelyVariantEnumeration({ make, model, trim: displayed })) return qualified;
   if (isLikelyVariantEnumeration({ make, model, trim: qualified })) return displayed;
 
