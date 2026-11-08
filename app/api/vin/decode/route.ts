@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import type { VinDecodeResult } from "@/types/vin";
-import { dedicatedBmwMModel, isNonRetailTrimLabel } from "@/lib/marketcheck/vehicle-identity";
+import { dedicatedBmwMModel, isNonRetailTrimLabel, decodedPowertrainFuel } from "@/lib/marketcheck/vehicle-identity";
 
 type NhtsaDecodeResponse = {
   Results?: Array<Record<string, string>>;
@@ -17,27 +17,6 @@ function normalizeMake(make: string) {
   if (upper === "GMC") return "GMC";
 
   return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
-}
-
-/**
- * NHTSA may report the combustion component of an HEV as primary fuel.
- * Prefer explicit electrification metadata, then a narrowly established
- * model-year fact (US 2025 Camry is hybrid-only).
- */
-export function decodedPowertrainFuel(result: Record<string, string>): string {
-  const fuel = String(result.FuelTypePrimary || "").trim();
-  const electrification = String(result.ElectrificationLevel || "").toLowerCase();
-  const secondaryFuel = String(result.FuelTypeSecondary || "").toLowerCase();
-  const make = String(result.Make || "").trim().toLowerCase();
-  const model = String(result.Model || "").trim().toLowerCase();
-  const year = Number(result.ModelYear);
-  if (/plug.?in hybrid|phev/.test(electrification)) return "Plug-in Hybrid";
-  if (/hybrid|\\bhev\\b/.test(electrification) ||
-      (/gasoline|petrol|gas/i.test(fuel) && /electric/.test(secondaryFuel)) ||
-      (make === "toyota" && model === "camry" && year === 2025)) {
-    return "Hybrid";
-  }
-  return fuel;
 }
 
 function getStatus(result: Record<string, string>) {
