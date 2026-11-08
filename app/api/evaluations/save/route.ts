@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
 import { createTraceId, recordSystemEvent } from "@/lib/observability/telemetry";
 import { recordPrediction } from "@/lib/lot-logic-intelligence";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
@@ -172,6 +173,18 @@ export async function POST(request: Request) {
     const valuationInput = toRecord(body.valuationInput);
     const valuation = toRecord(body.valuation);
 
+    // Recalculate rather than trusting a client-provided ready flag. The
+    // Pipeline must not persist profit or bid advice from one unverified comp.
+    const summary = toRecord(body.compSummary);
+    const evidence = classifyPricingEvidence({
+      includedCount: Number(summary.includedCount || 0),
+      primaryCompCount: Number(summary.primaryCompCount || 0),
+      pricingMode: summary.pricingMode === "primary" ? "primary" : "market-fallback",
+      confidence: summary.confidence === "High" || summary.confidence === "Medium"
+        ? summary.confidence : "Low",
+      valuationAvailable: summary.valuationAvailable !== false,
+    });
+
     const row: JsonRecord = {
       company_id: company.companyId,
       status: toStringOrNull(body.status) ?? "watching",
@@ -190,19 +203,19 @@ export async function POST(request: Request) {
       auction_ends_at: body.auctionEndsAt ?? null,
 
       current_bid: toNumber(valuationInput.currentBid),
-      target_resale_used: toNumber(valuationInput.targetResaleUsed),
+      target_resale_used: evidence.decisionReady ? toNumber(valuationInput.targetResaleUsed) : null,
 
-      safe_bid: toNumber(valuation.safeBid),
-      max_smart_bid: toNumber(valuation.maxSmartBid),
-      stretch_bid: toNumber(valuation.stretchBid),
-      expected_gross_profit: toNumber(valuation.expectedGrossProfit),
+      safe_bid: evidence.decisionReady ? toNumber(valuation.safeBid) : null,
+      max_smart_bid: evidence.decisionReady ? toNumber(valuation.maxSmartBid) : null,
+      stretch_bid: evidence.decisionReady ? toNumber(valuation.stretchBid) : null,
+      expected_gross_profit: evidence.decisionReady ? toNumber(valuation.expectedGrossProfit) : null,
 
-      decision: toStringOrNull(valuation.decision),
+      decision: evidence.decisionReady ? toStringOrNull(valuation.decision) : "Pricing Verification Required",
       risk_grade: toStringOrNull(valuation.riskGrade),
 
       updated_by: user.id,
 
-      payload: body,
+      payload: { ...body, pricingEvidence: evidence },
     };
 
     if (id) {
@@ -219,7 +232,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        await recordEvaluationPredictions({
+        if (evidence.decisionReady) await recordEvaluationPredictions({
           supabase,
           companyId: company.companyId,
           userId: user.id,
@@ -265,7 +278,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      await recordEvaluationPredictions({
+      if (evidence.decisionReady) await recordEvaluationPredictions({
         supabase,
         companyId: company.companyId,
         userId: user.id,

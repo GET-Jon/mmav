@@ -21,6 +21,8 @@ export type ValuationInput = {
   currentBid: number;
   targetResaleUsed: number;
   targetProfit: number;
+  /** Omitted or "minimum" preserves the existing dynamic profit floor. */
+  profitTargetMode?: "minimum" | "fixed";
   totalRiskPoints: number;
   hasAvoidFlag?: boolean;
   costs: EvaluationCosts;

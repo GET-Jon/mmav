@@ -1,4 +1,5 @@
 import { defaultAssumptions } from "@/lib/assumptions";
+import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
 import {
   calculateAdjustedCompPrice,
   calculateCompSummary,
@@ -266,6 +267,45 @@ export function assertPrimaryPricingCohortRegressionCases() {
     "Four coherent, uncapped close peers should permit Medium, not High confidence");
   check(expanded.cappedAdjustmentCount === 11,
     "Capped broader comps must remain auditable without dictating primary price");
+
+  // Cross-make acquisition readiness: count alone is not decision quality.
+  const evidence = (selected: number, close: number, confidence: "High" | "Medium" | "Low", pricingMode: "primary" | "market-fallback") =>
+    classifyPricingEvidence({
+      includedCount: selected,
+      primaryCompCount: close,
+      confidence,
+      pricingMode,
+      valuationAvailable: selected > 0,
+    });
+  check(evidence(0, 0, "Low", "market-fallback").level === "insufficient",
+    "No comps must not produce an acquisition verdict");
+  check(evidence(1, 0, "Low", "market-fallback").level === "insufficient",
+    "Velar: one related listing and zero close peers must not make a verdict");
+  check(evidence(3, 1, "Low", "market-fallback").level === "preliminary",
+    "One close peer is a preliminary indication");
+  check(evidence(3, 3, "Low", "market-fallback").level === "provisional",
+    "S63: three close peers remain provisional");
+  check(!evidence(8, 4, "Low", "primary").decisionReady,
+    "Four close peers still cannot override poor cohort quality");
+  check(evidence(8, 4, "Medium", "primary").decisionReady,
+    "Four strong close peers can support an acquisition verdict");
+  check(evidence(8, 8, "High", "primary").decisionReady,
+    "Well-supported high confidence is decision-ready");
+  check(!classifyPricingEvidence({
+    includedCount: 1, primaryCompCount: 4, confidence: "High",
+    pricingMode: "primary", valuationAvailable: true,
+  }).decisionReady,
+    "Contradictory provider counts must not create four close peers");
+  check(!classifyPricingEvidence({
+    includedCount: Number.NaN, primaryCompCount: Number.POSITIVE_INFINITY,
+    confidence: "High", pricingMode: "primary", valuationAvailable: true,
+  }).decisionReady,
+    "Malformed provider counts must never authorize a BUY/PASS verdict");
+  check(!classifyPricingEvidence({
+    includedCount: 4, primaryCompCount: 4, confidence: "High",
+    pricingMode: "primary", valuationAvailable: false,
+  }).decisionReady,
+    "Unavailable valuation must not become decision-ready even with four peers");
 
   const cleanPrimary = Array.from({length:8}, (_,i) => makeComp({
     id:`clean-${i}`, year:2018, mileage:52500 + i*200,

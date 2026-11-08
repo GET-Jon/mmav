@@ -3,7 +3,7 @@ import {
   type VehicleEquivalenceTier,
   type VehicleIdentity,
 } from "./vehicle-equivalence";
-import { canonicalIdentitySnapshot, dedicatedBmwMModel } from "./vehicle-identity";
+import { canonicalIdentitySnapshot, dedicatedBmwMModel, preserveSpecificSubjectTrim, preserveAdvertisedCandidateTrim, isNonRetailTrimLabel, decodedPowertrainFuel, canonicalVehicleVariant } from "./vehicle-identity";
 
 type RegressionCase = {
   name: string;
@@ -19,6 +19,205 @@ const base = {
 } as const;
 
 export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
+  {
+    name: "2025 Camry unknown retail grade keeps LE as related evidence despite engine-only gasoline fuel label",
+    target: {year:2025,make:"Toyota",model:"Camry",trim:"",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "supporting",
+  },
+  {
+    name: "2025 Camry exact LE grade may match provider gasoline engine label",
+    target: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "direct",
+  },
+  {
+    name: "2025 Camry LE is not direct pricing peer for XLE",
+    target: {year:2025,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Toyota",model:"Camry",trim:"XLE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "near",
+  },
+  {
+    name: "2024 Camry true gasoline vs hybrid is still a mismatch",
+    target: {year:2024,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2024,make:"Toyota",model:"Camry",trim:"LE",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "reject",
+  },
+  {
+    name: "Different fuel types remain rejected for unrelated vehicles",
+    target: {year:2025,make:"Honda",model:"Accord",trim:"EX",bodyType:"Sedan",fuelType:"Hybrid"},
+    candidate: {year:2025,make:"Honda",model:"Accord",trim:"EX",bodyType:"Sedan",fuelType:"Gasoline"},
+    expected: "reject",
+  },
+  {
+    name: "Turbo Coupe in trim matches Turbo in Coupe model",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "Turbo", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Turbo Coupe still differs from GTS in Coupe model",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "GTS", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Cayenne Turbo Coupe provider model alias remains a direct trim match",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Cayenne Turbo Coupe remains distinct from ordinary Cayenne base",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Base", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Cayenne Turbo Coupe must not price GTS Coupe as exact",
+    target: { year: 2020, make: "Porsche", model: "Cayenne", trim: "Turbo Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Porsche", model: "Cayenne Coupe", trim: "GTS Coupe", bodyType: "SUV", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Velar R-Dynamic SE must not auto-price from standard SE",
+    target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Velar R-Dynamic SE must not auto-price from ordinary S",
+    target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "S", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Velar matching R Dynamic SE and R-Dynamic SE remain direct",
+    target: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R-Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Land Rover", model: "Range Rover Velar", trim: "R Dynamic SE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "BMW M Sport cannot auto-price an ordinary Sport Line solely on model family",
+    target: { year: 2017, make: "BMW", model: "330i", trim: "M Sport", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "BMW", model: "330i", trim: "Sport Line", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Audi S line cannot auto-price non S line Premium Plus",
+    target: { year: 2019, make: "Audi", model: "A4", trim: "Premium Plus S line", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2019, make: "Audi", model: "A4", trim: "Premium Plus", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Toyota TRD Pro pickup cannot auto-price regular TRD Off-Road",
+    target: { year: 2021, make: "Toyota", model: "Tacoma", trim: "TRD Pro", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2021, make: "Toyota", model: "Tacoma", trim: "TRD Off-Road", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  // Shared pricing-critical configuration policies, independent of make.
+  {
+    name: "Porsche 911 coupe cannot value an unverified body style automatically",
+    target: { year: 2018, make: "Porsche", model: "911", trim: "Carrera", bodyType: "Coupe", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Porsche", model: "911", trim: "Carrera", bodyType: "Car", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "VW Golf R hatchback remains direct when configuration is verified",
+    target: { year: 2022, make: "Volkswagen", model: "Golf R", trim: "Golf R", bodyType: "Hatchback", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2022, make: "Volkswagen", model: "Golf R", trim: "Golf R", bodyType: "Hatchback", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "BMW manual versus automatic is not an automatic pricing peer",
+    target: { year: 2013, make: "BMW", model: "328i", trim: "328i", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline", transmission: "Manual" },
+    candidate: { year: 2013, make: "BMW", model: "328i", trim: "328i", bodyType: "Sedan", drivetrain: "RWD", fuelType: "Gasoline", transmission: "Automatic" },
+    expected: "supporting",
+  },
+  {
+    name: "Honda Civic manual versus automatic cannot silently set a price",
+    target: { year: 2020, make: "Honda", model: "Civic", trim: "Sport", bodyType: "Sedan", fuelType: "Gasoline", transmission: "Manual" },
+    candidate: { year: 2020, make: "Honda", model: "Civic", trim: "Sport", bodyType: "Sedan", fuelType: "Gasoline", transmission: "Automatic" },
+    expected: "supporting",
+  },
+  {
+    name: "Subaru wagon needs verified body style for direct pricing",
+    target: { year: 2018, make: "Subaru", model: "Outback", trim: "Limited", bodyType: "Wagon", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Subaru", model: "Outback", trim: "Limited", bodyType: "Car", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Ford F150 pickup with unverified body class cannot set price",
+    target: { year: 2020, make: "Ford", model: "F-150", trim: "XLT", bodyType: "Pickup", drivetrain: "4WD", fuelType: "Gasoline" },
+    candidate: { year: 2020, make: "Ford", model: "F-150", trim: "XLT", bodyType: "Car", drivetrain: "4WD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Toyota RAV4 same verified SUV and powertrain remains direct",
+    target: { year: 2023, make: "Toyota", model: "RAV4 Hybrid", trim: "XLE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Hybrid" },
+    candidate: { year: 2023, make: "Toyota", model: "RAV4 Hybrid", trim: "XLE", bodyType: "SUV", drivetrain: "AWD", fuelType: "Hybrid" },
+    expected: "direct",
+  },
+  {
+    name: "Mercedes S63 formatting AMG S63 versus AMG S 63 is a direct identity match",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S 63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "Matching S63 trim cannot override unknown convertible body",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S 63", bodyType: "Car", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Mercedes S63 different verified equipment remains near, not direct",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63 Designo Edition", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "S63 Convertible with unspecified listing body cannot auto-price",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 63 AMG 4MATIC", bodyType: "", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "S63 Convertible with verified cabriolet body remains comparable",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 63 AMG 4MATIC", bodyType: "Cabriolet", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "near",
+  },
+  {
+    name: "Mercedes S63 AMG Convertible must not auto-price from ordinary S550 4MATIC",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2016, make: "Mercedes-Benz", model: "S-Class", trim: "S 550 4MATIC", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Mercedes S63 AMG Convertible must not auto-price from S560",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2018, make: "Mercedes-Benz", model: "S-Class", trim: "S 560 4MATIC", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Matching Mercedes S63 AMG Convertible remains direct",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "direct",
+  },
+  {
+    name: "S63 AMG Convertible and S63 AMG Sedan are not pricing peers",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Sedan", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
+  {
+    name: "Mercedes S65 AMG is distinct from S63 AMG",
+    target: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S63", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    candidate: { year: 2017, make: "Mercedes-Benz", model: "S-Class", trim: "AMG S65", bodyType: "Convertible", drivetrain: "AWD", fuelType: "Gasoline" },
+    expected: "supporting",
+  },
   {
     name: "Mercedes ML-Class VIN identity and M-Class provider listing share model family",
     target: { year: 2014, make: "Mercedes-Benz", model: "ML-Class", trim: "ML350 4-MATIC", drivetrain: "AWD", fuelType: "Gasoline" },
@@ -134,7 +333,7 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
     expected: "reject",
   },
   {
-    name: "Audi A5 VIN naming vs A5 Sportback is near, not rejected",
+    name: "Audi A5 S Line package is supporting versus ordinary A5 Sportback Premium",
     target: {
       year: 2025,
       make: "Audi",
@@ -153,7 +352,7 @@ export const vehicleEquivalenceRegressionCases: RegressionCase[] = [
       drivetrain: "4WD",
       fuelType: "Gasoline",
     },
-    expected: "near",
+    expected: "supporting",
   },
   {
     name: "Audi A5 vs S5 Sportback preserves performance distinction",
@@ -937,6 +1136,41 @@ export const vehicleIdentityRegressionCases: IdentityRegressionCase[] = [
 
 export function assertVehicleEquivalenceRegressionCases() {
   const failures: string[] = [];
+  if (!isNonRetailTrimLabel("80 Series")) failures.push("Camry 80 Series must be treated as a generation label");
+  if (isNonRetailTrimLabel("LE")) failures.push("Camry LE must remain a genuine retail trim");
+  if (canonicalVehicleVariant({year:2025,make:"Toyota",model:"Camry",trim:"80 Series"}) !== "")
+    failures.push("An 80 Series VIN must not establish an invented Camry retail grade");
+  if (preserveSpecificSubjectTrim("", "80 Series", "Toyota", "Camry") !== "")
+    failures.push("Empty qualification must not restore Series as a retail trim");
+  if (decodedPowertrainFuel({Make:"TOYOTA",Model:"Camry",ModelYear:"2025",FuelTypePrimary:"Gasoline"}) !== "Hybrid")
+    failures.push("2025 Camry VIN fuel must be correctly identified as hybrid");
+  if (decodedPowertrainFuel({Make:"TOYOTA",Model:"Camry",ModelYear:"2024",FuelTypePrimary:"Gasoline"}) !== "Gasoline")
+    failures.push("Prior-year Camry gasoline must not be reclassified as hybrid");
+  if (decodedPowertrainFuel({Make:"Honda",Model:"Accord",ModelYear:"2024",FuelTypePrimary:"Gasoline",FuelTypeSecondary:"Electric"}) !== "Hybrid")
+    failures.push("Explicit hybrid source metadata should generalize across manufacturers");
+
+
+  for (const [advertised, decoder, expected] of [
+    ["SE", "R-Dynamic SE", "SE"],
+    ["R-Dynamic SE", "SE", "R-Dynamic SE"],
+    ["", "R-Dynamic SE", "R-Dynamic SE"],
+    ["Premium", "Premium Plus", "Premium"],
+  ] as Array<[string, string, string]>) {
+    const actual = preserveAdvertisedCandidateTrim(advertised, decoder, "Land Rover", "Range Rover Velar");
+    if (actual !== expected) failures.push(`Candidate trim ${advertised}/${decoder}: expected ${expected}, got ${actual}`);
+  }
+
+  for (const [qualification, display, make, model, expected] of [
+    ["SE", "R-Dynamic SE", "Land Rover", "Range Rover Velar", "R-Dynamic SE"],
+    ["Premium", "Premium Plus S line", "Audi", "A4", "Premium Plus S line"],
+    ["XLT", "XLT Sport", "Ford", "F-150", "XLT Sport"],
+    ["SE", "SE", "Land Rover", "Range Rover Velar", "SE"],
+    ["S", "SE", "Land Rover", "Range Rover Velar", "S"],
+    ["", "R-Dynamic SE", "Land Rover", "Range Rover Velar", "R-Dynamic SE"],
+  ] as Array<[string, string, string, string, string]>) {
+    const actual = preserveSpecificSubjectTrim(qualification, display, make, model);
+    if (actual !== expected) failures.push(`Subject trim ${qualification}/${display}: expected ${expected}, got ${actual}`);
+  }
 
   for (const [name, make, model, trim, expected] of [
     ["VIN decoder M5 5-Series", "BMW", "M5 5-Series", "", "M5"],
@@ -981,7 +1215,7 @@ export function assertVehicleEquivalenceRegressionCases() {
   return {
     passed:
       vehicleEquivalenceRegressionCases.length +
-      vehicleIdentityRegressionCases.length,
+      vehicleIdentityRegressionCases.length + 7,
     failed: 0,
   };
 }

@@ -1,3 +1,4 @@
+import { getBillingSiteUrl } from "../lib/billing/stripe";
 import assert from "node:assert/strict";
 import { calendarMonthWindow, resolvePaidUsageWindow } from "../lib/billing/billing-period";
 import { checkPreviewBillingIsolation, isDeployPreview } from "../lib/billing/preview-isolation";
@@ -101,3 +102,35 @@ assert.equal(checkPreviewBillingIsolation({
 }).safe, true, "Production configuration remains unaffected by preview-only checks");
 
 console.log("Billing-period and preview-isolation regressions passed");
+
+
+// Checkout and Customer Portal return URLs must never inherit Netlify's
+// deployment-specific server handler hostname in a production deployment.
+const priorSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const priorDeployPrimeUrl = process.env.DEPLOY_PRIME_URL;
+try {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://ymlleqpbpgzydyzwhlqq.supabase.co";
+  process.env.DEPLOY_PRIME_URL = "https://deploy-preview-40--mmav.netlify.app";
+  assert.equal(
+    getBillingSiteUrl("https://6aeb9621fd3526a2a56484d1--mmav.netlify.app/api/billing/checkout"),
+    "https://yourlotlogic.com",
+    "Production checkout returns to the canonical domain even when Netlify rewrites the request host",
+  );
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://separatetestproject.supabase.co";
+  assert.equal(
+    getBillingSiteUrl("https://some-internal-handler.netlify.app/api/billing/checkout"),
+    "https://deploy-preview-40--mmav.netlify.app",
+    "Preview checkout returns to its isolated preview host",
+  );
+  delete process.env.DEPLOY_PRIME_URL;
+  assert.throws(
+    () => getBillingSiteUrl("https://6aeb9621fd3526a2a56484d1--mmav.netlify.app/api/billing/checkout"),
+    /Billing return URL is not configured/,
+    "Unknown preview environment must fail closed rather than return an unrelated domain",
+  );
+} finally {
+  if (priorSupabaseUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  else process.env.NEXT_PUBLIC_SUPABASE_URL = priorSupabaseUrl;
+  if (priorDeployPrimeUrl === undefined) delete process.env.DEPLOY_PRIME_URL;
+  else process.env.DEPLOY_PRIME_URL = priorDeployPrimeUrl;
+}
