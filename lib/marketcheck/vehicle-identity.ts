@@ -18,6 +18,18 @@ export function normalizeVehicleText(value: unknown) {
     .trim();
 }
 
+/**
+ * VIN datasets sometimes expose a platform/generation under Series (for
+ * example "80 Series" for a Camry). It is not a retail trim, and treating it
+ * as one prevents real LE/SE/XLE/XSE listings from qualifying correctly.
+ * Never infer an actual grade from a generation name.
+ */
+export function isNonRetailTrimLabel(value: unknown): boolean {
+  const normalized = normalizeVehicleText(value);
+  return /^\\d{1,3} series$/.test(normalized) ||
+    /^(?:generation|gen) \\d{1,3}$/.test(normalized);
+}
+
 export function compactVehicleText(value: unknown) {
   return normalizeVehicleText(value).replace(/\s+/g, "");
 }
@@ -354,6 +366,7 @@ export function isLikelyVariantEnumeration({
 }) {
   const normalizedTrim = normalizeVehicleText(trim);
   if (!normalizedTrim) return false;
+  if (isNonRetailTrimLabel(trim)) return true;
 
   const family = canonicalModelFamily({
     year: 0,
