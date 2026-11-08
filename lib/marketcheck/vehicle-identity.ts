@@ -26,8 +26,8 @@ export function normalizeVehicleText(value: unknown) {
  */
 export function isNonRetailTrimLabel(value: unknown): boolean {
   const normalized = normalizeVehicleText(value);
-  return /^\\d{1,3} series$/.test(normalized) ||
-    /^(?:generation|gen) \\d{1,3}$/.test(normalized);
+  return /^\d{1,3} series$/.test(normalized) ||
+    /^(?:generation|gen) \d{1,3}$/.test(normalized);
 }
 
 /**
@@ -42,7 +42,7 @@ export function decodedPowertrainFuel(result: Record<string, string>): string {
   const model = normalizeVehicleText(result.Model);
   const year = Number(result.ModelYear);
   if (/plug.?in hybrid|phev/.test(electrification)) return "Plug-in Hybrid";
-  if (/hybrid|\\bhev\\b/.test(electrification) ||
+  if (/hybrid|\bhev\b/.test(electrification) ||
       (/gasoline|petrol|gas/i.test(fuel) && /electric/.test(secondaryFuel)) ||
       (make === "toyota" && model === "camry" && year === 2025)) {
     return "Hybrid";
