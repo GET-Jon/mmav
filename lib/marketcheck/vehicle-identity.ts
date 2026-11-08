@@ -576,6 +576,26 @@ export function canonicalFuelType(value: unknown) {
   return text;
 }
 
+/**
+ * Production facts can resolve an inaccurate engine-only fuel label in a
+ * listing provider. This is deliberately narrow: 2025 US Toyota Camry was
+ * hybrid-only. Do not infer trim or extend the rule to older model years.
+ */
+export function canonicalFuelForVehicle(vehicle: Pick<VehicleIdentity, "year" | "make" | "model" | "fuelType">) {
+  const fuel = canonicalFuelType(vehicle.fuelType);
+  if (Number(vehicle.year) === 2025 &&
+      canonicalVehicleMake(vehicle.make) === "toyota" &&
+      canonicalModelFamily({
+        year: Number(vehicle.year),
+        make: vehicle.make,
+        model: vehicle.model,
+      }) === "camry" &&
+      (fuel === "gasoline" || !fuel || fuel === "hybrid")) {
+    return "hybrid";
+  }
+  return fuel;
+}
+
 export function resolveSemanticFuelType({
   make,
   model,
