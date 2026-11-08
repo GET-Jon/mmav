@@ -31,7 +31,7 @@ import {
 } from "@/lib/evaluation/vehicle-identity-profile";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
-import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
+import { dedicatedBmwMModel, isNonRetailTrimLabel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
 import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
 import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
@@ -1837,6 +1837,11 @@ export function EvaluationWorkspace({
   const rawVehicleModel = decodedVehicle?.model || manualVehicle.model || "";
   const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, decodedVehicle?.trim || manualVehicle.trim) || rawVehicleModel;
   const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
+  const retailTrimNeedsConfirmation = Boolean(
+    decodedVehicle &&
+    (!vehicleTrim || isNonRetailTrimLabel(vehicleTrim)) &&
+    !dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim),
+  );
   const compTaxonomyFallback = findModelTaxonomyFallback({
     make: vehicleMake,
     model: vehicleModel,
@@ -7724,9 +7729,9 @@ export function EvaluationWorkspace({
                   <div className="grid gap-2 text-sm">
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Mileage</span><span className="font-black text-slate-900">{targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"}</span></div>
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Bid / Ask</span><span className="font-black text-slate-900">{valuationInput.currentBid > 0 ? money(valuationInput.currentBid) : "—"}</span></div>
-                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{vehicleTrim || "—"}</span></div>
+                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{retailTrimNeedsConfirmation ? "Unverified" : vehicleTrim || "—"}</span></div>
                   </div>
-                  <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Vehicle ready ✓</div>
+                  <div className={`mt-4 inline-flex rounded-full px-3 py-1 text-[10px] font-black ${retailTrimNeedsConfirmation ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>{retailTrimNeedsConfirmation ? "Confirm retail trim for pricing" : "Vehicle ready ✓"}</div>
                 </div>
               ) : null}
             </article>
@@ -8124,6 +8129,16 @@ export function EvaluationWorkspace({
                       </div>
                       {activeStage === "market" ? (
                         <>
+                        {retailTrimNeedsConfirmation ? (
+                          <div role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
+                            <p className="font-black">Retail trim not verified</p>
+                            <p>The VIN identified the model but not its exact retail grade. More geographic searches cannot establish trim-equivalent pricing until this is confirmed.</p>
+                            <button type="button" className="mt-2 font-black text-blue-700 hover:underline"
+                              onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}>
+                              Confirm retail trim in Vehicle →
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="mt-3 text-xs leading-5 text-slate-600">
                           {pricingEvidence.decisionReady
                             ? `${compSummary.primaryCompCount} close pricing peers support the estimate. Asking prices are not completed sales.`
