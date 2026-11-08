@@ -3,6 +3,7 @@ import {
   canonicalDrivetrain,
   dedicatedBmwMModel,
   canonicalFuelType,
+  canonicalFuelForVehicle,
   canonicalModelFamily,
   canonicalTractionClass,
   canonicalTransmission,
@@ -700,8 +701,8 @@ export function evaluateVehicleEquivalence({
     }
   }
 
-  const targetFuel = canonicalFuelType(target.fuelType);
-  const candidateFuel = canonicalFuelType(candidate.fuelType);
+  const targetFuel = canonicalFuelForVehicle(target);
+  const candidateFuel = canonicalFuelForVehicle(candidate);
   if (targetFuel && candidateFuel && targetFuel !== candidateFuel) {
     return {
       tier: "reject",
