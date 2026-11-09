@@ -1197,9 +1197,33 @@ export function EvaluationWorkspace({
   const [conditionAnalysisLoading, setConditionAnalysisLoading] =
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
-  const [issuePhotoFiles, setIssuePhotoFiles] = useState<Record<string, File[]>>({});
+  const [issueStoredPhotos, setIssueStoredPhotos] = useState<Record<string, Array<{slot: number; url: string; path: string}>>>({});
+  const [issuePhotoLoading, setIssuePhotoLoading] = useState(false);
   const [issuePhotoBusy, setIssuePhotoBusy] = useState<string | null>(null);
   const [issuePhotoError, setIssuePhotoError] = useState<Record<string, string>>({});
+  const photoIssueIds = conditionAnalysis?.issues.map((issue) => issue.id).join("|") || "";
+  useEffect(() => {
+    if (!conditionProfitabilityOpen || !evaluationUsageId || !photoIssueIds) return;
+    let cancelled = false;
+    setIssuePhotoLoading(true);
+    const ids = photoIssueIds.split("|");
+    void Promise.all(ids.map(async (issueId) => {
+      const query = new URLSearchParams({ evaluationUsageId, issueId });
+      const response = await fetch(`/api/evaluations/condition-photos?${query.toString()}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Could not load issue photos.");
+      return { issueId, photos: payload.photos || [] };
+    })).then((entries) => {
+      if (cancelled) return;
+      setIssueStoredPhotos(Object.fromEntries(entries.map((entry) => [entry.issueId, entry.photos])));
+    }).catch((error) => {
+      if (!cancelled) setIssuePhotoError((previous) => ({
+        ...previous, _load: error instanceof Error ? error.message : "Could not load photos."
+      }));
+    }).finally(() => { if (!cancelled) setIssuePhotoLoading(false); });
+    return () => { cancelled = true; };
+  }, [conditionProfitabilityOpen, evaluationUsageId, photoIssueIds]);
+
   const [conditionAnalysisRetryable, setConditionAnalysisRetryable] =
     useState(false);
   const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
@@ -3828,40 +3852,85 @@ export function EvaluationWorkspace({
     setConditionAnalysisApplied(false);
   }
 
-  function selectIssuePhotos(issueId: string, selected: FileList | null) {
-    if (!selected) return;
+  function issuePhotoEndpoint(issueId: string) {
+    const query = new URLSearchParams({ evaluationUsageId, issueId });
+    return `/api/evaluations/condition-photos?${query.toString()}`;
+  }
+
+  async function refreshIssuePhotos(issueId: string) {
+    const response = await fetch(issuePhotoEndpoint(issueId), { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not load saved photos.");
+    setIssueStoredPhotos((previous) => ({ ...previous, [issueId]: payload.photos || [] }));
+  }
+
+  async function selectIssuePhotos(issueId: string, selected: FileList | null) {
+    if (!selected?.length || issuePhotoBusy) return;
     const files = Array.from(selected);
-    if (files.length > 3 || files.some((file) =>
+    const existing = issueStoredPhotos[issueId] || [];
+    if (files.length + existing.length > 3 || files.some((file) =>
       !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
-      file.size > 4 * 1024 * 1024
+      file.size === 0 || file.size > 4 * 1024 * 1024
     )) {
       setIssuePhotoError((previous) => ({ ...previous,
-        [issueId]: "Choose up to three JPG, PNG, or WebP photos, each under 4 MB." }));
+        [issueId]: "Each issue can contain a maximum of three JPG, PNG or WebP photos (4 MB each). Remove a saved photo before adding another." }));
       return;
     }
-    setIssuePhotoFiles((previous) => ({ ...previous, [issueId]: files }));
+    setIssuePhotoBusy(issueId);
     setIssuePhotoError((previous) => ({ ...previous, [issueId]: "" }));
+    try {
+      for (const file of files) {
+        const body = new FormData();
+        body.append("photo", file);
+        const response = await fetch(issuePhotoEndpoint(issueId), { method: "POST", body });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Photo upload failed.");
+        setIssueStoredPhotos((previous) => ({ ...previous, [issueId]: payload.photos || [] }));
+      }
+      await refreshIssuePhotos(issueId);
+      // Existing analysis is no longer current once photo evidence changes.
+      setConditionAnalysis((previous) => previous
+        ? { ...previous, issues: previous.issues.map((issue) =>
+          issue.id === issueId ? { ...issue, photoReview: undefined } : issue) }
+        : previous);
+    } catch (error) {
+      await refreshIssuePhotos(issueId).catch(() => {});
+      setIssuePhotoError((previous) => ({ ...previous,
+        [issueId]: error instanceof Error ? error.message : "Photo upload failed." }));
+    } finally {
+      setIssuePhotoBusy(null);
+    }
+  }
+
+  async function deleteIssuePhoto(issueId: string, slot: number) {
+    if (issuePhotoBusy) return;
+    setIssuePhotoBusy(issueId);
+    setIssuePhotoError((previous) => ({ ...previous, [issueId]: "" }));
+    try {
+      const response = await fetch(`${issuePhotoEndpoint(issueId)}&slot=${slot}`, { method: "DELETE" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Could not remove photo.");
+      setIssueStoredPhotos((previous) => ({ ...previous, [issueId]: payload.photos || [] }));
+      setConditionAnalysis((previous) => previous
+        ? { ...previous, issues: previous.issues.map((issue) =>
+          issue.id === issueId ? { ...issue, photoReview: undefined } : issue) }
+        : previous);
+    } catch (error) {
+      setIssuePhotoError((previous) => ({ ...previous,
+        [issueId]: error instanceof Error ? error.message : "Could not remove photo." }));
+    } finally { setIssuePhotoBusy(null); }
   }
 
   async function deepDiveIssuePhotos(issue: ConditionAnalysisIssue) {
-    const files = issuePhotoFiles[issue.id] || [];
-    if (!files.length || issuePhotoBusy) return;
+    if (!(issueStoredPhotos[issue.id] || []).length || issuePhotoBusy) return;
     setIssuePhotoBusy(issue.id);
     setIssuePhotoError((previous) => ({ ...previous, [issue.id]: "" }));
     try {
-      const photos = await Promise.all(files.map(async (file) => {
-        const data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ""));
-          reader.onerror = () => reject(new Error("Could not read photo."));
-          reader.readAsDataURL(file);
-        });
-        return { data };
-      }));
       const response = await fetch("/api/evaluations/condition-photo-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          evaluationUsageId, issueId: issue.id,
           issue: {
             description: issue.description, category: issue.category,
             severity: issue.severity, certainty: issue.certainty,
@@ -3869,7 +3938,6 @@ export function EvaluationWorkspace({
           },
           vehicle: { year: vehicleYear, make: vehicleMake, model: vehicleModel,
             trim: vehicleTrim, mileage: targetMileage },
-          photos,
         }),
       });
       const payload = await response.json();
@@ -6321,25 +6389,47 @@ export function EvaluationWorkspace({
                                     </div>
                                   ) : null}
                                   <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
-                                    <div className="text-xs font-black text-slate-800">Photo deep dive</div>
+                                    <div className="text-xs font-black text-slate-800">Saved photos · {(issueStoredPhotos[issue.id] || []).length}/3</div>
                                     <p className="mt-1 text-[11px] text-slate-500">
-                                      Add up to three close-up photos of this issue. AI reviews visible evidence,
-                                      explains uncertainty, and suggests a revised amount for your approval.
+                                      Upload up to three photos of this issue. Photos are stored privately and can be reviewed later.
                                     </p>
-                                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple
-                                      aria-label={`Photos for ${issue.description}`}
-                                      onChange={(event) => selectIssuePhotos(issue.id, event.currentTarget.files)}
-                                      className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:font-bold file:text-violet-700" />
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {(issueStoredPhotos[issue.id] || []).map((photo) => (
+                                        <div key={photo.slot} className="relative w-24">
+                                          <a href={photo.url} target="_blank" rel="noopener noreferrer" title="View saved photo">
+                                            <img src={photo.url} alt={`Issue photo ${photo.slot + 1}`}
+                                              className="h-20 w-24 rounded-lg border border-slate-200 object-cover" />
+                                          </a>
+                                          <button type="button" disabled={Boolean(issuePhotoBusy)}
+                                            aria-label={`Remove issue photo ${photo.slot + 1}`}
+                                            onClick={() => void deleteIssuePhoto(issue.id, photo.slot)}
+                                            className="mt-1 w-full rounded-lg border border-slate-200 px-1 py-1 text-[10px] font-black text-red-600 disabled:opacity-40">
+                                            Remove
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {(issueStoredPhotos[issue.id] || []).length < 3 ? (
+                                      <input type="file" accept="image/jpeg,image/png,image/webp" multiple
+                                        aria-label={`Add photos for ${issue.description}`}
+                                        disabled={Boolean(issuePhotoBusy) || issuePhotoLoading || !evaluationUsageId}
+                                        onChange={(event) => {
+                                          void selectIssuePhotos(issue.id, event.currentTarget.files);
+                                          event.currentTarget.value = "";
+                                        }}
+                                        className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:font-bold file:text-violet-700" />
+                                    ) : <p className="mt-2 text-[11px] font-bold text-slate-500">Three photos saved. Remove one to add another.</p>}
                                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                                      <span className="text-[11px] text-slate-500">{issuePhotoFiles[issue.id]?.length || 0}/3 selected</span>
-                                      <button type="button" disabled={!issuePhotoFiles[issue.id]?.length || Boolean(issuePhotoBusy)}
+                                      {issuePhotoLoading ? <span className="text-[11px] text-slate-500">Loading photos…</span> : null}
+                                      <button type="button" disabled={!(issueStoredPhotos[issue.id] || []).length || Boolean(issuePhotoBusy)}
                                         onClick={() => void deepDiveIssuePhotos(issue)}
                                         className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-black text-white disabled:opacity-40">
-                                        {issuePhotoBusy === issue.id ? "Analyzing photos…" : "Analyze photos"}
+                                        {issuePhotoBusy === issue.id ? "Working…" : "Analyze saved photos"}
                                       </button>
                                     </div>
                                     {issuePhotoError[issue.id] ? <p role="alert" className="mt-2 text-xs text-red-700">{issuePhotoError[issue.id]}</p> : null}
-                                    {issue.photoReview ? (
+                                    {issuePhotoError._load ? <p role="alert" className="mt-2 text-xs text-red-700">{issuePhotoError._load}</p> : null}
+                                  {issue.photoReview ? (
                                       <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
                                         <div className="font-black">AI photo findings</div>
                                         <p className="mt-1">{issue.photoReview.summary}</p>
