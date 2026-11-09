@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/supabase/server-auth";
+import { getCurrentUser, createSupabaseServerAuthClient } from "@/lib/supabase/server-auth";
+import { getCurrentCompanyForUser } from "@/lib/supabase/company";
+import { CONDITION_PHOTO_BUCKET, listIssuePhotos, photoScope, photoIssueId } from "@/lib/evaluation/condition-photos";
 import { checkUsageAllowance, recordUsageEvent } from "@/lib/billing/usage";
 
 export const runtime = "nodejs";
-
-const MAX_PHOTOS = 3;
-const MAX_BYTES = 4 * 1024 * 1024;
-const VALID_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -40,29 +38,40 @@ export async function POST(request: Request) {
   let body: unknown;
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
-  if (!isRecord(body) || !isRecord(body.issue) || !Array.isArray(body.photos) ||
-      body.photos.length < 1 || body.photos.length > MAX_PHOTOS) {
-    return NextResponse.json({ error: "Provide an issue and one to three photos." }, { status: 400 });
+  if (!isRecord(body) || !isRecord(body.issue)) {
+    return NextResponse.json({ error: "An issue is required." }, { status: 400 });
   }
-
-  const images: Array<{ inlineData: { mimeType: string; data: string } }> = [];
-  for (const photo of body.photos) {
-    if (!isRecord(photo) || typeof photo.data !== "string") {
-      return NextResponse.json({ error: "Invalid photo." }, { status: 400 });
-    }
-    const match = /^data:(image\/jpeg|image\/png|image\/webp);base64,([a-zA-Z0-9+/=]+)$/.exec(photo.data);
-    if (!match || !VALID_MIME.has(match[1]) || match[2].length > Math.ceil(MAX_BYTES / 3) * 4 + 8) {
-      return NextResponse.json({ error: "Each image must be JPG, PNG or WebP under 4 MB." }, { status: 400 });
-    }
-    const bytes = Buffer.from(match[2], "base64");
-    if (bytes.length > MAX_BYTES || bytes.length === 0) {
-      return NextResponse.json({ error: "Photo is empty or too large." }, { status: 400 });
-    }
-    images.push({ inlineData: { mimeType: match[1], data: match[2] } });
+  let evaluationUsageId: string;
+  let issueId: string;
+  try {
+    evaluationUsageId = photoScope(body.evaluationUsageId, "evaluation identifier");
+    issueId = photoIssueId(body.issueId);
+  } catch {
+    return NextResponse.json({ error: "Invalid evaluation or issue reference." }, { status: 400 });
   }
-
+  const companyClient = await createSupabaseServerAuthClient();
+  const company = await getCurrentCompanyForUser(companyClient, user.id);
   const admin = createSupabaseAdminClient();
-  const subjectKey = `condition_photo:${user.id}:${safeText(body.issue.description, 90)}`;
+  const stored = await listIssuePhotos(company.companyId, user.id, evaluationUsageId, issueId);
+  if (!stored.length || stored.length > 3) {
+    return NextResponse.json({ error: "Upload one to three issue photos first." }, { status: 400 });
+  }
+  const images: Array<{ inlineData: { mimeType: string; data: string } }> = [];
+  for (const photo of stored) {
+    const { data, error } = await admin.storage.from(CONDITION_PHOTO_BUCKET).download(photo.path);
+    if (error || !data) return NextResponse.json({ error: "Could not read stored photo." }, { status: 503 });
+    const mimeType = data.type;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+      return NextResponse.json({ error: "Stored photo has an unsupported format." }, { status: 400 });
+    }
+    const bytes = Buffer.from(await data.arrayBuffer());
+    if (bytes.length > 4 * 1024 * 1024) {
+      return NextResponse.json({ error: "Stored photo exceeds size limit." }, { status: 400 });
+    }
+    images.push({ inlineData: { mimeType, data: bytes.toString("base64") } });
+  }
+
+  const subjectKey = `condition_photo:${user.id}:${evaluationUsageId}:${issueId.slice(0, 60)}`;
   const allowance = await checkUsageAllowance({ supabase: admin, userId: user.id,
     kind: "provider_api_call", subjectKey, expectedUnits: 1 });
   if (!allowance.allowed) {
