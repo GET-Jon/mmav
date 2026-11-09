@@ -4,7 +4,7 @@ import { createSupabaseServerAuthClient, getCurrentUser } from "@/lib/supabase/s
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
 import {
   CONDITION_PHOTO_BUCKET, CONDITION_PHOTO_LIMIT, CONDITION_PHOTO_MAX_BYTES,
-  listIssuePhotos, photoBase, photoExtension, photoIssueId, photoMime, photoScope,
+  listIssuePhotos, photoBase, photoIssueId, photoMime, photoScope,
 } from "@/lib/evaluation/condition-photos";
 
 export const runtime = "nodejs";
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Maximum three photos per issue." }, { status: 409 });
     }
     const prefix = photoBase(ctx.companyId, ctx.userId, ctx.evaluationUsageId, ctx.issueId);
-    const objectPath = `${prefix}/${slot}.${photoExtension(mime)}`;
+    const objectPath = `${prefix}/${slot}`;
     const { error } = await admin.storage.from(CONDITION_PHOTO_BUCKET).upload(objectPath, bytes, {
       contentType: mime, cacheControl: "60", upsert: false,
     });
