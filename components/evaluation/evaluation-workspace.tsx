@@ -1197,6 +1197,9 @@ export function EvaluationWorkspace({
   const [conditionAnalysisLoading, setConditionAnalysisLoading] =
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
+  const [issuePhotoFiles, setIssuePhotoFiles] = useState<Record<string, File[]>>({});
+  const [issuePhotoBusy, setIssuePhotoBusy] = useState<string | null>(null);
+  const [issuePhotoError, setIssuePhotoError] = useState<Record<string, string>>({});
   const [conditionAnalysisRetryable, setConditionAnalysisRetryable] =
     useState(false);
   const [conditionAnalysisApplied, setConditionAnalysisApplied] = useState(
@@ -3806,6 +3809,79 @@ export function EvaluationWorkspace({
     };
   }
 
+  function updateIssuePlanningAmount(issueId: string, amount: number) {
+    if (!Number.isFinite(amount) || amount < 0) return;
+    setConditionAnalysis((previous) => previous
+      ? recalculateConditionAnalysis(previous, previous.issues.map((issue) =>
+          issue.id === issueId ? { ...issue, planningEstimate: amount } : issue))
+      : previous);
+    // An itemized revision supersedes the former aggregate override.
+    setConditionPlanningEstimateOverride(null);
+    setConditionAnalysisApplied(false);
+  }
+
+  function selectIssuePhotos(issueId: string, selected: FileList | null) {
+    if (!selected) return;
+    const files = Array.from(selected);
+    if (files.length > 3 || files.some((file) =>
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size > 4 * 1024 * 1024
+    )) {
+      setIssuePhotoError((previous) => ({ ...previous,
+        [issueId]: "Choose up to three JPG, PNG, or WebP photos, each under 4 MB." }));
+      return;
+    }
+    setIssuePhotoFiles((previous) => ({ ...previous, [issueId]: files }));
+    setIssuePhotoError((previous) => ({ ...previous, [issueId]: "" }));
+  }
+
+  async function deepDiveIssuePhotos(issue: ConditionAnalysisIssue) {
+    const files = issuePhotoFiles[issue.id] || [];
+    if (!files.length || issuePhotoBusy) return;
+    setIssuePhotoBusy(issue.id);
+    setIssuePhotoError((previous) => ({ ...previous, [issue.id]: "" }));
+    try {
+      const photos = await Promise.all(files.map(async (file) => {
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Could not read photo."));
+          reader.readAsDataURL(file);
+        });
+        return { data };
+      }));
+      const response = await fetch("/api/evaluations/condition-photo-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issue: {
+            description: issue.description, category: issue.category,
+            severity: issue.severity, certainty: issue.certainty,
+            planningEstimate: issue.planningEstimate, assumptions: issue.assumptions,
+          },
+          vehicle: { year: vehicleYear, make: vehicleMake, model: vehicleModel,
+            trim: vehicleTrim, mileage: targetMileage },
+          photos,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.review) throw new Error(payload.error || "Photo review failed.");
+      setConditionAnalysis((previous) => previous
+        ? recalculateConditionAnalysis(previous, previous.issues.map((item) =>
+            item.id === issue.id ? { ...item, photoReview: {
+              ...payload.review, reviewedAt: new Date().toISOString()
+            }} : item))
+        : previous);
+      setConditionAnalysisApplied(false);
+    } catch (error) {
+      setIssuePhotoError((previous) => ({
+        ...previous, [issue.id]: error instanceof Error ? error.message : "Photo review failed."
+      }));
+    } finally {
+      setIssuePhotoBusy(null);
+    }
+  }
+
   function toggleConditionAnalysisIssue(issueId: string) {
     setConditionAnalysis((previous) => {
       if (!previous) {
@@ -6188,9 +6264,21 @@ export function EvaluationWorkspace({
                                       <div className="text-[9px] font-black uppercase text-slate-400">
                                         Planning
                                       </div>
-                                      <div className="mt-1 text-xs font-black text-violet-700">
-                                        {money(issue.planningEstimate)}
+                                      <div className="mt-1 flex max-w-[150px] items-center rounded-lg border border-violet-200 bg-white">
+                                        <span className="pl-2 text-xs text-slate-500">$</span>
+                                        <input
+                                          aria-label={`Planning amount for ${issue.description}`}
+                                          type="number" min="0" step="1"
+                                          value={issue.planningEstimate}
+                                          onChange={(event) => updateIssuePlanningAmount(issue.id, Number(event.target.value))}
+                                          className="w-full min-w-0 bg-transparent px-2 py-1.5 text-xs font-black text-violet-700 outline-none"
+                                        />
                                       </div>
+                                      {originalConditionAnalysis?.issues.find((original) => original.id === issue.id)?.planningEstimate !== undefined ? (
+                                        <div className="mt-1 text-[10px] text-slate-500">
+                                          AI: {money(originalConditionAnalysis.issues.find((original) => original.id === issue.id)!.planningEstimate)}
+                                        </div>
+                                      ) : null}
                                     </div>
 
                                     <div>
@@ -6222,6 +6310,41 @@ export function EvaluationWorkspace({
                                       {issue.assumptions.join("; ")}
                                     </div>
                                   ) : null}
+                                  <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                                    <div className="text-xs font-black text-slate-800">Photo deep dive</div>
+                                    <p className="mt-1 text-[11px] text-slate-500">
+                                      Add up to three close-up photos of this issue. AI reviews visible evidence,
+                                      explains uncertainty, and suggests a revised amount for your approval.
+                                    </p>
+                                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple
+                                      aria-label={`Photos for ${issue.description}`}
+                                      onChange={(event) => selectIssuePhotos(issue.id, event.currentTarget.files)}
+                                      className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:font-bold file:text-violet-700" />
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                      <span className="text-[11px] text-slate-500">{issuePhotoFiles[issue.id]?.length || 0}/3 selected</span>
+                                      <button type="button" disabled={!issuePhotoFiles[issue.id]?.length || Boolean(issuePhotoBusy)}
+                                        onClick={() => void deepDiveIssuePhotos(issue)}
+                                        className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-black text-white disabled:opacity-40">
+                                        {issuePhotoBusy === issue.id ? "Analyzing photos…" : "Analyze photos"}
+                                      </button>
+                                    </div>
+                                    {issuePhotoError[issue.id] ? <p role="alert" className="mt-2 text-xs text-red-700">{issuePhotoError[issue.id]}</p> : null}
+                                    {issue.photoReview ? (
+                                      <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                                        <div className="font-black">AI photo findings</div>
+                                        <p className="mt-1">{issue.photoReview.summary}</p>
+                                        {issue.photoReview.visibleEvidence.length ? <p className="mt-2">Visible: {issue.photoReview.visibleEvidence.join("; ")}</p> : null}
+                                        {issue.photoReview.limitations.length ? <p className="mt-2 text-amber-700">Cannot confirm: {issue.photoReview.limitations.join("; ")}</p> : null}
+                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                          <span className="font-black">Suggested planning: {money(issue.photoReview.suggestedPlanningEstimate)}</span>
+                                          <button type="button" className="rounded-lg border border-violet-300 bg-white px-2 py-1.5 font-black text-violet-700"
+                                            onClick={() => updateIssuePlanningAmount(issue.id, issue.photoReview!.suggestedPlanningEstimate)}>
+                                            Use suggestion
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -7444,7 +7567,7 @@ export function EvaluationWorkspace({
                     }}
                     className="text-xs font-black text-blue-700 hover:text-blue-900"
                   >
-                    Edit
+                    View/Edit
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
@@ -7459,7 +7582,7 @@ export function EvaluationWorkspace({
                     onClick={openConditionAnalysis}
                     className="text-xs font-black text-violet-700 hover:text-violet-900"
                   >
-                    Edit
+                    View/Edit
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
@@ -7480,7 +7603,7 @@ export function EvaluationWorkspace({
                     onClick={openCompMarketEditor}
                     className="text-xs font-black text-blue-700 hover:text-blue-900"
                   >
-                    Edit
+                    View/Edit
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
