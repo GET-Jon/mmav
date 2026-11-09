@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { getCurrentUser, createSupabaseServerAuthClient } from "@/lib/supabase/server-auth";
 import { getCurrentCompanyForUser } from "@/lib/supabase/company";
-import { CONDITION_PHOTO_BUCKET, listIssuePhotos, photoScope, photoIssueId } from "@/lib/evaluation/condition-photos";
+import { CONDITION_PHOTO_BUCKET, listIssuePhotos, photoScope, photoIssueId, photoMime } from "@/lib/evaluation/condition-photos";
 import { checkUsageAllowance, recordUsageEvent } from "@/lib/billing/usage";
 
 export const runtime = "nodejs";
@@ -60,13 +60,10 @@ export async function POST(request: Request) {
   for (const photo of stored) {
     const { data, error } = await admin.storage.from(CONDITION_PHOTO_BUCKET).download(photo.path);
     if (error || !data) return NextResponse.json({ error: "Could not read stored photo." }, { status: 503 });
-    const mimeType = data.type;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
-      return NextResponse.json({ error: "Stored photo has an unsupported format." }, { status: 400 });
-    }
     const bytes = Buffer.from(await data.arrayBuffer());
-    if (bytes.length > 4 * 1024 * 1024) {
-      return NextResponse.json({ error: "Stored photo exceeds size limit." }, { status: 400 });
+    const mimeType = photoMime(bytes);
+    if (!mimeType || bytes.length > 4 * 1024 * 1024) {
+      return NextResponse.json({ error: "Stored photo format or size is invalid." }, { status: 400 });
     }
     images.push({ inlineData: { mimeType, data: bytes.toString("base64") } });
   }
