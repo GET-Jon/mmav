@@ -3782,6 +3782,14 @@ export function EvaluationWorkspace({
     setConditionPlanningEstimateOverride(null);
     setConditionReadyDaysLowOverride(null);
     setConditionReadyDaysHighOverride(null);
+    if (originalConditionAnalysis) {
+      const originalAmounts = new Map(originalConditionAnalysis.issues.map((issue) => [issue.id, issue.planningEstimate]));
+      setConditionAnalysis((previous) => previous
+        ? recalculateConditionAnalysis(previous, previous.issues.map((issue) => ({
+            ...issue, planningEstimate: originalAmounts.get(issue.id) ?? issue.planningEstimate,
+          })))
+        : previous);
+    }
     setConditionAnalysisApplied(false);
   }
 
@@ -6055,7 +6063,9 @@ export function EvaluationWorkspace({
                             disabled={
                               conditionPlanningEstimateOverride === null &&
                               conditionReadyDaysLowOverride === null &&
-                              conditionReadyDaysHighOverride === null
+                              conditionReadyDaysHighOverride === null &&
+                              !conditionAnalysis.issues.some((issue) =>
+                                originalConditionAnalysis?.issues.find((original) => original.id === issue.id)?.planningEstimate !== issue.planningEstimate)
                             }
                             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                           >
