@@ -77,7 +77,11 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Photo analysis is not configured." }, { status: 503 });
-  const model = (process.env.AI_PHOTO_MODEL || "gemini-2.5-flash").trim();
+  // Use the same proven model configuration as text condition analysis.
+  // The previous hard-coded gemini-2.5-flash caused Netlify's AI provider
+  // to reject every request with unknown_model.
+  const model = (process.env.AI_PHOTO_MODEL || process.env.AI_MODEL || "gemini-3.1-flash-lite")
+    .trim().replace(/^["']|["']$/g, "").replace(/^models\\//, "");
   const vehicle = isRecord(body.vehicle) ? body.vehicle : {};
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -132,7 +136,38 @@ Include nonvisible damage and need for physical inspection in limitations.`,
     });
     return NextResponse.json({ review });
   } catch (error) {
-    console.error("Condition photo review failed", error);
-    return NextResponse.json({ error: "Photo analysis could not be completed. Please retry." }, { status: 503 });
+    // Log provider detail server-side without leaking keys or raw model output.
+    const diagnostic = error instanceof Error ? error.message : String(error);
+    let providerCode = "";
+    let providerMessage = "";
+    try {
+      const payload = JSON.parse(diagnostic) as {
+        error?: { code?: string; message?: string; type?: string };
+      };
+      providerCode = payload.error?.code || "";
+      providerMessage = payload.error?.message || "";
+    } catch {
+      // Other SDK errors may not be JSON.
+    }
+    const unknownModel = providerCode === "unknown_model" ||
+      /unknown_model|unable to find suitable provider/i.test(diagnostic);
+    const malformed = /JSON|Invalid photo analysis response|Unexpected token/i.test(diagnostic);
+    const status = unknownModel ? 502 : 503;
+    const code = unknownModel ? "PHOTO_AI_MODEL_UNAVAILABLE" :
+      malformed ? "PHOTO_AI_RESPONSE_INVALID" : "PHOTO_AI_PROVIDER_ERROR";
+    console.error("[condition-photo-review]", {
+      code, model, providerCode, providerMessage,
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
+    return NextResponse.json({
+      error: unknownModel
+        ? "The photo-analysis model is unavailable. Please contact support."
+        : malformed
+          ? "The AI returned an invalid photo review. Please retry."
+          : "Photo analysis is temporarily unavailable. Please retry.",
+      code,
+      // Provider diagnostics remain server-side; expose only safe identifiers.
+      model: unknownModel ? model : undefined,
+    }, { status });
   }
 }
