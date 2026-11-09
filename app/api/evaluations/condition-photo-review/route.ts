@@ -81,7 +81,7 @@ export async function POST(request: Request) {
   // The previous hard-coded gemini-2.5-flash caused Netlify's AI provider
   // to reject every request with unknown_model.
   const model = (process.env.AI_PHOTO_MODEL || process.env.AI_MODEL || "gemini-3.1-flash-lite")
-    .trim().replace(/^["']|["']$/g, "").replace(/^models\\//, "");
+    .trim().replace(/^["']|["']$/g, "").replace(/^models\//, "");
   const vehicle = isRecord(body.vehicle) ? body.vehicle : {};
   try {
     const ai = new GoogleGenAI({ apiKey });
