@@ -22,7 +22,7 @@ export function photoBase(companyId: string, userId: string, evaluationUsageId: 
 }
 
 export function photoIssueId(value: unknown) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 500) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 1500) {
     throw new Error("Invalid issue identifier.");
   }
   return value;
