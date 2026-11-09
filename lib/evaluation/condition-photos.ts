@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export const CONDITION_PHOTO_BUCKET = "lot-logic-condition-photos";
@@ -17,7 +18,14 @@ export function photoBase(companyId: string, userId: string, evaluationUsageId: 
   // user-submitted path components cannot contain separators.
   return [companyId, userId,
     photoScope(evaluationUsageId, "evaluation identifier"),
-    photoScope(issueId, "issue identifier")].join("/");
+    createHash("sha256").update(photoIssueId(issueId)).digest("hex").slice(0, 32)].join("/");
+}
+
+export function photoIssueId(value: unknown) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 500) {
+    throw new Error("Invalid issue identifier.");
+  }
+  return value;
 }
 
 export type StoredIssuePhoto = {
