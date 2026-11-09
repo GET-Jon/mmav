@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: allowance.message, code: allowance.code }, { status: allowance.status });
   }
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Photo analysis is not configured." }, { status: 503 });
   const model = (process.env.AI_PHOTO_MODEL || "gemini-2.5-flash").trim();
   const vehicle = isRecord(body.vehicle) ? body.vehicle : {};
