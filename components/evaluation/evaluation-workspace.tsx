@@ -1201,14 +1201,14 @@ export function EvaluationWorkspace({
   const [issuePhotoLoading, setIssuePhotoLoading] = useState(false);
   const [issuePhotoBusy, setIssuePhotoBusy] = useState<string | null>(null);
   const [issuePhotoError, setIssuePhotoError] = useState<Record<string, string>>({});
-  const photoIssueIds = conditionAnalysis?.issues.map((issue) => issue.id).join("|") || "";
+  const photoIssueIds = JSON.stringify(conditionAnalysis?.issues.map((issue) => [issue.id, issue.description]) || []);
   useEffect(() => {
-    if (!conditionProfitabilityOpen || !evaluationUsageId || !photoIssueIds) return;
+    if (!conditionProfitabilityOpen || !evaluationUsageId || photoIssueIds === "[]") return;
     let cancelled = false;
     setIssuePhotoLoading(true);
-    const ids = photoIssueIds.split("|");
-    void Promise.all(ids.map(async (issueId) => {
-      const query = new URLSearchParams({ evaluationUsageId, issueId });
+    const issues = JSON.parse(photoIssueIds) as Array<[string, string]>;
+    void Promise.all(issues.map(async ([issueId, description]) => {
+      const query = new URLSearchParams({ evaluationUsageId, issueId: `${issueId}::${description}` });
       const response = await fetch(`/api/evaluations/condition-photos?${query.toString()}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not load issue photos.");
@@ -3852,8 +3852,13 @@ export function EvaluationWorkspace({
     setConditionAnalysisApplied(false);
   }
 
+  function issuePhotoReference(issueId: string) {
+    const issue = conditionAnalysis?.issues.find((item) => item.id === issueId);
+    return issue ? `${issue.id}::${issue.description}` : issueId;
+  }
+
   function issuePhotoEndpoint(issueId: string) {
-    const query = new URLSearchParams({ evaluationUsageId, issueId });
+    const query = new URLSearchParams({ evaluationUsageId, issueId: issuePhotoReference(issueId) });
     return `/api/evaluations/condition-photos?${query.toString()}`;
   }
 
@@ -3930,7 +3935,7 @@ export function EvaluationWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          evaluationUsageId, issueId: issue.id,
+          evaluationUsageId, issueId: issuePhotoReference(issue.id),
           issue: {
             description: issue.description, category: issue.category,
             severity: issue.severity, certainty: issue.certainty,
