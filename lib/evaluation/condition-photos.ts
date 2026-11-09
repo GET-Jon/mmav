@@ -45,7 +45,7 @@ export async function listIssuePhotos(
   if (error) throw error;
   const result: StoredIssuePhoto[] = [];
   for (const item of data || []) {
-    const match = /^([012])\.(jpg|png|webp)$/.exec(item.name);
+    const match = /^([012])$/.exec(item.name);
     if (!match) continue;
     const path = `${prefix}/${item.name}`;
     const signed = await admin.storage.from(CONDITION_PHOTO_BUCKET).createSignedUrl(path, 300);
