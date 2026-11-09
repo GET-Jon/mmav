@@ -1198,6 +1198,7 @@ export function EvaluationWorkspace({
     useState(false);
   const [conditionAnalysisError, setConditionAnalysisError] = useState("");
   const [issueStoredPhotos, setIssueStoredPhotos] = useState<Record<string, Array<{slot: number; url: string; path: string}>>>({});
+  const [expandedIssuePhotos, setExpandedIssuePhotos] = useState<Record<string, boolean>>({});
   const [issuePhotoLoading, setIssuePhotoLoading] = useState(false);
   const [issuePhotoBusy, setIssuePhotoBusy] = useState<string | null>(null);
   const [issuePhotoError, setIssuePhotoError] = useState<Record<string, string>>({});
@@ -6332,7 +6333,7 @@ export function EvaluationWorkspace({
                                     </span>
                                   </div>
 
-                                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-5">
                                     <div>
                                       <div className="text-[9px] font-black uppercase text-slate-400">
                                         Range
@@ -6381,6 +6382,33 @@ export function EvaluationWorkspace({
                                         {issue.estimatedDurationDays} days
                                       </div>
                                     </div>
+                                    <div className="sm:justify-self-end">
+                                      <div className="text-[9px] font-black uppercase text-slate-400">
+                                        Add photos
+                                      </div>
+                                      <button
+                                        type="button"
+                                        aria-label={`Add photos for ${issue.description}`}
+                                        aria-expanded={Boolean(expandedIssuePhotos[issue.id])}
+                                        onClick={() => setExpandedIssuePhotos((previous) => ({
+                                          ...previous,
+                                          [issue.id]: !previous[issue.id],
+                                        }))}
+                                        className={`mt-1 inline-flex h-9 min-w-11 items-center justify-center gap-1.5 rounded-lg border px-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 ${
+                                          expandedIssuePhotos[issue.id]
+                                            ? "border-violet-400 bg-violet-100 text-violet-800"
+                                            : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700"
+                                        }`}
+                                      >
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                                          <path d="M14.5 4H9.5L7.7 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.7L14.5 4Z" />
+                                          <circle cx="12" cy="13" r="3.5" />
+                                        </svg>
+                                        {(issueStoredPhotos[issue.id] || []).length > 0 ? (
+                                          <span className="text-xs font-black">{(issueStoredPhotos[issue.id] || []).length}</span>
+                                        ) : null}
+                                      </button>
+                                    </div>
                                   </div>
 
                                   <div className="mt-3 text-[11px] font-semibold leading-5 text-slate-500">
@@ -6393,6 +6421,7 @@ export function EvaluationWorkspace({
                                       {issue.assumptions.join("; ")}
                                     </div>
                                   ) : null}
+                                  {expandedIssuePhotos[issue.id] ? (
                                   <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
                                     <div className="text-xs font-black text-slate-800">Saved photos · {(issueStoredPhotos[issue.id] || []).length}/3</div>
                                     <p className="mt-1 text-[11px] text-slate-500">
@@ -6450,6 +6479,7 @@ export function EvaluationWorkspace({
                                       </div>
                                     ) : null}
                                   </div>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
