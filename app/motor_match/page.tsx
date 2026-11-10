@@ -30,6 +30,12 @@ export default function MotorMatchPage(){
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
  const [makes,setMakes]=useState<string[]>([]),[models,setModels]=useState<string[]>([]),[validYears,setValidYears]=useState<number[]>([]);
  const [manualInquiry,setManualInquiry]=useState(false);
+ const [priority,setPriority]=useState<"budget"|"year"|"mileage">("budget");
+ const [advancedOpen,setAdvancedOpen]=useState(false);
+ const [originalTarget,setOriginalTarget]=useState<{year:number;budget:number;mileage:number}|null>(null);
+ const [appliedSuggestion,setAppliedSuggestion]=useState("");
+ const [budgetDraft,setBudgetDraft]=useState("30000");
+ const [discoveryMode,setDiscoveryMode]=useState(false);
  const [embedded,setEmbedded]=useState(false);
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
@@ -37,6 +43,7 @@ export default function MotorMatchPage(){
  const hasFlashedLimits=useRef(false);
  const [flashLimits,setFlashLimits]=useState(false);
  const [searchReady,setSearchReady]=useState(false);
+ const rounded=(value:number,step:number)=>Math.ceil(value/step)*step;
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
  const guidedReady=Boolean(make.trim()&&model.trim()&&year&&String(year).length===4);
  const makeNeedsFocus=!make.trim();
@@ -58,7 +65,7 @@ export default function MotorMatchPage(){
     throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
    }
    if(!payload)throw new Error("We could not read the market response. Please try again.");
-   if(id===requestId.current){setResult(payload);setStarted(true);setSent(false)}
+   if(id===requestId.current){setResult(payload);setStarted(true);setSent(false);setAppliedSuggestion("");}
   }catch(cause){if(id===requestId.current)setError(cause instanceof Error?cause.message:"We could not check the market.")}
   finally{if(id===requestId.current)setLoading(false)}
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
@@ -125,7 +132,7 @@ export default function MotorMatchPage(){
   fetch("/api/motor_match/options?make="+encodeURIComponent(make)+"&model="+encodeURIComponent(model)).then(r=>r.json()).then(payload=>{
    const next=Array.isArray(payload?.years)?payload.years.map(Number).filter(Number.isFinite):[];
    setValidYears(next);
-   setYear(current=>current&&next.includes(current)?current:null);
+   setYear(current=>current&&next.includes(current)?current:next.length?Math.max(...next):null);
   }).catch(()=>setValidYears([]));
  },[make,model]);
  useEffect(()=>{makeInputRef.current?.focus()},[]);
@@ -148,7 +155,8 @@ export default function MotorMatchPage(){
   e.preventDefault();if(!manualInquiry&&(!result||!year))return;setSending(true);setFormError("");
   try{
    const response=await fetch("/api/motor_match/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    manualInquiry,name,email,phone,notes,
+    manualInquiry,name,email,phone,notes:notes+(manualInquiry?"":`
+Customer priority: ${priority}`),
     searchKey:manualInquiry?"":result?.searchKey||"",
     request:{year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance},
     result:manualInquiry?null:result?{state:result.state,depth:result.depth,matchCount:result.matchCount,priceNeeded:result.market.priceNeeded,mileageNeeded:result.market.mileageNeeded,yearNeeded:result.market.yearNeeded}:null
@@ -161,17 +169,26 @@ export default function MotorMatchPage(){
   finally{setSending(false)}
  }
 
+ const matchesBoth=Boolean(result&&result.matchCount>0);
+ const saveOriginal=()=>{if(!originalTarget&&year)setOriginalTarget({year,budget,mileage})};
+ const applySuggestion=(kind:"price"|"mileage"|"year",value:number)=>{
+  saveOriginal();setAppliedSuggestion(kind);
+  if(kind==="price"){setBudget(value);setBudgetDraft(String(value))}
+  if(kind==="mileage")setMileage(value);
+  if(kind==="year")setYear(value);
+ };
+ const restoreOriginal=()=>{if(!originalTarget)return;setYear(originalTarget.year);setBudget(originalTarget.budget);setBudgetDraft(String(originalTarget.budget));setMileage(originalTarget.mileage);setOriginalTarget(null);setAppliedSuggestion("");};
  const headline=useMemo(()=>{
   if(!result)return "";
   if(result.state==="green")return "Yes — this is realistic.";
-  if(result.state==="yellow")return "Possible — but options are limited.";
+  if(result.state==="yellow")return "Your search is possible, but choices are limited.";
   return "You're close, but something has to give.";
  },[result]);
 
  const subhead=useMemo(()=>{
   if(!result)return "";
   if(result.state==="green")return result.depth==="strong"?"Strong availability around your target.":"Healthy availability around your target.";
-  if(result.state==="yellow")return "Your target exists, but there is not much room to be picky about color, condition, or options.";
+  if(result.state==="yellow")return "Some listings may fit, but finding the right condition, history, and options could take patience.";
   return "We couldn't find enough current inventory satisfying both limits at once.";
  },[result]);
 
@@ -187,39 +204,47 @@ export default function MotorMatchPage(){
    <p>Set the vehicle, budget, mileage, and search area. Motor Match checks current inventory and tells you whether those limits actually intersect.</p>
   </section>:null}
 
-  <section className={styles.builder}>
-   <div className={styles.step+" "+styles.stepCar+" "+(!guidedReady?styles.stepActive:"")}>
-    <div className={styles.stepNumber}>1</div>
-    <div className={styles.stepCopy}><span>THE CAR</span><strong>What are you looking for?</strong></div>
+  <section className={styles.builder+" "+styles.guidedBuilder}>
+   <div className={styles.guidedHeading}>
+    <span className={styles.eyebrow}>YOUR MOTOR MATCH</span>
+    <h2>Let's find your next car.</h2>
+    <p>Tell us what you have in mind. We'll show you what's realistic, then help you find the right one.</p>
+   </div>
+   <div className={styles.guidedStep}>
+    <div className={styles.guidedStepTitle}><span className={styles.guidedNum}>1</span><div><strong>What car do you have in mind?</strong><small>Start with a make and model. We can help with the rest.</small></div></div>
     <div className={styles.vehicleArea}>
-     <div className={styles.vehicleGrid}>
-      <Field label="MAKE"><select ref={makeInputRef} className={makeNeedsFocus?styles.makeFocus:""} value={make} onChange={e=>{setMake(e.target.value);setModel("");setYear(null);setTrim("");setResult(null);setStarted(false);setVehicleError("");setSearchReady(false)}}><option value="">Select make</option>{makes.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
-      <Field label="MODEL"><select value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setVehicleError("");setSearchReady(false)}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
-      <Field label="TRIM"><input value={trim} placeholder="Optional" onChange={e=>setTrim(e.target.value)}/></Field>
-      <Field label="YEAR"><select value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+     <div className={styles.guidedVehicleGrid}>
+      <Field label="MAKE"><select ref={makeInputRef} className={makeNeedsFocus?styles.makeFocus:""} value={make} onChange={e=>{setMake(e.target.value);setModel("");setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("");setSearchReady(false)}}><option value="">Select make</option>{makes.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+      <Field label="MODEL"><select value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("");setSearchReady(false)}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
      </div>
-     <button type="button" className={styles.dreamLink} onClick={()=>{setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Don&apos;t see your dream car here - let us know what you&apos;re looking for</button>
+     <button type="button" className={styles.dreamLink} onClick={()=>{setDiscoveryMode(true);setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Not sure what car to buy? Let us help you choose →</button>
     </div>
    </div>
-
-   <div className={styles.step+" "+styles.stepLimits+" "+(flashLimits?styles.stepPulse:"")}>
-    <div className={styles.stepNumber}>2</div>
-    <div className={styles.stepCopy}><span>YOUR LIMITS</span><strong>What matters most?</strong></div>
-    <div className={styles.limitGrid}>
-     <div className={styles.limitCard}><span>YEAR</span><strong>{year??"Choose year"}</strong><input type="range" min={0} max={Math.max(0,sliderYears.length-1)} step={1} value={yearSliderIndex} disabled={!year||sliderYears.length<2} onChange={e=>setYear(sliderYears[Number(e.target.value)]??year)}/></div>
-     <div className={styles.limitCard}><span>COST</span><strong>{money(budget)}</strong><input type="range" min={5000} max={150000} step={500} value={budget} onChange={e=>setBudget(Number(e.target.value))}/></div>
-     <div className={styles.limitCard}><span>MILES</span><strong>{num(mileage)} miles</strong><input type="range" min={5000} max={200000} step={1000} value={mileage} onChange={e=>setMileage(Number(e.target.value))}/></div>
+   <div className={styles.guidedStep}>
+    <div className={styles.guidedStepTitle}><span className={styles.guidedNum}>2</span><div><strong>What's your ideal budget?</strong><small>Enter an amount or use the slider.</small></div></div>
+    <div className={styles.budgetPanel}>
+     <label className={styles.budgetInputLabel}><span>BUDGET (USD)</span><div><span aria-hidden="true">$</span><input aria-label="Budget in dollars" type="number" min={1000} max={1000000} step={500} value={budgetDraft} onChange={e=>setBudgetDraft(e.target.value)} onBlur={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n))}} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/></div></label>
+     <input aria-label="Adjust budget" type="range" min={5000} max={150000} step={500} value={Math.max(5000,Math.min(150000,budget))} onChange={e=>{setBudget(Number(e.target.value));setBudgetDraft(e.target.value)}}/>
+     <div className={styles.rangeEnds}><span>$5,000</span><span>$150,000+</span></div>
     </div>
    </div>
-
-   <div className={styles.step+" "+styles.stepSearch}>
-    <div className={styles.stepNumber}>3</div>
-    <div className={styles.stepCopy}><span>SEARCH</span><strong>Where should we look?</strong></div>
-    <div className={styles.locationGrid}>
-     <Field label="ZIP CODE"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Optional"/></Field>
-     <Field label="RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
-     <button className={styles.primary+" "+(searchReady||started?styles.primaryReady:"")} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"CHECKING THE MARKET…":started?"REFRESH MARKET →":"CHECK THE MARKET →"}</button>
+   <div className={styles.guidedStep}>
+    <div className={styles.guidedStepTitle}><span className={styles.guidedNum}>3</span><div><strong>What matters most?</strong><small>We'll keep this in mind when recommending alternatives.</small></div></div>
+    <div className={styles.priorityGrid} role="radiogroup" aria-label="Your biggest priority">
+     {([["budget","Stay within my budget"],["year","Get a newer car"],["mileage","Find lower mileage"]] as const).map(([value,label])=><label className={styles.priorityChoice} key={value}><input type="radio" name="motor-match-priority" value={value} checked={priority===value} onChange={()=>setPriority(value)}/><span>{label}</span></label>)}
     </div>
+    <button type="button" className={styles.advancedToggle} aria-expanded={advancedOpen} onClick={()=>setAdvancedOpen(v=>!v)}>{advancedOpen?"− Hide preferences":"+ Refine year, mileage, trim and search area"} <span>{year?"· "+year:""} · {num(mileage)} mi · {zip||"Nationwide"}</span></button>
+    {advancedOpen?<div className={styles.advancedGrid}>
+     <Field label="MODEL YEAR"><select value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+     <Field label="MAXIMUM MILEAGE"><input inputMode="numeric" type="number" min={1000} max={500000} step={1000} value={mileage} onChange={e=>setMileage(Math.max(1000,Math.min(500000,Number(e.target.value)||1000)))}/></Field>
+     <Field label="TRIM (OPTIONAL)"><input value={trim} placeholder="Any trim" onChange={e=>setTrim(e.target.value)}/></Field>
+     <Field label="ZIP CODE (OPTIONAL)"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Nationwide"/></Field>
+     <Field label="SEARCH RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
+    </div>:null}
+   </div>
+   <div className={styles.guidedAction}>
+    <button className={styles.primary+" "+styles.primaryReady} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"EXPLORE MY OPTIONS →"}</button>
+    <span>{year?"Starting with model year "+year+". You can change it under preferences.":"Choose a make and model to begin."}</span>
    </div>
   </section>
 
@@ -239,27 +264,30 @@ export default function MotorMatchPage(){
     <p>{subhead}</p>
    </div>
 
+   <div className={styles.evidenceBar}>{result.matchCount>0?<><strong>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in our market sample</strong><span>Availability is not a condition or purchase recommendation. Always inspect vehicle history and mechanical condition.</span></>:<><strong>No listings currently satisfy every limit together.</strong><span>Individual limits may be feasible, but we did not verify a listing that meets all of them.</span></>}</div>
    <div className={styles.targetBlock}>
-    <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>What the market says about each limit.</strong></div>
+    <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>{matchesBoth?"Current evidence supports this combination.":"Individual targets may be possible without working together."}</strong></div>
     <div className={styles.constraintRow}>
-     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks}/>
-     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks}/>
-     <Constraint label="Year" value={String(year)} works={result.matchCount>0}/>
+     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks} combined={matchesBoth}/>
+     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks} combined={matchesBoth}/>
+     <Constraint label="Year" value={String(year)} works={result.matchCount>0} combined={matchesBoth}/>
     </div>
    </div>
 
    {result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
-    <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Relax one constraint — not all three.</strong></div>
+    <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Here are ways to expand your options.</strong></div>
     <div className={styles.moveGrid}>
-     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Raise budget to" value={money(result.market.priceNeeded)} action="Keep year + mileage" active onClick={()=>setBudget(Math.ceil(result.market.priceNeeded!/500)*500)}/>:null}
-     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Allow up to" value={num(result.market.mileageNeeded)+" mi"} action="Keep year + budget" active onClick={()=>setMileage(Math.ceil(result.market.mileageNeeded!/1000)*1000)}/>:null}
-     {result.market.yearNeeded?<Option label="Try model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>setYear(result.market.yearNeeded)}/>:null}
+     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Consider a budget of" value={money(rounded(result.market.priceNeeded,500))} action="Keep year + mileage" active onClick={()=>applySuggestion("price",rounded(result.market.priceNeeded!,500))}/>:null}
+     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Consider up to" value={num(rounded(result.market.mileageNeeded,5000))+" mi"} action="Keep year + budget · check maintenance history" active onClick={()=>applySuggestion("mileage",rounded(result.market.mileageNeeded!,5000))}/>:null}
+     {result.market.yearNeeded?<Option label="Consider model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>applySuggestion("year",result.market.yearNeeded!)}/>:null}
     </div>
    </div>:null}
 
+   {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
+   {appliedSuggestion?<p className={styles.suggestionHint}>Rechecking the market with your revised preference…</p>:null}
    <div className={styles.cta}>
-    <div><span>WANT US TO FIND THE RIGHT ONE?</span><strong>We can take it from here.</strong><p>Mindful Motors can search the public market, auctions, and dealer network using the target you just built.</p></div>
-    {!showForm&&!sent?<button onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>FIND MY CAR →</button>:null}
+    <div><span>MINDFUL MOTOR CO.</span><strong>Want us to find it for you?</strong><p>We have your search preferences. Let us find the right vehicle, check its condition, negotiate the deal, and coordinate delivery.</p><p className={styles.ctaSummary}><b>Your search:</b> {year} {make} {model}{trim?" · "+trim:""} · {money(budget)} · {num(mileage)}-mile target</p></div>
+    {!showForm&&!sent?<button onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>HAVE MINDFUL MOTORS FIND MY CAR →</button>:null}
    </div>
 
    {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
@@ -309,14 +337,14 @@ export default function MotorMatchPage(){
     <button className={styles.modalClose} type="button" onClick={()=>setShowForm(false)} aria-label="Close">×</button>
     <div className={styles.modalIntro}>
      <span>{manualInquiry?"DREAM CAR REQUEST":"FIND MY CAR"}</span>
-     <h2 id="motor-match-form-title">{manualInquiry?"Tell us what you’re looking for.":"Let Mindful Motors take it from here."}</h2>
-     <p>{manualInquiry?"If it isn’t in the list, that doesn’t mean we can’t find it. Tell us what you have in mind and we’ll take a look.":"Send us your Motor Match and we’ll review the live market, auctions, and dealer network for the best fit."}</p>
+     <h2 id="motor-match-form-title">{manualInquiry?(discoveryMode?"We’ll help you choose the right car.":"Tell us what you’re looking for."):"Let Mindful Motors take it from here."}</h2>
+     <p>{manualInquiry?"Tell us what you need, your budget, and what matters to you. We’ll help narrow down the right vehicles.":"Your vehicle, budget, mileage, year, and search area are included automatically. No need to enter them again."}</p>
     </div>
     <form className={styles.leadForm} onSubmit={submitLead}>
      <label><span>NAME</span><input required value={name} onChange={e=>setName(e.target.value)}/></label>
      <label><span>EMAIL</span><input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
      <label><span>PHONE</span><input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label>
-     <label className={styles.notes}><span>{manualInquiry?"WHAT ARE YOU LOOKING FOR?":"ANYTHING ELSE WE SHOULD KNOW?"}</span><textarea required={manualInquiry} value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder={manualInquiry?"Tell us the car, year range, trim, or anything else that matters.":""}/></label>
+     <label className={styles.notes}><span>{manualInquiry?"TELL US WHAT YOU NEED, YOUR BUDGET, AND YOUR PRIORITIES":"ANYTHING ELSE WE SHOULD KNOW?"}</span><textarea required={manualInquiry} value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder={manualInquiry?"Tell us the car, year range, trim, or anything else that matters.":""}/></label>
      <button type="submit" disabled={sending}>{sending?"SENDING…":"FIND MY CAR →"}</button>
      {formError?<div className={styles.formError}>{formError}</div>:null}
     </form>
@@ -326,5 +354,5 @@ export default function MotorMatchPage(){
 }
 
 function Field({label,children}:{label:string;children:React.ReactNode}){return <label className={styles.field}><span>{label}</span>{children}</label>}
-function Constraint({label,value,works}:{label:string;value:string;works:boolean}){return <div className={styles.constraint}><span>{label}</span><strong>{value}</strong><b className={works?styles.good:styles.bad}>{works?"WORKS":"BLOCKING"}</b></div>}
+function Constraint({label,value,works,combined}:{label:string;value:string;works:boolean;combined:boolean}){return <div className={styles.constraint}><span>{label}</span><strong>{value}</strong><b className={works&&combined?styles.good:styles.bad}>{works&&combined?"MATCHED":works?"INDIVIDUALLY POSSIBLE":"NOT VERIFIED"}</b></div>}
 function Option({label,value,action,active,onClick}:{label:string;value:string;action:string;active:boolean;onClick:()=>void}){return <button className={styles.option} disabled={!active} onClick={onClick}><span>{label}</span><strong>{value}</strong><b>{action}</b></button>}

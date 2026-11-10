@@ -208,3 +208,63 @@
 .shellEmbedded .builder{
   overflow:hidden;
 }
+
+
+/* Motor Match guided V2 - customer-first experience */
+.guidedBuilder{background:#fff;overflow:hidden}
+.guidedHeading{padding:28px 28px 22px;border-bottom:1px solid #11111112}
+.guidedHeading .eyebrow{color:#2457ff;font-size:10px;font-weight:900;letter-spacing:.12em}
+.guidedHeading h2{font-size:clamp(30px,3.1vw,44px);letter-spacing:-.045em;line-height:1.08;margin:8px 0;color:#151515}
+.guidedHeading p{font-size:14px;line-height:1.5;color:#666;margin:0}
+.guidedStep{padding:23px 28px;border-bottom:1px solid #11111112}
+.guidedStepTitle{display:flex;align-items:flex-start;gap:12px;margin-bottom:17px}
+.guidedNum{width:30px;height:30px;border-radius:50%;background:#111;color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0}
+.guidedStepTitle strong{display:block;font-size:19px;letter-spacing:-.03em;color:#111}
+.guidedStepTitle small{display:block;font-size:12px;color:#737373;margin-top:4px;line-height:1.5}
+.guidedVehicleGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.guidedBuilder .vehicleArea{margin-left:42px;gap:11px}
+.guidedBuilder .field>span{font-size:10px}
+.guidedBuilder .field select,.guidedBuilder .field input{min-height:45px;font-size:14px}
+.guidedBuilder .dreamLink{font-size:12px;text-align:left}
+.budgetPanel{margin-left:42px;border:1px solid #1112;border-radius:14px;padding:17px 20px;background:#fbfbfa}
+.budgetInputLabel{display:block}
+.budgetInputLabel>span{font-size:10px;letter-spacing:.1em;font-weight:900;color:#777}
+.budgetInputLabel>div{display:flex;align-items:center;gap:5px;font-size:32px;letter-spacing:-.04em;font-weight:850;margin:3px 0 12px}
+.budgetInputLabel input{border:0;background:transparent;outline-offset:3px;font:inherit;letter-spacing:inherit;width:100%;min-width:0;max-width:350px;color:#111}
+.budgetPanel input[type=range]{display:block;width:100%;accent-color:#2457ff;cursor:pointer}
+.rangeEnds{display:flex;justify-content:space-between;margin-top:7px;color:#777;font-size:11px}
+.priorityGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-left:42px}
+.priorityChoice{display:flex;align-items:center;gap:9px;background:#fbfaf7;border:1px solid #1112;border-radius:12px;padding:13px;cursor:pointer;font-size:13px;font-weight:700;line-height:1.3}
+.priorityChoice:has(input:checked){border-color:#2457ff;background:#f0f4ff}
+.priorityChoice input{accent-color:#2457ff;width:16px;height:16px;flex-shrink:0}
+.advancedToggle{margin:15px 0 0 42px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;text-align:left;border:0;background:none;padding:6px 0;color:#2457ff;font-size:12px;font-weight:750;cursor:pointer}
+.advancedToggle span{font-size:11px;color:#777;font-weight:500}
+.advancedGrid{margin:12px 0 0 42px;padding:17px;border:1px solid #1112;background:#f8f8f6;border-radius:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.guidedAction{padding:22px 28px;display:flex;align-items:center;gap:16px}
+.guidedAction .primary{padding:16px 22px;min-width:220px;font-size:12px}
+.guidedAction span{color:#777;font-size:12px;line-height:1.4}
+.evidenceBar{padding:14px 26px;background:#f7f8fa;border-bottom:1px solid #1111;display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 15px}
+.evidenceBar strong{font-size:13px;color:#222}
+.evidenceBar span{font-size:11px;color:#666;line-height:1.45}
+.resetTarget{margin:15px 24px;border:0;background:transparent;color:#2457ff;cursor:pointer;font-size:13px;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.suggestionHint{padding:0 24px;font-size:11px;color:#555}
+.ctaSummary{background:#fff;border:1px solid #1111;border-radius:10px;padding:10px 12px;margin-top:12px!important;color:#333!important}
+.answer .cta button{white-space:normal;text-align:center;max-width:270px;line-height:1.4}
+.targetBlock .constraint b{font-size:9px}
+@media(max-width:880px){.priorityGrid{grid-template-columns:1fr}.advancedGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){
+ .guidedHeading{padding:23px 18px}
+ .guidedHeading h2{font-size:31px}
+ .guidedStep{padding:19px 18px}
+ .guidedStepTitle strong{font-size:17px}
+ .guidedBuilder .vehicleArea,.budgetPanel,.priorityGrid,.advancedToggle,.advancedGrid{margin-left:0}
+ .guidedVehicleGrid{grid-template-columns:1fr 1fr;gap:8px}
+ .budgetPanel{padding:15px}
+ .budgetInputLabel>div{font-size:30px}
+ .advancedGrid{grid-template-columns:1fr;padding:12px}
+ .guidedAction{padding:18px;flex-direction:column;align-items:stretch}
+ .guidedAction .primary{width:100%}
+ .evidenceBar{padding:14px 18px}
+ .answer .cta button{max-width:none}
+}
+@media(max-width:390px){.guidedVehicleGrid{grid-template-columns:1fr}}
