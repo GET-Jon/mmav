@@ -6361,7 +6361,7 @@ export function EvaluationWorkspace({
                                             // Show zero when cleared, but never retain it as a
                                             // leading digit as the user types the replacement.
                                             const digits = event.currentTarget.value.replace(/[^0-9]/g, "");
-                                            const normalized = digits.replace(/^0+(?=\\d)/, "") || "0";
+                                            const normalized = digits.replace(/^0+(?=\d)/, "") || "0";
                                             updateIssuePlanningAmount(issue.id, Number(normalized));
                                           }}
                                           className="w-full min-w-0 bg-transparent px-2 py-1.5 text-xs font-black text-violet-700 outline-none"
