@@ -50,6 +50,13 @@ export type ConditionAnalysisIssue = {
   assumptions: string[];
   confidence: ConditionConfidence;
   sourceText: string;
+  photoReview?: {
+    summary: string;
+    visibleEvidence: string[];
+    limitations: string[];
+    suggestedPlanningEstimate: number;
+    reviewedAt: string;
+  };
 };
 
 export type ConditionAnalysis = {
