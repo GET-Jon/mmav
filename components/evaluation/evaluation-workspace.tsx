@@ -6352,9 +6352,18 @@ export function EvaluationWorkspace({
                                         <span className="pl-2 text-xs text-slate-500">$</span>
                                         <input
                                           aria-label={`Planning amount for ${issue.description}`}
-                                          type="number" min="0" step="1"
-                                          value={issue.planningEstimate}
-                                          onChange={(event) => updateIssuePlanningAmount(issue.id, Number(event.target.value))}
+                                          type="text"
+                                          inputMode="numeric"
+                                          pattern="[0-9]*"
+                                          value={String(issue.planningEstimate)}
+                                          onFocus={(event) => event.currentTarget.select()}
+                                          onChange={(event) => {
+                                            // Show zero when cleared, but never retain it as a
+                                            // leading digit as the user types the replacement.
+                                            const digits = event.currentTarget.value.replace(/[^0-9]/g, "");
+                                            const normalized = digits.replace(/^0+(?=\\d)/, "") || "0";
+                                            updateIssuePlanningAmount(issue.id, Number(normalized));
+                                          }}
                                           className="w-full min-w-0 bg-transparent px-2 py-1.5 text-xs font-black text-violet-700 outline-none"
                                         />
                                       </div>
