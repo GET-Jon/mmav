@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import type { VinDecodeResult } from "@/types/vin";
+import { preserveNhtsaEvidence } from "@/lib/evaluation/vin-evidence";
 import { dedicatedBmwMModel, isNonRetailTrimLabel, decodedPowertrainFuel } from "@/lib/marketcheck/vehicle-identity";
 
 type NhtsaDecodeResponse = {
@@ -111,6 +112,10 @@ export async function POST(request: Request) {
       driveType: result.DriveType || "",
       fuelType: decodedPowertrainFuel(result),
       plantCountry: result.PlantCountry || "",
+      transmission: result.TransmissionStyle || "",
+      engineModel: result.EngineModel || "",
+      enginePowerHp: result.EngineHP || "",
+      identityEvidence: preserveNhtsaEvidence(result),
     };
 
     await recordApiUsageEvent({

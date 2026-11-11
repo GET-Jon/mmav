@@ -10,7 +10,10 @@
     "start": "next start",
     "lint": "eslint",
     "seed:inventory-local": "bash scripts/seed-local-inventory.sh",
-    "sync:local-supabase-env": "bash scripts/sync-local-supabase-env.sh"
+    "sync:local-supabase-env": "bash scripts/sync-local-supabase-env.sh",
+    "test:identity-pilot": "node --test scripts/identity-pilot/test.cjs",
+    "pilot:identity-replay": "node scripts/identity-pilot/replay.cjs",
+    "pilot:identity-ai": "node scripts/identity-pilot/ai-benchmark.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
