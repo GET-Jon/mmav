@@ -304,6 +304,14 @@ Customer priority: ${priority}`),
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
 
   {result?<section ref={resultsRef} id="motor-match-results" className={styles.answer+" "+styles["answer_"+result.state]}>
+   <div className={styles.answerLead}>
+    <div className={styles.resultStatusRow}>
+     <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+     <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
+    </div>
+    <h2>{headline}</h2>
+    <p>{subhead}</p>
+   </div>
    <div className={styles.refinementTop}>
     {result.state==="green"?<>
      <div className={styles.sectionKicker}><span>YOUR MOTOR MATCH</span><strong>Your search is realistic.</strong></div>
@@ -331,14 +339,6 @@ Customer priority: ${priority}`),
     </>}
     {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
     {appliedSuggestion&&loading?<p className={styles.suggestionHint}>Rechecking the market with your revised preference…</p>:null}
-   </div>
-   <div className={styles.answerLead}>
-    <div className={styles.resultStatusRow}>
-     <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
-     <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
-    </div>
-    <h2>{headline}</h2>
-    <p>{subhead}</p>
    </div>
    <div className={styles.evidenceBar}>{result.matchCount>0?<><strong>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in our market sample</strong><span>Availability isn't a condition or purchase recommendation. Check vehicle history and mechanical condition.</span></>:<><strong>No listings currently meet every limit together.</strong><span>We cannot confirm a viable purchase with the available sample.</span></>}</div>
    <div className={styles.cta}>
