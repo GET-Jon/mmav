@@ -77,9 +77,9 @@ export function solveMotorMatch(listings:Listing[],budget:number,mileage:number)
 
 export async function findOlderYear(apiKey:string,input:{make:string;model:string;trim:string;zip:string;distance:number;year:number;budget:number;mileage:number}){
  if(input.year<=1991)return null;
- const base:Record<string,string|number|boolean>={"vehicle.make":input.make,"vehicle.model":input.model,"vehicle.year":Math.max(1990,input.year-3)+"-"+(input.year-1),"retailListing.used":true,"retailListing.price":"1-"+Math.round(input.budget),"retailListing.miles":"1-"+Math.round(input.mileage),limit:100,sort:"year.desc"};
+ const base:Record<string,string|number|boolean>={"vehicle.make":input.make,"vehicle.model":input.model,"vehicle.year":Math.max(older[0]-10,older[older.length-1])+"-"+older[0],"retailListing.used":true,"retailListing.price":"1-"+Math.round(input.budget),"retailListing.miles":"1-"+Math.round(input.mileage),limit:100,sort:"year.desc"};
  if(input.trim)base["vehicle.trim"]=input.trim;if(input.zip){base.zip=input.zip;base.distance=input.distance}
- const r=await query(apiKey,base);const counts=new Map<number,number>();r.listings.forEach(l=>{if(l.year)counts.set(l.year,(counts.get(l.year)||0)+1)});
+ const r=await query(apiKey,base);const counts=new Map<number,number>();r.listings.forEach(l=>{if(l.year&&older.includes(l.year))counts.set(l.year,(counts.get(l.year)||0)+1)});
  return Array.from(counts.entries()).filter(([,c])=>c>=3).sort((a,b)=>b[0]-a[0])[0]?.[0]||Array.from(counts.keys()).sort((a,b)=>b-a)[0]||null;
 }
 
