@@ -36,19 +36,14 @@ export default function MotorMatchPage(){
  const [appliedSuggestion,setAppliedSuggestion]=useState("");
  const [budgetDraft,setBudgetDraft]=useState("30000");
  const [discoveryMode,setDiscoveryMode]=useState(false);
+ const [activePanel,setActivePanel]=useState<0|1|2>(0);
  const [embedded,setEmbedded]=useState(false);
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
- const hasFlashedLimits=useRef(false);
- const [flashLimits,setFlashLimits]=useState(false);
- const [searchReady,setSearchReady]=useState(false);
  const rounded=(value:number,step:number)=>Math.ceil(value/step)*step;
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
- const guidedReady=Boolean(make.trim()&&model.trim()&&year&&String(year).length===4);
  const makeNeedsFocus=!make.trim();
- const sliderYears=useMemo(()=>[...validYears].sort((a,b)=>a-b),[validYears]);
- const yearSliderIndex=year?Math.max(0,sliderYears.indexOf(year)):0;
 
  const analyze=useCallback(async()=>{
   if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
@@ -136,14 +131,6 @@ export default function MotorMatchPage(){
   }).catch(()=>setValidYears([]));
  },[make,model]);
  useEffect(()=>{makeInputRef.current?.focus()},[]);
- useEffect(()=>{
-  if(!guidedReady||hasFlashedLimits.current)return;
-  hasFlashedLimits.current=true;
-  setFlashLimits(true);
-  setSearchReady(false);
-  const timer=window.setTimeout(()=>{setFlashLimits(false);setSearchReady(true)},4000);
-  return()=>window.clearTimeout(timer);
- },[guidedReady]);
  useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),650);return()=>window.clearTimeout(t)},[analyze,started]);
  useEffect(()=>{
   if(!loading||started){setLoadingMessageIndex(0);return}
@@ -204,47 +191,46 @@ Customer priority: ${priority}`),
    <p>Set the vehicle, budget, mileage, and search area. Motor Match checks current inventory and tells you whether those limits actually intersect.</p>
   </section>:null}
 
-  <section className={styles.builder+" "+styles.guidedBuilder}>
-   <div className={styles.guidedHeading}>
-    <span className={styles.eyebrow}>YOUR MOTOR MATCH</span>
-    <h2>Let's find your next car.</h2>
-    <p>Tell us what you have in mind. We'll show you what's realistic, then help you find the right one.</p>
-   </div>
-   <div className={styles.guidedStep}>
-    <div className={styles.guidedStepTitle}><span className={styles.guidedNum}>1</span><div><strong>What car do you have in mind?</strong><small>Start with a make and model. We can help with the rest.</small></div></div>
-    <div className={styles.vehicleArea}>
-     <div className={styles.guidedVehicleGrid}>
-      <Field label="MAKE"><select ref={makeInputRef} className={makeNeedsFocus?styles.makeFocus:""} value={make} onChange={e=>{setMake(e.target.value);setModel("");setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("");setSearchReady(false)}}><option value="">Select make</option>{makes.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
-      <Field label="MODEL"><select value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("");setSearchReady(false)}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
-     </div>
-     <button type="button" className={styles.dreamLink} onClick={()=>{setDiscoveryMode(true);setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Not sure what car to buy? Let us help you choose →</button>
-    </div>
-   </div>
-   <div className={styles.guidedStep}>
-    <div className={styles.guidedStepTitle}><span className={styles.guidedNum}>2</span><div><strong>What's your ideal budget?</strong><small>Enter an amount or use the slider.</small></div></div>
-    <div className={styles.budgetPanel}>
-     <label className={styles.budgetInputLabel}><span>BUDGET (USD)</span><div><span aria-hidden="true">$</span><input aria-label="Budget in dollars" type="number" min={1000} max={1000000} step={500} value={budgetDraft} onChange={e=>setBudgetDraft(e.target.value)} onBlur={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n))}} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/></div></label>
-     <input aria-label="Adjust budget" type="range" min={5000} max={150000} step={500} value={Math.max(5000,Math.min(150000,budget))} onChange={e=>{setBudget(Number(e.target.value));setBudgetDraft(e.target.value)}}/>
-     <div className={styles.rangeEnds}><span>$5,000</span><span>$150,000+</span></div>
-    </div>
-   </div>
-   <div className={styles.guidedStep}>
-    <div className={styles.guidedStepTitle}><span className={styles.guidedNum}>3</span><div><strong>What matters most?</strong><small>We'll keep this in mind when recommending alternatives.</small></div></div>
-    <div className={styles.priorityGrid} role="radiogroup" aria-label="Your biggest priority">
-     {([["budget","Stay within my budget"],["year","Get a newer car"],["mileage","Find lower mileage"]] as const).map(([value,label])=><label className={styles.priorityChoice} key={value}><input type="radio" name="motor-match-priority" value={value} checked={priority===value} onChange={()=>setPriority(value)}/><span>{label}</span></label>)}
-    </div>
-    <button type="button" className={styles.advancedToggle} aria-expanded={advancedOpen} onClick={()=>setAdvancedOpen(v=>!v)}>{advancedOpen?"− Hide preferences":"+ Refine year, mileage, trim and search area"} <span>{year?"· "+year:""} · {num(mileage)} mi · {zip||"Nationwide"}</span></button>
-    {advancedOpen?<div className={styles.advancedGrid}>
-     <Field label="MODEL YEAR"><select value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
-     <Field label="MAXIMUM MILEAGE"><input inputMode="numeric" type="number" min={1000} max={500000} step={1000} value={mileage} onChange={e=>setMileage(Math.max(1000,Math.min(500000,Number(e.target.value)||1000)))}/></Field>
-     <Field label="TRIM (OPTIONAL)"><input value={trim} placeholder="Any trim" onChange={e=>setTrim(e.target.value)}/></Field>
-     <Field label="ZIP CODE (OPTIONAL)"><input inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Nationwide"/></Field>
-     <Field label="SEARCH RADIUS"><select value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
-    </div>:null}
-   </div>
-   <div className={styles.guidedAction}>
-    <button className={styles.primary+" "+styles.primaryReady} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"EXPLORE MY OPTIONS →"}</button>
-    <span>{year?"Starting with model year "+year+". You can change it under preferences.":"Choose a make and model to begin."}</span>
+
+  <section className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
+   <div className={styles.guidedHeading}><span className={styles.eyebrow}>YOUR MOTOR MATCH</span><h2>Let's find your next car.</h2><p>Three quick choices. Adjust them anytime, and see what the market says below.</p></div>
+   <div className={styles.panelTrack} data-active={activePanel}>
+    <section className={styles.expandPanel+" "+(activePanel===0?styles.expandPanelOpen:styles.expandPanelClosed)}>
+     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><strong>What car do you have in mind?</strong><small>{make&&model?make+" "+model:"The car"}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
+     <div className={styles.panelContent} id="mm-car" aria-hidden={activePanel!==0}><div className={styles.panelInner}>
+      <h3>What car do you have in mind?</h3><p>Start with a make and model. We can help with the rest.</p>
+      <div className={styles.guidedVehicleGrid}>
+       <Field label="MAKE"><select ref={makeInputRef} tabIndex={activePanel===0?0:-1} className={makeNeedsFocus?styles.makeFocus:""} value={make} onChange={e=>{setMake(e.target.value);setModel("");setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("")}}><option value="">Select make</option>{makes.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+       <Field label="MODEL"><select tabIndex={activePanel===0?0:-1} value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("");if(e.target.value)setActivePanel(1)}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+      </div>
+      <button type="button" tabIndex={activePanel===0?0:-1} className={styles.dreamLink} onClick={()=>{setDiscoveryMode(true);setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Not sure what car to buy? Let us help you choose →</button>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===0?0:-1} className={styles.panelNext} disabled={!make||!model} onClick={()=>setActivePanel(1)}>Continue to budget →</button></div>
+     </div></div>
+    </section>
+    <section className={styles.expandPanel+" "+(activePanel===1?styles.expandPanelOpen:styles.expandPanelClosed)}>
+     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===1} aria-controls="mm-budget" onClick={()=>setActivePanel(1)}><span className={styles.panelBadge}>2</span><span className={styles.panelHandleWords}><strong>What's your ideal budget?</strong><small>{money(budget)}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===1?"−":"+"}</span></button>
+     <div className={styles.panelContent} id="mm-budget" aria-hidden={activePanel!==1}><div className={styles.panelInner}>
+      <h3>What's your ideal budget?</h3><p>Enter an amount or use the slider. You can change it anytime.</p>
+      <div className={styles.budgetPanel}><label className={styles.budgetInputLabel}><span>BUDGET (USD)</span><div><span aria-hidden="true">$</span><input tabIndex={activePanel===1?0:-1} aria-label="Budget in dollars" type="number" min={1000} max={1000000} step={500} value={budgetDraft} onChange={e=>setBudgetDraft(e.target.value)} onBlur={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n))}} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/></div></label><input tabIndex={activePanel===1?0:-1} aria-label="Adjust budget" type="range" min={5000} max={150000} step={500} value={Math.max(5000,Math.min(150000,budget))} onChange={e=>{setBudget(Number(e.target.value));setBudgetDraft(e.target.value)}}/><div className={styles.rangeEnds}><span>$5,000</span><span>$150,000+</span></div></div>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===1?0:-1} className={styles.panelNext} onClick={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n));setActivePanel(2)}}>Continue to priorities →</button></div>
+     </div></div>
+    </section>
+    <section className={styles.expandPanel+" "+(activePanel===2?styles.expandPanelOpen:styles.expandPanelClosed)}>
+     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===2} aria-controls="mm-priorities" onClick={()=>setActivePanel(2)}><span className={styles.panelBadge}>3</span><span className={styles.panelHandleWords}><strong>What matters most?</strong><small>{priority==="budget"?"Stay within budget":priority==="year"?"Newer model year":"Lower mileage"}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===2?"−":"+"}</span></button>
+     <div className={styles.panelContent} id="mm-priorities" aria-hidden={activePanel!==2}><div className={styles.panelInner}>
+      <h3>What matters most?</h3><p>Choose your biggest priority. Refine any other details.</p>
+      <div className={styles.priorityGrid} role="radiogroup" aria-label="Your biggest priority">{([["budget","Stay within my budget"],["year","Get a newer car"],["mileage","Find lower mileage"]] as const).map(([value,label])=><label className={styles.priorityChoice} key={value}><input tabIndex={activePanel===2?0:-1} type="radio" name="motor-match-priority" value={value} checked={priority===value} onChange={()=>setPriority(value)}/><span>{label}</span></label>)}</div>
+      <button type="button" tabIndex={activePanel===2?0:-1} className={styles.advancedToggle} aria-expanded={advancedOpen} onClick={()=>setAdvancedOpen(v=>!v)}>{advancedOpen?"− Hide preferences":"+ Refine year, mileage, trim and search area"} <span>{year?"· "+year:""} · {num(mileage)} mi · {zip||"Nationwide"}</span></button>
+      {advancedOpen?<div className={styles.advancedGrid}>
+       <Field label="MODEL YEAR"><select tabIndex={activePanel===2?0:-1} value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
+       <Field label="MAXIMUM MILEAGE"><input tabIndex={activePanel===2?0:-1} inputMode="numeric" type="number" min={1000} max={500000} step={1000} value={mileage} onChange={e=>setMileage(Math.max(1000,Math.min(500000,Number(e.target.value)||1000)))}/></Field>
+       <Field label="TRIM (OPTIONAL)"><input tabIndex={activePanel===2?0:-1} value={trim} placeholder="Any trim" onChange={e=>setTrim(e.target.value)}/></Field>
+       <Field label="ZIP CODE (OPTIONAL)"><input tabIndex={activePanel===2?0:-1} inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Nationwide"/></Field>
+       <Field label="SEARCH RADIUS"><select tabIndex={activePanel===2?0:-1} value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
+      </div>:null}
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===2?0:-1} className={styles.primary+" "+styles.primaryReady} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"EXPLORE MY OPTIONS →"}</button></div>
+     </div></div>
+    </section>
    </div>
   </section>
 
