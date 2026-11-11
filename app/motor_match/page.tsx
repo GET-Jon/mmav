@@ -11,6 +11,7 @@ type MatchResponse={
  message:string;searchKey:string;providerTotal:number;sampleSize:number;
  apiUsage:{callsThisUpdate:number;breakdown:Array<{label:string;purpose:string}>};
  cache?:{hit:boolean;ttlSeconds:number};
+ fallbackOptions?:Array<{kind:"year"|"trim"|"distance";value:number|string;label:string;detail:string}>;
 };
 
 const money=(v:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(v);
@@ -40,6 +41,7 @@ export default function MotorMatchPage(){
  const [budgetChosen,setBudgetChosen]=useState(false);
  const [priorityChosen,setPriorityChosen]=useState(false);
  const [embedded,setEmbedded]=useState(false);
+ const [vehicleSuggestion,setVehicleSuggestion]=useState<{model:string;year:number}|null>(null);
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
  const resultsRef=useRef<HTMLElement|null>(null);
@@ -51,14 +53,14 @@ export default function MotorMatchPage(){
 
  const analyze=useCallback(async()=>{
   if(!vehicleReady||!year){scrollAfterSearch.current=false;setError("Add a year, make, and model first.");return}
-  const id=++requestId.current;setLoading(true);setError("");setVehicleError("");
+  const id=++requestId.current;setLoading(true);setError("");setVehicleError("");setVehicleSuggestion(null);
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
    const raw=await response.text();let payload:any=null;try{payload=raw?JSON.parse(raw):null}catch{}
    setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
    if(!response.ok){
-    if(payload?.code==="vehicle_unverified"){
-     if(id===requestId.current){scrollAfterSearch.current=false;setResult(null);setStarted(false);setVehicleError(payload.error||"We couldn't verify that vehicle.");}
+    if(payload?.code==="vehicle_unverified"||payload?.code==="invalid_model_year"){
+     if(id===requestId.current){scrollAfterSearch.current=false;setResult(null);setStarted(false);setVehicleSuggestion(payload.suggestion||null);setActivePanel(0);setVehicleError(payload.error||"We couldn't verify that vehicle.");}
      return;
     }
     throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
@@ -254,7 +256,7 @@ Customer priority: ${priority}`),
   </section>
 
   {sent&&manualInquiry?<div className={styles.success+" "+styles.manualSuccess}><strong>Got it.</strong><span>We’ll take a look at what you’re trying to find and get back to you.</span></div>:null}
-  {vehicleError?<div className={styles.vehicleError}><strong>CHECK THE VEHICLE</strong><span>{vehicleError}</span></div>:null}
+  {vehicleError?<div className={styles.vehicleError}><strong>CHECK THE VEHICLE</strong><span>{vehicleError}</span>{vehicleSuggestion?<button type="button" className={styles.vehicleSuggestionButton} onClick={()=>{setModel(vehicleSuggestion.model);setYear(vehicleSuggestion.year);setTrim("");setVehicleError("");setVehicleSuggestion(null);setActivePanel(2)}}>Switch to {make} {vehicleSuggestion.model} →</button>:null}</div>:null}
   {error?<div className={styles.error}>{error}</div>:null}
 
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
@@ -285,6 +287,22 @@ Customer priority: ${priority}`),
      {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Consider a budget of" value={money(rounded(result.market.priceNeeded,500))} action="Keep year + mileage" active onClick={()=>applySuggestion("price",rounded(result.market.priceNeeded!,500))}/>:null}
      {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Consider up to" value={num(rounded(result.market.mileageNeeded,5000))+" mi"} action="Keep year + budget · check maintenance history" active onClick={()=>applySuggestion("mileage",rounded(result.market.mileageNeeded!,5000))}/>:null}
      {result.market.yearNeeded?<Option label="Consider model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>applySuggestion("year",result.market.yearNeeded!)}/>:null}
+    </div>
+   </div>:null}
+
+   {result.state!=="green"&&!result.market.priceNeeded&&!result.market.mileageNeeded&&!result.market.yearNeeded?<div className={styles.nextMoves}>
+    <div className={styles.sectionKicker}><span>OTHER WAYS TO SEARCH</span><strong>We don't have enough matching market evidence for a specific price or mileage adjustment.</strong></div>
+    <p className={styles.fallbackExplanation}>These changes broaden the search, but do not guarantee available listings.</p>
+    <div className={styles.moveGrid}>
+     {(result.fallbackOptions||[]).map((choice,i)=><button className={styles.option} key={i} type="button" onClick={()=>{
+      saveOriginal();
+      if(choice.kind==="year")setYear(Number(choice.value));
+      if(choice.kind==="trim")setTrim("");
+      if(choice.kind==="distance")setDistance(Number(choice.value));
+      setAppliedSuggestion(choice.kind);
+      setActivePanel(2);
+     }}><span>TRY A DIFFERENT SEARCH</span><strong>{choice.label}</strong><b>{choice.detail}</b></button>)}
+     <button className={styles.option} type="button" onClick={()=>{setActivePanel(2);setAdvancedOpen(true);window.scrollTo({top:0,behavior:"smooth"})}}><span>ADJUST YOUR LIMITS</span><strong>Review your preferences</strong><b>Change mileage, year, trim, or search area manually</b></button>
     </div>
    </div>:null}
 
