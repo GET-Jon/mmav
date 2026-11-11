@@ -636,3 +636,59 @@
   justify-self:center;
  }
 }
+
+
+/* Scope the two-line rotated tab treatment ONLY to partly collapsed tabs.
+   The all-closed results summary must retain horizontal labels and values. */
+@media(min-width:901px){
+ .panelTrackAllClosed .expandPanelClosed .panelHandle{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:flex-start;
+  min-height:98px;
+  height:98px;
+  padding:16px 19px;
+  gap:13px;
+ }
+ .panelTrackAllClosed .expandPanelClosed .panelHandleWords{
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  justify-content:center;
+  align-items:flex-start;
+  width:auto;
+  height:auto;
+  min-width:0;
+  max-height:none;
+  gap:9px;
+  overflow:hidden;
+  writing-mode:horizontal-tb;
+  transform:none;
+ }
+ .panelTrackAllClosed .expandPanelClosed .panelHandleWords small,
+ .panelTrackAllClosed .expandPanelClosed .panelHandleWords strong{
+  writing-mode:horizontal-tb;
+  transform:none;
+  flex:initial;
+  display:block;
+  padding:0;
+  border:0;
+  width:100%;
+  height:auto;
+  max-height:none;
+  max-width:100%;
+  line-height:1.3;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+ }
+ .panelTrackAllClosed .expandPanelClosed .panelHandleWords small{font-size:10px;letter-spacing:.12em}
+ .panelTrackAllClosed .expandPanelClosed .panelHandleWords strong{font-size:16px}
+ .panelTrackAllClosed .expandPanelClosed .panelHandleChevron{margin:0}
+}
+.refinementOutcome,.refinementProgress{border-radius:12px;padding:13px 16px;margin-bottom:16px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.refinementOutcome{background:#f0f6ee;border:1px solid #b8cfb5;color:#24462b}
+.refinementProgress{background:#f1ede5;border:1px solid #d7c8af;color:#5b4428}
+.refinementOutcome strong{font-size:15px}
+.refinementOutcome span{font-size:12px;line-height:1.45}
