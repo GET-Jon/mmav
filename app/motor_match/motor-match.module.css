@@ -516,3 +516,17 @@
  .panelTrackAllClosed .panelHandleWords small{font-size:9px}
  .panelTrackAllClosed .panelHandleWords strong{font-size:13px}
 }
+
+
+/* Three side-by-side choices at desktop size, responsive below. */
+.refinementGrid{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
+.refinementCard{height:100%;box-sizing:border-box}
+.refinementCard>strong{font-size:clamp(17px,1.75vw,23px)}
+/* Market verdict leads; evidence stays after refinement options. */
+.answer .answerLead{border-bottom:1px solid #eadad5}
+@media(max-width:900px){
+ .refinementGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:650px){
+ .refinementGrid{grid-template-columns:1fr}
+}
