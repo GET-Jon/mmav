@@ -422,3 +422,19 @@
  .panelHandleWords strong{font-size:15px;white-space:normal;max-height:none}
  .panelHandleChevron{color:#987344}
 }
+
+
+/* Keep horizontal geometry stable as results, tabs, and forms change. */
+:global(html){scrollbar-gutter:stable}
+.shell,.shellEmbedded{width:100%;max-width:1260px;min-width:0;box-sizing:border-box}
+.panelBuilder,.panelTrack,.answer{width:100%;min-width:0;box-sizing:border-box}
+.panelTrack{overflow:hidden}
+.panelInner,.panelInner .advancedGrid,.panelInner .budgetPanel{min-width:0;max-width:100%;box-sizing:border-box}
+.answer{scroll-margin-top:18px}
+.fallbackExplanation{margin:0 0 14px;font-size:12px;line-height:1.5;color:#686158}
+.nextMoves .option{min-width:0}
+.nextMoves .option strong{font-size:clamp(16px,1.7vw,23px);line-height:1.2;white-space:normal;overflow-wrap:anywhere}
+.nextMoves .option b{white-space:normal;line-height:1.45}
+.vehicleSuggestionButton{border:0;background:#171715;color:#fff;border-radius:9px;padding:11px 14px;font-size:12px;font-weight:800;cursor:pointer}
+.vehicleSuggestionButton:hover{background:#3e362e}
+@media(max-width:900px){.nextMoves .option strong{font-size:19px}}
