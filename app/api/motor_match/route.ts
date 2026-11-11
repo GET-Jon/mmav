@@ -44,7 +44,7 @@ export async function POST(request:Request){
    }
   }
   const fallbackOptions:Array<{kind:"year"|"trim"|"distance";value:number|string;label:string;detail:string}>=[];
-  if(solved.state!=="green"&&!solved.market.priceNeeded&&!solved.market.mileageNeeded&&!solved.market.yearNeeded){
+  if(solved.state!=="green"){
    const older=validYears.filter(y=>y<year).sort((a,b)=>b-a);
    if(older.length){
     const candidate=older.find(y=>y<=year-3)||older[0];
