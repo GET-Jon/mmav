@@ -45,6 +45,7 @@ export default function MotorMatchPage(){
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
  const resultsRef=useRef<HTMLElement|null>(null);
+ const builderRef=useRef<HTMLElement|null>(null);
  const scrollAfterSearch=useRef(false);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
  const rounded=(value:number,step:number)=>Math.ceil(value/step)*step;
@@ -191,6 +192,42 @@ Customer priority: ${priority}`),
   if(kind==="year")setYear(value);
  };
  const restoreOriginal=()=>{if(!originalTarget)return;setYear(originalTarget.year);setBudget(originalTarget.budget);setBudgetDraft(String(originalTarget.budget));setMileage(originalTarget.mileage);setOriginalTarget(null);setAppliedSuggestion("");};
+ const refinementOptions=useMemo(()=>{
+  if(!result||result.state==="green")return [];
+  type Choice={key:string;heading:string;value:string;detail:string;verified:boolean;action:()=>void;focus:"year"|"mileage"|"budget"|"other"};
+  const choices:Choice[]=[];
+  const add=(item:Choice)=>{if(!choices.some(c=>c.key===item.key))choices.push(item)};
+  const yearOption=result.market.yearNeeded;
+  const mileageOption=result.market.mileageNeeded;
+  const priceOption=result.market.priceNeeded;
+  const alternateYear=(result.fallbackOptions||[]).find(c=>c.kind==="year");
+  if(yearOption&&yearOption<Number(year)){
+   add({key:"year-verified",heading:"Prioritize lower mileage",value:String(yearOption)+" "+make+" "+model,detail:"Keep your budget and mileage target · supported by sampled listings",verified:true,focus:"year",action:()=>applySuggestion("year",yearOption)});
+  }else if(alternateYear&&Number(alternateYear.value)<Number(year)){
+   add({key:"year-explore",heading:"Prioritize lower mileage",value:"Explore "+alternateYear.value+" models",detail:"Keep mileage and budget · availability not yet verified",verified:false,focus:"year",action:()=>applySuggestion("year",Number(alternateYear.value))});
+  }
+  if(mileageOption&&mileageOption>mileage){
+   const value=rounded(mileageOption,5000);
+   add({key:"mileage-verified",heading:"Prioritize a newer car",value:"Allow up to "+num(value)+" miles",detail:"Keep model year and budget · supported by sampled listings; inspect maintenance history",verified:true,focus:"mileage",action:()=>applySuggestion("mileage",value)});
+  }
+  if(priceOption&&priceOption>budget){
+   const value=rounded(priceOption,500);
+   add({key:"price-verified",heading:"Keep year and mileage",value:"Consider "+money(value),detail:"Raise the budget · supported by sampled listings",verified:true,focus:"budget",action:()=>applySuggestion("price",value)});
+  }
+  // Always offer both trade-off directions without fabricating an inventory threshold.
+  if(!choices.some(c=>c.focus==="year")){
+   add({key:"year-review",heading:"Prioritize lower mileage",value:"Explore other model years",detail:"Review valid older years while keeping your mileage goal · availability unconfirmed",verified:false,focus:"year",action:()=>{setActivePanel(2);setAdvancedOpen(true);builderRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}});
+  }
+  if(!choices.some(c=>c.focus==="mileage")){
+   add({key:"mileage-review",heading:"Prioritize a newer car",value:"Revisit the mileage limit",detail:"Keep your selected year; adjust mileage to broaden the search · no verified threshold yet",verified:false,focus:"mileage",action:()=>{setActivePanel(2);setAdvancedOpen(true);builderRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}});
+  }
+  if(choices.length<2){
+   add({key:"budget-review",heading:"Keep year and mileage",value:"Review your budget",detail:"Explore a higher price ceiling; no verified threshold yet",verified:false,focus:"budget",action:()=>{setActivePanel(1);builderRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}});
+  }
+  const order=priority==="year"?["mileage","year","budget","other"]:priority==="mileage"?["year","mileage","budget","other"]:["year","mileage","budget","other"];
+  return choices.sort((a,b)=>order.indexOf(a.focus)-order.indexOf(b.focus));
+ // Deliberately recalculated with current search evidence; suggestions update the original search.
+ },[result,priority,year,make,model,budget,mileage]);
  const headline=useMemo(()=>{
   if(!result)return "";
   if(result.state==="green")return "Yes — this is realistic.";
@@ -219,7 +256,7 @@ Customer priority: ${priority}`),
 
   {embedded?<div className={styles.embedProcess}><strong>THREE QUICK CHOICES</strong><span>Car → Budget → Priorities → Market results</span></div>:null}
 
-  <section className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
+  <section ref={builderRef} className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
    <div className={styles.panelTrack} data-active={activePanel}>
     <section className={styles.expandPanel+" "+(activePanel===0?styles.expandPanelOpen:styles.expandPanelClosed)}>
      <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><strong>{make&&model?model:"Choose car"}</strong></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
@@ -267,6 +304,34 @@ Customer priority: ${priority}`),
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
 
   {result?<section ref={resultsRef} id="motor-match-results" className={styles.answer+" "+styles["answer_"+result.state]}>
+   <div className={styles.refinementTop}>
+    {result.state==="green"?<>
+     <div className={styles.sectionKicker}><span>YOUR MOTOR MATCH</span><strong>Your search is realistic.</strong></div>
+     <div className={styles.refinementSuccess}>
+      <strong>{year} {make} {model}</strong>
+      <span>{money(budget)} budget · up to {num(mileage)} miles</span>
+      <p>{result.matchCount} matching listings in the current market sample. Vehicle condition and availability still require verification.</p>
+     </div>
+    </>:result.state==="yellow"?<>
+     <div className={styles.sectionKicker}><span>YOUR MOTOR MATCH</span><strong>Possible, but choices are limited.</strong></div>
+     <div className={styles.refinementSuccess}>
+      <strong>{year} {make} {model}</strong>
+      <span>{money(budget)} budget · up to {num(mileage)} miles</span>
+      <p>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in the current sample. If you'd like more options, consider either direction below.</p>
+     </div>
+     <div className={styles.refinementGrid}>
+      {refinementOptions.slice(0,3).map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={choice.action}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
+     </div>
+    </>:<>
+     <div className={styles.sectionKicker}><span>REFINE YOUR SEARCH</span><strong>Choose what matters more to you.</strong></div>
+     <p className={styles.refinementIntro}>We couldn't verify a listing that meets all your limits. Try one of these approaches—verified adjustments are labeled, and exploratory choices are not guarantees.</p>
+     <div className={styles.refinementGrid}>
+      {refinementOptions.map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={choice.action}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
+     </div>
+    </>}
+    {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
+    {appliedSuggestion&&loading?<p className={styles.suggestionHint}>Rechecking the market with your revised preference…</p>:null}
+   </div>
    <div className={styles.answerLead}>
     <div className={styles.resultStatusRow}>
      <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
@@ -275,44 +340,7 @@ Customer priority: ${priority}`),
     <h2>{headline}</h2>
     <p>{subhead}</p>
    </div>
-
-   <div className={styles.evidenceBar}>{result.matchCount>0?<><strong>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in our market sample</strong><span>Availability is not a condition or purchase recommendation. Always inspect vehicle history and mechanical condition.</span></>:<><strong>No listings currently satisfy every limit together.</strong><span>Individual limits may be feasible, but we did not verify a listing that meets all of them.</span></>}</div>
-   <div className={styles.targetBlock}>
-    <div className={styles.sectionKicker}><span>YOUR TARGET</span><strong>{matchesBoth?"Current evidence supports this combination.":"Individual targets may be possible without working together."}</strong></div>
-    <div className={styles.constraintRow}>
-     <Constraint label="Budget" value={money(budget)} works={result.constraintStatus.priceWorks} combined={matchesBoth}/>
-     <Constraint label="Mileage" value={num(mileage)+" mi"} works={result.constraintStatus.mileageWorks} combined={matchesBoth}/>
-     <Constraint label="Year" value={String(year)} works={result.matchCount>0} combined={matchesBoth}/>
-    </div>
-   </div>
-
-   {result.state!=="green"&&(Boolean(result.market.priceNeeded&&result.market.priceNeeded>budget)||Boolean(result.market.mileageNeeded&&result.market.mileageNeeded>mileage)||Boolean(result.market.yearNeeded))?<div className={styles.nextMoves}>
-    <div className={styles.sectionKicker}><span>BEST NEXT MOVE</span><strong>Here are ways to expand your options.</strong></div>
-    <div className={styles.moveGrid}>
-     {result.market.priceNeeded&&result.market.priceNeeded>budget?<Option label="Consider a budget of" value={money(rounded(result.market.priceNeeded,500))} action="Keep year + mileage" active onClick={()=>applySuggestion("price",rounded(result.market.priceNeeded!,500))}/>:null}
-     {result.market.mileageNeeded&&result.market.mileageNeeded>mileage?<Option label="Consider up to" value={num(rounded(result.market.mileageNeeded,5000))+" mi"} action="Keep year + budget · check maintenance history" active onClick={()=>applySuggestion("mileage",rounded(result.market.mileageNeeded!,5000))}/>:null}
-     {result.market.yearNeeded?<Option label="Consider model year" value={String(result.market.yearNeeded)} action="Keep budget + mileage" active onClick={()=>applySuggestion("year",result.market.yearNeeded!)}/>:null}
-    </div>
-   </div>:null}
-
-   {result.state!=="green"&&!result.market.priceNeeded&&!result.market.mileageNeeded&&!result.market.yearNeeded?<div className={styles.nextMoves}>
-    <div className={styles.sectionKicker}><span>OTHER WAYS TO SEARCH</span><strong>We don't have enough matching market evidence for a specific price or mileage adjustment.</strong></div>
-    <p className={styles.fallbackExplanation}>These changes broaden the search, but do not guarantee available listings.</p>
-    <div className={styles.moveGrid}>
-     {(result.fallbackOptions||[]).map((choice,i)=><button className={styles.option} key={i} type="button" onClick={()=>{
-      saveOriginal();
-      if(choice.kind==="year")setYear(Number(choice.value));
-      if(choice.kind==="trim")setTrim("");
-      if(choice.kind==="distance")setDistance(Number(choice.value));
-      setAppliedSuggestion(choice.kind);
-      setActivePanel(2);
-     }}><span>TRY A DIFFERENT SEARCH</span><strong>{choice.label}</strong><b>{choice.detail}</b></button>)}
-     <button className={styles.option} type="button" onClick={()=>{setActivePanel(2);setAdvancedOpen(true);window.scrollTo({top:0,behavior:"smooth"})}}><span>ADJUST YOUR LIMITS</span><strong>Review your preferences</strong><b>Change mileage, year, trim, or search area manually</b></button>
-    </div>
-   </div>:null}
-
-   {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
-   {appliedSuggestion?<p className={styles.suggestionHint}>Rechecking the market with your revised preference…</p>:null}
+   <div className={styles.evidenceBar}>{result.matchCount>0?<><strong>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in our market sample</strong><span>Availability isn't a condition or purchase recommendation. Check vehicle history and mechanical condition.</span></>:<><strong>No listings currently meet every limit together.</strong><span>We cannot confirm a viable purchase with the available sample.</span></>}</div>
    <div className={styles.cta}>
     <div><span>MINDFUL MOTOR CO.</span><strong>Want us to find it for you?</strong><p>We have your search preferences. Let us find the right vehicle, check its condition, negotiate the deal, and coordinate delivery.</p><p className={styles.ctaSummary}><b>Your search:</b> {year} {make} {model}{trim?" · "+trim:""} · {money(budget)} · {num(mileage)}-mile target</p></div>
     {!showForm&&!sent?<button onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>HAVE MINDFUL MOTORS FIND MY CAR →</button>:null}
