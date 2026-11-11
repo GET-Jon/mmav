@@ -193,7 +193,7 @@ Customer priority: ${priority}`),
 
 
   <section className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
-   <div className={styles.guidedHeading}><span className={styles.eyebrow}>YOUR MOTOR MATCH</span><h2>Let's find your next car.</h2><p>Three quick choices. Adjust them anytime, and see what the market says below.</p></div>
+   <div className={styles.guidedHeading}><span className={styles.eyebrow}>YOUR MOTOR MATCH</span><h2>Let's find your next car.</h2><p>Three quick choices. Adjust them anytime, then see what the market says below.</p></div>
    <div className={styles.panelTrack} data-active={activePanel}>
     <section className={styles.expandPanel+" "+(activePanel===0?styles.expandPanelOpen:styles.expandPanelClosed)}>
      <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><strong>What car do you have in mind?</strong><small>{make&&model?make+" "+model:"The car"}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
