@@ -188,12 +188,13 @@ Customer priority: ${priority}`),
   {!embedded?<section className={styles.hero}>
    <span className={styles.eyebrow}>WHAT CAN I ACTUALLY BUY?</span>
    <h1>Tell us the car.<br/><em>We'll tell you the market.</em></h1>
-   <p>Set the vehicle, budget, mileage, and search area. Motor Match checks current inventory and tells you whether those limits actually intersect.</p>
+   <p>Choose the car, set your budget, and tell us what matters most. We'll show you what the market supports.</p>
+   <div className={styles.heroProcess}><strong>THREE QUICK CHOICES</strong><span>1. Choose your car</span><span>2. Set your budget</span><span>3. Pick your priorities</span><span className={styles.heroProcessResult}>Then see what's realistic ↓</span></div>
   </section>:null}
 
+  {embedded?<div className={styles.embedProcess}><strong>THREE QUICK CHOICES</strong><span>Car → Budget → Priorities → Market results</span></div>:null}
 
   <section className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
-   <div className={styles.guidedHeading}><span className={styles.eyebrow}>YOUR MOTOR MATCH</span><h2>Let's find your next car.</h2><p>Three quick choices. Adjust them anytime, then see what the market says below.</p></div>
    <div className={styles.panelTrack} data-active={activePanel}>
     <section className={styles.expandPanel+" "+(activePanel===0?styles.expandPanelOpen:styles.expandPanelClosed)}>
      <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><strong>What car do you have in mind?</strong><small>{make&&model?make+" "+model:"The car"}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
@@ -204,7 +205,7 @@ Customer priority: ${priority}`),
        <Field label="MODEL"><select tabIndex={activePanel===0?0:-1} value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("");if(e.target.value)setActivePanel(1)}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
       </div>
       <button type="button" tabIndex={activePanel===0?0:-1} className={styles.dreamLink} onClick={()=>{setDiscoveryMode(true);setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Not sure what car to buy? Let us help you choose →</button>
-      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===0?0:-1} className={styles.panelNext} disabled={!make||!model} onClick={()=>setActivePanel(1)}>Continue to budget →</button></div>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===0?0:-1} className={styles.panelNext} disabled={!make||!model} onClick={()=>setActivePanel(1)}>Next: Set your budget →</button></div>
      </div></div>
     </section>
     <section className={styles.expandPanel+" "+(activePanel===1?styles.expandPanelOpen:styles.expandPanelClosed)}>
@@ -212,7 +213,7 @@ Customer priority: ${priority}`),
      <div className={styles.panelContent} id="mm-budget" aria-hidden={activePanel!==1}><div className={styles.panelInner}>
       <h3>What's your ideal budget?</h3><p>Enter an amount or use the slider. You can change it anytime.</p>
       <div className={styles.budgetPanel}><label className={styles.budgetInputLabel}><span>BUDGET (USD)</span><div><span aria-hidden="true">$</span><input tabIndex={activePanel===1?0:-1} aria-label="Budget in dollars" type="number" min={1000} max={1000000} step={500} value={budgetDraft} onChange={e=>setBudgetDraft(e.target.value)} onBlur={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n))}} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/></div></label><input tabIndex={activePanel===1?0:-1} aria-label="Adjust budget" type="range" min={5000} max={150000} step={500} value={Math.max(5000,Math.min(150000,budget))} onChange={e=>{setBudget(Number(e.target.value));setBudgetDraft(e.target.value)}}/><div className={styles.rangeEnds}><span>$5,000</span><span>$150,000+</span></div></div>
-      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===1?0:-1} className={styles.panelNext} onClick={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n));setActivePanel(2)}}>Continue to priorities →</button></div>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===1?0:-1} className={styles.panelNext} onClick={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n));setActivePanel(2)}}>Next: Choose priorities →</button></div>
      </div></div>
     </section>
     <section className={styles.expandPanel+" "+(activePanel===2?styles.expandPanelOpen:styles.expandPanelClosed)}>
@@ -228,7 +229,7 @@ Customer priority: ${priority}`),
        <Field label="ZIP CODE (OPTIONAL)"><input tabIndex={activePanel===2?0:-1} inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Nationwide"/></Field>
        <Field label="SEARCH RADIUS"><select tabIndex={activePanel===2?0:-1} value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
       </div>:null}
-      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===2?0:-1} className={styles.primary+" "+styles.primaryReady} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"EXPLORE MY OPTIONS →"}</button></div>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===2?0:-1} className={styles.primary+" "+styles.primaryReady} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"SEE WHAT\u2019S REALISTIC →"}</button></div>
      </div></div>
     </section>
    </div>
