@@ -320,6 +320,7 @@ Customer priority: ${priority}`),
       </div>
       <div className={styles.panelActions}><button type="button" tabIndex={activePanel===3?0:-1} className={styles.primary+" "+styles.primaryReady} onClick={()=>{scrollAfterSearch.current=true;void analyze()}} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"SEE WHAT’S REALISTIC →"}</button></div>
      </div></div>
+    </section>
    </div>
   </section>
 
