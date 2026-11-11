@@ -72,6 +72,11 @@ export default function MotorMatchPage(){
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
  useEffect(()=>{
+  const originalGutter=document.documentElement.style.scrollbarGutter;
+  document.documentElement.style.scrollbarGutter="stable";
+  return()=>{document.documentElement.style.scrollbarGutter=originalGutter};
+ },[]);
+ useEffect(()=>{
   const isEmbed=new URLSearchParams(window.location.search).get("embed")==="1";
   setEmbedded(isEmbed);
   if(!isEmbed)return;
