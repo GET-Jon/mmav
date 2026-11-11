@@ -555,3 +555,23 @@
  }
  .panelTrackAllClosed .panelHandleWords{gap:7px}
 }
+
+
+/* Separate label from selected value on the vertical, partially collapsed tabs. */
+@media(min-width:901px){
+ .expandPanelClosed .panelHandleWords{
+  gap:18px;
+ }
+ .expandPanelClosed .panelHandleWords small{
+  flex:none;
+  padding-inline-end:14px;
+  border-inline-end:1px solid #b8ab98;
+  line-height:1.2;
+  white-space:nowrap;
+ }
+ .expandPanelClosed .panelHandleWords strong{
+  flex:none;
+  line-height:1.25;
+ }
+}
+/* The fully collapsed, horizontal summary retains its own spacing. */
