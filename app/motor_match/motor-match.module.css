@@ -692,3 +692,7 @@
 .refinementProgress{background:#f1ede5;border:1px solid #d7c8af;color:#5b4428}
 .refinementOutcome strong{font-size:15px}
 .refinementOutcome span{font-size:12px;line-height:1.45}
+
+/* Clear click affordance for each refinement choice. */
+.refinementCard>b{display:inline-flex;align-self:flex-start;align-items:center;margin-top:auto;padding:9px 11px;background:#1b1a18;color:#fff;border-radius:8px;font-size:10px;letter-spacing:.035em}
+.refinementCard:hover>b{background:#7b5a33}
