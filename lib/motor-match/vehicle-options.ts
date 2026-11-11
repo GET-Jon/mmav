@@ -59,5 +59,12 @@ export function motorMatchYears(make:string,model:string){
   if(!modelParts(rule.model).some(part=>same(part,model)))continue;
   for(let year=rule.startYear;year<=rule.endYear;year++)years.add(year);
  }
+ // The source taxonomy groups the renamed ML/M-Class and GLE family together.
+ // Motor Match must validate the actual nameplate, not just the shared platform.
+ if(targetMake==="mercedes benz"){
+  const normalized=normalizeVehicleText(model);
+  if(normalized==="m class"||normalized==="ml class")return [...years].filter(year=>year<=2015).sort((a,b)=>b-a);
+  if(normalized==="gle")return [...years].filter(year=>year>=2016).sort((a,b)=>b-a);
+ }
  return [...years].sort((a,b)=>b-a);
 }
