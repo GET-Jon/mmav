@@ -268,3 +268,62 @@
  .answer .cta button{max-width:none}
 }
 @media(max-width:390px){.guidedVehicleGrid{grid-template-columns:1fr}}
+
+
+/* V3: expanding question panels */
+.panelBuilder{overflow:hidden}
+.panelTrack{display:flex;min-height:370px;align-items:stretch;background:#f6f5f1;isolation:isolate}
+.expandPanel{position:relative;min-width:0;flex:0 0 12%;background:#f8f7f3;border-right:1px solid #11111114;transition:flex-basis 320ms cubic-bezier(.2,.7,.2,1),background 260ms ease;overflow:hidden}
+.expandPanel:last-child{border-right:0}
+.expandPanelOpen{flex:1 1 76%;background:#fff}
+.panelHandle{display:flex;width:100%;height:100%;min-height:370px;align-items:center;justify-content:flex-start;flex-direction:column;gap:16px;background:transparent;border:0;padding:22px 10px;cursor:pointer;color:#111;text-align:left}
+.panelHandle:hover{background:#eef3ff}
+.panelBadge{display:grid;place-items:center;flex-shrink:0;width:33px;height:33px;border-radius:50%;background:#151515;color:#fff;font-size:13px;font-weight:850}
+.panelHandleWords{display:flex;align-items:center;gap:10px;writing-mode:vertical-rl;transform:rotate(180deg);max-height:260px;overflow:hidden}
+.panelHandleWords strong{font-size:17px;font-weight:850;line-height:1.25;white-space:nowrap;letter-spacing:-.025em}
+.panelHandleWords small{font-size:10px;font-weight:650;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:170px}
+.panelHandleChevron{font-size:21px;color:#2457ff;margin-top:auto}
+.expandPanelOpen .panelHandle{display:none}
+.panelContent{min-width:0;height:100%;width:100%}
+.expandPanelClosed .panelContent{display:none}
+.panelInner{min-width:0;max-width:100%;padding:28px 31px 25px;display:flex;flex-direction:column;gap:13px;box-sizing:border-box;min-height:370px}
+.panelInner h3{margin:0;color:#111;font-size:clamp(22px,2.2vw,29px);line-height:1.1;letter-spacing:-.04em}
+.panelInner p{font-size:13px;line-height:1.5;color:#777;margin:0 0 5px}
+.panelInner .guidedVehicleGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.panelInner .budgetPanel,.panelInner .priorityGrid,.panelInner .advancedToggle,.panelInner .advancedGrid{margin-left:0}
+.panelInner .priorityGrid{grid-template-columns:1fr;gap:8px}
+.panelInner .priorityChoice{padding:9px 12px}
+.panelInner .advancedToggle{margin-top:3px;line-height:1.5}
+.panelInner .advancedGrid{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:0}
+.panelInner .dreamLink{font-size:12px;margin-top:2px}
+.panelActions{margin-top:auto;display:flex;justify-content:flex-start;padding-top:12px}
+.panelNext{border:0;background:#2457ff;border-radius:10px;padding:14px 20px;color:white;font-size:12px;font-weight:850;cursor:pointer;box-shadow:0 8px 18px #2457ff1a}
+.panelNext:disabled{background:#bbb;box-shadow:none;cursor:not-allowed}
+.panelNext:hover:not(:disabled){background:#1748e8}
+.panelActions .primary{min-height:44px;min-width:210px;font-size:12px}
+@media(max-width:900px){
+ .panelTrack{display:flex;flex-direction:column;min-height:0}
+ .expandPanel,.expandPanelOpen{flex:0 0 auto;min-height:0;border-right:0;border-bottom:1px solid #11111114}
+ .expandPanel:last-child{border-bottom:0}
+ .panelHandle,.expandPanelOpen .panelHandle{display:flex;flex-direction:row;min-height:65px;height:auto;padding:14px 17px;gap:12px;align-items:center}
+ .expandPanelOpen .panelHandle{background:#f1f5ff}
+ .expandPanelOpen .panelBadge{background:#2457ff}
+ .panelHandleWords{writing-mode:horizontal-tb;transform:none;max-height:none;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px;flex:1}
+ .panelHandleWords strong{font-size:15px;white-space:normal}
+ .panelHandleWords small{font-size:11px;white-space:normal;max-height:none;max-width:100%}
+ .panelHandleChevron{margin:0;font-size:20px}
+ .expandPanelOpen .panelContent{display:block;height:auto}
+ .expandPanelClosed .panelContent{display:none}
+ .panelInner{min-height:0;padding:18px 20px 22px;gap:11px}
+ .panelInner h3{display:none}
+ .panelInner p{margin:0 0 4px}
+ .panelInner .advancedGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+ .panelInner{padding:16px}
+ .panelInner .guidedVehicleGrid{grid-template-columns:1fr}
+ .panelInner .advancedGrid{grid-template-columns:1fr}
+ .panelActions .primary,.panelNext{width:100%;min-width:0}
+ .panelBuilder .guidedHeading{padding:19px 17px}
+}
+@media(prefers-reduced-motion:reduce){.expandPanel{transition:none}}
