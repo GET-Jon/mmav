@@ -327,3 +327,64 @@
  .panelBuilder .guidedHeading{padding:19px 17px}
 }
 @media(prefers-reduced-motion:reduce){.expandPanel{transition:none}}
+
+
+/* V3 tighter centered layout and clearer three-step hierarchy */
+.shell{box-sizing:border-box;max-width:1260px;margin-inline:auto;padding:0 28px 36px}
+.hero{max-width:100%;padding:32px 0 21px}
+.hero h1{font-size:clamp(42px,5vw,70px);line-height:.96;letter-spacing:-.055em;margin:9px 0 13px}
+.hero p{max-width:760px;font-size:14px;line-height:1.55;opacity:.72}
+.heroProcess{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:15px;font-size:12px;color:#454545}
+.heroProcess strong,.embedProcess strong{color:#2457ff;font-weight:900;letter-spacing:.09em;font-size:10px}
+.heroProcess>span:not(:last-child){padding-right:14px;border-right:1px solid #1112}
+.heroProcessResult{font-weight:800;color:#151515}
+.embedProcess{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:4px 0 11px;padding:0 3px;font-size:12px;font-weight:700;color:#444}
+.panelBuilder{margin-top:0;border-radius:18px}
+.panelTrack{min-height:308px}
+.expandPanel{flex:0 0 15%;background:#f3f2ee}
+.expandPanelOpen{flex:1 1 70%;background:#fff}
+.expandPanelClosed:hover{background:#eaf0ff}
+.panelHandle{min-height:308px;padding:17px 11px;gap:11px}
+.panelHandleWords{max-height:none;flex:1;justify-content:center;gap:12px;overflow:visible}
+.panelHandleWords strong{font-size:16px;white-space:normal;max-height:230px}
+.panelHandleWords small{font-size:11px;max-height:150px}
+.panelHandleChevron{font-size:19px;margin-top:0;font-weight:850}
+.panelInner{min-height:308px;padding:23px 27px 20px;gap:10px}
+.panelInner h3{font-size:clamp(22px,2vw,27px)}
+.panelInner p{font-size:12px;margin:0 0 1px}
+.panelInner .guidedVehicleGrid{gap:10px}
+.panelInner .guidedVehicleGrid .field select{min-height:43px}
+.panelInner .dreamLink{margin-top:0}
+.panelActions{padding-top:7px}
+.panelNext{padding:12px 17px}
+.panelInner .priorityChoice{padding:8px 11px}
+.answer{margin-top:16px}
+.shellEmbedded{max-width:1260px;margin-inline:auto;padding:0 16px 18px}
+@media(max-width:900px){
+ .shell{padding:0 18px 28px}
+ .hero{padding:26px 0 18px}
+ .hero h1{font-size:clamp(38px,6.3vw,58px)}
+ .heroProcess{gap:9px 12px}
+ .panelTrack{min-height:0}
+ .expandPanel,.expandPanelOpen{flex:0 0 auto}
+ .panelHandle,.expandPanelOpen .panelHandle{min-height:61px;padding:12px 15px}
+ .panelHandleWords{flex:1;max-height:none;gap:2px;justify-content:center;overflow:hidden}
+ .panelHandleWords strong{font-size:15px;max-height:none}
+ .panelHandleWords small{font-size:11px;max-height:none}
+ .panelInner{min-height:0;padding:15px 19px 18px}
+ .panelBuilder{border-radius:15px}
+ .shellEmbedded{padding:0 10px 16px}
+}
+@media(max-width:520px){
+ .shell{padding:0 12px 24px}
+ .hero{padding:20px 0 16px}
+ .hero h1{font-size:clamp(36px,9.4vw,46px)}
+ .heroProcess{font-size:11px;align-items:flex-start;gap:6px 10px}
+ .heroProcess strong{width:100%}
+ .heroProcess>span:not(:last-child){padding-right:9px}
+ .heroProcessResult{width:100%;margin-top:2px}
+ .panelInner{padding:15px}
+ .panelHandle,.expandPanelOpen .panelHandle{padding:12px 14px}
+ .embedProcess{padding:0 3px;gap:6px}
+ .shellEmbedded{padding:0 6px 14px}
+}
