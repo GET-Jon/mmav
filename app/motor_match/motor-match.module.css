@@ -696,3 +696,39 @@
 /* Clear click affordance for each refinement choice. */
 .refinementCard>b{display:inline-flex;align-self:flex-start;align-items:center;margin-top:auto;padding:9px 11px;background:#1b1a18;color:#fff;border-radius:8px;font-size:10px;letter-spacing:.035em}
 .refinementCard:hover>b{background:#7b5a33}
+
+
+/* Four-stage search: three quick choices and one genuinely optional Details stage. */
+@media(min-width:901px){
+ .panelTrack:not(.panelTrackAllClosed) .expandPanelClosed{flex:0 0 11%}
+ .panelTrack:not(.panelTrackAllClosed) .expandPanelOpen{flex:1 1 67%;min-width:0}
+ .panelTrackAllClosed .expandPanel{flex:1 1 25%;min-width:0}
+ .panelTrackAllClosed .expandPanelClosed .panelHandle{padding:14px 12px;gap:10px}
+ .panelTrackAllClosed .expandPanelClosed .panelHandleWords strong{font-size:14px}
+ .panelTrack:not(.panelTrackAllClosed) .expandPanelClosed .panelHandleWords{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px}
+ .panelTrack:not(.panelTrackAllClosed) .expandPanelClosed .panelHandle{padding:15px 9px}
+}
+.optionalPanel{background:#f2eee5}
+.optionalPanel.expandPanelClosed{background:#f0e9dd}
+.optionalPanel .panelBadge{background:#886a45;color:#fff}
+.optionalPanel .panelHandleWords small{color:#866543}
+.optionalPanel.expandPanelClosed:hover{background:#e9dfd0}
+.optionalKicker{display:inline-flex;width:max-content;color:#785a35;border:1px solid #c8b695;border-radius:999px;background:#f5eee2;padding:5px 10px;font-size:10px;font-weight:900;letter-spacing:.1em}
+.optionalPanel .panelInner .detailsGrid{margin:2px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;background:#f8f6f1;border:1px solid #e4dcca;border-radius:14px;padding:15px}
+.optionalPanel .panelInner .detailsGrid .field{min-width:0}
+.optionalPanel .panelInner .detailsGrid .field input,.optionalPanel .panelInner .detailsGrid .field select{width:100%;min-width:0;box-sizing:border-box}
+.priorityActions{display:flex;align-items:stretch;flex-wrap:wrap;gap:10px}
+.optionalButton{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:1px solid #99856a;border-radius:10px;padding:12px 16px;background:#fff;color:#25211c;font-size:12px;font-weight:850;cursor:pointer}
+.optionalButton span{font-size:10px;color:#896946;font-weight:900;letter-spacing:.07em}
+.optionalButton:hover{background:#f1eadd;border-color:#83613e}
+.optionalButton:focus-visible{outline:2px solid #987344;outline-offset:2px}
+@media(max-width:900px){
+ .optionalPanel.expandPanelOpen .panelHandle{background:#f1e9db}
+ .optionalPanel .panelInner .detailsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .priorityActions{flex-direction:column;align-items:stretch}
+ .priorityActions .primary,.priorityActions .optionalButton{width:100%;max-width:none}
+}
+@media(max-width:520px){
+ .optionalPanel .panelInner .detailsGrid{grid-template-columns:1fr;padding:12px}
+ .panelTrackAllClosed .panelHandleWords strong{white-space:normal;overflow-wrap:anywhere}
+}
