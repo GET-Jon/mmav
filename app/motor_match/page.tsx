@@ -35,6 +35,8 @@ export default function MotorMatchPage(){
  const [advancedOpen,setAdvancedOpen]=useState(false);
  const [originalTarget,setOriginalTarget]=useState<{year:number;budget:number;mileage:number}|null>(null);
  const [appliedSuggestion,setAppliedSuggestion]=useState("");
+ const [refinementOutcome,setRefinementOutcome]=useState<{before:number;after:number;label:string}|null>(null);
+ const pendingRefinement=useRef<{before:number;label:string}|null>(null);
  const [budgetDraft,setBudgetDraft]=useState("30000");
  const [discoveryMode,setDiscoveryMode]=useState(false);
  const [activePanel,setActivePanel]=useState<0|1|2|null>(0);
@@ -67,7 +69,12 @@ export default function MotorMatchPage(){
     throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
    }
    if(!payload)throw new Error("We could not read the market response. Please try again.");
-   if(id===requestId.current){setResult(payload);setStarted(true);setSent(false);setAppliedSuggestion("");setActivePanel(null);}
+   if(id===requestId.current){
+    const pending=pendingRefinement.current;
+    if(pending){setRefinementOutcome({before:pending.before,after:payload.matchCount,label:pending.label});pendingRefinement.current=null;}
+    else if(!started)setRefinementOutcome(null);
+    setResult(payload);setStarted(true);setSent(false);setAppliedSuggestion("");setActivePanel(null);
+   }
   }catch(cause){if(id===requestId.current){scrollAfterSearch.current=false;setError(cause instanceof Error?cause.message:"We could not check the market.")}}
   finally{if(id===requestId.current)setLoading(false)}
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
@@ -191,6 +198,11 @@ Customer priority: ${priority}`),
   if(kind==="mileage")setMileage(value);
   if(kind==="year")setYear(value);
  };
+ const queueRefinement=(label:string,action:()=>void,verified:boolean)=>{
+  if(verified&&result){pendingRefinement.current={before:result.matchCount,label};setRefinementOutcome(null);}
+  else{pendingRefinement.current=null;setRefinementOutcome(null);}
+  action();
+ };
  const restoreOriginal=()=>{if(!originalTarget)return;setYear(originalTarget.year);setBudget(originalTarget.budget);setBudgetDraft(String(originalTarget.budget));setMileage(originalTarget.mileage);setOriginalTarget(null);setAppliedSuggestion("");};
  const refinementOptions=useMemo(()=>{
   if(!result||result.state==="green")return [];
@@ -313,6 +325,11 @@ Customer priority: ${priority}`),
     <p>{subhead}</p>
    </div>
    <div className={styles.refinementTop}>
+    {loading&&pendingRefinement.current?<div className={styles.refinementProgress} role="status">Checking how your updated criteria change the available listings…</div>:null}
+    {refinementOutcome&&!loading?<div className={styles.refinementOutcome} role="status">
+     <strong>{refinementOutcome.after>refinementOutcome.before?"Your updated search found more matches.":refinementOutcome.after>0?"Your updated search has matching listings.":"No confirmed matches with this adjustment yet."}</strong>
+     <span>{refinementOutcome.label} · {refinementOutcome.before} → {refinementOutcome.after} matching listings in the respective market samples.</span>
+    </div>:null}
     {result.state==="green"?<>
      <div className={styles.sectionKicker}><span>YOUR MOTOR MATCH</span><strong>Your search is realistic.</strong></div>
      <div className={styles.refinementSuccess}>
@@ -328,13 +345,13 @@ Customer priority: ${priority}`),
       <p>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in the current sample. If you'd like more options, consider either direction below.</p>
      </div>
      <div className={styles.refinementGrid}>
-      {refinementOptions.slice(0,3).map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={choice.action}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
+      {refinementOptions.slice(0,3).map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
      </div>
     </>:<>
      <div className={styles.sectionKicker}><span>REFINE YOUR SEARCH</span><strong>Choose what matters more to you.</strong></div>
      <p className={styles.refinementIntro}>We couldn't verify a listing that meets all your limits. Try one of these approaches—verified adjustments are labeled, and exploratory choices are not guarantees.</p>
      <div className={styles.refinementGrid}>
-      {refinementOptions.map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={choice.action}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
+      {refinementOptions.map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
      </div>
     </>}
     {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
