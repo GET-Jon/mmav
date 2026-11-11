@@ -55,7 +55,7 @@ class MotorMatchEmbed extends HTMLElement {
       return;
     }
 
-    const targetWidth = Math.min(1440, Math.max(980, viewport - 64));
+    const targetWidth = Math.min(1260, Math.max(760, viewport - 64));
     const rect = this.getBoundingClientRect();
     const currentCenter = rect.left + rect.width / 2;
     const viewportCenter = viewport / 2;
@@ -70,7 +70,16 @@ class MotorMatchEmbed extends HTMLElement {
     if (event.origin !== "https://yourlotlogic.com") return;
     if (event.source !== this._iframe?.contentWindow) return;
     const data = event.data;
-    if (!data || data.type !== "motor-match:resize") return;
+    if (!data) return;
+    if (data.type === "motor-match:scroll-results") {
+      const offset = Number(data.offset);
+      if (!Number.isFinite(offset) || offset < 0 || offset > 10000) return;
+      const top = window.scrollY + this._iframe.getBoundingClientRect().top + offset - 90;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduced ? "auto" : "smooth" });
+      return;
+    }
+    if (data.type !== "motor-match:resize") return;
 
     const requested = Number(data.height);
     if (!Number.isFinite(requested)) return;
