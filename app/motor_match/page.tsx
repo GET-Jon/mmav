@@ -77,7 +77,7 @@ export default function MotorMatchPage(){
    }
   }catch(cause){if(id===requestId.current){scrollAfterSearch.current=false;setError(cause instanceof Error?cause.message:"We could not check the market.")}}
   finally{if(id===requestId.current)setLoading(false)}
- },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
+ },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip,started]);
 
  useEffect(()=>{
   const originalGutter=document.documentElement.style.scrollbarGutter;
@@ -345,13 +345,13 @@ Customer priority: ${priority}`),
       <p>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in the current sample. If you'd like more options, consider either direction below.</p>
      </div>
      <div className={styles.refinementGrid}>
-      {refinementOptions.slice(0,3).map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
+      {refinementOptions.slice(0,3).map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>)}
      </div>
     </>:<>
      <div className={styles.sectionKicker}><span>REFINE YOUR SEARCH</span><strong>Choose what matters more to you.</strong></div>
      <p className={styles.refinementIntro}>We couldn't verify a listing that meets all your limits. Try one of these approaches—verified adjustments are labeled, and exploratory choices are not guarantees.</p>
      <div className={styles.refinementGrid}>
-      {refinementOptions.map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"MARKET-SUPPORTED":"EXPLORE OPTION"} · APPLY →</b></button>)}
+      {refinementOptions.map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>)}
      </div>
     </>}
     {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
