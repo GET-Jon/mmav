@@ -37,16 +37,20 @@ export default function MotorMatchPage(){
  const [budgetDraft,setBudgetDraft]=useState("30000");
  const [discoveryMode,setDiscoveryMode]=useState(false);
  const [activePanel,setActivePanel]=useState<0|1|2>(0);
+ const [budgetChosen,setBudgetChosen]=useState(false);
+ const [priorityChosen,setPriorityChosen]=useState(false);
  const [embedded,setEmbedded]=useState(false);
  const requestId=useRef(0);
  const shellRef=useRef<HTMLElement|null>(null);
+ const resultsRef=useRef<HTMLElement|null>(null);
+ const scrollAfterSearch=useRef(false);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
  const rounded=(value:number,step:number)=>Math.ceil(value/step)*step;
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
  const makeNeedsFocus=!make.trim();
 
  const analyze=useCallback(async()=>{
-  if(!vehicleReady||!year){setError("Add a year, make, and model first.");return}
+  if(!vehicleReady||!year){scrollAfterSearch.current=false;setError("Add a year, make, and model first.");return}
   const id=++requestId.current;setLoading(true);setError("");setVehicleError("");
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
@@ -54,14 +58,14 @@ export default function MotorMatchPage(){
    setSessionCalls(v=>v+(payload?.apiUsage?.callsThisUpdate||0));
    if(!response.ok){
     if(payload?.code==="vehicle_unverified"){
-     if(id===requestId.current){setResult(null);setStarted(false);setVehicleError(payload.error||"We couldn't verify that vehicle.");}
+     if(id===requestId.current){scrollAfterSearch.current=false;setResult(null);setStarted(false);setVehicleError(payload.error||"We couldn't verify that vehicle.");}
      return;
     }
     throw new Error(payload?.error||"The market service took too long to respond. Please try again.");
    }
    if(!payload)throw new Error("We could not read the market response. Please try again.");
    if(id===requestId.current){setResult(payload);setStarted(true);setSent(false);setAppliedSuggestion("");}
-  }catch(cause){if(id===requestId.current)setError(cause instanceof Error?cause.message:"We could not check the market.")}
+  }catch(cause){if(id===requestId.current){scrollAfterSearch.current=false;setError(cause instanceof Error?cause.message:"We could not check the market.")}}
   finally{if(id===requestId.current)setLoading(false)}
  },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip]);
 
@@ -133,6 +137,21 @@ export default function MotorMatchPage(){
  useEffect(()=>{makeInputRef.current?.focus()},[]);
  useEffect(()=>{if(!started)return;const t=window.setTimeout(()=>void analyze(),650);return()=>window.clearTimeout(t)},[analyze,started]);
  useEffect(()=>{
+  if(!result||loading||!scrollAfterSearch.current)return;
+  scrollAfterSearch.current=false;
+  const timer=window.setTimeout(()=>{
+   const section=resultsRef.current;
+   if(!section)return;
+   if(new URLSearchParams(window.location.search).get("embed")==="1"){
+    window.parent.postMessage({type:"motor-match:scroll-results",offset:section.getBoundingClientRect().top},"*");
+   }else{
+    const reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    section.scrollIntoView({behavior:reduced?"auto":"smooth",block:"start"});
+   }
+  },180);
+  return()=>window.clearTimeout(timer);
+ },[result,loading]);
+ useEffect(()=>{
   if(!loading||started){setLoadingMessageIndex(0);return}
   const timer=window.setInterval(()=>setLoadingMessageIndex(index=>(index+1)%LOADING_MESSAGES.length),1450);
   return()=>window.clearInterval(timer);
@@ -188,7 +207,6 @@ Customer priority: ${priority}`),
   {!embedded?<section className={styles.hero}>
    <span className={styles.eyebrow}>WHAT CAN I ACTUALLY BUY?</span>
    <h1>Tell us the car.<br/><em>We'll tell you the market.</em></h1>
-   <p>Choose the car, set your budget, and tell us what matters most. We'll show you what the market supports.</p>
    <div className={styles.heroProcess}><strong>THREE QUICK CHOICES</strong><span>1. Choose your car</span><span>2. Set your budget</span><span>3. Pick your priorities</span><span className={styles.heroProcessResult}>Then see what's realistic ↓</span></div>
   </section>:null}
 
@@ -197,7 +215,7 @@ Customer priority: ${priority}`),
   <section className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
    <div className={styles.panelTrack} data-active={activePanel}>
     <section className={styles.expandPanel+" "+(activePanel===0?styles.expandPanelOpen:styles.expandPanelClosed)}>
-     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><strong>What car do you have in mind?</strong><small>{make&&model?make+" "+model:"The car"}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
+     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><strong>{make&&model?model:"Choose car"}</strong></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
      <div className={styles.panelContent} id="mm-car" aria-hidden={activePanel!==0}><div className={styles.panelInner}>
       <h3>What car do you have in mind?</h3><p>Start with a make and model. We can help with the rest.</p>
       <div className={styles.guidedVehicleGrid}>
@@ -209,18 +227,18 @@ Customer priority: ${priority}`),
      </div></div>
     </section>
     <section className={styles.expandPanel+" "+(activePanel===1?styles.expandPanelOpen:styles.expandPanelClosed)}>
-     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===1} aria-controls="mm-budget" onClick={()=>setActivePanel(1)}><span className={styles.panelBadge}>2</span><span className={styles.panelHandleWords}><strong>What's your ideal budget?</strong><small>{money(budget)}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===1?"−":"+"}</span></button>
+     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===1} aria-controls="mm-budget" onClick={()=>setActivePanel(1)}><span className={styles.panelBadge}>2</span><span className={styles.panelHandleWords}><strong>{budgetChosen?money(budget):"Set budget"}</strong></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===1?"−":"+"}</span></button>
      <div className={styles.panelContent} id="mm-budget" aria-hidden={activePanel!==1}><div className={styles.panelInner}>
       <h3>What's your ideal budget?</h3><p>Enter an amount or use the slider. You can change it anytime.</p>
-      <div className={styles.budgetPanel}><label className={styles.budgetInputLabel}><span>BUDGET (USD)</span><div><span aria-hidden="true">$</span><input tabIndex={activePanel===1?0:-1} aria-label="Budget in dollars" type="number" min={1000} max={1000000} step={500} value={budgetDraft} onChange={e=>setBudgetDraft(e.target.value)} onBlur={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n))}} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/></div></label><input tabIndex={activePanel===1?0:-1} aria-label="Adjust budget" type="range" min={5000} max={150000} step={500} value={Math.max(5000,Math.min(150000,budget))} onChange={e=>{setBudget(Number(e.target.value));setBudgetDraft(e.target.value)}}/><div className={styles.rangeEnds}><span>$5,000</span><span>$150,000+</span></div></div>
-      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===1?0:-1} className={styles.panelNext} onClick={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n));setActivePanel(2)}}>Next: Choose priorities →</button></div>
+      <div className={styles.budgetPanel}><label className={styles.budgetInputLabel}><span>BUDGET (USD)</span><div><span aria-hidden="true">$</span><input tabIndex={activePanel===1?0:-1} aria-label="Budget in dollars" type="number" min={1000} max={1000000} step={500} value={budgetDraft} onChange={e=>{setBudgetDraft(e.target.value);setBudgetChosen(true)}} onBlur={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n))}} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/></div></label><input tabIndex={activePanel===1?0:-1} aria-label="Adjust budget" type="range" min={5000} max={150000} step={500} value={Math.max(5000,Math.min(150000,budget))} onChange={e=>{setBudget(Number(e.target.value));setBudgetDraft(e.target.value);setBudgetChosen(true)}}/><div className={styles.rangeEnds}><span>$5,000</span><span>$150,000+</span></div></div>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===1?0:-1} className={styles.panelNext} onClick={()=>{const n=Math.max(1000,Math.min(1000000,Number(budgetDraft)||30000));setBudget(n);setBudgetDraft(String(n));setBudgetChosen(true);setActivePanel(2)}}>Next: Choose priorities →</button></div>
      </div></div>
     </section>
     <section className={styles.expandPanel+" "+(activePanel===2?styles.expandPanelOpen:styles.expandPanelClosed)}>
-     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===2} aria-controls="mm-priorities" onClick={()=>setActivePanel(2)}><span className={styles.panelBadge}>3</span><span className={styles.panelHandleWords}><strong>What matters most?</strong><small>{priority==="budget"?"Stay within budget":priority==="year"?"Newer model year":"Lower mileage"}</small></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===2?"−":"+"}</span></button>
+     <button className={styles.panelHandle} type="button" aria-expanded={activePanel===2} aria-controls="mm-priorities" onClick={()=>setActivePanel(2)}><span className={styles.panelBadge}>3</span><span className={styles.panelHandleWords}><strong>{priorityChosen?(priority==="budget"?"Budget":priority==="year"?"Newer year":"Lower miles"):"Set priorities"}</strong></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===2?"−":"+"}</span></button>
      <div className={styles.panelContent} id="mm-priorities" aria-hidden={activePanel!==2}><div className={styles.panelInner}>
       <h3>What matters most?</h3><p>Choose your biggest priority. Refine any other details.</p>
-      <div className={styles.priorityGrid} role="radiogroup" aria-label="Your biggest priority">{([["budget","Stay within my budget"],["year","Get a newer car"],["mileage","Find lower mileage"]] as const).map(([value,label])=><label className={styles.priorityChoice} key={value}><input tabIndex={activePanel===2?0:-1} type="radio" name="motor-match-priority" value={value} checked={priority===value} onChange={()=>setPriority(value)}/><span>{label}</span></label>)}</div>
+      <div className={styles.priorityGrid} role="radiogroup" aria-label="Your biggest priority">{([["budget","Stay within my budget"],["year","Get a newer car"],["mileage","Find lower mileage"]] as const).map(([value,label])=><label className={styles.priorityChoice} key={value}><input tabIndex={activePanel===2?0:-1} type="radio" name="motor-match-priority" value={value} checked={priority===value} onChange={()=>{setPriority(value);setPriorityChosen(true)}}/><span>{label}</span></label>)}</div>
       <button type="button" tabIndex={activePanel===2?0:-1} className={styles.advancedToggle} aria-expanded={advancedOpen} onClick={()=>setAdvancedOpen(v=>!v)}>{advancedOpen?"− Hide preferences":"+ Refine year, mileage, trim and search area"} <span>{year?"· "+year:""} · {num(mileage)} mi · {zip||"Nationwide"}</span></button>
       {advancedOpen?<div className={styles.advancedGrid}>
        <Field label="MODEL YEAR"><select tabIndex={activePanel===2?0:-1} value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
@@ -229,7 +247,7 @@ Customer priority: ${priority}`),
        <Field label="ZIP CODE (OPTIONAL)"><input tabIndex={activePanel===2?0:-1} inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Nationwide"/></Field>
        <Field label="SEARCH RADIUS"><select tabIndex={activePanel===2?0:-1} value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
       </div>:null}
-      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===2?0:-1} className={styles.primary+" "+styles.primaryReady} onClick={()=>void analyze()} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"SEE WHAT\u2019S REALISTIC →"}</button></div>
+      <div className={styles.panelActions}><button type="button" tabIndex={activePanel===2?0:-1} className={styles.primary+" "+styles.primaryReady} onClick={()=>{scrollAfterSearch.current=true;void analyze()}} disabled={loading||!vehicleReady}>{loading?"SEARCHING THE MARKET…":started?"UPDATE MY RESULTS →":"SEE WHAT\u2019S REALISTIC →"}</button></div>
      </div></div>
     </section>
    </div>
@@ -241,7 +259,7 @@ Customer priority: ${priority}`),
 
   {loading&&started?<div className={styles.refreshStatus} role="status" aria-live="polite"><span className={styles.refreshDot}/><div><strong>Updating your Motor Match…</strong><small>Rechecking the market against your new limits.</small></div></div>:null}
 
-  {result?<section className={styles.answer+" "+styles["answer_"+result.state]}>
+  {result?<section ref={resultsRef} id="motor-match-results" className={styles.answer+" "+styles["answer_"+result.state]}>
    <div className={styles.answerLead}>
     <div className={styles.resultStatusRow}>
      <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
