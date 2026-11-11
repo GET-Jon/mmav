@@ -575,3 +575,64 @@
  }
 }
 /* The fully collapsed, horizontal summary retains its own spacing. */
+
+
+/* Two independently constrained vertical text lines between the navigation controls. */
+@media(min-width:901px){
+ .expandPanelClosed .panelHandle{
+  display:grid;
+  grid-template-rows:34px minmax(0,1fr) 24px;
+  justify-items:center;
+  align-items:center;
+  gap:12px;
+  padding:17px 12px;
+  box-sizing:border-box;
+ }
+ .expandPanelClosed .panelBadge{grid-row:1}
+ .expandPanelClosed .panelHandleWords{
+  grid-row:2;
+  writing-mode:horizontal-tb;
+  transform:none;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:center;
+  justify-items:center;
+  gap:9px;
+  width:100%;
+  min-width:0;
+  height:100%;
+  max-height:none;
+  overflow:hidden;
+ }
+ .expandPanelClosed .panelHandleWords small,
+ .expandPanelClosed .panelHandleWords strong{
+  writing-mode:vertical-rl;
+  transform:rotate(180deg);
+  display:block;
+  box-sizing:border-box;
+  height:auto;
+  max-height:100%;
+  max-width:100%;
+  margin:0;
+  padding:0;
+  border:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  line-height:1.3;
+ }
+ .expandPanelClosed .panelHandleWords small{
+  font-size:10px;
+  letter-spacing:.09em;
+ }
+ .expandPanelClosed .panelHandleWords strong{
+  font-size:14px;
+  font-weight:850;
+ }
+ .expandPanelClosed .panelHandleChevron{
+  grid-row:3;
+  margin:0;
+  align-self:center;
+  justify-self:center;
+ }
+}
