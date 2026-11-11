@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["../../lib/evaluation/identity-evidence.ts", "../../lib/evaluation/identity-pilot-adapters.ts", "../../lib/evaluation/vin-evidence.ts"],
+  "exclude": ["../../node_modules"]
+}

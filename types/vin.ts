@@ -12,4 +12,9 @@ export type VinDecodeResult = {
   driveType: string;
   fuelType: string;
   plantCountry: string;
+  /** Optional observations; blank is unknown, not an absent feature. */
+  transmission?: string;
+  engineModel?: string;
+  enginePowerHp?: string;
+  identityEvidence?: { source: "nhtsa-vpic"; fields: Record<string, string> };
 };
