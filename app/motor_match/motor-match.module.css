@@ -530,3 +530,28 @@
 @media(max-width:650px){
  .refinementGrid{grid-template-columns:1fr}
 }
+
+
+/* Small V3 polish: compact typed-budget field and clearer collapsed summaries. */
+.panelInner .budgetInputLabel>div{
+ width:50%;
+ max-width:340px;
+ min-width:220px;
+ box-sizing:border-box;
+}
+.panelTrackAllClosed .panelHandleWords{
+ gap:10px;
+}
+.panelTrackAllClosed .panelHandleWords small,
+.panelTrackAllClosed .panelHandleWords strong{
+ display:block;
+ line-height:1.35;
+}
+@media(max-width:520px){
+ .panelInner .budgetInputLabel>div{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+ }
+ .panelTrackAllClosed .panelHandleWords{gap:7px}
+}
