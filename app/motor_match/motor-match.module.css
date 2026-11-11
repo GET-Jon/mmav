@@ -425,7 +425,6 @@
 
 
 /* Keep horizontal geometry stable as results, tabs, and forms change. */
-:global(html){scrollbar-gutter:stable}
 .shell,.shellEmbedded{width:100%;max-width:1260px;min-width:0;box-sizing:border-box}
 .panelBuilder,.panelTrack,.answer{width:100%;min-width:0;box-sizing:border-box}
 .panelTrack{overflow:hidden}
