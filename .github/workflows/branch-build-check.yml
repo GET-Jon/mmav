@@ -18,6 +18,10 @@ jobs:
       - run: npm ci
       - name: Apply repository prebuild checks
         run: npm run prebuild
+      - name: VIN benchmark safety check (zero API calls)
+        run: |
+          node --check scripts/benchmark-vin-decoders.mjs
+          node scripts/benchmark-vin-decoders.mjs > /dev/null
       - name: Comp regression suite
         run: npx --yes tsx@4.20.6 scripts/run-comp-regressions.ts
       - name: Billing period regression suite
