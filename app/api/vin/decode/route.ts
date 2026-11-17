@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordApiUsageEvent } from "@/lib/observability/api-usage";
 import type { VinDecodeResult } from "@/types/vin";
-import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
+import { dedicatedBmwMModel, isNonRetailTrimLabel, decodedPowertrainFuel } from "@/lib/marketcheck/vehicle-identity";
 
 type NhtsaDecodeResponse = {
   Results?: Array<Record<string, string>>;
@@ -99,16 +99,17 @@ export async function POST(request: Request) {
       year: result.ModelYear || "",
       make: normalizeMake(result.Make || ""),
       model: dedicatedBmwMModel(normalizeMake(result.Make || ""), result.Model, result.Trim || result.Series) || result.Model || "",
-      // Series is the family (e.g. "5-Series"), not a trim for a dedicated M5.
-      trim: dedicatedBmwMModel(normalizeMake(result.Make || ""), result.Model, result.Trim || result.Series)
-        ? (result.Trim || "")
-        : (result.Trim || result.Series || ""),
+      // NHTSA Series is a generation/family descriptor, not a verified retail
+      // grade. Never turn "80 Series" into a Camry trim (or guess LE/SE).
+      trim: result.Trim && !isNonRetailTrimLabel(result.Trim)
+        ? result.Trim
+        : "",
       bodyClass: result.BodyClass || "",
       doors: result.Doors || "",
       engineCylinders: result.EngineCylinders || "",
       displacementL: result.DisplacementL || "",
       driveType: result.DriveType || "",
-      fuelType: result.FuelTypePrimary || "",
+      fuelType: decodedPowertrainFuel(result),
       plantCountry: result.PlantCountry || "",
     };
 

@@ -42,3 +42,6 @@ next-env.d.ts
 .env.local
 
 .env.local
+
+# Local VIN benchmark and other scratch output (never commit provider raw records)
+/tmp/

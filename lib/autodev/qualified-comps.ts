@@ -18,6 +18,7 @@ export type AutoDevCompListing = {
   drivetrain?: string | null;
   fuelType?: string | null;
   bodyType?: string | null;
+  bodyVerificationSource?: "nhtsa-vin" | null;
   price?: number | null;
   miles?: number | null;
   dealer?: string | null;
@@ -171,6 +172,10 @@ export function buildAutoDevCompCandidates(
         listingUrl: url || null,
         dealerName: listing.dealer || null,
         bodyType: listing.bodyType || null,
+        identityVerification: listing.bodyVerificationSource === "nhtsa-vin"
+          ? { source: "nhtsa-vin" as const, status: "partial" as const, bodyType: listing.bodyType || null,
+              note: "NHTSA VIN decoding corroborated the body style. Other listing specifications still come from the provider." }
+          : undefined,
         drivetrain: listing.drivetrain || null,
         fuelType: listing.fuelType || null,
         city: listing.city || null,

@@ -18,8 +18,90 @@ export function normalizeVehicleText(value: unknown) {
     .trim();
 }
 
+/**
+ * VIN datasets sometimes expose a platform/generation under Series (for
+ * example "80 Series" for a Camry). It is not a retail trim, and treating it
+ * as one prevents real LE/SE/XLE/XSE listings from qualifying correctly.
+ * Never infer an actual grade from a generation name.
+ */
+export function isNonRetailTrimLabel(value: unknown): boolean {
+  const normalized = normalizeVehicleText(value);
+  return /^\d{1,3} series$/.test(normalized) ||
+    /^(?:generation|gen) \d{1,3}$/.test(normalized);
+}
+
+/**
+ * Resolve VIN-decoder fuel labels. NHTSA sometimes reports the combustion
+ * component as primary fuel on a hybrid vehicle.
+ */
+export function decodedPowertrainFuel(result: Record<string, string>): string {
+  const fuel = String(result.FuelTypePrimary || "").trim();
+  const electrification = String(result.ElectrificationLevel || "").toLowerCase();
+  const secondaryFuel = String(result.FuelTypeSecondary || "").toLowerCase();
+  const make = normalizeVehicleText(result.Make);
+  const model = normalizeVehicleText(result.Model);
+  const year = Number(result.ModelYear);
+  if (/plug.?in hybrid|phev/.test(electrification)) return "Plug-in Hybrid";
+  if (/hybrid|\bhev\b/.test(electrification) ||
+      (/gasoline|petrol|gas/i.test(fuel) && /electric/.test(secondaryFuel)) ||
+      (make === "toyota" && model === "camry" && year === 2025)) {
+    return "Hybrid";
+  }
+  return fuel;
+}
+
 export function compactVehicleText(value: unknown) {
   return normalizeVehicleText(value).replace(/\s+/g, "");
+}
+
+/**
+ * Keep an explicitly supplied, more specific trim when a decoder or search
+ * qualification field has reduced it to a shorter base trim.
+ *
+ * Example: qualification "SE" must not erase the evaluator's "R-Dynamic SE".
+ * This is not a claim that an unverified listing has that package: candidate
+ * listing labels and decoder descriptions are handled separately.
+ */
+/**
+ * A provider's displayed trim describes the advertised retail listing.
+ * NHTSA VIN Series data may be broad or ambiguous; do not silently replace
+ * "SE" with a more expensive subtrim from a generic VIN Series field.
+ */
+export function preserveAdvertisedCandidateTrim(
+  advertisedTrim: unknown,
+  decoderTrim: unknown,
+  make: unknown,
+  model: unknown,
+): string {
+  const advertised = String(advertisedTrim || "").trim();
+  const decoded = String(decoderTrim || "").trim();
+  if (advertised && !isLikelyVariantEnumeration({ make, model, trim: advertised })) return advertised;
+  if (decoded && !isLikelyVariantEnumeration({ make, model, trim: decoded })) return decoded;
+  return "";
+}
+
+export function preserveSpecificSubjectTrim(
+  qualificationTrim: unknown,
+  displayTrim: unknown,
+  make: unknown,
+  model: unknown,
+): string {
+  const qualified = String(qualificationTrim || "").trim();
+  const displayed = String(displayTrim || "").trim();
+  if (!qualified) return isNonRetailTrimLabel(displayed) ? "" : displayed;
+  if (!displayed) return isNonRetailTrimLabel(qualified) ? "" : qualified;
+  if (isLikelyVariantEnumeration({ make, model, trim: displayed })) return qualified;
+  if (isLikelyVariantEnumeration({ make, model, trim: qualified })) return displayed;
+
+  const base = normalizeVehicleText(qualified);
+  const specific = normalizeVehicleText(displayed);
+  // Require whole words, not arbitrary substrings ("S" must not match "SE").
+  // A longer trim is retained only when it contains the qualified trim.
+  if (specific.length > base.length &&
+      ` ${specific} `.includes(` ${base} `)) {
+    return displayed;
+  }
+  return qualified;
 }
 
 export function canonicalVehicleMake(value: unknown) {
@@ -267,6 +349,11 @@ export function canonicalModelFamily(vehicle: VehicleIdentity) {
   }
 
   if (make === "porsche") {
+    // Providers index Coupe and performance derivatives as model names.
+    // Keep them in the Cayenne family, then let trim/body equivalence decide
+    // whether they are genuinely the same retail configuration.
+    if (modelCompact === "cayenne" ||
+        /^cayenne(?:coupe|turbo|gts|s|e?hybrid)/.test(modelCompact)) return "cayenne";
     if (modelCompact.startsWith("911")) return "911";
     if (modelCompact.startsWith("718cayman")) return "cayman";
     if (modelCompact.startsWith("718boxster")) return "boxster";
@@ -299,6 +386,7 @@ export function isLikelyVariantEnumeration({
 }) {
   const normalizedTrim = normalizeVehicleText(trim);
   if (!normalizedTrim) return false;
+  if (isNonRetailTrimLabel(trim)) return true;
 
   const family = canonicalModelFamily({
     year: 0,
@@ -486,6 +574,26 @@ export function canonicalFuelType(value: unknown) {
   }
 
   return text;
+}
+
+/**
+ * Production facts can resolve an inaccurate engine-only fuel label in a
+ * listing provider. This is deliberately narrow: 2025 US Toyota Camry was
+ * hybrid-only. Do not infer trim or extend the rule to older model years.
+ */
+export function canonicalFuelForVehicle(vehicle: Pick<VehicleIdentity, "year" | "make" | "model" | "fuelType">) {
+  const fuel = canonicalFuelType(vehicle.fuelType);
+  if (Number(vehicle.year) === 2025 &&
+      canonicalVehicleMake(vehicle.make) === "toyota" &&
+      canonicalModelFamily({
+        year: Number(vehicle.year),
+        make: vehicle.make,
+        model: vehicle.model,
+      }) === "camry" &&
+      (fuel === "gasoline" || !fuel || fuel === "hybrid")) {
+    return "hybrid";
+  }
+  return fuel;
 }
 
 export function resolveSemanticFuelType({

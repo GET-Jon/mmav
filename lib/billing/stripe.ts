@@ -54,23 +54,43 @@ export async function stripeGet(path: string): Promise<Record<string, unknown>> 
   return data;
 }
 
+/**
+ * Stripe redirect URLs must follow the public application origin, not the
+ * internal Netlify server-handler request URL. Netlify can expose a
+ * deployment-specific hostname in request.url even on the production site.
+ */
 export function getBillingSiteUrl(requestUrl?: string) {
-  // Checkout must return to the same host that started it. This keeps
-  // preview authentication on the preview domain and production auth on
-  // yourlotlogic.com instead of crossing cookie boundaries.
-  if (requestUrl) {
-    const url = new URL(requestUrl);
-    return url.origin;
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/[/]$/, "");
+  const isProduction = supabaseUrl === "https://ymlleqpbpgzydyzwhlqq.supabase.co";
+  if (isProduction) return "https://yourlotlogic.com";
+
+  // Previews must remain on the preview host for session-cookie isolation.
+  // Netlify may rewrite the incoming request hostname, so prefer the stable
+  // DEPLOY_PRIME_URL supplied to the deploy when it is available.
+  const candidates = [
+    process.env.DEPLOY_PRIME_URL,
+    requestUrl,
+    process.env.DEPLOY_URL,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol === "https:" &&
+          /^deploy-preview-[0-9]+--mmav[.]netlify[.]app$/.test(parsed.hostname)) {
+        return parsed.origin;
+      }
+      if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+        return parsed.origin;
+      }
+    } catch {
+      // Ignore malformed candidate URLs; never pass them to Stripe.
+    }
   }
 
-  const configured =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.URL ||
-    process.env.DEPLOY_PRIME_URL;
-
-  if (configured) return configured.replace(/\/$/, "");
-
-  return "https://yourlotlogic.com";
+  // Unknown staging/preview configurations must not silently redirect a
+  // customer's Stripe session to production or an internal deploy hostname.
+  throw new Error("Billing return URL is not configured for this environment.");
 }
 
 export function verifyStripeWebhook(
