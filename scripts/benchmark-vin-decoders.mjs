@@ -5,6 +5,8 @@
  * Dry run (no API requests): node scripts/benchmark-vin-decoders.mjs
  * Execute first 5 (up to 5 Auto.dev quota calls and 5 free NHTSA requests):
  *   AUTODEV_API_KEY=... node scripts/benchmark-vin-decoders.mjs --execute --limit 5
+ * Test the Camry pair: ... --execute --make Toyota --limit 2
+ * Test one specific VIN: ... --execute --vin 4T1DAACK6SU615158 --limit 1
  * Execute all 15: ... --execute --limit 15
  *
  * Results are saved locally, not committed. DO NOT supply keys as CLI arguments.
@@ -20,13 +22,17 @@ const fixtures = JSON.parse(fs.readFileSync(path.join(root, "benchmarks/vin/fixt
 const flags = new Set(process.argv.slice(2));
 const index = process.argv.indexOf("--limit");
 const limit = index === -1 ? 5 : Number(process.argv[index + 1]);
+const makeIndex = process.argv.indexOf("--make");
+const makeFilter = makeIndex === -1 ? "" : String(process.argv[makeIndex + 1] || "").toLowerCase();
+const vinIndex = process.argv.indexOf("--vin");
+const vinFilter = vinIndex === -1 ? "" : String(process.argv[vinIndex + 1] || "").toUpperCase();
+const eligible = fixtures.filter(v => (!makeFilter || v.make.toLowerCase() === makeFilter) && (!vinFilter || v.vin === vinFilter));
 const outIndex = process.argv.indexOf("--out");
 const outfile = outIndex === -1 ? path.join(root, "tmp", "vin-benchmark-results.json") : path.resolve(process.argv[outIndex + 1] || "");
 const execute = flags.has("--execute");
-const only = flags.has("--only");
 const provider = flags.has("--nhtsa-only") ? "nhtsa" : flags.has("--autodev-only") ? "autodev" : "both";
-if (!Number.isInteger(limit) || limit < 1 || limit > fixtures.length) {
-  console.error("Invalid --limit. Must be 1 to " + fixtures.length); process.exit(2);
+if (!Number.isInteger(limit) || limit < 1 || limit > Math.min(15, eligible.length)) {
+  console.error("Invalid --limit. Must be 1 to " + Math.min(15, eligible.length)); process.exit(2);
 }
 if (flags.has("--nhtsa-only") && flags.has("--autodev-only")) {
   console.error("Select only one provider filter."); process.exit(2);
@@ -34,7 +40,7 @@ if (flags.has("--nhtsa-only") && flags.has("--autodev-only")) {
 if (outIndex !== -1 && (!process.argv[outIndex + 1] || process.argv[outIndex + 1].startsWith("--"))) {
   console.error("Supply a file path after --out."); process.exit(2);
 }
-const chosen = fixtures.slice(0,limit);
+const chosen = eligible.slice(0,limit);
 const scrub = (s) => String(s ?? "").toLowerCase()
   .replace(/\b(?:4wd|awd|fwd|rwd|4x4|2wd|all wheel drive|front wheel drive|rear wheel drive)\b/g," ")
   .replace(/[^a-z0-9]+/g," ").trim().replace(/\s+/g," ");
