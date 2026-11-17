@@ -48,6 +48,18 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  // Public customer-facing Motor Match preview and its dedicated intake endpoint.
+  // This exemption is narrowly scoped; other Lot Logic pages and APIs still
+  // require authentication. The intake handler separately verifies its own
+  // isolated database configuration and rejects writes if it is unavailable.
+  if (
+    pathname === "/motor-match-conversational" ||
+    pathname.startsWith("/motor-match-conversational/") ||
+    pathname === "/api/motor-match-conversational/submit"
+  ) {
+    return response;
+  }
+
   // Stripe delivers signed, server-to-server POSTs without user cookies.
   // Let only this exact webhook route reach its signature-verifying handler.
   // All other API routes retain the normal authentication checks.
