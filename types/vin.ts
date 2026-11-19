@@ -12,4 +12,13 @@ export type VinDecodeResult = {
   driveType: string;
   fuelType: string;
   plantCountry: string;
+  identityEvidence?: {
+    sources: Array<"nhtsa" | "auto_dev">;
+    confidence: "high" | "partial" | "conflict";
+    ambiguousTrim: boolean;
+    possibleTrims: string[];
+    conflicts: string[];
+    durationMs: number;
+    cache: "hit" | "miss";
+  };
 };
