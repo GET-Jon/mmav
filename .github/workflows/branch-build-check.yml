@@ -1,6 +1,9 @@
 name: Branch build check
 
 on:
+  push:
+    branches:
+      - feat/vin-identity-stage1-fast-fallback
   pull_request:
     branches:
       - main
