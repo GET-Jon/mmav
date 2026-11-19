@@ -4,3 +4,4 @@ verified-build-trigger: 2026-09-30T15:27:00-04:00
 verified-build-trigger: 2026-09-30T15:30:00-04:00
 
 request-deploy-preview-38: 2026-11-19 stage-1-vin-identity
+preview-auth-env-repaired: 2026-11-19 connect-to-existing-mavv-auth
