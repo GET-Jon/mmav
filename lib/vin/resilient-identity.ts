@@ -5,6 +5,7 @@ import {
   isNonRetailTrimLabel,
   normalizeVehicleText,
   canonicalModelFamily,
+  canonicalVehicleVariant,
 } from "@/lib/marketcheck/vehicle-identity";
 
 export type DecodeSource = "nhtsa" | "auto_dev";
@@ -152,7 +153,13 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
     if (secondary && primary[key] && secondary[key] && !same(primary[key],secondary[key])) {
       if (key === "model") {
         const family = (model:string) => canonicalModelFamily({year:Number(primary.year),make:primary.make,model,trim:"",drivetrain:"",fuelType:"",bodyType:""});
-        if (family(primary.model) === family(secondary.model)) continue;
+        if (family(primary.model) === family(secondary.model)) {
+          const variant = (model:string) => canonicalVehicleVariant({year:Number(primary.year),make:primary.make,model,trim:"",drivetrain:"",fuelType:"",bodyType:""});
+          const left = variant(primary.model), right = variant(secondary.model);
+          if (!left || !right || left === right) continue;
+          conflicts.push("modelDerivative");
+          continue;
+        }
       }
       conflicts.push(key);
     }
