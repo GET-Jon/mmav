@@ -217,6 +217,9 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
   for (const field of ["year", "make", "model", "trim", "engineCylinders", "displacementL", "fuelType", "bodyClass"] as const) {
     inspectAttribute(field, field === "fuelType" ? comparableFuel : undefined);
   }
+  for (const field of ["engineCylinders", "displacementL"] as const) {
+    if (attributes[field]?.confidence === "conflict" && !conflicts.includes(field)) conflicts.push(field);
+  }
   // Synonyms like "FWD" and "Front-Wheel Drive" are equivalent; AWD
   // and 4WD remain distinct, as do FWD/RWD and generic 2WD.
   const nhtsaDrive = text(nhtsa?.driveType);
