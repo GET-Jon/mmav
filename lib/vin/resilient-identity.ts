@@ -107,6 +107,26 @@ export function normalizeDecodeDriveType(value: unknown): "FWD" | "RWD" | "AWD" 
   return "";
 }
 
+// Broad two-wheel-drive labels are compatible with FWD or RWD, but never
+// sufficient to establish which axle is driven. AWD and 4WD remain distinct.
+export function driveTractionClass(value: unknown): "two" | "four" | "" {
+  const normalized = normalizeDecodeDriveType(value);
+  if (normalized === "FWD" || normalized === "RWD") return "two";
+  if (normalized === "AWD" || normalized === "4WD") return "four";
+  const compact = nameKey(value).replace(/[^a-z0-9]/g, "");
+  if (["2wd","4x2","twowheeldrive","2wheeldrive"].includes(compact)) return "two";
+  return "";
+}
+
+export function normalizeDecodeBodyClass(value: unknown): string {
+  const raw = nameKey(value);
+  if (!raw) return "";
+  // Four-door sedan nomenclature: Sedan/Saloon, Sedan 4D, 4-door Sedan.
+  if (/^(?:sedan|saloon)(?:\s*\/\s*(?:sedan|saloon))?(?:\s*(?:4d|4dr|4 door|4 doors))?$/.test(raw) ||
+      /^(?:4d|4dr|4 door|4 doors)\s*(?:sedan|saloon)$/.test(raw)) return "sedan";
+  return raw;
+}
+
 function nhtsaDecode(vin: string, data: NhtsaBody): VinDecodeResult | null {
   const row = data.Results?.[0];
   if (!row || !row.ModelYear || !row.Make || !row.Model) return null;
@@ -224,7 +244,7 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
     return disagreement;
   };
   for (const field of ["year", "make", "model", "trim", "engineCylinders", "displacementL", "fuelType", "bodyClass"] as const) {
-    inspectAttribute(field, field === "fuelType" ? comparableFuel : undefined);
+    inspectAttribute(field, field === "fuelType" ? comparableFuel : field === "bodyClass" ? normalizeDecodeBodyClass : undefined);
   }
   for (const field of ["engineCylinders", "displacementL"] as const) {
     if (attributes[field]?.confidence === "conflict" && !conflicts.includes(field)) conflicts.push(field);
@@ -235,21 +255,27 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
   const autoDrive = text(auto?.driveType);
   const normalizedNhtsaDrive = normalizeDecodeDriveType(nhtsaDrive);
   const normalizedAutoDrive = normalizeDecodeDriveType(autoDrive);
+  const nhtsaTraction = driveTractionClass(nhtsaDrive);
+  const autoTraction = driveTractionClass(autoDrive);
   const knownDriveConflict = Boolean(normalizedNhtsaDrive && normalizedAutoDrive &&
     normalizedNhtsaDrive !== normalizedAutoDrive);
-  const oneUnknownDrive = Boolean(nhtsaDrive && autoDrive && (!normalizedNhtsaDrive || !normalizedAutoDrive));
-  const driveConflict = knownDriveConflict || oneUnknownDrive;
+  const tractionConflict = Boolean(nhtsaTraction && autoTraction && nhtsaTraction !== autoTraction);
+  // Unknown terminology is not evidence of a disagreement. Preserve it as
+  // unresolved instead of treating it as an incompatible drivetrain.
+  const driveConflict = knownDriveConflict || tractionConflict;
+  const driveType = driveConflict ? "" : (normalizedNhtsaDrive || normalizedAutoDrive);
+  const corroboratedDrive = Boolean(normalizedNhtsaDrive && normalizedAutoDrive &&
+    normalizedNhtsaDrive === normalizedAutoDrive);
   attributes.driveType = {
     confidence: driveConflict ? "conflict"
-      : normalizedNhtsaDrive && normalizedAutoDrive ? "corroborated"
-      : normalizedNhtsaDrive || normalizedAutoDrive ? "single_source" : "unverified",
+      : corroboratedDrive ? "corroborated"
+      : driveType ? "single_source" : "unverified",
     reported: {
       ...(nhtsaDrive ? { nhtsa: nhtsaDrive } : {}),
       ...(autoDrive ? { auto_dev: autoDrive } : {}),
     },
   };
   if (driveConflict) conflicts.push("driveType");
-  const driveType = driveConflict ? "" : (normalizedNhtsaDrive || normalizedAutoDrive);
   // Clear only genuinely disputed values, not every attribute of the car.
   const engineCylinders = attributes.engineCylinders?.confidence === "conflict" ? "" : choose(primary.engineCylinders, secondary?.engineCylinders || "");
   const displacementL = attributes.displacementL?.confidence === "conflict" ? "" : choose(primary.displacementL, secondary?.displacementL || "");
