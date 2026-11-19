@@ -42,9 +42,9 @@ const fwd=run([out("nhtsa",nhtsa({DriveType:"Front-Wheel Drive (FWD)"})),out("au
 assert.ok(fwd);
 assert.equal(fwd.driveType,"FWD");
 assert.equal(fwd.identityEvidence.conflicts.includes("driveType"),false);
-assert.equal(fwd.identityEvidence.attributes.driveType.confidence,"corroborated");
-assert.equal(fwd.identityEvidence.attributes.driveType.reported.nhtsa,"Front-Wheel Drive (FWD)");
-assert.equal(fwd.identityEvidence.attributes.driveType.reported.auto_dev,"FWD");
+assert.equal(fwd.identityEvidence.attributes.driveType?.confidence,"corroborated");
+assert.equal(fwd.identityEvidence.attributes.driveType?.reported.nhtsa,"Front-Wheel Drive (FWD)");
+assert.equal(fwd.identityEvidence.attributes.driveType?.reported.auto_dev,"FWD");
 const rwd=run([out("nhtsa",nhtsa({DriveType:"Rear-Wheel Drive (RWD)"})),out("auto_dev",auto({drive:"RWD"}))]);
 assert.equal(rwd?.driveType,"RWD");
 const awd=run([out("nhtsa",nhtsa({DriveType:"All Wheel Drive"})),out("auto_dev",auto({drive:"AWD"}))]);
@@ -55,13 +55,13 @@ const trueDisagreement=run([out("nhtsa",nhtsa({DriveType:"FWD"})),out("auto_dev"
 assert.ok(trueDisagreement);
 assert.equal(trueDisagreement.driveType,"");
 assert.ok(trueDisagreement.identityEvidence.conflicts.includes("driveType"));
-assert.equal(trueDisagreement.identityEvidence.attributes.driveType.confidence,"conflict");
-assert.equal(trueDisagreement.identityEvidence.attributes.engineCylinders.confidence,"corroborated");
+assert.equal(trueDisagreement.identityEvidence.attributes.driveType?.confidence,"conflict");
+assert.equal(trueDisagreement.identityEvidence.attributes.engineCylinders?.confidence,"corroborated");
 const distinctAwd4wd=run([out("nhtsa",nhtsa({DriveType:"4WD"})),out("auto_dev",auto({drive:"AWD"}))]);
-assert.equal(distinctAwd4wd?.identityEvidence.attributes.driveType.confidence,"conflict");
+assert.equal(distinctAwd4wd?.identityEvidence.attributes.driveType?.confidence,"conflict");
 const unresolved2wd=run([out("nhtsa",nhtsa({DriveType:"2WD"})),out("auto_dev",auto({drive:"FWD"}))]);
 assert.equal(unresolved2wd?.driveType,"");
-assert.equal(unresolved2wd?.identityEvidence.attributes.driveType.confidence,"conflict");
+assert.equal(unresolved2wd?.identityEvidence.attributes.driveType?.confidence,"conflict");
 
 const failNhtsa=run([out("nhtsa",{},503),out("auto_dev",auto({trim:"SE",ambiguous:false,trims:["SE"]}))]);
 assert.ok(failNhtsa);
