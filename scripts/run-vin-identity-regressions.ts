@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeProviders, isValidVinFormat, reconcileVinResults, normalizeDecodeDriveType, type ProviderOutcome,
+  decodeProviders, isValidVinFormat, reconcileVinResults, normalizeDecodeDriveType, engineCylinders, engineDisplacement, type ProviderOutcome,
 } from "../lib/vin/resilient-identity";
 
 const VIN="4T1DAACK6SU615158";
@@ -62,6 +62,28 @@ assert.equal(distinctAwd4wd?.identityEvidence.attributes.driveType?.confidence,"
 const unresolved2wd=run([out("nhtsa",nhtsa({DriveType:"2WD"})),out("auto_dev",auto({drive:"FWD"}))]);
 assert.equal(unresolved2wd?.driveType,"");
 assert.equal(unresolved2wd?.identityEvidence.attributes.driveType?.confidence,"conflict");
+
+assert.equal(engineCylinders("2.5L I4 Hybrid"),"4");
+assert.equal(engineCylinders("2.0 L Inline-4"),"4");
+assert.equal(engineCylinders("3.0 L V6"),"6");
+assert.equal(engineCylinders("2.5L 4 cylinder"),"4");
+assert.equal(engineCylinders(null),"");
+assert.equal(engineDisplacement("2.5L I4 Hybrid"),"2.5");
+assert.equal(engineDisplacement("2487 cc 4-cylinder"),"2.5");
+assert.equal(engineDisplacement(null),"");
+const blockedNhtsa=run([
+  out("nhtsa",null,403),
+  out("auto_dev",auto({engine:null,trim:null,ambiguous:true})),
+]);
+assert.ok(blockedNhtsa);
+assert.equal(blockedNhtsa.identityEvidence.providerHealth.find(item => item.provider === "nhtsa")?.httpStatus,403);
+assert.equal(blockedNhtsa.identityEvidence.providerHealth.find(item => item.provider === "auto_dev")?.status,"ok");
+assert.equal(blockedNhtsa.engineCylinders,"");
+assert.equal(blockedNhtsa.displacementL,"");
+assert.match(blockedNhtsa.identityEvidence.engineNote || "",/did not provide an engine/);
+const nhtsaOnly=run([out("nhtsa",nhtsa({DriveType:"FWD"})),out("auto_dev",null,207)]);
+assert.ok(nhtsaOnly);
+assert.equal(nhtsaOnly.identityEvidence.providerHealth.find(item => item.provider === "auto_dev")?.status,"partial");
 
 const failNhtsa=run([out("nhtsa",{},503),out("auto_dev",auto({trim:"SE",ambiguous:false,trims:["SE"]}))]);
 assert.ok(failNhtsa);
