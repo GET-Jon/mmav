@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeProviders, isValidVinFormat, reconcileVinResults, type ProviderOutcome,
+  decodeProviders, isValidVinFormat, reconcileVinResults, normalizeDecodeDriveType, type ProviderOutcome,
 } from "../lib/vin/resilient-identity";
 
 const VIN="4T1DAACK6SU615158";
@@ -31,6 +31,37 @@ assert.equal(both.identityEvidence.confidence,"partial");
 assert.equal(both.identityEvidence.ambiguousTrim,true);
 assert.ok(both.identityEvidence.possibleTrims.includes("SE"));
 assert.ok(!both.identityEvidence.conflicts.includes("fuelType"));
+
+// Identical drivetrain descriptions must not become false conflicts.
+assert.equal(normalizeDecodeDriveType("Front-Wheel Drive (FWD)"),"FWD");
+assert.equal(normalizeDecodeDriveType("Rear Wheel Drive"),"RWD");
+assert.equal(normalizeDecodeDriveType("all-wheel drive"),"AWD");
+assert.equal(normalizeDecodeDriveType("Four Wheel Drive"),"4WD");
+assert.equal(normalizeDecodeDriveType("2WD"),"");
+const fwd=run([out("nhtsa",nhtsa({DriveType:"Front-Wheel Drive (FWD)"})),out("auto_dev",auto({drive:"FWD"}))]);
+assert.ok(fwd);
+assert.equal(fwd.driveType,"FWD");
+assert.equal(fwd.identityEvidence.conflicts.includes("driveType"),false);
+assert.equal(fwd.identityEvidence.attributes.driveType.confidence,"corroborated");
+assert.equal(fwd.identityEvidence.attributes.driveType.reported.nhtsa,"Front-Wheel Drive (FWD)");
+assert.equal(fwd.identityEvidence.attributes.driveType.reported.auto_dev,"FWD");
+const rwd=run([out("nhtsa",nhtsa({DriveType:"Rear-Wheel Drive (RWD)"})),out("auto_dev",auto({drive:"RWD"}))]);
+assert.equal(rwd?.driveType,"RWD");
+const awd=run([out("nhtsa",nhtsa({DriveType:"All Wheel Drive"})),out("auto_dev",auto({drive:"AWD"}))]);
+assert.equal(awd?.driveType,"AWD");
+const fourWd=run([out("nhtsa",nhtsa({DriveType:"Four Wheel Drive"})),out("auto_dev",auto({drive:"4x4"}))]);
+assert.equal(fourWd?.driveType,"4WD");
+const trueDisagreement=run([out("nhtsa",nhtsa({DriveType:"FWD"})),out("auto_dev",auto({drive:"AWD"}))]);
+assert.ok(trueDisagreement);
+assert.equal(trueDisagreement.driveType,"");
+assert.ok(trueDisagreement.identityEvidence.conflicts.includes("driveType"));
+assert.equal(trueDisagreement.identityEvidence.attributes.driveType.confidence,"conflict");
+assert.equal(trueDisagreement.identityEvidence.attributes.engineCylinders.confidence,"corroborated");
+const distinctAwd4wd=run([out("nhtsa",nhtsa({DriveType:"4WD"})),out("auto_dev",auto({drive:"AWD"}))]);
+assert.equal(distinctAwd4wd?.identityEvidence.attributes.driveType.confidence,"conflict");
+const unresolved2wd=run([out("nhtsa",nhtsa({DriveType:"2WD"})),out("auto_dev",auto({drive:"FWD"}))]);
+assert.equal(unresolved2wd?.driveType,"");
+assert.equal(unresolved2wd?.identityEvidence.attributes.driveType.confidence,"conflict");
 
 const failNhtsa=run([out("nhtsa",{},503),out("auto_dev",auto({trim:"SE",ambiguous:false,trims:["SE"]}))]);
 assert.ok(failNhtsa);
