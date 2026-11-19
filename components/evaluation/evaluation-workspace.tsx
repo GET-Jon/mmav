@@ -1852,6 +1852,7 @@ export function EvaluationWorkspace({
     ? buildTrimMarketScenarios({
         comps: independentComps,
         model: vehicleModel,
+        make: vehicleMake,
         year: Number(vehicleYear),
         targetMileage,
         assumptions: activeAssumptions,
@@ -8112,6 +8113,19 @@ export function EvaluationWorkspace({
                         onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}>
                         Confirm retail trim in Vehicle →
                       </button>
+                    </div>
+                  ) : null}
+                  {!evaluationRunning && !marketCheckLoading && !compSearchImproving && strongestIndicativeScenario ? (
+                    <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-blue-800">Market intelligence available · provisional</p>
+                      <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                          <p className="text-xl font-black text-slate-950">{money(strongestIndicativeScenario.adjustedMedian)}</p>
+                          <p className="text-[11px] font-semibold text-slate-600">{strongestIndicativeScenario.trim} advertised asking median adjusted to {targetMileage.toLocaleString()} miles</p>
+                        </div>
+                        <p className="text-xs font-bold text-blue-900">{strongestIndicativeScenario.count} comparable listings</p>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-700">Observed adjusted range: <strong>{money(strongestIndicativeScenario.adjustedLow)}–{money(strongestIndicativeScenario.adjustedHigh)}</strong>. This is a market scenario, not a confirmed valuation for this VIN.</p>
                     </div>
                   ) : null}
                   {evaluationRunning || marketCheckLoading || compSearchImproving ? (
