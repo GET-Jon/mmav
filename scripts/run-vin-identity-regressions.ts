@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeProviders, isValidVinFormat, reconcileVinResults, normalizeDecodeDriveType, engineCylinders, engineDisplacement, type ProviderOutcome,
+  decodeProviders, isValidVinFormat, reconcileVinResults, normalizeDecodeDriveType, engineCylinders, engineDisplacement, normalizeDecodeBodyClass, driveTractionClass, type ProviderOutcome,
 } from "../lib/vin/resilient-identity";
 
 const VIN="4T1DAACK6SU615158";
@@ -60,8 +60,30 @@ assert.equal(trueDisagreement.identityEvidence.attributes.engineCylinders?.confi
 const distinctAwd4wd=run([out("nhtsa",nhtsa({DriveType:"4WD"})),out("auto_dev",auto({drive:"AWD"}))]);
 assert.equal(distinctAwd4wd?.identityEvidence.attributes.driveType?.confidence,"conflict");
 const unresolved2wd=run([out("nhtsa",nhtsa({DriveType:"2WD"})),out("auto_dev",auto({drive:"FWD"}))]);
-assert.equal(unresolved2wd?.driveType,"");
-assert.equal(unresolved2wd?.identityEvidence.attributes.driveType?.confidence,"conflict");
+assert.equal(unresolved2wd?.driveType,"FWD");
+assert.equal(unresolved2wd?.identityEvidence.attributes.driveType?.confidence,"single_source");
+assert.equal(unresolved2wd?.identityEvidence.conflicts.includes("driveType"),false);
+const camryActual=run([out("nhtsa",nhtsa({DriveType:"4x2",BodyClass:"Sedan/Saloon"})),
+  out("auto_dev",auto({drive:"Front Wheel Drive",body:"Sedan 4D",engine:"2.5L I4 Hybrid"}))]);
+assert.ok(camryActual);
+assert.equal(camryActual.driveType,"FWD");
+assert.equal(camryActual.bodyClass,"Sedan/Saloon");
+assert.equal(camryActual.identityEvidence.conflicts.includes("driveType"),false);
+assert.equal(camryActual.identityEvidence.attributes.driveType?.confidence,"single_source");
+assert.equal(camryActual.identityEvidence.attributes.bodyClass?.confidence,"corroborated");
+assert.equal(camryActual.identityEvidence.conflicts.includes("bodyClass"),false);
+assert.equal(camryActual.identityEvidence.confidence,"partial");
+assert.equal(normalizeDecodeBodyClass("Sedan/Saloon"),"sedan");
+assert.equal(normalizeDecodeBodyClass("Sedan 4D"),"sedan");
+assert.equal(normalizeDecodeBodyClass("Coupe 2D"),"coupe 2d");
+assert.equal(driveTractionClass("4x2"),"two");
+const twoVersusFour=run([out("nhtsa",nhtsa({DriveType:"4x2"})),out("auto_dev",auto({drive:"AWD"}))]);
+assert.equal(twoVersusFour?.identityEvidence.attributes.driveType?.confidence,"conflict");
+assert.equal(twoVersusFour?.driveType,"");
+const rwdWith4x2=run([out("nhtsa",nhtsa({DriveType:"4x2"})),out("auto_dev",auto({drive:"RWD"}))]);
+assert.equal(rwdWith4x2?.driveType,"RWD");
+assert.equal(rwdWith4x2?.identityEvidence.attributes.driveType?.confidence,"single_source");
+
 
 assert.equal(engineCylinders("2.5L I4 Hybrid"),"4");
 assert.equal(engineCylinders("2.0 L Inline-4"),"4");
