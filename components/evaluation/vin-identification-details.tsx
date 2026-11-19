@@ -2,11 +2,12 @@
 
 import type { VinDecodeResult } from "@/types/vin";
 
-function Detail({ label, value }: { label: string; value?: string | null }) {
+function Detail({ label, value, confidence }: { label: string; value?: string | null; confidence?: "corroborated" | "single_source" | "conflict" | "unverified" }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</dt>
       <dd className="break-words text-xs font-semibold text-slate-900">{value?.trim() || "Not established"}</dd>
+      {confidence ? <span className={`text-[10px] font-semibold ${confidence === "conflict" ? "text-amber-800" : "text-slate-500"}`}>{confidence === "corroborated" ? "Both providers agree" : confidence === "single_source" ? "One provider" : confidence === "conflict" ? "Disputed" : "Unverified"}</span> : null}
     </div>
   );
 }
@@ -28,6 +29,8 @@ export function VinIdentificationDetails({
 
   const evidence = decoded.identityEvidence;
   const sourceNames = evidence?.sources.map(source => source === "auto_dev" ? "Auto.dev" : "NHTSA");
+  const confidenceFor = (field: "year" | "make" | "model" | "trim" | "engineCylinders" | "displacementL" | "fuelType" | "driveType" | "bodyClass") => evidence?.attributes?.[field]?.confidence;
+  const disputed = evidence?.conflicts.map(field => ({field, values: evidence.attributes?.[field as keyof NonNullable<typeof evidence.attributes>]?.reported}));
   const statusText = evidence
     ? evidence.confidence === "conflict"
       ? "Conflicting attributes"
@@ -47,15 +50,15 @@ export function VinIdentificationDetails({
       </summary>
       <div className="space-y-3 border-t border-slate-200 px-3 py-3">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-          <Detail label="Year" value={decoded.year} />
-          <Detail label="Make" value={decoded.make} />
-          <Detail label="Model" value={decoded.model} />
-          <Detail label="Retail trim" value={decoded.trim} />
-          <Detail label="Engine cylinders" value={decoded.engineCylinders} />
-          <Detail label="Engine displacement" value={decoded.displacementL ? decoded.displacementL + " L" : ""} />
-          <Detail label="Fuel / powertrain" value={decoded.fuelType} />
-          <Detail label="Drivetrain" value={decoded.driveType} />
-          <Detail label="Body" value={decoded.bodyClass} />
+          <Detail label="Year" value={decoded.year} confidence={confidenceFor("year")} />
+          <Detail label="Make" value={decoded.make} confidence={confidenceFor("make")} />
+          <Detail label="Model" value={decoded.model} confidence={confidenceFor("model")} />
+          <Detail label="Retail trim" value={decoded.trim} confidence={confidenceFor("trim")} />
+          <Detail label="Engine cylinders" value={decoded.engineCylinders} confidence={confidenceFor("engineCylinders")} />
+          <Detail label="Engine displacement" value={decoded.displacementL ? decoded.displacementL + " L" : ""} confidence={confidenceFor("displacementL")} />
+          <Detail label="Fuel / powertrain" value={decoded.fuelType} confidence={confidenceFor("fuelType")} />
+          <Detail label="Drivetrain" value={decoded.driveType} confidence={confidenceFor("driveType")} />
+          <Detail label="Body" value={decoded.bodyClass} confidence={confidenceFor("bodyClass")} />
           <Detail label="Doors" value={decoded.doors} />
         </dl>
         <div className="border-t border-slate-200 pt-3">
@@ -71,8 +74,18 @@ export function VinIdentificationDetails({
                   ? "Possible grades: " + evidence.possibleTrims.join(", ")
                   : "The decoder did not establish the retail grade."}</p>
               ) : null}
-              {evidence.conflicts.length ? (
-                <p className="text-amber-800"><strong>Disputed attributes:</strong> {evidence.conflicts.join(", ")}. Do not rely on these for exact-match pricing.</p>
+              {disputed?.length ? (
+                <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-900">
+                  <p className="font-bold">Provider disagreements</p>
+                  {disputed.map(({field, values}) => (
+                    <div key={field} className="space-y-0.5">
+                      <p className="font-semibold">{field}</p>
+                      <p>NHTSA: {values?.nhtsa || "Not reported"}</p>
+                      <p>Auto.dev: {values?.auto_dev || "Not reported"}</p>
+                    </div>
+                  ))}
+                  <p className="text-[11px]">Disputed values are not used as verified exact-match attributes.</p>
+                </div>
               ) : null}
             </div>
           ) : (
