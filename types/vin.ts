@@ -27,5 +27,7 @@ export type VinDecodeResult = {
     >>;
     durationMs: number;
     cache: "hit" | "miss";
+    providerHealth?: Array<{ provider: "nhtsa" | "auto_dev"; status: "ok" | "partial" | "http_error" | "timeout" | "unavailable" | "not_configured"; httpStatus?: number; durationMs: number }>;
+    engineNote?: string;
   };
 };
