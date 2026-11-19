@@ -18,6 +18,13 @@ export type VinDecodeResult = {
     ambiguousTrim: boolean;
     possibleTrims: string[];
     conflicts: string[];
+    attributes?: Partial<Record<
+      "year" | "make" | "model" | "trim" | "engineCylinders" | "displacementL" | "driveType" | "fuelType" | "bodyClass",
+      {
+        confidence: "corroborated" | "single_source" | "conflict" | "unverified";
+        reported: Partial<Record<"nhtsa" | "auto_dev", string>>;
+      }
+    >>;
     durationMs: number;
     cache: "hit" | "miss";
   };
