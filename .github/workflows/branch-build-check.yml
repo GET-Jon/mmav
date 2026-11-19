@@ -25,6 +25,8 @@ jobs:
         run: |
           node --check scripts/benchmark-vin-decoders.mjs
           node scripts/benchmark-vin-decoders.mjs > /dev/null
+      - name: Provisional trim market scenario regressions
+        run: npx --yes tsx@4.20.6 scripts/run-trim-market-scenario-regressions.ts
       - name: Fast VIN dual-provider regression suite
         run: npx --yes tsx@4.20.6 scripts/run-vin-identity-regressions.ts
       - name: Comp regression suite
