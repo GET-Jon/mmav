@@ -16,7 +16,12 @@ const comps=[
   make(6,"SE",31200,11000),
   make(7,"XSE",34000,13000,{included:false}),
 ];
-const input={comps,model:"Camry",year:2025,targetMileage,assumptions:defaultAssumptions};
+const input={comps,make:"Toyota",model:"Camry",year:2025,targetMileage,assumptions:defaultAssumptions};
+const brandedComps=comps.map(comp=>({...comp,model:"Toyota Camry"}));
+const brandedScenarios=buildTrimMarketScenarios({...input,comps:brandedComps});
+assert.equal(brandedScenarios.length,1,"Branded provider model must match canonical Camry.");
+assert.equal(brandedScenarios[0].count,5);
+assert.equal(buildTrimMarketScenarios({...input,comps:comps.map(comp=>({...comp,model:"Camry Hybrid"}))}).length,0,"Adjacent model strings must not be silently promoted.");
 const scenarios=buildTrimMarketScenarios(input);
 assert.equal(scenarios.length,1);
 assert.equal(scenarios[0].trim,"LE");
