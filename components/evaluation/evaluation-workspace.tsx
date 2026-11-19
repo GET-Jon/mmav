@@ -35,6 +35,7 @@ import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
 import { dedicatedBmwMModel, isNonRetailTrimLabel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
 import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
+import { buildTrimMarketScenarios } from "@/lib/evaluation/trim-market-scenarios";
 import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
@@ -1847,6 +1848,16 @@ export function EvaluationWorkspace({
     make: vehicleMake,
     model: vehicleModel,
   });
+  const indicativeTrimScenarios = retailTrimNeedsConfirmation && !pricingEvidence.decisionReady
+    ? buildTrimMarketScenarios({
+        comps: independentComps,
+        model: vehicleModel,
+        year: Number(vehicleYear),
+        targetMileage,
+        assumptions: activeAssumptions,
+      })
+    : [];
+  const strongestIndicativeScenario = indicativeTrimScenarios[0] || null;
   const compRetrievalLabel = compTaxonomyFallback
     ? [vehicleMake, compTaxonomyFallback.fallbackModel, "broad model bucket"]
         .filter(Boolean)
@@ -8096,7 +8107,7 @@ export function EvaluationWorkspace({
                   {!evaluationRunning && !marketCheckLoading && !compSearchImproving && retailTrimNeedsConfirmation ? (
                     <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
                       <p className="font-black">Exact retail trim has not been established</p>
-                      <p>Lot Logic found related inventory, but cannot claim LE, SE, XLE, or XSE is an exact pricing match without evidence of this vehicle's grade. More geographic searches alone will not resolve it.</p>
+                      <p>Lot Logic cannot confirm the exact grade from the VIN. The listings below provide useful market context, but they are not verified pricing matches for this particular car.</p>
                       <button type="button" className="mt-2 font-black text-blue-700 hover:underline"
                         onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}>
                         Confirm retail trim in Vehicle →
@@ -8130,8 +8141,9 @@ export function EvaluationWorkspace({
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
-                          <div className="mt-1 text-xl font-black text-slate-950">{pricingEvidence.closePeerCount === 0 ? "Not established" : finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{strongestIndicativeScenario ? `Indicative ${strongestIndicativeScenario.trim} asking market` : pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{strongestIndicativeScenario ? money(strongestIndicativeScenario.adjustedMedian) : pricingEvidence.closePeerCount === 0 ? "Not established" : finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          {strongestIndicativeScenario ? <div className="mt-1 text-[10px] font-medium text-slate-600">{strongestIndicativeScenario.count} selected ${strongestIndicativeScenario.trim} listings · mileage-adjusted asking median, not a subject valuation</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Pricing evidence</div>
@@ -8139,6 +8151,21 @@ export function EvaluationWorkspace({
                           <div className="mt-1 text-[10px] font-semibold text-slate-500">{pricingEvidence.decisionReady ? "Based on qualified close pricing peers" : "Acquisition decision not yet supported"}</div>
                         </div>
                       </div>
+                      {indicativeTrimScenarios.length > 0 && (
+                        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-3 text-xs text-slate-800">
+                          <p className="font-black text-blue-900">Available market evidence by retail trim</p>
+                          <p className="mt-1 text-[11px] leading-4 text-slate-700">These are mileage-adjusted <strong>advertised asking prices</strong> from selected listings, not verified transaction prices. The VIN has not established which trim the subject vehicle is.</p>
+                          <div className="mt-2 space-y-1.5">
+                            {indicativeTrimScenarios.map(scenario => (
+                              <div key={scenario.trim} className="flex items-center justify-between gap-3 rounded-lg bg-white px-2 py-2">
+                                <span className="font-semibold">{scenario.trim} · {scenario.count} listings</span>
+                                <span className="text-right font-bold">{money(scenario.adjustedMedian)} median <span className="block text-[10px] font-medium text-slate-500">{money(scenario.adjustedLow)}–{money(scenario.adjustedHigh)} range</span></span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-[11px] font-semibold text-amber-900">Confirm actual trim, title and condition before relying on this market context for a bid. No automatic acquisition recommendation is issued from these scenarios.</p>
+                        </div>
+                      )}
                       {activeStage === "market" ? (
                         <>
                         <div className="mt-3 text-xs leading-5 text-slate-600">
