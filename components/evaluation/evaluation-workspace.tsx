@@ -19,6 +19,7 @@ import {
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { VinPhotoCapture } from "@/components/evaluation/vin-photo-capture";
+import { VinIdentificationDetails } from "@/components/evaluation/vin-identification-details";
 import { isPromisingNegotiationOpportunity } from "@/lib/evaluation/verdict-presentation";
 import {
   describeMarketCheckAttempt,
@@ -7613,6 +7614,7 @@ export function EvaluationWorkspace({
                           disabled={vinDecodeLoading || evaluationRunning}
                         />
                       </div>
+                      <VinIdentificationDetails decoded={decodedVehicle} vin={vin} />
                       <label className="block">
                         <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
                           Retail trim / grade (if known)
