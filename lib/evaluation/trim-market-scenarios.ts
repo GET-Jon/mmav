@@ -21,6 +21,13 @@ function roundedMedian(input: number[]) {
 }
 
 const normalize = (input: unknown) => String(input || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const canonicalListingModel = (model: string, make: string) => {
+  const compactModel = normalize(model);
+  const compactMake = normalize(make);
+  return compactMake && compactModel.startsWith(compactMake)
+    ? compactModel.slice(compactMake.length)
+    : compactModel;
+};
 
 /**
  * Requires >=3 separate, selected, quality-passing listings in a named trim
@@ -28,22 +35,24 @@ const normalize = (input: unknown) => String(input || "").toLowerCase().replace(
  * These are asking-price scenarios only, not completed sale prices.
  */
 export function buildTrimMarketScenarios({
-  comps, model, year, targetMileage, assumptions,
+  comps, model, make, year, targetMileage, assumptions,
 }: {
   comps: MarketComp[];
   model: string;
+  make: string;
   year: number;
   targetMileage: number;
   assumptions: Assumptions;
 }): TrimMarketScenario[] {
   if (!model || !year || !Number.isFinite(targetMileage) || targetMileage < 0) return [];
+  const subjectModel = canonicalListingModel(model, make);
   const cohorts = new Map<string, MarketComp[]>();
   const seen = new Set<string>();
   for (const comp of comps) {
     if (!comp.included || comp.equivalenceTier === "reject" ||
         comp.dealerDecision === "exclude" || comp.dealerDecision === "include" ||
         (comp.qualityScore || 0) < assumptions.compSettings.minimumQualityScore ||
-        comp.year !== year || normalize(comp.model) !== normalize(model) ||
+        comp.year !== year || canonicalListingModel(comp.model, make) !== subjectModel ||
         !comp.trim?.trim() || !Number.isFinite(comp.askingPrice) || comp.askingPrice <= 0 ||
         !Number.isFinite(comp.mileage) || comp.mileage < 0) continue;
     const trim = comp.trim.trim();
