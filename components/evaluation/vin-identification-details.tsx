@@ -69,6 +69,29 @@ export function VinIdentificationDetails({
               <p><strong>Confidence:</strong> {statusText}</p>
               <p><strong>Decode time:</strong> {Number.isFinite(evidence.durationMs) ? Math.round(evidence.durationMs).toLocaleString() + " ms" : "Not reported"}
                 {evidence.cache === "hit" ? " (cached)" : ""}</p>
+              {evidence.providerHealth?.length ? (
+                <div className="space-y-1 rounded-lg border border-slate-200 bg-white p-2">
+                  <p className="font-semibold">Provider availability</p>
+                  {evidence.providerHealth.map(provider => (
+                    <p key={provider.provider} className={provider.status === "ok" ? "text-slate-700" : "text-amber-800"}>
+                      <strong>{provider.provider === "nhtsa" ? "NHTSA" : "Auto.dev"}:</strong>{" "}
+                      {provider.status === "ok" ? "Success"
+                        : provider.status === "partial" ? "Partial answer"
+                        : provider.status === "http_error" ? `Unavailable (HTTP ${provider.httpStatus})`
+                        : provider.status === "timeout" ? "Timed out"
+                        : provider.status === "not_configured" ? "Not configured"
+                        : "Unavailable"}{" "}
+                      · {Math.round(provider.durationMs).toLocaleString()} ms
+                    </p>
+                  ))}
+                  {evidence.providerHealth.some(provider => provider.provider === "nhtsa" && provider.httpStatus === 403) ? (
+                    <p className="text-[11px] text-amber-800">NHTSA refused this server request (403). Auto.dev fallback remains available; repeating a forbidden request is not expected to fix it.</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {evidence.engineNote ? (
+                <p className="text-[11px] text-amber-800">{evidence.engineNote}</p>
+              ) : null}
               {evidence.ambiguousTrim ? (
                 <p className="text-amber-800"><strong>Trim not confirmed.</strong> {evidence.possibleTrims.length
                   ? "Possible grades: " + evidence.possibleTrims.join(", ")
