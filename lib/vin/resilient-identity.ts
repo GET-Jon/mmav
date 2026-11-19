@@ -111,13 +111,11 @@ function autoDevDecode(vin: string, data: AutoDevBody): VinDecodeResult | null {
   const model = text(data.model || data.vehicle?.model);
   const year = text(data.vehicle?.year);
   if (!year || !make || !model || !/^\d{4}$/.test(year)) return null;
-  const possibleTrims = new Set([
-    ...(Array.isArray(data.trims) ? data.trims : []),
-    ...(Array.isArray(data.styles) ? data.styles.map(s => s?.trim).filter(Boolean) : []),
-  ].map(s => text(s)).filter(Boolean));
   // Ambiguous=true does not mean no common trim: the endpoint only asserts
   // a trim if its sources settled the grade. Never force a candidate into it.
-  const retailTrim = data.ambiguous && possibleTrims.size > 1 ? "" : text(data.trim);
+  // Auto.dev v2 only populates trim on ambiguous results when its trim
+  // sources have settled that grade; the style may still be ambiguous.
+  const retailTrim = text(data.trim);
   return {
     vin, status: data.ambiguous ? "Decoded with unresolved configuration" : "Decoded",
     year, make,
