@@ -23,6 +23,8 @@ export type VehicleIdentityEvidence = {
   attributes: Partial<Record<IdentityAttribute, AttributeEvidence>>;
   durationMs: number;
   cache: "hit" | "miss";
+  providerHealth: Array<{ provider: DecodeSource; status: "ok" | "partial" | "http_error" | "timeout" | "unavailable" | "not_configured"; httpStatus?: number; durationMs: number }>;
+  engineNote?: string;
 };
 
 export type ResilientVinDecode = VinDecodeResult & { identityEvidence: VehicleIdentityEvidence };
@@ -64,14 +66,21 @@ export function normalizeMake(make: string) {
 function text(value: unknown) { return String(value ?? "").trim(); }
 function nameKey(value: unknown) { return normalizeVehicleText(value); }
 function same(a: unknown, b: unknown) { return nameKey(a) === nameKey(b); }
-function engineDisplacement(engine: unknown): string {
-  const match = text(engine).match(/\b(\d\.\d)\s?l\b/i);
-  return match?.[1] || "";
+// Auto.dev v2 documents engine as a string, but permits null for ambiguous
+// configurations. Parse only values explicitly present; never infer from model.
+export function engineDisplacement(engine: unknown): string {
+  const str = typeof engine === "string" ? engine : "";
+  const liters = str.match(/\b(\d(?:\.\d{1,2})?)\s*(?:l|liter|litre)s?\b/i);
+  if (liters) return liters[1];
+  const cc = str.match(/\b(\d{4})\s*(?:cc|cm3)\b/i);
+  return cc ? String(Math.round(Number(cc[1]) / 100) / 10) : "";
 }
-function engineCylinders(engine: unknown): string {
-  const str = text(engine);
-  const v = str.match(/\bV\s?([468])\b/i) || str.match(/\bI\s?([346])\b/i);
-  return v?.[1] || (/\bfour.cylinder\b/i.test(str) ? "4" : "");
+export function engineCylinders(engine: unknown): string {
+  const str = typeof engine === "string" ? engine : "";
+  const shorthand = str.match(/\b(?:V|I|L|H|W)\s*[- ]?\s*(3|4|5|6|8|10|12)\b/i);
+  if(shorthand) return shorthand[1];
+  const verbose = str.match(/\b(3|4|5|6|8|10|12)[- ]?(?:cyl|cylinder)s?\b|\b(?:inline|flat|boxer)[- ]?(3|4|5|6|8|10|12)\b/i);
+  return verbose?.[1] || verbose?.[2] || "";
 }
 function normalizedFuel(value: unknown) {
   const fuel = nameKey(value);
@@ -255,6 +264,21 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
       : fuelType ? "single_source" : "unverified";
   }
   if (attributes.model && !criticalConflict && both) attributes.model.confidence = "corroborated";
+  const providerHealth: VehicleIdentityEvidence["providerHealth"] = outcomes.map(outcome => ({
+    provider: outcome.provider,
+    status: outcome.httpStatus === 200 ? "ok"
+      : outcome.httpStatus === 207 ? "partial"
+      : outcome.httpStatus > 0 ? "http_error"
+      : outcome.error === "timeout" ? "timeout"
+      : outcome.error === "not_configured" ? "not_configured" : "unavailable",
+    ...(outcome.httpStatus > 0 ? { httpStatus: outcome.httpStatus } : {}),
+    durationMs: outcome.durationMs,
+  }));
+  const engineNote = !engineCylinders || !displacementL
+    ? (auto && !auto.engineCylinders && !auto.displacementL
+      ? "Auto.dev did not provide an engine specification for this VIN; no engine has been inferred."
+      : "Engine specification is incomplete or disputed; verify before exact engine matching.")
+    : undefined;
   const decoded: ResilientVinDecode = {
     ...primary,
     trim, engineCylinders, displacementL, driveType, fuelType,
@@ -263,7 +287,7 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
     status: conflicts.length ? "Decoded with conflicting attributes" :
       (both ? (ambiguousTrim ? "Decoded with unresolved trim" : "Decoded by two sources") :
       "Decoded from " + (sources[0] === "nhtsa" ? "NHTSA" : "Auto.dev")),
-    identityEvidence: { sources,confidence,ambiguousTrim,possibleTrims,conflicts,attributes,durationMs,cache:"miss" },
+    identityEvidence: { sources,confidence,ambiguousTrim,possibleTrims,conflicts,attributes,durationMs,cache:"miss",providerHealth,engineNote },
   };
   return decoded;
 }
