@@ -122,8 +122,8 @@ export function normalizeDecodeBodyClass(value: unknown): string {
   const raw = nameKey(value);
   if (!raw) return "";
   // Four-door sedan nomenclature: Sedan/Saloon, Sedan 4D, 4-door Sedan.
-  if (/^(?:sedan|saloon)(?:\s*\/\s*(?:sedan|saloon))?(?:\s*(?:4d|4dr|4 door|4 doors))?$/.test(raw) ||
-      /^(?:4d|4dr|4 door|4 doors)\s*(?:sedan|saloon)$/.test(raw)) return "sedan";
+  if (/^(?:sedan|saloon)(?:\s+(?:sedan|saloon))?(?:\s+(?:4d|4dr|4 door|4 doors))?$/.test(raw) ||
+      /^(?:4d|4dr|4 door|4 doors)\s+(?:sedan|saloon)$/.test(raw)) return "sedan";
   return raw;
 }
 
