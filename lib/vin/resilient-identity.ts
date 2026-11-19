@@ -4,6 +4,7 @@ import {
   decodedPowertrainFuel,
   isNonRetailTrimLabel,
   normalizeVehicleText,
+  canonicalModelFamily,
 } from "@/lib/marketcheck/vehicle-identity";
 
 export type DecodeSource = "nhtsa" | "auto_dev";
@@ -148,7 +149,13 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
   const secondary = nhtsa && auto ? auto : null;
   // Never claim a decoded identity where providers disagree on basic identity.
   for (const key of ["year","make","model"] as const) {
-    if (secondary && primary[key] && secondary[key] && !same(primary[key],secondary[key])) conflicts.push(key);
+    if (secondary && primary[key] && secondary[key] && !same(primary[key],secondary[key])) {
+      if (key === "model") {
+        const family = (model:string) => canonicalModelFamily({year:Number(primary.year),make:primary.make,model,trim:"",drivetrain:"",fuelType:"",bodyType:""});
+        if (family(primary.model) === family(secondary.model)) continue;
+      }
+      conflicts.push(key);
+    }
   }
   const criticalConflict = conflicts.length > 0;
   const both = Boolean(nhtsa && auto);
