@@ -57,6 +57,7 @@ assert.equal(mismatch,null);
 const noData=run([out("nhtsa",{},503),out("auto_dev",{},503)]);
 assert.equal(noData,null);
 
+async function checkConcurrency() {
 const concurrent=await decodeProviders(VIN,async(provider,vin,timeoutMs)=>{
   assert.equal(vin,VIN);assert.equal(timeoutMs,1800);
   if(provider==="nhtsa") { await new Promise(resolve=>setTimeout(resolve,25)); return out("nhtsa",nhtsa()); }
@@ -68,4 +69,5 @@ assert.equal(concurrent.outcomes.length,2);
 assert.ok(concurrent.decoded.identityEvidence.durationMs < 200,
   "Requests must be concurrent, not serial.");
 
-console.log("VIN identity regression suite passed (format, dual, fallback, ambiguity, conflict, failure, concurrency).");
+}
+void checkConcurrency().then(() => console.log("VIN identity regression suite passed (format, dual, fallback, ambiguity, conflict, failure, concurrency).")).catch(error => { console.error(error); process.exitCode=1; });
