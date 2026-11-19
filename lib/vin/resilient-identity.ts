@@ -6,16 +6,21 @@ import {
   normalizeVehicleText,
   canonicalModelFamily,
   canonicalVehicleVariant,
+  canonicalDrivetrain,
 } from "@/lib/marketcheck/vehicle-identity";
 
 export type DecodeSource = "nhtsa" | "auto_dev";
 export type DecodeConfidence = "high" | "partial" | "conflict";
+export type AttributeConfidence = "corroborated" | "single_source" | "conflict" | "unverified";
+export type IdentityAttribute = "year" | "make" | "model" | "trim" | "engineCylinders" | "displacementL" | "driveType" | "fuelType" | "bodyClass";
+export type AttributeEvidence = { confidence: AttributeConfidence; reported: Partial<Record<DecodeSource, string>> };
 export type VehicleIdentityEvidence = {
   sources: DecodeSource[];
   confidence: DecodeConfidence;
   ambiguousTrim: boolean;
   possibleTrims: string[];
   conflicts: string[];
+  attributes: Partial<Record<IdentityAttribute, AttributeEvidence>>;
   durationMs: number;
   cache: "hit" | "miss";
 };
@@ -79,6 +84,19 @@ function normalizedFuel(value: unknown) {
 }
 function comparableFuel(value: unknown) { return nameKey(normalizedFuel(value)); }
 function choose(a: string, b: string) { return a || b; }
+
+// Keep AWD and selectable 4WD separate; they can have different price effects.
+// Do not infer FWD from a generic "2WD" label.
+export function normalizeDecodeDriveType(value: unknown): "FWD" | "RWD" | "AWD" | "4WD" | "" {
+  const raw = text(value);
+  if (!raw) return "";
+  const normalized = canonicalDrivetrain(raw);
+  if (normalized === "fwd") return "FWD";
+  if (normalized === "rwd") return "RWD";
+  if (normalized === "awd") return "AWD";
+  if (normalized === "4wd") return "4WD";
+  return "";
+}
 
 function nhtsaDecode(vin: string, data: NhtsaBody): VinDecodeResult | null {
   const row = data.Results?.[0];
@@ -178,24 +196,62 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
       fuelType = "Hybrid";
     } else { conflicts.push("fuelType"); fuelType = ""; }
   }
-  const reconcileField = (field: "engineCylinders" | "displacementL" | "driveType") => {
-    const a = text(primary[field]);
-    const b = text(secondary?.[field]);
-    if (a && b && !same(a,b)) {
-      if (field === "driveType") {
-        const compact = (s:string) => nameKey(s).replace(/[^a-z0-9]/g,"");
-        const AWD = new Set(["awd","4wd","4x4","allwheeldrive","fourwheeldrive"]);
-        if (AWD.has(compact(a)) && AWD.has(compact(b))) return "AWD";
-      }
-      conflicts.push(field);
-      return "";
-    }
-    return a || b;
+  const attributes: Partial<Record<IdentityAttribute, AttributeEvidence>> = {};
+  const inspectAttribute = (field: IdentityAttribute, comparable?: (value: string) => string) => {
+    const nhtsaValue = text(nhtsa?.[field]);
+    const autoValue = text(auto?.[field]);
+    const values: Partial<Record<DecodeSource, string>> = {};
+    if (nhtsaValue) values.nhtsa = nhtsaValue;
+    if (autoValue) values.auto_dev = autoValue;
+    const n = comparable ? comparable(nhtsaValue) : nameKey(nhtsaValue);
+    const a = comparable ? comparable(autoValue) : nameKey(autoValue);
+    const disagreement = Boolean(nhtsaValue && autoValue && n !== a);
+    attributes[field] = {
+      reported: values,
+      confidence: disagreement ? "conflict"
+        : nhtsaValue && autoValue ? "corroborated"
+        : nhtsaValue || autoValue ? "single_source" : "unverified",
+    };
+    return disagreement;
   };
-  const engineCylinders = reconcileField("engineCylinders");
-  const displacementL = reconcileField("displacementL");
-  const driveType = reconcileField("driveType");
+  for (const field of ["year", "make", "model", "trim", "engineCylinders", "displacementL", "fuelType", "bodyClass"] as const) {
+    inspectAttribute(field, field === "fuelType" ? comparableFuel : undefined);
+  }
+  // Synonyms like "FWD" and "Front-Wheel Drive" are equivalent; AWD
+  // and 4WD remain distinct, as do FWD/RWD and generic 2WD.
+  const nhtsaDrive = text(nhtsa?.driveType);
+  const autoDrive = text(auto?.driveType);
+  const normalizedNhtsaDrive = normalizeDecodeDriveType(nhtsaDrive);
+  const normalizedAutoDrive = normalizeDecodeDriveType(autoDrive);
+  const knownDriveConflict = Boolean(normalizedNhtsaDrive && normalizedAutoDrive &&
+    normalizedNhtsaDrive !== normalizedAutoDrive);
+  const oneUnknownDrive = Boolean(nhtsaDrive && autoDrive && (!normalizedNhtsaDrive || !normalizedAutoDrive));
+  const driveConflict = knownDriveConflict || oneUnknownDrive;
+  attributes.driveType = {
+    confidence: driveConflict ? "conflict"
+      : normalizedNhtsaDrive && normalizedAutoDrive ? "corroborated"
+      : normalizedNhtsaDrive || normalizedAutoDrive ? "single_source" : "unverified",
+    reported: {
+      ...(nhtsaDrive ? { nhtsa: nhtsaDrive } : {}),
+      ...(autoDrive ? { auto_dev: autoDrive } : {}),
+    },
+  };
+  if (driveConflict) conflicts.push("driveType");
+  const driveType = driveConflict ? "" : (normalizedNhtsaDrive || normalizedAutoDrive);
+  // Clear only genuinely disputed values, not every attribute of the car.
+  const engineCylinders = attributes.engineCylinders?.confidence === "conflict" ? "" : choose(primary.engineCylinders, secondary?.engineCylinders || "");
+  const displacementL = attributes.displacementL?.confidence === "conflict" ? "" : choose(primary.displacementL, secondary?.displacementL || "");
   const confidence: DecodeConfidence = conflicts.length ? "conflict" : (both && trim && !ambiguousTrim ? "high" : "partial");
+  if (attributes.trim) {
+    attributes.trim.confidence = conflicts.includes("trim") ? "conflict"
+      : !trim || ambiguousTrim ? "unverified" : attributes.trim.confidence;
+  }
+  if (attributes.fuelType) {
+    attributes.fuelType.confidence = conflicts.includes("fuelType") ? "conflict"
+      : nhtsa?.fuelType && auto?.fuelType ? "corroborated"
+      : fuelType ? "single_source" : "unverified";
+  }
+  if (attributes.model && !criticalConflict && both) attributes.model.confidence = "corroborated";
   const decoded: ResilientVinDecode = {
     ...primary,
     trim, engineCylinders, displacementL, driveType, fuelType,
@@ -204,7 +260,7 @@ export function reconcileVinResults(vin: string, outcomes: ProviderOutcome[], du
     status: conflicts.length ? "Decoded with conflicting attributes" :
       (both ? (ambiguousTrim ? "Decoded with unresolved trim" : "Decoded by two sources") :
       "Decoded from " + (sources[0] === "nhtsa" ? "NHTSA" : "Auto.dev")),
-    identityEvidence: { sources,confidence,ambiguousTrim,possibleTrims,conflicts,durationMs,cache:"miss" },
+    identityEvidence: { sources,confidence,ambiguousTrim,possibleTrims,conflicts,attributes,durationMs,cache:"miss" },
   };
   return decoded;
 }
