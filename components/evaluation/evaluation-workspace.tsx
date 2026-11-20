@@ -5277,6 +5277,11 @@ export function EvaluationWorkspace({
     hardPass: hasHardPass,
     reviewRequired: requiresReview || promisingNegotiation,
   });
+  const confidenceLevels = ["Limited", "Moderate", "High"] as const;
+  const confidenceIndex = confidenceLevels.indexOf(verdictFirstAssessment.confidence);
+  const confidenceExplanation = verdictFirstAssessment.blockers.length
+    ? verdictFirstAssessment.blockers.slice(0, 2).join(" · ")
+    : "Vehicle identity, condition, and market evidence support this assessment.";
 
   // The market search remains on the market stage until it settles. Then open
   // the assessment exactly once for this evaluation: the existing completion
@@ -8596,12 +8601,12 @@ export function EvaluationWorkspace({
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
-              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-2 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.1fr)_minmax(0,1.3fr)] ${
+              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.35fr)] ${
                 verdictEntered
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
               }`}>
-                <article className="h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
+                <article className="order-2 h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-1 lg:row-start-1">
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="text-base font-black text-slate-950">Vehicle Snapshot</h2>
                     <button type="button" onClick={() => setVehicleDetailsOpen(true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50">Details</button>
@@ -8631,7 +8636,7 @@ export function EvaluationWorkspace({
                   </dl>
                 </article>
 
-                <article className={`flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] ${decisionBannerTone}`}>
+                <article className={`order-1 flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1 ${decisionBannerTone}`}>
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
@@ -8711,13 +8716,27 @@ export function EvaluationWorkspace({
                   </div>
                 </article>
 
-                <article className="flex h-full flex-col rounded-[20px] border border-blue-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:col-span-2 xl:col-span-1">
+                <article className="order-3 flex h-full flex-col rounded-[20px] border border-blue-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-1 lg:row-start-2">
                   <div>
                     <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Next steps</div>
                     <h2 className="mt-1 text-base font-black text-slate-950">Improve result</h2>
                     <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
                       Confirm the inputs that can change the recommendation. Lot Logic will keep you on this verdict while it updates.
                     </p>
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-black text-slate-900">Assessment confidence</span>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceIndex === 0 ? "bg-amber-100 text-amber-800" : confidenceIndex === 1 ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>
+                          {verdictFirstAssessment.confidence}
+                        </span>
+                      </div>
+                      <div role="img" aria-label={`Assessment confidence: ${verdictFirstAssessment.confidence}`} className="mt-2 flex gap-1.5">
+                        {confidenceLevels.map((level, index) => (
+                          <span key={level} className={`h-1.5 flex-1 rounded-full ${index <= confidenceIndex ? confidenceIndex === 0 ? "bg-amber-500" : confidenceIndex === 1 ? "bg-blue-600" : "bg-emerald-600" : "bg-slate-200"}`} />
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[11px] font-semibold leading-4 text-slate-600">{confidenceExplanation}</p>
+                    </div>
                     {vehicleIdentityUpdating ? (
                       <p role="status" className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">
                         Refreshing market comparisons and recalculating the verdict…
