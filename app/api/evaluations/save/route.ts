@@ -169,6 +169,7 @@ export async function POST(request: Request) {
 
     const decodedVehicle = toRecord(body.decodedVehicle);
     const manualVehicle = toRecord(body.manualVehicle);
+    const vehicleIdentityOverride = toRecord(body.vehicleIdentityOverride);
     const valuationInput = toRecord(body.valuationInput);
     const valuation = toRecord(body.valuation);
 
@@ -179,10 +180,10 @@ export async function POST(request: Request) {
       vin: toStringOrNull(decodedVehicle.vin ?? body.vin),
       vehicle_title: toStringOrNull(body.vehicleTitle),
 
-      year: toInteger(decodedVehicle.year ?? manualVehicle.year),
-      make: toStringOrNull(decodedVehicle.make ?? manualVehicle.make),
-      model: toStringOrNull(decodedVehicle.model ?? manualVehicle.model),
-      trim: toStringOrNull(decodedVehicle.trim ?? manualVehicle.trim),
+      year: toInteger(vehicleIdentityOverride.year ?? decodedVehicle.year ?? manualVehicle.year),
+      make: toStringOrNull(vehicleIdentityOverride.make ?? decodedVehicle.make ?? manualVehicle.make),
+      model: toStringOrNull(vehicleIdentityOverride.model ?? decodedVehicle.model ?? manualVehicle.model),
+      trim: toStringOrNull(vehicleIdentityOverride.trim ?? decodedVehicle.trim ?? manualVehicle.trim),
       mileage: toInteger(body.targetMileage),
 
       auction_site: toStringOrNull(body.auctionSite),
