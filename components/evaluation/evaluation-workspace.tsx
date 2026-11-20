@@ -5273,6 +5273,7 @@ export function EvaluationWorkspace({
     (pricingEvidence.decisionReady ? finalTargetUsed : compSummary.marketMedianAdjusted || 0);
   const verdictFirstAssessment = assessVerdictFirst({
     identityKnown: Boolean(vehicleYear && vehicleMake && vehicleModel),
+    identitySpecComplete: Boolean(decodedVehicle?.engineCylinders && decodedVehicle?.fuelType && decodedVehicle?.driveType),
     retailTrimUnknown: retailTrimNeedsConfirmation,
     identityConflicts: decodedVehicle?.identityEvidence?.conflicts || [],
     selectedComps: compSummary.includedCount,
@@ -5299,7 +5300,7 @@ export function EvaluationWorkspace({
         autoDevDiscoveryLoading || verdictTransitioning || compMarketEditorOpen) return;
     if (!marketCheckSearchMeta && !automaticMarketPassFinished && !automaticCompSearchCompleted &&
         !marketCheckError) return;
-    const key = [evaluationUsageId, vin, targetMileage, vehicleYear, vehicleMake, vehicleModel].join("|");
+    const key = [evaluationUsageId, vin, targetMileage, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, conditionReviewStatus].join("|");
     if (autoVerdictHandledRef.current === key) return;
     // Small idle window lets a queued automatic improvement begin first.
     const handle = window.setTimeout(() => {
@@ -5312,7 +5313,7 @@ export function EvaluationWorkspace({
     marketCheckLoading, compSearchImproving, autoDevDiscoveryLoading,
     verdictTransitioning, compMarketEditorOpen, marketCheckSearchMeta, marketCheckError,
     automaticMarketPassFinished, automaticCompSearchCompleted, evaluationUsageId,
-    vin, targetMileage, vehicleYear, vehicleMake, vehicleModel]);
+    vin, targetMileage, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, conditionReviewStatus]);
 
   const decisionBadgeTone =
     presentationDecision === "searching"
