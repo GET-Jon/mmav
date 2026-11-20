@@ -1134,6 +1134,10 @@ export function EvaluationWorkspace({
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
+  useEffect(() => {
+    if (activeStage === "verdict") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeStage]);
+
   const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
     useState(0);
   const [allInCostOpen, setAllInCostOpen] = useState(false);
@@ -7512,8 +7516,9 @@ export function EvaluationWorkspace({
                 switch (verdictFirstAssessment.action) {
                   case "trim":
                   case "identity":
+                    setQuickEvalOpen(false);
                     setQuickEvalMode(vin ? "vin" : "manual");
-                    setQuickEvalOpen(true);
+                    setActiveStage("vehicle");
                     break;
                   case "condition":
                     openConditionAnalysis();
