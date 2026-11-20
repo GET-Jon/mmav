@@ -8056,11 +8056,11 @@ export function EvaluationWorkspace({
                         : compSummary.includedCount > 0
                           ? pricingEvidence.decisionReady
                             ? "Market valuation supported by close comparisons"
-                            : "Price indication needs verification"
+                            : strongestIndicativeScenario ? "Market snapshot" : "Price indication needs verification"
                           : "Market evidence"}
                   </h2>
                 </div>
-                {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" ? (
+                {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" && !strongestIndicativeScenario ? (
                   <div className="relative flex shrink-0 items-center gap-1.5">
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
                     !pricingEvidence.decisionReady ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
@@ -8105,6 +8105,48 @@ export function EvaluationWorkspace({
                 </div>
               ) : (
                 <div className="mt-4 flex-1">
+                  {strongestIndicativeScenario && !evaluationRunning && !marketCheckLoading && !compSearchImproving ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Indicative {strongestIndicativeScenario.trim} asking market</p>
+                        <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">{money(strongestIndicativeScenario.adjustedMedian)}</p>
+                        <p className="mt-1 text-xs text-slate-600">{strongestIndicativeScenario.count} comparable listings · adjusted to {targetMileage.toLocaleString()} miles</p>
+                      </div>
+                      <div className="border-t border-slate-200 pt-3">
+                        <p className="text-sm font-black text-slate-900">
+                          {valuationInput.currentBid > 0 && valuationInput.currentBid < strongestIndicativeScenario.adjustedLow * 0.65
+                            ? "Potential opportunity — verify before bidding"
+                            : "Market information available — verify vehicle details"}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">
+                          {valuationInput.currentBid > 0 && valuationInput.currentBid < strongestIndicativeScenario.adjustedLow * 0.65
+                            ? `Your ${money(valuationInput.currentBid)} entry is well below comparable advertised prices. Confirm trim, title, condition and seller details before acting.`
+                            : "The VIN does not establish the retail trim. Confirm the actual grade before applying this market price to the vehicle."}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}
+                        className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800">
+                        Confirm Vehicle Details →
+                      </button>
+                      <details className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700">
+                        <summary className="cursor-pointer font-bold text-blue-700">View market evidence and assumptions</summary>
+                        <div className="mt-3 space-y-2 leading-5">
+                          <p>{strongestIndicativeScenario.trim} adjusted asking range: <strong>{money(strongestIndicativeScenario.adjustedLow)}–{money(strongestIndicativeScenario.adjustedHigh)}</strong>.</p>
+                          <p>Asking prices are not completed sales. The subject trim is unverified, so this is neither a confirmed subject valuation nor a maximum bid.</p>
+                          <p>{pricingEvidence.explanation}</p>
+                          <button type="button" className="font-bold text-blue-700 hover:underline"
+                            onClick={() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                            Review comparable listings ↓
+                          </button>
+                          <button type="button" className="ml-3 font-bold text-blue-700 hover:underline"
+                            onClick={() => void continueToVerdict()} disabled={verdictTransitioning}>
+                            Continue to Verdict →
+                          </button>
+                        </div>
+                      </details>
+                    </div>
+                  ) : (
+                    <>
                   {!evaluationRunning && !marketCheckLoading && !compSearchImproving && retailTrimNeedsConfirmation ? (
                     <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
                       <p className="font-black">Exact retail trim has not been established</p>
@@ -8294,6 +8336,8 @@ export function EvaluationWorkspace({
                     )
                   ) : (
                     <div className="text-sm font-semibold text-slate-500">Market evidence incomplete.</div>
+                  )}
+                    </>
                   )}
                 </div>
               )}
