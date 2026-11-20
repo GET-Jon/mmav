@@ -1083,6 +1083,7 @@ export function EvaluationWorkspace({
   const [vinDecodeError, setVinDecodeError] = useState("");
   const [confirmedVinTrim, setConfirmedVinTrim] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
+  const [showCompDetails, setShowCompDetails] = useState(false);
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
@@ -4187,6 +4188,7 @@ export function EvaluationWorkspace({
     marketCheckInFlightRef.current = false;
 
     setComps(initialComps);
+    setShowCompDetails(false);
     setMarketCheckStatus("");
     setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
@@ -8135,7 +8137,7 @@ export function EvaluationWorkspace({
                           <p>Asking prices are not completed sales. The subject trim is unverified, so this is neither a confirmed subject valuation nor a maximum bid.</p>
                           <p>{pricingEvidence.explanation}</p>
                           <button type="button" className="font-bold text-blue-700 hover:underline"
-                            onClick={() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                            onClick={() => { setShowCompDetails(true); compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
                             Review comparable listings ↓
                           </button>
                           <button type="button" className="ml-3 font-bold text-blue-700 hover:underline"
@@ -8345,7 +8347,7 @@ export function EvaluationWorkspace({
                 (comps.length > 0 || needsCompSearch) ? (
                 <div className="mt-auto border-t border-slate-100 pt-4">
                   <button type="button"
-                    onClick={() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    onClick={() => { setShowCompDetails(true); compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                     className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:text-blue-900">
                     View comp results ↓
                   </button>
@@ -8365,6 +8367,7 @@ export function EvaluationWorkspace({
                   <span>{compSearchImprovementStatus || "Updating comparable vehicles…"}</span>
                 </div>
               ) : null}
+              {(!strongestIndicativeScenario || showCompDetails) ? (
               <SectionCard
                 title="Comparable Vehicles"
                 action={
@@ -8472,6 +8475,12 @@ export function EvaluationWorkspace({
                   ) : null}
                 </div>
               </SectionCard>
+              ) : (
+                <button type="button" onClick={() => setShowCompDetails(true)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-bold text-blue-700 hover:bg-blue-50">
+                  View all comparable listings ({compSummary.includedCount} selected) ↓
+                </button>
+              )}
             </section>
           ) : null}
 
