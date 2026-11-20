@@ -89,7 +89,7 @@ export function VinDecodeCard({
 
         {decoded ? (
           <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-            VIN decoded
+            {decoded.identityEvidence?.confidence === "conflict" ? "Review identity" : decoded.identityEvidence?.confidence === "partial" ? "Partially identified" : "VIN decoded"}
           </span>
         ) : (
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
@@ -167,6 +167,28 @@ export function VinDecodeCard({
             <FieldRow label="Fuel" value={decoded.fuelType} />
             <FieldRow label="Plant" value={decoded.plantCountry} />
           </div>
+
+          {decoded.identityEvidence ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Identification evidence
+              </p>
+              <p className="mt-1 text-xs text-slate-700">
+                {decoded.identityEvidence.sources.map(source => source === "auto_dev" ? "Auto.dev" : "NHTSA").join(" + ")}
+                {" · "}{decoded.identityEvidence.confidence === "high" ? "Both sources agree" : decoded.identityEvidence.confidence === "conflict" ? "Some attributes conflict" : "Some attributes remain unverified"}
+              </p>
+              {decoded.identityEvidence.ambiguousTrim ? (
+                <p className="mt-1 text-xs text-amber-800">
+                  Exact trim is not confirmed. Plausible grades: {decoded.identityEvidence.possibleTrims.join(", ") || "unknown"}.
+                </p>
+              ) : null}
+              {decoded.identityEvidence.conflicts.length ? (
+                <p className="mt-1 text-xs text-amber-800">
+                  Unresolved fields: {decoded.identityEvidence.conflicts.join(", ")}. Their values are withheld from automatic matching.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {appliedVehicleProfile ? (
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3">

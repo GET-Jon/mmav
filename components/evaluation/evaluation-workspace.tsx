@@ -19,6 +19,8 @@ import {
 } from "@/lib/marketcheck/api-controls";
 import { VinDecodeCard } from "@/components/evaluation/vin-decode-card";
 import { VinPhotoCapture } from "@/components/evaluation/vin-photo-capture";
+import { VinIdentificationDetails } from "@/components/evaluation/vin-identification-details";
+import { isPromisingNegotiationOpportunity } from "@/lib/evaluation/verdict-presentation";
 import {
   describeMarketCheckAttempt,
   recommendCompSearchAction,
@@ -30,15 +32,18 @@ import {
 } from "@/lib/evaluation/vehicle-identity-profile";
 import { buildExpansionMarkets } from "@/lib/marketcheck/metro-expansion";
 import { findModelTaxonomyFallback } from "@/lib/marketcheck/model-taxonomy";
-import { dedicatedBmwMModel } from "@/lib/marketcheck/vehicle-identity";
+import { dedicatedBmwMModel, isNonRetailTrimLabel } from "@/lib/marketcheck/vehicle-identity";
 import { calculateCompSummary } from "@/lib/comps";
+import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
+import { buildTrimMarketScenarios } from "@/lib/evaluation/trim-market-scenarios";
+import { assessVerdictFirst } from "@/lib/evaluation/verdict-first";
 import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
 import { defaultAssumptions } from "@/lib/assumptions";
 import { calculateDealerFit } from "@/lib/dealer-fit";
 import { findPrimaryMindfulIntelligenceMatch } from "@/lib/mindful-intelligence";
-import { calculateDealEconomicsScore, calculateValuation } from "@/lib/valuation";
+import { calculateDealEconomicsScore, calculateDesiredProfitTarget, calculateValuation } from "@/lib/valuation";
 import { trackEvent } from "@/lib/analytics/client";
 import type { MarketComp } from "@/types/comps";
 import type { VinDecodeResult } from "@/types/vin";
@@ -377,70 +382,6 @@ function SectionCard({
   );
 }
 
-function ScoreRing({
-  label,
-  score,
-  tone,
-  isEmpty = false,
-}: {
-  label: string;
-  score: number;
-  tone: "green" | "blue";
-  isEmpty?: boolean;
-}) {
-  const normalizedScore = Math.max(0, Math.min(100, score));
-
-  const ringColor = isEmpty
-    ? "#cbd5e1"
-    : normalizedScore < 40
-      ? "#dc2626"
-      : normalizedScore < 65
-        ? "#d97706"
-        : tone === "green"
-          ? "#059669"
-          : "#2563eb";
-
-  return (
-    <div className="flex flex-col items-center text-center">
-      <div className="mb-1.5 text-xs font-extrabold text-slate-600">{label}</div>
-
-      <div
-        className="relative grid h-[78px] w-[78px] place-items-center rounded-full"
-        style={{
-          background: isEmpty
-            ? "#e2e8f0"
-            : `conic-gradient(${ringColor} ${
-                normalizedScore * 3.6
-              }deg, #e2e8f0 0deg)`,
-        }}
-      >
-        <div className="grid h-[64px] w-[64px] place-items-center rounded-full bg-white shadow-inner">
-          <div>
-            <div className={`text-[23px] font-black leading-none tracking-[-0.04em] ${
-              isEmpty ? "text-slate-400" : "text-slate-950"
-            }`}>
-              {isEmpty ? "—" : normalizedScore}
-            </div>
-
-            {!isEmpty ? (
-              <div className="mt-1 text-[10px] font-bold text-slate-400">
-                /100
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {isEmpty ? (
-        <div className="mt-2 text-[10px] font-bold text-slate-400">
-          Not calculated
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-
 function MarketLiquidityVisual({
   soldLow,
   soldHigh,
@@ -692,6 +633,7 @@ type SavedEvaluationPayload = {
   auctionSite?: string;
   finalTargetOverride?: number | null;
   decodedVehicle?: VinDecodeResult | null;
+  vehicleIdentityOverride?: MarketCheckVehicleOverride | null;
   vehicleIdentityProfile?: VehicleIdentityProfile | null;
   manualVehicle?: ManualVehicleBasics;
   targetMileage?: number;
@@ -815,6 +757,10 @@ export function EvaluationWorkspace({
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null,
   );
+  const [vehicleIdentityOverride, setVehicleIdentityOverride] =
+    useState<MarketCheckVehicleOverride | null>(
+      initialSavedPayload?.vehicleIdentityOverride || null,
+    );
   const [vehicleIdentityProfile, setVehicleIdentityProfile] =
     useState<VehicleIdentityProfile | null>(
       initialSavedPayload?.vehicleIdentityProfile ||
@@ -861,6 +807,7 @@ export function EvaluationWorkspace({
       near: number;
       supporting: number;
       autoIncluded: number;
+      closeDiscoveryCandidates?: number;
     };
     query: {
       year: number;
@@ -1076,7 +1023,9 @@ export function EvaluationWorkspace({
   const [draftReady, setDraftReady] = useState(false);
   const [vinDecodeLoading, setVinDecodeLoading] = useState(false);
   const [vinDecodeError, setVinDecodeError] = useState("");
+  const [confirmedVinTrim, setConfirmedVinTrim] = useState("");
   const mileageInputRef = useRef<HTMLInputElement | null>(null);
+  const [showCompDetails, setShowCompDetails] = useState(false);
   const compSectionRef = useRef<HTMLElement | null>(null);
   const conditionSectionRef = useRef<HTMLElement | null>(null);
   const [compSearchHandedOff, setCompSearchHandedOff] = useState(false);
@@ -1096,6 +1045,7 @@ export function EvaluationWorkspace({
     return stage === "market" || stage === "verdict";
   });
   const [verdictTransitioning, setVerdictTransitioning] = useState(false);
+  const autoVerdictHandledRef = useRef("");
   const [usageLimitMessage, setUsageLimitMessage] = useState("");
   const [evaluationAccessError, setEvaluationAccessError] = useState("");
   const [planSelectionMessage, setPlanSelectionMessage] = useState<string | null>(null);
@@ -1123,6 +1073,10 @@ export function EvaluationWorkspace({
   const [verdictEntered, setVerdictEntered] = useState(
     () => deriveEvaluationStage(initialSavedPayload) === "verdict",
   );
+  useEffect(() => {
+    if (activeStage === "verdict") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeStage]);
+
   const [conditionAnalysisProgressIndex, setConditionAnalysisProgressIndex] =
     useState(0);
   const [allInCostOpen, setAllInCostOpen] = useState(false);
@@ -1134,10 +1088,15 @@ export function EvaluationWorkspace({
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
+  const [vehicleIdentityEditOpen, setVehicleIdentityEditOpen] = useState(false);
+  const [vehicleIdentityUpdating, setVehicleIdentityUpdating] = useState(false);
+  const [vehicleIdentityDraft, setVehicleIdentityDraft] =
+    useState<MarketCheckVehicleOverride>({ year: "", make: "", model: "", trim: "" });
   const [vehicleThumbnailUrl, setVehicleThumbnailUrl] = useState("");
   const [vehicleThumbnailLoading, setVehicleThumbnailLoading] = useState(false);
   const [vehicleThumbnailError, setVehicleThumbnailError] = useState("");
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
+  const [profitDetailsOpen, setProfitDetailsOpen] = useState(false);
   const [compMarketEditorOpen, setCompMarketEditorOpen] = useState(false);
   const [compEditorTab, setCompEditorTab] = useState<"geography" | "vehicle">("geography");
   const [selectedCompMarketZips, setSelectedCompMarketZips] = useState<string[]>([]);
@@ -1408,6 +1367,10 @@ export function EvaluationWorkspace({
         setVehicleIdentityProfileStatus("Vehicle identity ready");
       }
 
+      if (draft.vehicleIdentityOverride) {
+        setVehicleIdentityOverride(draft.vehicleIdentityOverride);
+      }
+
       if (draft.manualVehicle) {
         setManualVehicle(draft.manualVehicle);
       }
@@ -1547,6 +1510,7 @@ export function EvaluationWorkspace({
           auctionSite,
           finalTargetOverride,
           decodedVehicle,
+          vehicleIdentityOverride,
           vehicleIdentityProfile,
           manualVehicle,
           targetMileage,
@@ -1580,6 +1544,7 @@ export function EvaluationWorkspace({
     auctionSite,
     finalTargetOverride,
     decodedVehicle,
+    vehicleIdentityOverride,
     vehicleIdentityProfile,
     manualVehicle,
     targetMileage,
@@ -1616,13 +1581,15 @@ export function EvaluationWorkspace({
       calculateCompSummary({
         comps: independentComps,
         targetMileage,
-        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+        targetYear: Number(vehicleIdentityOverride?.year ?? decodedVehicle?.year ?? manualVehicle.year ?? vehicleIdentityProfile?.year ?? 0) || null,
         targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
         targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
+    [independentComps, targetMileage, vehicleIdentityOverride?.year, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
+
+  const pricingEvidence = classifyPricingEvidence(compSummary);
 
   const refinementSnapshot: RefinementSnapshot = {
     comps: independentComps,
@@ -1813,16 +1780,43 @@ export function EvaluationWorkspace({
     () => calculateValuation(valuationInput, activeAssumptions),
     [valuationInput, activeAssumptions],
   );
+  const automaticProfitTarget = calculateDesiredProfitTarget({
+    ...valuationInput,
+    targetProfit: 0,
+  });
+  const dealerProfitMinimum = Math.max(0, valuationInput.targetProfit || 0);
+  const fixedProfitMode = valuationInput.profitTargetMode === "fixed" && dealerProfitMinimum > 0;
+  const profitTargetSource = fixedProfitMode
+    ? "Dealer fixed target"
+    : dealerProfitMinimum > automaticProfitTarget
+      ? "Dealer minimum"
+      : "Lot Logic automatic target";
 
-  const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
-  const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
-  const rawVehicleModel = decodedVehicle?.model || manualVehicle.model || "";
-  const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, decodedVehicle?.trim || manualVehicle.trim) || rawVehicleModel;
-  const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
+  const vehicleYear = vehicleIdentityOverride?.year ?? decodedVehicle?.year ?? manualVehicle.year ?? "";
+  const vehicleMake = vehicleIdentityOverride?.make ?? decodedVehicle?.make ?? manualVehicle.make ?? "";
+  const rawVehicleModel = vehicleIdentityOverride?.model ?? decodedVehicle?.model ?? manualVehicle.model ?? "";
+  const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, vehicleIdentityOverride?.trim ?? decodedVehicle?.trim ?? manualVehicle.trim) || rawVehicleModel;
+  const vehicleTrim = vehicleIdentityOverride?.trim ?? decodedVehicle?.trim ?? manualVehicle.trim ?? "";
+  const retailTrimNeedsConfirmation = Boolean(
+    decodedVehicle &&
+    (!vehicleTrim || isNonRetailTrimLabel(vehicleTrim)) &&
+    !dedicatedBmwMModel(vehicleMake, vehicleModel, vehicleTrim),
+  );
   const compTaxonomyFallback = findModelTaxonomyFallback({
     make: vehicleMake,
     model: vehicleModel,
   });
+  const indicativeTrimScenarios = retailTrimNeedsConfirmation && !pricingEvidence.decisionReady
+    ? buildTrimMarketScenarios({
+        comps: independentComps,
+        model: vehicleModel,
+        make: vehicleMake,
+        year: Number(vehicleYear),
+        targetMileage,
+        assumptions: activeAssumptions,
+      })
+    : [];
+  const strongestIndicativeScenario = indicativeTrimScenarios[0] || null;
   const compRetrievalLabel = compTaxonomyFallback
     ? [vehicleMake, compTaxonomyFallback.fallbackModel, "broad model bucket"]
         .filter(Boolean)
@@ -2263,7 +2257,12 @@ export function EvaluationWorkspace({
         throw new Error(data.error || "VIN decode failed.");
       }
 
-      const decoded = data as VinDecodeResult;
+      const decodedFromProvider = data as VinDecodeResult;
+      // The dealer may know the retail grade even when NHTSA supplies only
+      // a generation/Series label. Preserve that explicit identification.
+      const decoded = confirmedVinTrim.trim()
+        ? { ...decodedFromProvider, trim: confirmedVinTrim.trim() }
+        : decodedFromProvider;
 
       handleDecodedVinAndReset(decoded);
       startVehicleIdentityProfileEnrichment(decoded);
@@ -2294,6 +2293,7 @@ export function EvaluationWorkspace({
     }
 
     setDecodedVehicle(decoded);
+    setVehicleIdentityOverride(null);
     setVehicleIdentityProfile(
       buildDeterministicVehicleIdentityProfile(decoded),
     );
@@ -2323,7 +2323,10 @@ export function EvaluationWorkspace({
       ...initialEvaluation,
       currentBid: valuationInput.currentBid,
       targetResaleUsed: valuationInput.targetResaleUsed,
-      targetProfit: valuation.desiredProfitTarget,
+      // Carry the dealer's chosen strategy, not the computed target from
+      // the previous vehicle (which would silently turn auto into a floor).
+      targetProfit: valuationInput.targetProfit,
+      profitTargetMode: valuationInput.profitTargetMode,
       hasAvoidFlag: false,
       costs: {
         ...initialEvaluation.costs,
@@ -2446,14 +2449,7 @@ export function EvaluationWorkspace({
           ? finalTargetUsed - evaluation.currentBid - modeledCostAdders
           : null;
 
-      const compConfidence =
-        totalCompCount === 0
-          ? "No comps available"
-          : includedCompCount === 0
-            ? "No included comps"
-            : includedCompCount < 3
-              ? "Low / limited comp set"
-              : "Usable comp set";
+      const compConfidence = pricingEvidence.label;
 
       const response = await fetch("/api/evaluations/summary", {
         method: "POST",
@@ -2472,14 +2468,15 @@ export function EvaluationWorkspace({
           marketCompAverage: compSummary.averageAdjusted || null,
           medianAdjusted:
             (compSummary as { medianAdjusted?: number }).medianAdjusted || null,
-          finalRetailTarget: finalTargetUsed || null,
-          safeBid: valuation.safeBid || null,
-          maxSmartBid: valuation.maxSmartBid || null,
-          stretchBid: valuation.stretchBid || null,
-          expectedGrossProfit,
+          finalRetailTarget: pricingEvidence.decisionReady ? finalTargetUsed || null : null,
+          safeBid: pricingEvidence.decisionReady ? valuation.safeBid || null : null,
+          maxSmartBid: pricingEvidence.decisionReady ? valuation.maxSmartBid || null : null,
+          stretchBid: pricingEvidence.decisionReady ? valuation.stretchBid || null : null,
+          expectedGrossProfit: pricingEvidence.decisionReady ? expectedGrossProfit : null,
+          pricingEvidenceNote: pricingEvidence.explanation,
 
           riskGrade: valuation.riskGrade,
-          decision: valuation.decision,
+          decision: pricingEvidence.decisionReady ? valuation.decision : "Pricing Verification Required",
           compConfidence,
           includedCompCount,
           totalCompCount,
@@ -3133,6 +3130,50 @@ export function EvaluationWorkspace({
   function openCompVehicleMatchEditor() {
     setCompEditorTab("vehicle");
     setCompMarketEditorOpen(true);
+  }
+
+  function openVehicleIdentityEditor(focusTrim = false) {
+    setVehicleIdentityDraft({
+      year: String(vehicleYear || ""),
+      make: String(vehicleMake || ""),
+      model: String(vehicleModel || ""),
+      trim: String(vehicleTrim || ""),
+      fuelType: decodedVehicle?.fuelType || null,
+    });
+    setVehicleIdentityEditOpen(true);
+    if (focusTrim) {
+      window.setTimeout(() => {
+        document.getElementById("verdict-vehicle-trim")?.focus();
+      }, 0);
+    }
+  }
+
+  async function applyVehicleIdentityEdit() {
+    const nextIdentity = {
+      ...vehicleIdentityDraft,
+      year: String(vehicleIdentityDraft.year || "").trim(),
+      make: String(vehicleIdentityDraft.make || "").trim().toUpperCase(),
+      model: String(vehicleIdentityDraft.model || "").trim(),
+      trim: String(vehicleIdentityDraft.trim || "").trim(),
+    };
+
+    if (!nextIdentity.year || !nextIdentity.make || !nextIdentity.model) return;
+
+    setVehicleIdentityUpdating(true);
+    setVehicleIdentityOverride(nextIdentity);
+    setVehicleIdentityProfile(null);
+    vehicleIdentityProfilePromiseRef.current = null;
+    vehicleIdentityRequestVinRef.current = "";
+    setVehicleIdentityProfileStatus("Using the confirmed vehicle details for this evaluation.");
+    setVehicleIdentityEditOpen(false);
+
+    try {
+      await pullMarketCheckComps(nextIdentity, {
+        useVinMatch: false,
+      });
+    } finally {
+      setVehicleIdentityUpdating(false);
+    }
   }
 
   function openCompMarketEditor() {
@@ -4088,12 +4129,14 @@ export function EvaluationWorkspace({
           targetResaleFromComps: targetResaleUsed,
           finalTargetUsed,
           decodedVehicle,
+          vehicleIdentityOverride,
           manualVehicle,
           targetMileage,
           evaluation,
           valuationInput,
           valuation,
           compSummary,
+          pricingEvidence,
           comps,
           refinementEvents,
           selectedConditions,
@@ -4148,6 +4191,8 @@ export function EvaluationWorkspace({
     marketCheckInFlightRef.current = false;
 
     setComps(initialComps);
+    setShowCompDetails(false);
+    autoVerdictHandledRef.current = "";
     setMarketCheckStatus("");
     setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
@@ -4290,8 +4335,6 @@ export function EvaluationWorkspace({
               ? "Weak"
               : "Avoid";
 
-  const profitabilityWidth = `${profitabilityScore}%`;
-
   const dealerFitResult = useMemo(
     () =>
       calculateDealerFit({
@@ -4375,13 +4418,7 @@ export function EvaluationWorkspace({
     ],
   );
 
-  const dealerFitScore = dealerFitResult.score;
-
-  const profitabilityScoreDisplay = hasEvaluationData ? profitabilityScore : 0;
-
-  const dealerFitScoreDisplay = hasEvaluationData ? dealerFitScore : 0;
   const dealerFitLabel = dealerFitResult.label;
-  const dealerFitWidth = `${dealerFitScore}%`;
   const dealerFitReason =
     dealerFitResult.reasons[0] ||
     "Dealer fit will improve as vehicle details are added.";
@@ -4466,10 +4503,10 @@ export function EvaluationWorkspace({
     .sort((a, b) => b.planningEstimate - a.planningEstimate);
 
   const dealStrengthBullets = [
-    profitabilityScore >= 82 && valuation.expectedGrossProfit > 0
+    pricingEvidence.decisionReady && profitabilityScore >= 82 && valuation.expectedGrossProfit > 0
       ? `Strong economics: ${money(valuation.expectedGrossProfit)} expected gross at the current assumptions.`
       : null,
-    compSummary.includedCount >= 6 && finalTargetUsed > 0
+    pricingEvidence.decisionReady && compSummary.includedCount >= 6 && finalTargetUsed > 0
       ? `${compSummary.includedCount} valuation comps support an expected sale value near ${money(finalTargetUsed)}.`
       : null,
     conditionAnalysisApplied && getEffectiveConditionPlanningEstimate() > 0
@@ -4513,7 +4550,9 @@ export function EvaluationWorkspace({
         ? "bg-amber-100 text-amber-700"
         : "bg-red-100 text-red-700";
 
-  const suggestedBidDisplay = !hasEvaluationData
+  const suggestedBidDisplay = !pricingEvidence.decisionReady
+    ? "Pending price verification"
+    : !hasEvaluationData
     ? "—"
     : valuationInput.currentBid <= 0
       ? "Enter bid to calculate"
@@ -4566,6 +4605,7 @@ export function EvaluationWorkspace({
     setAiSummaryError("");
     setAiSummaryLoadingMode(null);
     setActiveThesisMode("financial");
+    setVehicleIdentityOverride(null);
 
     if (quickEvalMode === "manual") {
       setDecodedVehicle(null);
@@ -4770,14 +4810,14 @@ export function EvaluationWorkspace({
     .filter((market) => !(marketCheckSearchMeta?.searchedZips || []).includes(market.zip))
     .length;
   const canContinueNationalSearch =
-    (compSummary.primaryCompCount || 0) < 4 && remainingNationalMarketCount > 0;
+    !pricingEvidence.decisionReady && remainingNationalMarketCount > 0;
   const compSearchRecommendation = canContinueNationalSearch
     ? {
         action: "discovered-markets" as const,
         title: `Check ${remainingNationalMarketCount} remaining national market${remainingNationalMarketCount === 1 ? "" : "s"}`,
         reason: "National inventory discovery identified markets that have not yet been checked against strict vehicle-match rules.",
       }
-    : automaticCompSearchCompleted && (compSummary.primaryCompCount || 0) < 4
+    : automaticCompSearchCompleted && !pricingEvidence.decisionReady
       ? {
           action: "manual-review" as const,
           title: "Automatic market checks finished",
@@ -4822,7 +4862,7 @@ export function EvaluationWorkspace({
           ? "Strong pricing confidence"
           : "Moderate pricing confidence";
   const hasLimitedMarketEvidence =
-    compSummary.includedCount > 0 && marketEvidenceStrength === "Limited";
+    !pricingEvidence.decisionReady;
   // Do not present broad-market fallback asking-price evidence as a verified retail value.
   const provisionalFallbackPricing =
     compSummary.pricingMode === "market-fallback" && (compSummary.pricingCompCount ?? 0) > 0;
@@ -4868,14 +4908,19 @@ export function EvaluationWorkspace({
 
       let latestIncludedCount = compSummary.includedCount;
       let latestPrimaryCount = compSummary.primaryCompCount || 0;
-      const countClosePeers = (candidates: MarketComp[]) => calculateCompSummary({
-        comps: candidates,
-        targetMileage,
-        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
-        targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
-        targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
-        assumptions: activeAssumptions,
-      }).primaryCompCount || 0;
+      let latestDecisionReady = pricingEvidence.decisionReady;
+      const countClosePeers = (candidates: MarketComp[]) => {
+        const latestSummary = calculateCompSummary({
+          comps: candidates,
+          targetMileage,
+          targetYear: Number(vehicleIdentityOverride?.year ?? decodedVehicle?.year ?? manualVehicle.year ?? vehicleIdentityProfile?.year ?? 0) || null,
+          targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
+          targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
+          assumptions: activeAssumptions,
+        });
+        latestDecisionReady = classifyPricingEvidence(latestSummary).decisionReady;
+        return latestSummary.primaryCompCount || 0;
+      };
       let latestRegionCount = compSearchRegions;
       let latestSearchedZips = marketCheckSearchMeta?.searchedZips || [];
 
@@ -4925,14 +4970,14 @@ export function EvaluationWorkspace({
               (market) => !latestSearchedZips.includes(market.zip),
             ) || [];
 
-          if (latestPrimaryCount < 4 && remainingNationalMarkets.length > 0) {
+          if (!latestDecisionReady && remainingNationalMarkets.length > 0) {
             setCompSearchImprovementStatus(
               `Still thin. Verifying ${Math.min(3, remainingNationalMarkets.length)} more national market${Math.min(3, remainingNationalMarkets.length) === 1 ? "" : "s"}…`,
             );
           }
         }
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             `This search pass finished with ${latestIncludedCount} selected comps. Choose whether to review the listings, check more markets, or continue to Verdict.`,
           );
@@ -4969,7 +5014,7 @@ export function EvaluationWorkspace({
         latestSearchedZips =
           broadened?.searchedZips || latestSearchedZips;
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after normalizing the vehicle match.",
           );
@@ -4993,7 +5038,7 @@ export function EvaluationWorkspace({
         latestSearchedZips =
           expanded?.searchedZips || latestSearchedZips;
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after regional expansion.",
           );
@@ -5021,7 +5066,7 @@ export function EvaluationWorkspace({
         const provisional = mergeCompCandidates(comps, checkedCandidates);
         latestIncludedCount = Math.max(latestIncludedCount, provisional.filter((comp) => comp.included).length);
         latestPrimaryCount = Math.max(latestPrimaryCount, countClosePeers(provisional));
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus("National retail evidence is now sufficient for review. You can continue to Verdict or refine the comp set.");
           return;
         }
@@ -5034,7 +5079,7 @@ export function EvaluationWorkspace({
         );
 
         while (
-          latestPrimaryCount < 4 &&
+          !latestDecisionReady &&
           remainingNationalMarkets.length > 0 &&
           nationalBatches < 3 &&
           additionalMarketCheckCalls < additionalMarketCheckBudget
@@ -5071,7 +5116,7 @@ export function EvaluationWorkspace({
           );
         }
 
-        if (latestPrimaryCount >= 4) {
+        if (latestDecisionReady) {
           setCompSearchImprovementStatus(
             "Reliable market evidence found after national discovery.",
           );
@@ -5127,9 +5172,27 @@ export function EvaluationWorkspace({
 
   const hasHardPass =
     hasEvaluationData &&
+    pricingEvidence.decisionReady &&
     !needsCompSearch &&
     !conditionReviewPending &&
     (valuation.riskGrade === "High/Avoid" || valuation.expectedGrossProfit <= 0);
+
+  const promisingNegotiation =
+    hasEvaluationData && hasAcquisitionPrice && isAboveRecommendedBuy &&
+    isPromisingNegotiationOpportunity({
+      allInCost: valuation.allInCost,
+      recommendedAllInCost,
+      expectedGrossProfit: valuation.expectedGrossProfit,
+      saleEstimate: finalTargetUsed,
+      dealEconomicsScore: profitabilityScore,
+      dealerFitScore: dealerFitResult.score,
+      hasLimitedMarketEvidence,
+      hasMaterialConditionRisk,
+      conditionUnknown,
+      hasHardPass,
+      needsCompSearch,
+      conditionReviewPending,
+    });
 
   const requiresReview =
     hasEvaluationData &&
@@ -5160,8 +5223,12 @@ export function EvaluationWorkspace({
         ? "COMP SEARCH NEEDED"
         : conditionReviewPending
           ? "CONDITION REVIEW NEEDED"
+        : !pricingEvidence.decisionReady
+          ? "VERIFY PRICING"
         : hasHardPass
           ? "PASS"
+        : promisingNegotiation
+          ? "PROMISING — NEGOTIATE"
         : isAboveRecommendedBuy
           ? "ABOVE TARGET COST"
           : requiresReview
@@ -5177,17 +5244,71 @@ export function EvaluationWorkspace({
           ? "comps"
           : conditionReviewPending
             ? "condition"
+          : !pricingEvidence.decisionReady
+            ? "comps"
           : hasHardPass
             ? "pass"
+            : promisingNegotiation
+              ? "promising"
             : requiresReview
               ? "review"
               : "pursue";
+
+  // Confidence and attractiveness are deliberately separate. No provisional
+  // asking-market scenario is promoted to a verified resale target or bid.
+  const indicativeMarket = strongestIndicativeScenario?.adjustedMedian ||
+    (pricingEvidence.decisionReady ? finalTargetUsed : compSummary.marketMedianAdjusted || 0);
+  const verdictFirstAssessment = assessVerdictFirst({
+    identityKnown: Boolean(vehicleYear && vehicleMake && vehicleModel),
+    identitySpecComplete: Boolean(decodedVehicle?.engineCylinders && decodedVehicle?.fuelType && decodedVehicle?.driveType),
+    retailTrimUnknown: retailTrimNeedsConfirmation,
+    identityConflicts: decodedVehicle?.identityEvidence?.conflicts || [],
+    selectedComps: compSummary.includedCount,
+    closePeers: compSummary.primaryCompCount || 0,
+    pricingDecisionReady: pricingEvidence.decisionReady,
+    marketConfidence: compSummary.confidence === "High" ? "High" : compSummary.confidence === "Medium" ? "Moderate" : "Limited",
+    conditionStatus: conditionReviewStatus,
+    materialConditionRisk: hasMaterialConditionRisk,
+    hasPurchasePrice: hasAcquisitionPrice,
+    purchasePrice: valuationInput.currentBid,
+    indicativeMarketLow: strongestIndicativeScenario?.adjustedLow || (pricingEvidence.decisionReady ? compSummary.lowAdjusted : 0),
+    indicativeMarketMedian: indicativeMarket,
+    hasSupportedSalePrice: pricingEvidence.decisionReady && finalTargetUsed > 0,
+    hardPass: hasHardPass,
+    reviewRequired: requiresReview || promisingNegotiation,
+  });
+
+  // The market search remains on the market stage until it settles. Then open
+  // the assessment exactly once for this evaluation: the existing completion
+  // endpoint retains its usage/accounting semantics and access checks.
+  useEffect(() => {
+    if (activeStage !== "market" || !conditionStepConfirmed || !draftReady ||
+        evaluationRunning || marketCheckLoading || compSearchImproving ||
+        autoDevDiscoveryLoading || verdictTransitioning || compMarketEditorOpen) return;
+    if (!marketCheckSearchMeta && !automaticMarketPassFinished && !automaticCompSearchCompleted &&
+        !marketCheckError) return;
+    const key = [evaluationUsageId, vin, targetMileage, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, conditionReviewStatus].join("|");
+    if (autoVerdictHandledRef.current === key) return;
+    // Small idle window lets a queued automatic improvement begin first.
+    const handle = window.setTimeout(() => {
+      if (autoVerdictHandledRef.current === key) return;
+      autoVerdictHandledRef.current = key;
+      void continueToVerdict();
+    }, 1000);
+    return () => window.clearTimeout(handle);
+  }, [activeStage, conditionStepConfirmed, draftReady, evaluationRunning,
+    marketCheckLoading, compSearchImproving, autoDevDiscoveryLoading,
+    verdictTransitioning, compMarketEditorOpen, marketCheckSearchMeta, marketCheckError,
+    automaticMarketPassFinished, automaticCompSearchCompleted, evaluationUsageId,
+    vin, targetMileage, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, conditionReviewStatus]);
 
   const decisionBadgeTone =
     presentationDecision === "searching"
       ? "bg-blue-100 text-blue-700"
       : presentationDecision === "pass"
         ? "bg-red-100 text-red-700"
+      : presentationDecision === "promising"
+        ? "bg-teal-100 text-teal-800"
       : presentationDecision === "comps"
         ? "bg-amber-100 text-amber-800"
         : presentationDecision === "condition"
@@ -5203,6 +5324,8 @@ export function EvaluationWorkspace({
       ? "border-blue-200/80 bg-blue-50/40 text-blue-950"
       : presentationDecision === "pass"
         ? "border-red-200/80 bg-red-50/60 text-red-950"
+      : presentationDecision === "promising"
+        ? "border-teal-200/80 bg-teal-50/35 text-teal-950"
       : presentationDecision === "comps"
         ? "border-amber-200/80 bg-amber-50/35 text-amber-950"
         : presentationDecision === "condition"
@@ -5218,6 +5341,8 @@ export function EvaluationWorkspace({
       ? "text-blue-700"
       : presentationDecision === "pass"
         ? "text-red-700"
+      : presentationDecision === "promising"
+        ? "text-teal-700"
       : presentationDecision === "comps"
         ? "text-amber-700"
         : presentationDecision === "condition"
@@ -5229,10 +5354,10 @@ export function EvaluationWorkspace({
           : "text-slate-400";
 
   const lotLogicIcon =
-    presentationDecision === "pursue" ? "✓ " : "";
+    presentationDecision === "pursue" || presentationDecision === "promising" ? "✓ " : "";
 
   const compConfidenceDisplay =
-    compSummary.includedCount > 0 ? marketEvidenceDisplay : "—";
+    compSummary.includedCount > 0 ? pricingEvidence.label : "—";
 
   const liquidity = marketCheckApiUsage?.marketLiquidity || null;
   const liquiditySoldLow = Math.max(0, liquidity?.soldP25Days || 0);
@@ -5286,7 +5411,7 @@ export function EvaluationWorkspace({
     if (activeStage !== "market" || !marketCheckSearchMeta || marketCheckLoading ||
         evaluationRunning || compSearchImproving || compSearchHandedOff ||
         automaticCompSearchCompleted || !draftReady || !targetMileage ||
-        (compSummary.primaryCompCount || 0) >= 4 ||
+        pricingEvidence.decisionReady ||
         compSearchRecommendation.action === "complete" ||
         compSearchRecommendation.action === "manual-review") return;
     const key = [evaluationUsageId || vin || vehicleModel, targetMileage, marketCheckSearchMeta.searchStage].join(":");
@@ -5296,7 +5421,7 @@ export function EvaluationWorkspace({
   // Runs when initial MarketCheck results finish; internal guards prevent repeat requests.
   }, [activeStage, marketCheckLoading, evaluationRunning, compSearchImproving,
       marketCheckSearchMeta, compSearchHandedOff, automaticCompSearchCompleted,
-      compSummary.primaryCompCount, draftReady, targetMileage]);
+      compSummary.primaryCompCount, pricingEvidence.decisionReady, draftReady, targetMileage]);
 
   const compActionButtonLabels: Record<string, string> = {
     "expand-geography": "Search Additional Nearby Markets →",
@@ -6431,6 +6556,63 @@ export function EvaluationWorkspace({
         </div>
       ) : null}
 
+      {vehicleIdentityEditOpen ? (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setVehicleIdentityEditOpen(false)}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="verdict-vehicle-edit-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void applyVehicleIdentityEdit();
+            }}
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 id="verdict-vehicle-edit-title" className="text-lg font-black text-slate-950">Edit vehicle identity</h2>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                  Correct the details Lot Logic uses to find comparisons. The VIN stays on this evaluation; the market search uses the details below.
+                </p>
+              </div>
+              <button type="button" onClick={() => setVehicleIdentityEditOpen(false)} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close vehicle identity editor">✕</button>
+            </div>
+            <div className="grid gap-3 px-5 py-5 sm:grid-cols-2">
+              {([
+                ["year", "Year", "2023"],
+                ["make", "Make", "Toyota"],
+                ["model", "Model", "Camry"],
+                ["trim", "Trim", "XSE"],
+              ] as const).map(([key, label, placeholder]) => (
+                <label key={key} className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+                  <input
+                    id={key === "trim" ? "verdict-vehicle-trim" : undefined}
+                    type="text"
+                    inputMode={key === "year" ? "numeric" : "text"}
+                    value={String(vehicleIdentityDraft[key] || "")}
+                    onChange={(event) => setVehicleIdentityDraft((current) => ({ ...current, [key]: event.target.value }))}
+                    placeholder={placeholder}
+                    required={key !== "trim"}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setVehicleIdentityEditOpen(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+              <button type="submit" disabled={vehicleIdentityUpdating || !String(vehicleIdentityDraft.year || "").trim() || !String(vehicleIdentityDraft.make || "").trim() || !String(vehicleIdentityDraft.model || "").trim()} className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300">
+                {vehicleIdentityUpdating ? "Updating market search…" : "Update assessment"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
       {vehicleDetailsOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
@@ -6561,7 +6743,8 @@ export function EvaluationWorkspace({
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         <span>Auto.dev national listings: <b>{autoDevDiscovery?.total ?? "Not checked"}</b></span>
                         <span>Auto.dev qualified candidates: <b>{autoDevDiscovery?.candidateComps?.length ?? 0}</b></span>
-                        <span>Auto.dev auto-eligible: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b></span>
+                        <span>Auto.dev listings auto-selected: <b>{autoDevDiscovery?.candidateDiagnostics?.autoIncluded ?? 0}</b> (may include broader market context)</span>
+                        <span>Auto.dev close pricing candidates: <b>{autoDevDiscovery?.candidateDiagnostics?.closeDiscoveryCandidates ?? 0}</b> (subject to final valuation checks)</span>
                         <span>MarketCheck returned: <b>{compReturnedListings}</b></span>
                         <span>Provider-usable: <b>{compUsableListings}</b></span>
                         <span>Trusted selected: <b>{compSummary.includedCount}</b></span>
@@ -6913,19 +7096,27 @@ export function EvaluationWorkspace({
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Expected profit</dt>
                       <dd className="mt-1 font-black text-emerald-700">
-                        {!needsCompSearch && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}
+                        {pricingEvidence.decisionReady && !needsCompSearch && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}
                       </dd>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Recommended max buy</dt>
-                      <dd className="mt-1 font-black text-blue-700">{suggestedBid > 0 ? money(suggestedBid) : "—"}</dd>
+                      <dd className="mt-1 font-black text-blue-700">{pricingEvidence.decisionReady && suggestedBid > 0 ? money(suggestedBid) : "—"}</dd>
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                       <dt className="text-[9px] font-black uppercase text-slate-400">Desired profit target</dt>
                       <dd className="mt-1 font-black text-slate-950">{money(valuation.desiredProfitTarget)}</dd>
-                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setBidLogicOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit profit target →</button>
+                      <p className="mt-1 text-[10px] font-semibold text-slate-500">{profitTargetSource}</p>
+                      <button type="button" onClick={() => { setWhyLotLogicOpen(false); setProfitDetailsOpen(true); }} className="mt-2 text-xs font-bold text-blue-700 hover:underline">Profit details →</button>
                     </div>
                   </dl>
+                  <button type="button"
+                    onClick={() => { setWhyLotLogicOpen(false); setProfitDetailsOpen(true); }}
+                    className="mt-4 flex w-full items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-left text-xs font-semibold text-blue-800 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-blue-600"
+                  >
+                    <span>How profit is calculated · {profitTargetSource}</span>
+                    <span className="shrink-0 font-black">Profit details →</span>
+                  </button>
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 p-5">
@@ -7077,6 +7268,98 @@ export function EvaluationWorkspace({
         </div>
       ) : null}
 
+      {profitDetailsOpen ? (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setProfitDetailsOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Profit details"
+            className="flex max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}>
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-950">Profit details</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Understand the profit estimate and choose your target.</p>
+              </div>
+              <button type="button" onClick={() => setProfitDetailsOpen(false)}
+                aria-label="Close profit details"
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100">✕</button>
+            </div>
+            <div className="min-h-0 overflow-y-auto space-y-4 px-5 py-5 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">Expected gross profit</div>
+                  <div className="mt-1 text-xl font-black text-slate-950">
+                    {pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "Not verified"}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">Desired profit target</div>
+                  <div className="mt-1 text-xl font-black text-slate-950">{money(valuation.desiredProfitTarget)}</div>
+                  <p className="mt-1 text-[10px] text-slate-500">{profitTargetSource}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-black text-slate-950">How the numbers work</h3>
+                <p className="mt-2 text-xs leading-5 text-slate-600">
+                  Expected gross profit = estimated retail value minus the current all-in acquisition cost.
+                  This is a projection, not a guaranteed sale. Desired profit is the minimum margin Lot Logic
+                  uses to calculate its recommended maximum purchase price.
+                </p>
+                <div className="mt-3 space-y-1 text-xs">
+                  <div className="flex justify-between gap-3"><span>Expected retail</span><strong>{pricingEvidence.decisionReady ? money(finalTargetUsed) : "Unverified"}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Current all-in cost</span><strong>{money(displayedCurrentCost)}</strong></div>
+                  <div className="flex justify-between gap-3 border-t border-slate-200 pt-2"><span>Projected gross profit</span><strong>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</strong></div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-black text-slate-950">Set desired profit</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Automatic: the higher of dealer minimum (below) or 20% of the recommended pre-reconditioning
+                  acquisition basis. Fixed target: uses exactly the amount you set.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button"
+                    onClick={() => setEvaluation((previous) => ({ ...previous, profitTargetMode: "minimum" }))}
+                    aria-pressed={!fixedProfitMode}
+                    className={`rounded-lg border p-3 text-left text-xs font-black ${!fixedProfitMode ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}>
+                    Automatic minimum
+                  </button>
+                  <button type="button"
+                    onClick={() => setEvaluation((previous) => ({
+                      ...previous, profitTargetMode: "fixed",
+                      targetProfit: previous.targetProfit > 0 ? previous.targetProfit : 5000,
+                    }))}
+                    aria-pressed={valuationInput.profitTargetMode === "fixed"}
+                    className={`rounded-lg border p-3 text-left text-xs font-black ${valuationInput.profitTargetMode === "fixed" ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}>
+                    Fixed dollar target
+                  </button>
+                </div>
+                <label className="mt-3 block text-xs font-bold text-slate-700" htmlFor="profit-details-target">
+                  {valuationInput.profitTargetMode === "fixed" ? "Your fixed gross profit target" : "Optional dealer minimum"}
+                </label>
+                <div className="mt-1 flex items-center rounded-lg border border-slate-200">
+                  <span className="px-3 text-slate-500">$</span>
+                  <input id="profit-details-target" type="text" inputMode="numeric"
+                    value={formatNumberInput(valuationInput.targetProfit)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => updateEvaluationField("targetProfit", toNumber(event.target.value))}
+                    className="w-full rounded-lg py-2 pr-3 text-right font-semibold outline-none"/>
+                </div>
+                <dl className="mt-3 space-y-1.5 text-xs">
+                  <div className="flex justify-between gap-2"><dt>Automatic benchmark</dt><dd className="font-bold">{money(automaticProfitTarget)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Dealer setting</dt><dd className="font-bold">{dealerProfitMinimum > 0 ? money(dealerProfitMinimum) : "Not set"}</dd></div>
+                  <div className="flex justify-between gap-2 border-t border-slate-200 pt-2"><dt className="font-black">Desired profit used</dt><dd className="font-black">{money(valuation.desiredProfitTarget)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Recommended maximum bid</dt><dd className="font-bold">{pricingEvidence.decisionReady && suggestedBid > 0 ? money(suggestedBid) : "Pricing verification needed"}</dd></div>
+                </dl>
+              </div>
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={() => setProfitDetailsOpen(false)}
+                className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800">Done</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {bidLogicOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -7168,7 +7451,26 @@ export function EvaluationWorkspace({
                 </div>
               </FormRow>
 
-              <FormRow label="Profit Target Override">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-black text-slate-900">Desired profit strategy</div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button type="button"
+                    onClick={() => setEvaluation((previous) => ({ ...previous, profitTargetMode: "minimum" }))}
+                    aria-pressed={!fixedProfitMode}
+                    className={`rounded-lg border px-3 py-3 text-left text-xs font-bold ${!fixedProfitMode ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700"}`}>
+                    Automatic minimum
+                    <span className="mt-1 block font-medium">Use the higher of Lot Logic's target and your minimum.</span>
+                  </button>
+                  <button type="button"
+                    onClick={() => setEvaluation((previous) => ({ ...previous, profitTargetMode: "fixed", targetProfit: previous.targetProfit > 0 ? previous.targetProfit : 5000 }))}
+                    aria-pressed={valuationInput.profitTargetMode === "fixed"}
+                    className={`rounded-lg border px-3 py-3 text-left text-xs font-bold ${valuationInput.profitTargetMode === "fixed" ? "border-blue-500 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-700"}`}>
+                    Fixed dollar target
+                    <span className="mt-1 block font-medium">Use exactly the gross profit amount you specify.</span>
+                  </button>
+                </div>
+              </div>
+              <FormRow label={valuationInput.profitTargetMode === "fixed" ? "Fixed desired gross profit" : "Dealer Minimum Profit (optional)"}>
                 <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
                   <span className="pl-3 text-sm text-slate-400">$</span>
                   <input
@@ -7186,7 +7488,10 @@ export function EvaluationWorkspace({
                   />
                 </div>
                 <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
-                  Leave at $0 to use the Lot Logic automatic target: at least $2,500, scaling to roughly 20% of the pre-recon acquisition basis. Current target: {money(valuation.desiredProfitTarget)}.
+                  {valuationInput.profitTargetMode === "fixed"
+                    ? "This amount is your fixed gross profit goal. Enter a positive amount; $0 returns to Lot Logic's automatic calculation."
+                    : "Leave at $0 for the automatic target. A positive number sets a minimum; Lot Logic uses whichever is higher."}
+                  {" "}Automatic benchmark: {money(automaticProfitTarget)}. Desired profit used: {money(valuation.desiredProfitTarget)}.
                 </p>
               </FormRow>
 
@@ -7211,7 +7516,7 @@ export function EvaluationWorkspace({
                         : "text-red-700"
                     }`}
                   >
-                    {hasEvaluationData
+                    {pricingEvidence.decisionReady && hasEvaluationData
                       ? money(valuation.expectedGrossProfit)
                       : "—"}
                   </div>
@@ -7243,7 +7548,7 @@ export function EvaluationWorkspace({
           {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
 
           {activeStage === "verdict" ? (
-            <section className="grid gap-4 lg:grid-cols-3">
+            <section className="mt-4 grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
@@ -7284,7 +7589,7 @@ export function EvaluationWorkspace({
                 <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
               </article>
 
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+              <article className={`relative min-h-[142px] rounded-[20px] border bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] ${pricingEvidence.decisionReady ? "border-emerald-200" : "border-amber-300"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
                   <button
@@ -7296,9 +7601,11 @@ export function EvaluationWorkspace({
                   </button>
                 </div>
                 <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} relevant comparison{compSummary.includedCount === 1 ? "" : "s"} · {compSummary.confidence === "High" ? "Strong price evidence" : compSummary.confidence === "Medium" ? "Moderate price evidence" : "Price review recommended"}
+                  {compSummary.includedCount} relevant comparison{compSummary.includedCount === 1 ? "" : "s"} · {pricingEvidence.decisionReady ? pricingEvidence.label : "Pricing unverified"}
                 </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
+                <div className={`absolute bottom-4 left-5 rounded-full px-3 py-1 text-[10px] font-black ${pricingEvidence.decisionReady ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+                  {pricingEvidence.decisionReady ? "Pricing supported ✓" : "Verification needed"}
+                </div>
               </article>
             </section>
           ) : (
@@ -7413,7 +7720,7 @@ export function EvaluationWorkspace({
                       <div className="relative">
                         <input
                           value={vin}
-                          onChange={(event) => setVin(event.target.value.toUpperCase())}
+                          onChange={(event) => { setVin(event.target.value.toUpperCase()); setConfirmedVinTrim(""); }}
                           placeholder="17-character VIN"
                           aria-label="Vehicle VIN"
                           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-14 text-sm font-semibold outline-none focus:border-blue-300"
@@ -7423,6 +7730,24 @@ export function EvaluationWorkspace({
                           disabled={vinDecodeLoading || evaluationRunning}
                         />
                       </div>
+                      <VinIdentificationDetails decoded={decodedVehicle} vin={vin} />
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
+                          Retail trim / grade (if known)
+                        </span>
+                        <input type="text"
+                          aria-label="Verified retail trim or grade"
+                          value={confirmedVinTrim}
+                          onChange={(event) => setConfirmedVinTrim(event.target.value)}
+                          placeholder={decodedVehicle?.trim || "e.g. LE, SE, XLE, XSE"}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-300"/>
+                        {!confirmedVinTrim.trim() && decodedVehicle &&
+                          (!decodedVehicle.trim || /^\\d{1,3}\\s+series$/i.test(decodedVehicle.trim)) ? (
+                          <span className="mt-1 block text-[11px] font-semibold leading-4 text-amber-700">
+                            VIN data has not confirmed a retail trim. Enter the actual grade to enable reliable trim-matched pricing. Do not guess.
+                          </span>
+                        ) : null}
+                      </label>
                       {vinDecodeError ? <p role="alert" className="text-xs font-semibold text-red-700">{vinDecodeError}</p> : null}
                     </div>
                   ) : (
@@ -7522,9 +7847,9 @@ export function EvaluationWorkspace({
                   <div className="grid gap-2 text-sm">
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Mileage</span><span className="font-black text-slate-900">{targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"}</span></div>
                     <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Bid / Ask</span><span className="font-black text-slate-900">{valuationInput.currentBid > 0 ? money(valuationInput.currentBid) : "—"}</span></div>
-                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{vehicleTrim || "—"}</span></div>
+                    <div className="flex justify-between gap-3"><span className="font-semibold text-slate-500">Trim</span><span className="truncate font-black text-slate-900">{retailTrimNeedsConfirmation ? "Unverified" : vehicleTrim || "—"}</span></div>
                   </div>
-                  <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Vehicle ready ✓</div>
+                  <div className={`mt-4 inline-flex rounded-full px-3 py-1 text-[10px] font-black ${retailTrimNeedsConfirmation ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>{retailTrimNeedsConfirmation ? "Confirm retail trim for pricing" : "Vehicle ready ✓"}</div>
                 </div>
               ) : null}
             </article>
@@ -7833,30 +8158,26 @@ export function EvaluationWorkspace({
                       : evaluationRunning || marketCheckLoading || compSearchImproving
                         ? "Finding comps..."
                         : compSummary.includedCount > 0
-                          ? (compSummary.primaryCompCount || 0) >= 4
-                            ? "Market pricing supported by close comparisons"
-                            : "Market analysis complete"
+                          ? pricingEvidence.decisionReady
+                            ? "Market valuation supported by close comparisons"
+                            : strongestIndicativeScenario ? "Market snapshot" : "Price indication needs verification"
                           : "Market evidence"}
                   </h2>
                 </div>
-                {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" ? (
+                {conditionStepConfirmed && hasEvaluationData && activeStage !== "vehicle" && !strongestIndicativeScenario ? (
                   <div className="relative flex shrink-0 items-center gap-1.5">
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
-                    needsCompSearch ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
+                    !pricingEvidence.decisionReady ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
                   }`}>
-                    {needsCompSearch ? "Needs attention" : "Ready ✓"}
+                    {pricingEvidence.decisionReady ? "Ready ✓" : "Needs attention"}
                     </span>
-                    {needsCompSearch ? (
+                    {!pricingEvidence.decisionReady ? (
                       <span className="group relative inline-flex">
                         <button type="button" aria-label="Why market evidence needs attention"
-                          title={recommendedCompSearchExhausted
-                            ? "Recommended searches have finished. An unpriced review will not consume an evaluation credit."
-                            : "No trusted comps yet. Run the recommended search before deciding whether a valuation is possible."}
+                          title={pricingEvidence.explanation}
                           className="flex h-5 w-5 items-center justify-center rounded-full border border-amber-300 text-[11px] font-black text-amber-800 focus-visible:outline-2 focus-visible:outline-blue-600">!</button>
                         <span role="tooltip" className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-64 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold leading-5 text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                          {recommendedCompSearchExhausted
-                            ? "Recommended searches have finished without reliable comparisons. You can review an unpriced verdict without using an evaluation credit; no sale or profit estimate is available."
-                            : "The initial search has not established reliable comparisons. Run the recommended search for stronger market evidence before treating this as unpriceable."}
+                          {pricingEvidence.explanation}
                         </span>
                       </span>
                     ) : null}
@@ -7872,7 +8193,7 @@ export function EvaluationWorkspace({
                       <div className="mt-1 text-lg font-black text-slate-300">—</div>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
-                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
                       <div className="mt-1 text-lg font-black text-slate-300">—</div>
                     </div>
                   </div>
@@ -7888,6 +8209,71 @@ export function EvaluationWorkspace({
                 </div>
               ) : (
                 <div className="mt-4 flex-1">
+                  {strongestIndicativeScenario && !evaluationRunning && !marketCheckLoading && !compSearchImproving ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Indicative {strongestIndicativeScenario.trim} asking market</p>
+                        <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">{money(strongestIndicativeScenario.adjustedMedian)}</p>
+                        <p className="mt-1 text-xs text-slate-600">{strongestIndicativeScenario.count} comparable listings · adjusted to {targetMileage.toLocaleString()} miles</p>
+                      </div>
+                      <div className="border-t border-slate-200 pt-3">
+                        <p className="text-sm font-black text-slate-900">
+                          {valuationInput.currentBid > 0 && valuationInput.currentBid < strongestIndicativeScenario.adjustedLow * 0.65
+                            ? "Potential opportunity — verify before bidding"
+                            : "Market information available — verify vehicle details"}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">
+                          {valuationInput.currentBid > 0 && valuationInput.currentBid < strongestIndicativeScenario.adjustedLow * 0.65
+                            ? `Your ${money(valuationInput.currentBid)} entry is well below comparable advertised prices. Confirm trim, title, condition and seller details before acting.`
+                            : "The VIN does not establish the retail trim. Confirm the actual grade before applying this market price to the vehicle."}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}
+                        className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white hover:bg-blue-800">
+                        Confirm Vehicle Details →
+                      </button>
+                      <details className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700">
+                        <summary className="cursor-pointer font-bold text-blue-700">View market evidence and assumptions</summary>
+                        <div className="mt-3 space-y-2 leading-5">
+                          <p>{strongestIndicativeScenario.trim} adjusted asking range: <strong>{money(strongestIndicativeScenario.adjustedLow)}–{money(strongestIndicativeScenario.adjustedHigh)}</strong>.</p>
+                          <p>Asking prices are not completed sales. The subject trim is unverified, so this is neither a confirmed subject valuation nor a maximum bid.</p>
+                          <p>{pricingEvidence.explanation}</p>
+                          <button type="button" className="font-bold text-blue-700 hover:underline"
+                            onClick={() => { setShowCompDetails(true); compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+                            Review comparable listings ↓
+                          </button>
+                          <button type="button" className="ml-3 font-bold text-blue-700 hover:underline"
+                            onClick={() => void continueToVerdict()} disabled={verdictTransitioning}>
+                            Continue to Verdict →
+                          </button>
+                        </div>
+                      </details>
+                    </div>
+                  ) : (
+                    <>
+                  {!evaluationRunning && !marketCheckLoading && !compSearchImproving && retailTrimNeedsConfirmation ? (
+                    <div role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900">
+                      <p className="font-black">Exact retail trim has not been established</p>
+                      <p>Lot Logic cannot confirm the exact grade from the VIN. The listings below provide useful market context, but they are not verified pricing matches for this particular car.</p>
+                      <button type="button" className="mt-2 font-black text-blue-700 hover:underline"
+                        onClick={() => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }}>
+                        Confirm retail trim in Vehicle →
+                      </button>
+                    </div>
+                  ) : null}
+                  {!evaluationRunning && !marketCheckLoading && !compSearchImproving && strongestIndicativeScenario ? (
+                    <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-blue-800">Market intelligence available · provisional</p>
+                      <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                          <p className="text-xl font-black text-slate-950">{money(strongestIndicativeScenario.adjustedMedian)}</p>
+                          <p className="text-[11px] font-semibold text-slate-600">{strongestIndicativeScenario.trim} advertised asking median adjusted to {targetMileage.toLocaleString()} miles</p>
+                        </div>
+                        <p className="text-xs font-bold text-blue-900">{strongestIndicativeScenario.count} comparable listings</p>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-700">Observed adjusted range: <strong>{money(strongestIndicativeScenario.adjustedLow)}–{money(strongestIndicativeScenario.adjustedHigh)}</strong>. This is a market scenario, not a confirmed valuation for this VIN.</p>
+                    </div>
+                  ) : null}
                   {evaluationRunning || marketCheckLoading || compSearchImproving ? (
                     <div role="status" aria-live="polite" className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-4">
@@ -7915,25 +8301,42 @@ export function EvaluationWorkspace({
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Expected Retail</div>
-                          <div className="mt-1 text-xl font-black text-slate-950">{finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{strongestIndicativeScenario ? `Indicative ${strongestIndicativeScenario.trim} asking market` : pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Expected Retail" : "Unverified Retail Indication"}</div>
+                          <div className="mt-1 text-xl font-black text-slate-950">{strongestIndicativeScenario ? money(strongestIndicativeScenario.adjustedMedian) : pricingEvidence.closePeerCount === 0 ? "Not established" : finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                          {strongestIndicativeScenario ? <div className="mt-1 text-[10px] font-medium text-slate-600">{strongestIndicativeScenario.count} selected ${strongestIndicativeScenario.trim} listings · mileage-adjusted asking median, not a subject valuation</div> : null}
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Pricing evidence</div>
-                          <div className="mt-1 text-lg font-black text-slate-950">{compSummary.confidence === "High" ? "Strong" : compSummary.confidence === "Medium" ? "Moderate" : "Provisional"}</div>
-                          <div className="mt-1 text-[10px] font-semibold text-slate-500">{compSummary.confidence === "Low" ? "Closer pricing peers needed" : "Based on qualified price comparisons"}</div>
+                          <div className="mt-1 text-lg font-black text-slate-950">{pricingEvidence.label}</div>
+                          <div className="mt-1 text-[10px] font-semibold text-slate-500">{pricingEvidence.decisionReady ? "Based on qualified close pricing peers" : "Acquisition decision not yet supported"}</div>
                         </div>
                       </div>
+                      {indicativeTrimScenarios.length > 0 && (
+                        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-3 text-xs text-slate-800">
+                          <p className="font-black text-blue-900">Available market evidence by retail trim</p>
+                          <p className="mt-1 text-[11px] leading-4 text-slate-700">These are mileage-adjusted <strong>advertised asking prices</strong> from selected listings, not verified transaction prices. The VIN has not established which trim the subject vehicle is.</p>
+                          <div className="mt-2 space-y-1.5">
+                            {indicativeTrimScenarios.map(scenario => (
+                              <div key={scenario.trim} className="flex items-center justify-between gap-3 rounded-lg bg-white px-2 py-2">
+                                <span className="font-semibold">{scenario.trim} · {scenario.count} listings</span>
+                                <span className="text-right font-bold">{money(scenario.adjustedMedian)} median <span className="block text-[10px] font-medium text-slate-500">{money(scenario.adjustedLow)}–{money(scenario.adjustedHigh)} range</span></span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-[11px] font-semibold text-amber-900">Confirm actual trim, title and condition before relying on this market context for a bid. No automatic acquisition recommendation is issued from these scenarios.</p>
+                        </div>
+                      )}
                       {activeStage === "market" ? (
                         <>
                         <div className="mt-3 text-xs leading-5 text-slate-600">
-                          {compSummary.pricingMode === "primary"
+                          {pricingEvidence.decisionReady
                             ? `${compSummary.primaryCompCount} close pricing peers support the estimate. Asking prices are not completed sales.`
                             : `${compSummary.includedCount} relevant comparisons found, but only ${compSummary.primaryCompCount || 0} qualify as close pricing peers. Verify retail pricing before purchasing.`}
                           <details className="mt-1">
                             <summary className="w-fit cursor-pointer text-[11px] font-semibold text-blue-700 hover:text-blue-900">Pricing evidence details</summary>
                             <div className="mt-1 space-y-1 text-[11px] text-slate-600">
-                              <p>{fallbackEvidenceDisclosure || `${compSummary.primaryCompCount || 0} close pricing peers and ${compSummary.includedCount} selected comparisons.`}</p>
+                              <p>{pricingEvidence.explanation}</p>
+                              {fallbackEvidenceDisclosure ? <p>{fallbackEvidenceDisclosure}</p> : null}
                               {(compSummary.confidenceReasons || []).length > 0 ? <ul className="list-disc pl-4">{(compSummary.confidenceReasons || []).map((reason, index) => <li key={index}>{reason}</li>)}</ul> : null}
                             </div>
                           </details>
@@ -7998,10 +8401,13 @@ export function EvaluationWorkspace({
                           </div>
                         </div>
                         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <button type="button" onClick={openCompMarketEditor}
+                          <button type="button"
+                            onClick={retailTrimNeedsConfirmation
+                              ? () => { setQuickEvalMode("vin"); setActiveStage("vehicle"); }
+                              : openCompMarketEditor}
                             disabled={compSearchImproving || marketCheckLoading || autoDevDiscoveryLoading}
                             className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
-                            {compSearchImproving ? "Searching…" : "Improve Search"}
+                            {compSearchImproving ? "Searching…" : retailTrimNeedsConfirmation ? "Confirm Retail Trim" : "Improve Search"}
                           </button>
                           <span className="text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">or</span>
                           <button type="button" onClick={() => void continueToVerdict()}
@@ -8035,13 +8441,15 @@ export function EvaluationWorkspace({
                   ) : (
                     <div className="text-sm font-semibold text-slate-500">Market evidence incomplete.</div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
               {activeStage === "market" && conditionStepConfirmed &&
                 (comps.length > 0 || needsCompSearch) ? (
                 <div className="mt-auto border-t border-slate-100 pt-4">
                   <button type="button"
-                    onClick={() => compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    onClick={() => { setShowCompDetails(true); compSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                     className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:text-blue-900">
                     View comp results ↓
                   </button>
@@ -8061,6 +8469,7 @@ export function EvaluationWorkspace({
                   <span>{compSearchImprovementStatus || "Updating comparable vehicles…"}</span>
                 </div>
               ) : null}
+              {(!strongestIndicativeScenario || showCompDetails) ? (
               <SectionCard
                 title="Comparable Vehicles"
                 action={
@@ -8168,6 +8577,12 @@ export function EvaluationWorkspace({
                   ) : null}
                 </div>
               </SectionCard>
+              ) : (
+                <button type="button" onClick={() => setShowCompDetails(true)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-bold text-blue-700 hover:bg-blue-50">
+                  View all comparable listings ({compSummary.includedCount} selected) ↓
+                </button>
+              )}
             </section>
           ) : null}
 
@@ -8181,7 +8596,7 @@ export function EvaluationWorkspace({
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
-              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[1.05fr_1.1fr_1fr] ${
+              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-2 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.1fr)_minmax(0,1.3fr)] ${
                 verdictEntered
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
@@ -8221,6 +8636,10 @@ export function EvaluationWorkspace({
                     <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
                   </div>
+                  <div className="mt-3 rounded-xl bg-white/55 px-3 py-2.5">
+                    <div className="text-sm font-black text-slate-950">{verdictFirstAssessment.headline}</div>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">{verdictFirstAssessment.summary}</p>
+                  </div>
                   <div className="mt-4 grid gap-2 border-t border-current/10 pt-4 text-center sm:grid-cols-3 sm:gap-3">
                     <button
                       type="button"
@@ -8241,33 +8660,43 @@ export function EvaluationWorkspace({
                       ) : null}
                     </button>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Sale Estimate</div>
-                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Sale Estimate" : "Unverified Retail Indication"}</div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{pricingEvidence.closePeerCount === 0 ? "Not established" : compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
                     </div>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">Estimated Profit</div>
-                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{hasAcquisitionPrice && compSummary.includedCount > 0 ? money(valuation.expectedGrossProfit) : "—"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Estimated Profit" : "Profit Pending Verification"}</div>
+                      <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</div>
+                      <button type="button"
+                        onClick={() => setProfitDetailsOpen(true)}
+                        className="mt-1.5 text-[10px] font-black text-blue-700 hover:text-blue-900 hover:underline focus-visible:outline-2 focus-visible:outline-blue-600"
+                      >
+                        Profit details →
+                      </button>
                     </div>
                   </div>
-                  {provisionalFallbackPricing && hasEvaluationData ? (
+                  {!pricingEvidence.decisionReady && hasEvaluationData ? (
                     <div role="note" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold leading-5 text-amber-900">
-                      <span className="font-black">Market pricing needs verification.</span>{" "}
+                      <span className="font-black">{pricingEvidence.label}.</span>{" "}
                       Based on {compSummary.pricingCompCount ?? compSummary.includedCount} related asking-price listings, but {compSummary.primaryCompCount === 0
                         ? "none closely match this vehicle"
                         : `only ${compSummary.primaryCompCount} qualify as close pricing peers`}.
                       {(compSummary.cappedAdjustmentCount ?? 0) > 0
                         ? ` ${compSummary.cappedAdjustmentCount} required capped mileage adjustments.`
                         : ""}
-                      {" "}Verify the estimated sale price before purchasing.
+                      {" "}No confident BUY/PASS or profit recommendation is supported. {pricingEvidence.explanation}
                       {presentationDecision === "review" && reviewReasons.some((reason) => !reason.startsWith("market evidence is limited")) ? (
                         <p className="mt-2">Also review: {reviewReasons.filter((reason) => !reason.startsWith("market evidence is limited")).join("; ")}.</p>
                       ) : null}
                     </div>
+                  ) : promisingNegotiation ? (
+                    <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 px-3 py-3 text-center text-xs font-semibold leading-5 text-teal-900">
+                      <strong>Positive projected economics.</strong> The current cost is {money(currentAllInDifference)} above the recommended buy target. Negotiate toward that target before committing; the purchase still requires review.
+                    </div>
                   ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
-                  {!needsCompSearch && currentCostPosition ? (
-                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-red-100 text-red-700" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
+                  {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
+                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
                   ) : null}
                   <div className="mt-auto pt-5">
                     <button
@@ -8282,14 +8711,58 @@ export function EvaluationWorkspace({
                   </div>
                 </article>
 
-                <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
-                  <h2 className="text-base font-black text-slate-950">Deal Snapshot</h2>
-                  <div className="mt-4 grid grid-cols-2 gap-4">
-                    <button type="button" aria-label="View Deal Economics decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch} /></button>
-                    <button type="button" aria-label="View Dealer Fit decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} /></button>
+                <article className="flex h-full flex-col rounded-[20px] border border-blue-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:col-span-2 xl:col-span-1">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Next steps</div>
+                    <h2 className="mt-1 text-base font-black text-slate-950">Improve result</h2>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                      Confirm the inputs that can change the recommendation. Lot Logic will keep you on this verdict while it updates.
+                    </p>
+                    {vehicleIdentityUpdating ? (
+                      <p role="status" className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">
+                        Refreshing market comparisons and recalculating the verdict…
+                      </p>
+                    ) : null}
                   </div>
-                  <button type="button" aria-label="View Current Market Age decision details" onClick={() => setWhyLotLogicOpen(true)} className="mt-4 w-full border-t border-slate-100 pt-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600">
-                    <MarketLiquidityVisual soldLow={liquiditySoldLow} soldHigh={liquiditySoldHigh} soldMedian={liquiditySoldMedian} activeDays={liquidityActiveDays} label={liquidityLabel} confidence={liquidityConfidence} sampleSize={liquiditySampleSize} />
+                  <div className="mt-4 space-y-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setAllInCostOpen(true)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-3 text-left transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-slate-950">Confirm deal economics</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-600">Purchase price, fees, transport, and recon</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openVehicleIdentityEditor(true)}
+                      disabled={vehicleIdentityUpdating}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-slate-950">{vehicleTrim ? "Review trim" : "Add trim"}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">{vehicleTrim ? `Currently: ${vehicleTrim}` : "A more specific trim can improve the comparisons"}</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openVehicleIdentityEditor(false)}
+                      disabled={vehicleIdentityUpdating}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-slate-950">Edit vehicle</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">Correct year, make, model, or trim and refresh the market search</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
+                    </button>
+                  </div>
+                  <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mt-auto pt-4 text-left text-xs font-black text-blue-700 hover:text-blue-900">
+                    View dealer fit and market timing →
                   </button>
                 </article>
               </section>
