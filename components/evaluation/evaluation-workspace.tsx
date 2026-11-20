@@ -383,70 +383,6 @@ function SectionCard({
   );
 }
 
-function ScoreRing({
-  label,
-  score,
-  tone,
-  isEmpty = false,
-}: {
-  label: string;
-  score: number;
-  tone: "green" | "blue";
-  isEmpty?: boolean;
-}) {
-  const normalizedScore = Math.max(0, Math.min(100, score));
-
-  const ringColor = isEmpty
-    ? "#cbd5e1"
-    : normalizedScore < 40
-      ? "#dc2626"
-      : normalizedScore < 65
-        ? "#d97706"
-        : tone === "green"
-          ? "#059669"
-          : "#2563eb";
-
-  return (
-    <div className="flex flex-col items-center text-center">
-      <div className="mb-1.5 text-xs font-extrabold text-slate-600">{label}</div>
-
-      <div
-        className="relative grid h-[78px] w-[78px] place-items-center rounded-full"
-        style={{
-          background: isEmpty
-            ? "#e2e8f0"
-            : `conic-gradient(${ringColor} ${
-                normalizedScore * 3.6
-              }deg, #e2e8f0 0deg)`,
-        }}
-      >
-        <div className="grid h-[64px] w-[64px] place-items-center rounded-full bg-white shadow-inner">
-          <div>
-            <div className={`text-[23px] font-black leading-none tracking-[-0.04em] ${
-              isEmpty ? "text-slate-400" : "text-slate-950"
-            }`}>
-              {isEmpty ? "—" : normalizedScore}
-            </div>
-
-            {!isEmpty ? (
-              <div className="mt-1 text-[10px] font-bold text-slate-400">
-                /100
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {isEmpty ? (
-        <div className="mt-2 text-[10px] font-bold text-slate-400">
-          Not calculated
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-
 function MarketLiquidityVisual({
   soldLow,
   soldHigh,
@@ -698,6 +634,7 @@ type SavedEvaluationPayload = {
   auctionSite?: string;
   finalTargetOverride?: number | null;
   decodedVehicle?: VinDecodeResult | null;
+  vehicleIdentityOverride?: MarketCheckVehicleOverride | null;
   vehicleIdentityProfile?: VehicleIdentityProfile | null;
   manualVehicle?: ManualVehicleBasics;
   targetMileage?: number;
@@ -821,6 +758,10 @@ export function EvaluationWorkspace({
   const [decodedVehicle, setDecodedVehicle] = useState<VinDecodeResult | null>(
     initialSavedPayload?.decodedVehicle || null,
   );
+  const [vehicleIdentityOverride, setVehicleIdentityOverride] =
+    useState<MarketCheckVehicleOverride | null>(
+      initialSavedPayload?.vehicleIdentityOverride || null,
+    );
   const [vehicleIdentityProfile, setVehicleIdentityProfile] =
     useState<VehicleIdentityProfile | null>(
       initialSavedPayload?.vehicleIdentityProfile ||
@@ -1149,6 +1090,10 @@ export function EvaluationWorkspace({
   const [quickEvalOpen, setQuickEvalOpen] = useState(false);
   const [quickEvalMode, setQuickEvalMode] = useState<"vin" | "manual">("vin");
   const [vehicleDetailsOpen, setVehicleDetailsOpen] = useState(false);
+  const [vehicleIdentityEditOpen, setVehicleIdentityEditOpen] = useState(false);
+  const [vehicleIdentityUpdating, setVehicleIdentityUpdating] = useState(false);
+  const [vehicleIdentityDraft, setVehicleIdentityDraft] =
+    useState<MarketCheckVehicleOverride>({ year: "", make: "", model: "", trim: "" });
   const [vehicleThumbnailUrl, setVehicleThumbnailUrl] = useState("");
   const [vehicleThumbnailLoading, setVehicleThumbnailLoading] = useState(false);
   const [vehicleThumbnailError, setVehicleThumbnailError] = useState("");
@@ -1424,6 +1369,10 @@ export function EvaluationWorkspace({
         setVehicleIdentityProfileStatus("Vehicle identity ready");
       }
 
+      if (draft.vehicleIdentityOverride) {
+        setVehicleIdentityOverride(draft.vehicleIdentityOverride);
+      }
+
       if (draft.manualVehicle) {
         setManualVehicle(draft.manualVehicle);
       }
@@ -1563,6 +1512,7 @@ export function EvaluationWorkspace({
           auctionSite,
           finalTargetOverride,
           decodedVehicle,
+          vehicleIdentityOverride,
           vehicleIdentityProfile,
           manualVehicle,
           targetMileage,
@@ -1596,6 +1546,7 @@ export function EvaluationWorkspace({
     auctionSite,
     finalTargetOverride,
     decodedVehicle,
+    vehicleIdentityOverride,
     vehicleIdentityProfile,
     manualVehicle,
     targetMileage,
@@ -1632,12 +1583,12 @@ export function EvaluationWorkspace({
       calculateCompSummary({
         comps: independentComps,
         targetMileage,
-        targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+        targetYear: Number(vehicleIdentityOverride?.year ?? decodedVehicle?.year ?? manualVehicle.year ?? vehicleIdentityProfile?.year ?? 0) || null,
         targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
         targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
         assumptions: activeAssumptions,
       }),
-    [independentComps, targetMileage, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
+    [independentComps, targetMileage, vehicleIdentityOverride?.year, decodedVehicle?.year, decodedVehicle?.fuelType, decodedVehicle?.driveType, manualVehicle.year, vehicleIdentityProfile?.year, vehicleIdentityProfile?.fuelType, vehicleIdentityProfile?.drivetrain, activeAssumptions],
   );
 
   const pricingEvidence = classifyPricingEvidence(compSummary);
@@ -1843,11 +1794,11 @@ export function EvaluationWorkspace({
       ? "Dealer minimum"
       : "Lot Logic automatic target";
 
-  const vehicleYear = decodedVehicle?.year || manualVehicle.year || "";
-  const vehicleMake = decodedVehicle?.make || manualVehicle.make || "";
-  const rawVehicleModel = decodedVehicle?.model || manualVehicle.model || "";
-  const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, decodedVehicle?.trim || manualVehicle.trim) || rawVehicleModel;
-  const vehicleTrim = decodedVehicle?.trim || manualVehicle.trim || "";
+  const vehicleYear = vehicleIdentityOverride?.year ?? decodedVehicle?.year ?? manualVehicle.year ?? "";
+  const vehicleMake = vehicleIdentityOverride?.make ?? decodedVehicle?.make ?? manualVehicle.make ?? "";
+  const rawVehicleModel = vehicleIdentityOverride?.model ?? decodedVehicle?.model ?? manualVehicle.model ?? "";
+  const vehicleModel = dedicatedBmwMModel(vehicleMake, rawVehicleModel, vehicleIdentityOverride?.trim ?? decodedVehicle?.trim ?? manualVehicle.trim) || rawVehicleModel;
+  const vehicleTrim = vehicleIdentityOverride?.trim ?? decodedVehicle?.trim ?? manualVehicle.trim ?? "";
   const retailTrimNeedsConfirmation = Boolean(
     decodedVehicle &&
     (!vehicleTrim || isNonRetailTrimLabel(vehicleTrim)) &&
@@ -2344,6 +2295,7 @@ export function EvaluationWorkspace({
     }
 
     setDecodedVehicle(decoded);
+    setVehicleIdentityOverride(null);
     setVehicleIdentityProfile(
       buildDeterministicVehicleIdentityProfile(decoded),
     );
@@ -3180,6 +3132,50 @@ export function EvaluationWorkspace({
   function openCompVehicleMatchEditor() {
     setCompEditorTab("vehicle");
     setCompMarketEditorOpen(true);
+  }
+
+  function openVehicleIdentityEditor(focusTrim = false) {
+    setVehicleIdentityDraft({
+      year: String(vehicleYear || ""),
+      make: String(vehicleMake || ""),
+      model: String(vehicleModel || ""),
+      trim: String(vehicleTrim || ""),
+      fuelType: decodedVehicle?.fuelType || null,
+    });
+    setVehicleIdentityEditOpen(true);
+    if (focusTrim) {
+      window.setTimeout(() => {
+        document.getElementById("verdict-vehicle-trim")?.focus();
+      }, 0);
+    }
+  }
+
+  async function applyVehicleIdentityEdit() {
+    const nextIdentity = {
+      ...vehicleIdentityDraft,
+      year: String(vehicleIdentityDraft.year || "").trim(),
+      make: String(vehicleIdentityDraft.make || "").trim().toUpperCase(),
+      model: String(vehicleIdentityDraft.model || "").trim(),
+      trim: String(vehicleIdentityDraft.trim || "").trim(),
+    };
+
+    if (!nextIdentity.year || !nextIdentity.make || !nextIdentity.model) return;
+
+    setVehicleIdentityUpdating(true);
+    setVehicleIdentityOverride(nextIdentity);
+    setVehicleIdentityProfile(null);
+    vehicleIdentityProfilePromiseRef.current = null;
+    vehicleIdentityRequestVinRef.current = "";
+    setVehicleIdentityProfileStatus("Using the confirmed vehicle details for this evaluation.");
+    setVehicleIdentityEditOpen(false);
+
+    try {
+      await pullMarketCheckComps(nextIdentity, {
+        useVinMatch: false,
+      });
+    } finally {
+      setVehicleIdentityUpdating(false);
+    }
   }
 
   function openCompMarketEditor() {
@@ -4135,6 +4131,7 @@ export function EvaluationWorkspace({
           targetResaleFromComps: targetResaleUsed,
           finalTargetUsed,
           decodedVehicle,
+          vehicleIdentityOverride,
           manualVehicle,
           targetMileage,
           evaluation,
@@ -4341,8 +4338,6 @@ export function EvaluationWorkspace({
               ? "Weak"
               : "Avoid";
 
-  const profitabilityWidth = `${profitabilityScore}%`;
-
   const dealerFitResult = useMemo(
     () =>
       calculateDealerFit({
@@ -4426,13 +4421,7 @@ export function EvaluationWorkspace({
     ],
   );
 
-  const dealerFitScore = dealerFitResult.score;
-
-  const profitabilityScoreDisplay = hasEvaluationData ? profitabilityScore : 0;
-
-  const dealerFitScoreDisplay = hasEvaluationData ? dealerFitScore : 0;
   const dealerFitLabel = dealerFitResult.label;
-  const dealerFitWidth = `${dealerFitScore}%`;
   const dealerFitReason =
     dealerFitResult.reasons[0] ||
     "Dealer fit will improve as vehicle details are added.";
@@ -4619,6 +4608,7 @@ export function EvaluationWorkspace({
     setAiSummaryError("");
     setAiSummaryLoadingMode(null);
     setActiveThesisMode("financial");
+    setVehicleIdentityOverride(null);
 
     if (quickEvalMode === "manual") {
       setDecodedVehicle(null);
@@ -4926,7 +4916,7 @@ export function EvaluationWorkspace({
         const latestSummary = calculateCompSummary({
           comps: candidates,
           targetMileage,
-          targetYear: Number(decodedVehicle?.year || manualVehicle.year || vehicleIdentityProfile?.year || 0) || null,
+          targetYear: Number(vehicleIdentityOverride?.year ?? decodedVehicle?.year ?? manualVehicle.year ?? vehicleIdentityProfile?.year ?? 0) || null,
           targetFuelType: vehicleIdentityProfile?.fuelType || decodedVehicle?.fuelType || null,
           targetDrivetrain: vehicleIdentityProfile?.drivetrain || decodedVehicle?.driveType || null,
           assumptions: activeAssumptions,
@@ -6566,6 +6556,63 @@ export function EvaluationWorkspace({
               </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {vehicleIdentityEditOpen ? (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setVehicleIdentityEditOpen(false)}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="verdict-vehicle-edit-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void applyVehicleIdentityEdit();
+            }}
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 id="verdict-vehicle-edit-title" className="text-lg font-black text-slate-950">Edit vehicle identity</h2>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                  Correct the details Lot Logic uses to find comparisons. The VIN stays on this evaluation; the market search uses the details below.
+                </p>
+              </div>
+              <button type="button" onClick={() => setVehicleIdentityEditOpen(false)} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close vehicle identity editor">✕</button>
+            </div>
+            <div className="grid gap-3 px-5 py-5 sm:grid-cols-2">
+              {([
+                ["year", "Year", "2023"],
+                ["make", "Make", "Toyota"],
+                ["model", "Model", "Camry"],
+                ["trim", "Trim", "XSE"],
+              ] as const).map(([key, label, placeholder]) => (
+                <label key={key} className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+                  <input
+                    id={key === "trim" ? "verdict-vehicle-trim" : undefined}
+                    type="text"
+                    inputMode={key === "year" ? "numeric" : "text"}
+                    value={String(vehicleIdentityDraft[key] || "")}
+                    onChange={(event) => setVehicleIdentityDraft((current) => ({ ...current, [key]: event.target.value }))}
+                    placeholder={placeholder}
+                    required={key !== "trim"}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setVehicleIdentityEditOpen(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+              <button type="submit" disabled={vehicleIdentityUpdating || !String(vehicleIdentityDraft.year || "").trim() || !String(vehicleIdentityDraft.make || "").trim() || !String(vehicleIdentityDraft.model || "").trim()} className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300">
+                {vehicleIdentityUpdating ? "Updating market search…" : "Update assessment"}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
 
@@ -8595,7 +8642,7 @@ export function EvaluationWorkspace({
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
-              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[1.05fr_1.1fr_1fr] ${
+              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-2 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.1fr)_minmax(0,1.3fr)] ${
                 verdictEntered
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
@@ -8706,14 +8753,58 @@ export function EvaluationWorkspace({
                   </div>
                 </article>
 
-                <article className="flex h-full flex-col rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)]">
-                  <h2 className="text-base font-black text-slate-950">Deal Snapshot</h2>
-                  <div className="mt-4 grid grid-cols-2 gap-4">
-                    <button type="button" aria-label="View Deal Economics decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Deal Economics" score={profitabilityScoreDisplay} tone="green" isEmpty={!hasEvaluationData || needsCompSearch || !pricingEvidence.decisionReady} /></button>
-                    <button type="button" aria-label="View Dealer Fit decision details" onClick={() => setWhyLotLogicOpen(true)} className="rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600"><ScoreRing label="Dealer Fit" score={dealerFitScoreDisplay} tone="blue" isEmpty={!hasEvaluationData} /></button>
+                <article className="flex h-full flex-col rounded-[20px] border border-blue-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:col-span-2 xl:col-span-1">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Next steps</div>
+                    <h2 className="mt-1 text-base font-black text-slate-950">Improve result</h2>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                      Confirm the inputs that can change the recommendation. Lot Logic will keep you on this verdict while it updates.
+                    </p>
+                    {vehicleIdentityUpdating ? (
+                      <p role="status" className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">
+                        Refreshing market comparisons and recalculating the verdict…
+                      </p>
+                    ) : null}
                   </div>
-                  <button type="button" aria-label="View Current Market Age decision details" onClick={() => setWhyLotLogicOpen(true)} className="mt-4 w-full border-t border-slate-100 pt-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-blue-600">
-                    <MarketLiquidityVisual soldLow={liquiditySoldLow} soldHigh={liquiditySoldHigh} soldMedian={liquiditySoldMedian} activeDays={liquidityActiveDays} label={liquidityLabel} confidence={liquidityConfidence} sampleSize={liquiditySampleSize} />
+                  <div className="mt-4 space-y-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setAllInCostOpen(true)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-3 text-left transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-slate-950">Confirm deal economics</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-600">Purchase price, fees, transport, and recon</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openVehicleIdentityEditor(true)}
+                      disabled={vehicleIdentityUpdating}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-slate-950">{vehicleTrim ? "Review trim" : "Add trim"}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">{vehicleTrim ? `Currently: ${vehicleTrim}` : "A more specific trim can improve the comparisons"}</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openVehicleIdentityEditor(false)}
+                      disabled={vehicleIdentityUpdating}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black text-slate-950">Edit vehicle</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">Correct year, make, model, or trim and refresh the market search</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
+                    </button>
+                  </div>
+                  <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mt-auto pt-4 text-left text-xs font-black text-blue-700 hover:text-blue-900">
+                    View dealer fit and market timing →
                   </button>
                 </article>
               </section>
