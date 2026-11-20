@@ -4,6 +4,7 @@ export type NextAction = "trim" | "identity" | "condition" | "market" | "costs" 
 
 export type VerdictFirstInputs = {
   identityKnown: boolean;
+  identitySpecComplete: boolean;
   retailTrimUnknown: boolean;
   identityConflicts: string[];
   selectedComps: number;
@@ -43,7 +44,7 @@ export type VerdictFirstAssessment = {
 export function assessVerdictFirst(input: VerdictFirstInputs): VerdictFirstAssessment {
   const majorIdentityConflict = input.identityConflicts.length > 0;
   const identityConfidence: EvidenceLevel = !input.identityKnown || majorIdentityConflict
-    ? "Limited" : input.retailTrimUnknown ? "Moderate" : "High";
+    ? "Limited" : input.retailTrimUnknown || !input.identitySpecComplete ? "Moderate" : "High";
   const marketConfidence: EvidenceLevel = !input.pricingDecisionReady
     ? "Limited" : input.marketConfidence;
   const acquisitionConfidence: EvidenceLevel =
@@ -63,6 +64,7 @@ export function assessVerdictFirst(input: VerdictFirstInputs): VerdictFirstAsses
   const blockers = [
     majorIdentityConflict ? "Conflicting vehicle identity information" : null,
     input.retailTrimUnknown ? "Retail trim is not verified" : null,
+    input.identityKnown && !input.identitySpecComplete ? "Engine, fuel, or drivetrain is not fully verified" : null,
     input.conditionStatus === "unknown" || input.conditionStatus === "unreviewed" ? "Condition is not verified" : null,
     input.materialConditionRisk ? "Material condition risk needs review" : null,
     !input.pricingDecisionReady ? "Retail resale valuation is not established" : null,
@@ -71,6 +73,7 @@ export function assessVerdictFirst(input: VerdictFirstInputs): VerdictFirstAsses
   const action: NextAction =
     majorIdentityConflict || !input.identityKnown ? "identity"
     : input.retailTrimUnknown ? "trim"
+    : !input.identitySpecComplete ? "identity"
     : input.conditionStatus === "unknown" || input.conditionStatus === "unreviewed" || input.materialConditionRisk ? "condition"
     : !input.pricingDecisionReady || input.selectedComps === 0 ? "market"
     : !input.hasPurchasePrice || !input.hasSupportedSalePrice ? "costs"
@@ -89,7 +92,7 @@ export function assessVerdictFirst(input: VerdictFirstInputs): VerdictFirstAsses
       : input.pricingDecisionReady && input.hardPass
         ? "Pass"
         : input.pricingDecisionReady && !input.reviewRequired && !input.retailTrimUnknown &&
-          input.conditionStatus !== "unknown" && !input.materialConditionRisk
+          input.identitySpecComplete && input.conditionStatus !== "unknown" && !input.materialConditionRisk
           ? "Pursue"
           : "Investigate";
   const headline =
