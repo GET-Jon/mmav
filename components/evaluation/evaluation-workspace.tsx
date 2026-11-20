@@ -36,6 +36,8 @@ import { dedicatedBmwMModel, isNonRetailTrimLabel } from "@/lib/marketcheck/vehi
 import { calculateCompSummary } from "@/lib/comps";
 import { classifyPricingEvidence } from "@/lib/evaluation/pricing-evidence";
 import { buildTrimMarketScenarios } from "@/lib/evaluation/trim-market-scenarios";
+import { assessVerdictFirst } from "@/lib/evaluation/verdict-first";
+import { VerdictFirstPanel } from "@/components/evaluation/verdict-first-panel";
 import { buildRefinementEvent, type RefinementEvent, type RefinementSnapshot } from "@/lib/comps-refinement-history";
 import { createCompAuditCsv } from "@/lib/comps-audit-export";
 import { excludeSubjectVinComps, mergeCompCandidates } from "@/lib/autodev/qualified-comps";
@@ -1103,6 +1105,8 @@ export function EvaluationWorkspace({
     return stage === "market" || stage === "verdict";
   });
   const [verdictTransitioning, setVerdictTransitioning] = useState(false);
+  const [showFullVerdict, setShowFullVerdict] = useState(false);
+  const autoVerdictHandledRef = useRef("");
   const [usageLimitMessage, setUsageLimitMessage] = useState("");
   const [evaluationAccessError, setEvaluationAccessError] = useState("");
   const [planSelectionMessage, setPlanSelectionMessage] = useState<string | null>(null);
@@ -4189,6 +4193,8 @@ export function EvaluationWorkspace({
 
     setComps(initialComps);
     setShowCompDetails(false);
+    setShowFullVerdict(false);
+    autoVerdictHandledRef.current = "";
     setMarketCheckStatus("");
     setMarketCheckError(null);
     setMarketCheckSearchMeta(null);
@@ -5256,6 +5262,53 @@ export function EvaluationWorkspace({
             : requiresReview
               ? "review"
               : "pursue";
+
+  // Confidence and attractiveness are deliberately separate. No provisional
+  // asking-market scenario is promoted to a verified resale target or bid.
+  const indicativeMarket = strongestIndicativeScenario?.adjustedMedian ||
+    (pricingEvidence.decisionReady ? finalTargetUsed : compSummary.marketMedianAdjusted || 0);
+  const verdictFirstAssessment = assessVerdictFirst({
+    identityKnown: Boolean(vehicleYear && vehicleMake && vehicleModel),
+    retailTrimUnknown: retailTrimNeedsConfirmation,
+    identityConflicts: decodedVehicle?.identityEvidence?.conflicts || [],
+    selectedComps: compSummary.includedCount,
+    closePeers: compSummary.primaryCompCount || 0,
+    pricingDecisionReady: pricingEvidence.decisionReady,
+    marketConfidence: compSummary.confidence === "High" ? "High" : compSummary.confidence === "Medium" ? "Moderate" : "Limited",
+    conditionStatus: conditionReviewStatus,
+    materialConditionRisk: hasMaterialConditionRisk,
+    hasPurchasePrice: hasAcquisitionPrice,
+    purchasePrice: valuationInput.currentBid,
+    indicativeMarketLow: strongestIndicativeScenario?.adjustedLow || (pricingEvidence.decisionReady ? compSummary.lowAdjusted : 0),
+    indicativeMarketMedian: indicativeMarket,
+    hasSupportedSalePrice: pricingEvidence.decisionReady && finalTargetUsed > 0,
+    hardPass: hasHardPass,
+    reviewRequired: requiresReview || promisingNegotiation,
+  });
+
+  // The market search remains on the market stage until it settles. Then open
+  // the assessment exactly once for this evaluation: the existing completion
+  // endpoint retains its usage/accounting semantics and access checks.
+  useEffect(() => {
+    if (activeStage !== "market" || !conditionStepConfirmed || !draftReady ||
+        evaluationRunning || marketCheckLoading || compSearchImproving ||
+        autoDevDiscoveryLoading || verdictTransitioning || compMarketEditorOpen) return;
+    if (!marketCheckSearchMeta && !automaticMarketPassFinished && !automaticCompSearchCompleted &&
+        !marketCheckError) return;
+    const key = [evaluationUsageId, vin, targetMileage, vehicleYear, vehicleMake, vehicleModel].join("|");
+    if (autoVerdictHandledRef.current === key) return;
+    // Small idle window lets a queued automatic improvement begin first.
+    const handle = window.setTimeout(() => {
+      if (autoVerdictHandledRef.current === key) return;
+      autoVerdictHandledRef.current = key;
+      void continueToVerdict();
+    }, 1000);
+    return () => window.clearTimeout(handle);
+  }, [activeStage, conditionStepConfirmed, draftReady, evaluationRunning,
+    marketCheckLoading, compSearchImproving, autoDevDiscoveryLoading,
+    verdictTransitioning, compMarketEditorOpen, marketCheckSearchMeta, marketCheckError,
+    automaticMarketPassFinished, automaticCompSearchCompleted, evaluationUsageId,
+    vin, targetMileage, vehicleYear, vehicleMake, vehicleModel]);
 
   const decisionBadgeTone =
     presentationDecision === "searching"
@@ -7446,7 +7499,49 @@ export function EvaluationWorkspace({
           {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
 
           {activeStage === "verdict" ? (
-            <section className="grid gap-4 lg:grid-cols-3">
+            <VerdictFirstPanel
+              title={vehicleTitle}
+              subtitle={[`${formatNumberInput(targetMileage)} miles`, decodedVehicle?.fuelType || vehicleIdentityProfile?.fuelType || "", retailTrimNeedsConfirmation ? "Trim unverified" : vehicleTrim].filter(Boolean).join(" · ")}
+              askingPrice={valuationInput.currentBid}
+              marketPrice={indicativeMarket}
+              marketLabel={pricingEvidence.decisionReady ? "Supported retail estimate" : strongestIndicativeScenario ? `Indicative ${strongestIndicativeScenario.trim} asking market` : "Indicative asking-market context"}
+              marketCount={strongestIndicativeScenario?.count || compSummary.includedCount}
+              marketSource={pricingEvidence.decisionReady ? "supported" : "indicative"}
+              assessment={verdictFirstAssessment}
+              onPrimaryAction={() => {
+                switch (verdictFirstAssessment.action) {
+                  case "trim":
+                  case "identity":
+                    setQuickEvalMode(vin ? "vin" : "manual");
+                    setQuickEvalOpen(true);
+                    break;
+                  case "condition":
+                    openConditionAnalysis();
+                    break;
+                  case "market":
+                    setShowFullVerdict(true);
+                    setActiveStage("market");
+                    openCompMarketEditor();
+                    break;
+                  case "costs":
+                    setAllInCostOpen(true);
+                    break;
+                  default:
+                    setShowFullVerdict(true);
+                    setAllInCostOpen(true);
+                }
+              }}
+              onEditVehicle={() => { setQuickEvalMode(vin ? "vin" : "manual"); setQuickEvalOpen(true); }}
+              onMarketEvidence={() => setShowFullVerdict(true)}
+              onSave={() => void saveEvaluation()}
+              saving={saveLoading}
+              saved={Boolean(savedEvaluationId)}
+              saveDisabled={saveLoading || !hasEvaluationData || !hasAcquisitionPrice}
+            />
+          ) : null}
+
+          {activeStage === "verdict" && showFullVerdict ? (
+            <section className="mt-4 grid gap-4 lg:grid-cols-3">
               <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
@@ -8484,7 +8579,7 @@ export function EvaluationWorkspace({
             </section>
           ) : null}
 
-          {activeStage === "verdict" ? (
+          {activeStage === "verdict" && showFullVerdict ? (
             <>
               {compSummary.includedCount === 0 ? (
                 <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950" role="status">
