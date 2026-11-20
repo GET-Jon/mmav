@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { assessVerdictFirst, type VerdictFirstInputs } from "../lib/evaluation/verdict-first";
 
 const baseline: VerdictFirstInputs = {
-  identityKnown:true, retailTrimUnknown:true, identityConflicts:[],
+  identityKnown:true, identitySpecComplete:true, retailTrimUnknown:true, identityConflicts:[],
   selectedComps:6, closePeers:0, pricingDecisionReady:false,
   marketConfidence:"Limited", conditionStatus:"no_material_issues",
   materialConditionRisk:false, hasPurchasePrice:true, purchasePrice:5000,
@@ -22,6 +22,10 @@ assert.equal(badIdentity.identityConfidence,"Limited");
 const missingData=assessVerdictFirst({...baseline,selectedComps:0,indicativeMarketLow:0});
 assert.equal(missingData.verdict,"Insufficient information");
 assert.equal(missingData.opportunityDetected,false);
+const engineUnverified = assessVerdictFirst({...baseline,retailTrimUnknown:false,identitySpecComplete:false});
+assert.equal(engineUnverified.identityConfidence,"Moderate");
+assert.equal(engineUnverified.action,"identity");
+assert.notEqual(engineUnverified.verdict,"Pursue");
 const conditionUnknown=assessVerdictFirst({...baseline,retailTrimUnknown:false,conditionStatus:"unknown"});
 assert.equal(conditionUnknown.action,"condition");
 assert.equal(conditionUnknown.acquisitionConfidence,"Limited");
