@@ -390,6 +390,7 @@ function MarketLiquidityVisual({
   label,
   confidence,
   sampleSize,
+  compact = false,
 }: {
   soldLow: number;
   soldHigh: number;
@@ -398,6 +399,7 @@ function MarketLiquidityVisual({
   label: string;
   confidence: "low" | "medium" | "high" | "unknown";
   sampleSize: number;
+  compact?: boolean;
 }) {
   const hasSoldRange = soldLow > 0 && soldHigh > 0;
   const hasActive = activeDays > 0;
@@ -423,7 +425,7 @@ function MarketLiquidityVisual({
           : "text-slate-700";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
+    <div className={`rounded-2xl border border-slate-200 bg-slate-50/70 ${compact ? "px-3 py-2.5" : "px-3.5 py-3"}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <div className="text-xs font-extrabold text-slate-600">
@@ -453,18 +455,18 @@ function MarketLiquidityVisual({
         ) : null}
       </div>
 
-      <div className="mt-2.5">
+      <div className={compact ? "mt-1.5" : "mt-2.5"}>
         <div className="mb-1 flex justify-between text-[8px] font-black uppercase tracking-[0.06em] text-slate-400">
           <span>Quick turn</span>
           <span>Typical</span>
           <span>Slow turn</span>
         </div>
 
-        <div className="relative pt-6 pb-1">
-          <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-400 via-amber-300 to-orange-400 shadow-inner">
+        <div className={`relative ${compact ? "pt-5 pb-0.5" : "pt-6 pb-1"}`}>
+          <div className={`relative rounded-full bg-gradient-to-r from-emerald-400 via-amber-300 to-orange-400 shadow-inner ${compact ? "h-3" : "h-4"}`}>
             {hasSoldRange ? (
               <div
-                className="absolute top-1/2 h-6 -translate-y-1/2 rounded-full border border-white/80 bg-white/45 shadow-sm backdrop-blur-[1px]"
+                className={`absolute top-1/2 -translate-y-1/2 rounded-full border border-white/80 bg-white/45 shadow-sm backdrop-blur-[1px] ${compact ? "h-5" : "h-6"}`}
                 style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
                 title="Typical recent sold range"
               />
@@ -481,12 +483,12 @@ function MarketLiquidityVisual({
             {hasActive ? (
               <>
                 <div
-                  className="absolute top-1/2 h-7 w-7 -translate-y-1/2 rounded-full border-2 border-white bg-blue-700 shadow-[0_4px_14px_rgba(37,99,235,0.35)]"
-                  style={{ left: `calc(${activeLeft}% - 14px)` }}
+                  className={`absolute top-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-700 shadow-[0_4px_14px_rgba(37,99,235,0.35)] ${compact ? "h-6 w-6" : "h-7 w-7"}`}
+                  style={{ left: `calc(${activeLeft}% - ${compact ? 12 : 14}px)` }}
                   title={`Current active market age: ${Math.round(activeDays)} days`}
                 />
                 <div
-                  className="absolute -top-1 -translate-x-1/2 -translate-y-full rounded-full bg-blue-700 px-2 py-1 text-[10px] font-black text-white shadow-md"
+                  className={`absolute -top-1 -translate-x-1/2 -translate-y-full rounded-full bg-blue-700 px-2 text-[10px] font-black text-white shadow-md ${compact ? "py-0.5" : "py-1"}`}
                   style={{ left: `${activeLeft}%` }}
                 >
                   {Math.round(activeDays)}d
@@ -519,7 +521,7 @@ function MarketLiquidityVisual({
 
       </div>
 
-      <div className="mt-2 text-[10px] font-semibold leading-4 text-slate-400">
+      <div className={`${compact ? "mt-1.5" : "mt-2"} text-[10px] font-semibold leading-4 text-slate-400`}>
         {sampleSize > 0
           ? `${sampleSize} recent sold observations · ${confidence} confidence`
           : hasActive
@@ -8551,8 +8553,8 @@ export function EvaluationWorkspace({
                   : "translate-y-4 opacity-0"
               }`}>
                 <div className="order-2 space-y-2.5 lg:order-none lg:col-start-1 lg:row-start-1">
-                  <details className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-blue-600">
+                  <details open className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 focus-visible:outline-2 focus-visible:outline-blue-600">
                       <span className="min-w-0">
                         <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Vehicle snapshot</span>
                         <span className="mt-0.5 block truncate text-sm font-black text-slate-950">{vehicleTitle}</span>
@@ -8587,8 +8589,8 @@ export function EvaluationWorkspace({
                     </div>
                   </details>
 
-                  <details className="group rounded-2xl border border-violet-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-violet-600">
+                  <details open className="group rounded-2xl border border-violet-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 focus-visible:outline-2 focus-visible:outline-violet-600">
                       <span className="min-w-0">
                         <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">Condition</span>
                         <span className="mt-0.5 block truncate text-sm font-black text-slate-950">
@@ -8626,8 +8628,8 @@ export function EvaluationWorkspace({
                     </div>
                   </details>
 
-                  <details className="group rounded-2xl border border-blue-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-blue-600">
+                  <details open className="group rounded-2xl border border-blue-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 focus-visible:outline-2 focus-visible:outline-blue-600">
                       <span className="min-w-0">
                         <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Next steps</span>
                         <span className="mt-0.5 block truncate text-sm font-black text-slate-950">Improve result</span>
@@ -8734,9 +8736,9 @@ export function EvaluationWorkspace({
                   {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
                     <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
                   ) : null}
-                  <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/65 p-4 sm:p-5">
+                  <div className="mt-4 rounded-2xl border border-slate-200/80 bg-white/65 p-3 sm:p-4">
                     <h3 className="text-sm font-black text-slate-950">Deal Snapshot</h3>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="mt-2 grid grid-cols-2 gap-2">
                       {[
                         {
                           label: "Deal Economics",
@@ -8749,16 +8751,16 @@ export function EvaluationWorkspace({
                           color: dealerFitResult.score >= 70 ? "#059669" : dealerFitResult.score >= 40 ? "#d97706" : "#dc2626",
                         },
                       ].map((item) => (
-                        <div key={item.label} className="rounded-xl bg-white/65 px-3 py-3 text-center">
-                          <div className="text-xs font-extrabold text-slate-600">{item.label}</div>
+                        <div key={item.label} className="flex items-center justify-center gap-2 rounded-xl bg-white/65 px-2 py-2">
+                          <div className="min-w-0 text-right text-[10px] font-extrabold leading-4 text-slate-600">{item.label}</div>
                           <div
                             role="img"
                             aria-label={item.label + ": " + item.score + " out of 100"}
-                            className="mx-auto mt-2 flex h-[72px] w-[72px] items-center justify-center rounded-full p-[6px]"
+                            className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full p-[5px]"
                             style={{ background: "conic-gradient(" + item.color + " " + item.score + "%, #e2e8f0 " + item.score + "% 100%)" }}
                           >
                             <div aria-hidden="true" className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white">
-                              <span className="text-xl font-black leading-none text-slate-950">{item.score}</span>
+                              <span className="text-lg font-black leading-none text-slate-950">{item.score}</span>
                               <span className="mt-0.5 text-[9px] font-bold text-slate-400">/100</span>
                             </div>
                           </div>
@@ -8774,8 +8776,9 @@ export function EvaluationWorkspace({
                         label={liquidityLabel}
                         confidence={liquidityConfidence}
                         sampleSize={liquiditySampleSize}
+                        compact
                       />
-                      <p className="mt-2 px-1 text-[11px] font-semibold leading-4 text-slate-500">{liquidityInterpretation}</p>
+                      <p className="mt-1.5 px-1 text-[10px] font-semibold leading-4 text-slate-500">{liquidityInterpretation}</p>
                     </div>
                   </div>
                   <div className="mt-auto pt-5">
