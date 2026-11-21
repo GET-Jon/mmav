@@ -5277,6 +5277,7 @@ export function EvaluationWorkspace({
     hardPass: hasHardPass,
     reviewRequired: requiresReview || promisingNegotiation,
   });
+  // Qualitative evidence scale, not a numeric probability.
   const confidenceLevels = ["Limited", "Moderate", "High"] as const;
   const confidenceIndex = confidenceLevels.indexOf(verdictFirstAssessment.confidence);
   const confidenceExplanation = verdictFirstAssessment.blockers.length
