@@ -432,7 +432,16 @@ function MarketLiquidityVisual({
           <div className={`text-base font-black ${labelTone}`}>{label}</div>
         </div>
 
-        {hasSoldRange ? (
+        {hasActive ? (
+          <div className="text-left sm:text-right">
+            <div className="text-[9px] font-black uppercase tracking-[0.07em] text-slate-400 sm:text-[10px]">
+              Current market age
+            </div>
+            <div className="mt-0.5 text-sm font-black text-slate-800">
+              {Math.round(activeDays)} days
+            </div>
+          </div>
+        ) : hasSoldRange ? (
           <div className="text-left sm:text-right">
             <div className="text-[9px] font-black uppercase tracking-[0.07em] text-slate-400 sm:text-[10px]">
               Typical retail window
@@ -440,10 +449,6 @@ function MarketLiquidityVisual({
             <div className="mt-0.5 text-sm font-black text-slate-800">
               {Math.round(soldLow)}–{Math.round(soldHigh)} days
             </div>
-          </div>
-        ) : hasActive ? (
-          <div className="inline-flex w-fit rounded-full bg-blue-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-blue-700 sm:bg-transparent sm:px-0 sm:py-0 sm:text-right sm:text-[10px] sm:text-slate-400">
-            Current market age
           </div>
         ) : null}
       </div>
@@ -5277,7 +5282,6 @@ export function EvaluationWorkspace({
     hardPass: hasHardPass,
     reviewRequired: requiresReview || promisingNegotiation,
   });
-  // Qualitative evidence scale, not a numeric probability.
   const confidenceLevels = ["Limited", "Moderate", "High"] as const;
   const confidenceIndex = confidenceLevels.indexOf(verdictFirstAssessment.confidence);
   const confidenceExplanation = verdictFirstAssessment.blockers.length
@@ -7553,68 +7557,7 @@ export function EvaluationWorkspace({
         <div className="mx-auto w-[92vw] max-w-[1720px] px-2 py-4 sm:px-3 lg:px-4">
           {needsDealershipZip ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">Set your dealership ZIP code so Lot Logic can search your local market. <Link href="/settings?tab=organization" className="font-black underline">Set dealership ZIP →</Link></div> : null}
 
-          {activeStage === "verdict" ? (
-            <section className="mt-4 grid gap-4 lg:grid-cols-3">
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Vehicle</div>
-                  <button
-                    type="button"
-                    data-evaluation-entry-action="true"
-                    onClick={() => {
-                      setQuickEvalMode(vin ? "vin" : "manual");
-                      setQuickEvalOpen(true);
-                    }}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="mt-3 text-lg font-black leading-tight text-slate-950">{vehicleTitle}</div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
-              </article>
-
-              <article className="relative min-h-[142px] rounded-[20px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Condition</div>
-                  <button
-                    type="button"
-                    onClick={openConditionAnalysis}
-                    className="text-xs font-black text-violet-700 hover:text-violet-900"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
-                  {conditionReviewStatus === "issues"
-                    ? "Known issues"
-                    : conditionReviewStatus === "unknown"
-                      ? "Condition unknown"
-                      : "No material issues"} · {money(displayedReconReserve)}
-                </div>
-                <div className="absolute bottom-4 left-5 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">Ready ✓</div>
-              </article>
-
-              <article className={`relative min-h-[142px] rounded-[20px] border bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] ${pricingEvidence.decisionReady ? "border-emerald-200" : "border-amber-300"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Market</div>
-                  <button
-                    type="button"
-                    onClick={openCompMarketEditor}
-                    className="text-xs font-black text-blue-700 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="mt-3 text-lg font-black text-slate-950">
-                  {compSummary.includedCount} relevant comparison{compSummary.includedCount === 1 ? "" : "s"} · {pricingEvidence.decisionReady ? pricingEvidence.label : "Pricing unverified"}
-                </div>
-                <div className={`absolute bottom-4 left-5 rounded-full px-3 py-1 text-[10px] font-black ${pricingEvidence.decisionReady ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
-                  {pricingEvidence.decisionReady ? "Pricing supported ✓" : "Verification needed"}
-                </div>
-              </article>
-            </section>
-          ) : (
+          {activeStage !== "verdict" ? (
             <div className={`relative overflow-hidden rounded-[28px] border border-slate-200/80 min-h-[500px] bg-gradient-to-br from-white via-slate-50/80 to-blue-50/40 px-6 py-8 shadow-[0_18px_50px_rgba(15,23,42,0.05)] transition-all duration-300 ease-out sm:px-7 ${
               verdictTransitioning
                 ? "-translate-y-1 scale-[0.965] opacity-70"
@@ -8465,7 +8408,7 @@ export function EvaluationWorkspace({
           </section>
               </div>
             </div>
-          )}
+          ) : null}
 
           {activeStage === "market" && (comps.length > 0 || needsCompSearch) ? (
             <section ref={compSectionRef} className="mt-4 scroll-mt-4" aria-busy={compSearchImproving || marketCheckLoading}>
@@ -8602,42 +8545,129 @@ export function EvaluationWorkspace({
                   <button type="button" className="ml-2 font-black underline" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }}>Improve comps →</button>
                 </div>
               ) : null}
-              <section className={`mt-4 grid gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.35fr)] ${
+              <section className={`mt-4 grid items-start gap-4 transition-all delay-75 duration-300 ease-out lg:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.35fr)] ${
                 verdictEntered
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
               }`}>
-                <article className="order-2 h-full rounded-[20px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-1 lg:row-start-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-base font-black text-slate-950">Vehicle Snapshot</h2>
-                    <button type="button" onClick={() => setVehicleDetailsOpen(true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50">Details</button>
-                  </div>
-                  <div className="mt-4 flex items-center gap-4">
-                    <div className="relative h-[76px] w-[116px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                      {representativeCompImage ? <img src={representativeCompImage} alt={vehicleTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : null}
-                    </div>
-                    <div>
-                      <div className="text-lg font-black leading-tight text-blue-700">{vehicleTitle}</div>
-                      <div className="mt-1 text-xs font-semibold text-slate-500">{simplifiedVehicleBodyClass || "Vehicle"}{decodedVehicle?.fuelType ? ` · ${decodedVehicle.fuelType}` : ""}</div>
-                    </div>
-                  </div>
-                  <dl className="mt-5 space-y-2.5 text-sm">
-                    {[
-                      ["VIN", vin || "—"],
-                      ["Mileage", targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"],
-                      ["Drivetrain", decodedVehicle?.driveType || "—"],
-                      ["Trim", vehicleTrim || "—"],
-                      ["Source", auctionSite || "—"],
-                    ].map(([label, value]) => (
-                      <div key={label} className="grid grid-cols-[100px_1fr] gap-3">
-                        <dt className="font-semibold text-slate-500">{label}</dt>
-                        <dd className="truncate text-right font-bold text-slate-900">{value}</dd>
+                <div className="order-2 space-y-2.5 lg:order-none lg:col-start-1 lg:row-start-1">
+                  <details className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-blue-600">
+                      <span className="min-w-0">
+                        <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Vehicle snapshot</span>
+                        <span className="mt-0.5 block truncate text-sm font-black text-slate-950">{vehicleTitle}</span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700 transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative h-[58px] w-[88px] shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                          {representativeCompImage ? <img src={representativeCompImage} alt={vehicleTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-black text-blue-700">{vehicleTitle}</div>
+                          <div className="mt-1 text-[11px] font-semibold text-slate-500">{simplifiedVehicleBodyClass || "Vehicle"}{decodedVehicle?.fuelType ? ` · ${decodedVehicle.fuelType}` : ""}</div>
+                        </div>
+                        <button type="button" onClick={() => setVehicleDetailsOpen(true)} className="ml-auto shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-extrabold text-slate-600 hover:bg-slate-50">Details</button>
                       </div>
-                    ))}
-                  </dl>
-                </article>
+                      <dl className="mt-3 space-y-1.5 text-xs">
+                        {[
+                          ["VIN", vin || "—"],
+                          ["Mileage", targetMileage ? `${formatNumberInput(targetMileage)} mi` : "—"],
+                          ["Drivetrain", decodedVehicle?.driveType || "—"],
+                          ["Trim", vehicleTrim || "—"],
+                          ["Source", auctionSite || "—"],
+                        ].map(([label, value]) => (
+                          <div key={label} className="grid grid-cols-[90px_1fr] gap-3">
+                            <dt className="font-semibold text-slate-500">{label}</dt>
+                            <dd className="truncate text-right font-bold text-slate-900">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  </details>
 
-                <article className={`order-1 flex h-full flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1 ${decisionBannerTone}`}>
+                  <details className="group rounded-2xl border border-violet-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-violet-600">
+                      <span className="min-w-0">
+                        <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">Condition</span>
+                        <span className="mt-0.5 block truncate text-sm font-black text-slate-950">
+                          {conditionReviewStatus === "issues"
+                            ? `${conditionIssueBullets.length} known issue${conditionIssueBullets.length === 1 ? "" : "s"} · ${money(displayedReconReserve)} reserve`
+                            : conditionReviewStatus === "unknown"
+                              ? "Condition unknown"
+                              : conditionReviewStatus === "unreviewed"
+                                ? "Condition not reviewed"
+                                : `No material issues · ${money(displayedReconReserve)}`}
+                        </span>
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-violet-700 transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                      {conditionReviewStatus === "issues" && conditionIssueBullets.length ? (
+                        <div className="space-y-1.5">
+                          {conditionIssueBullets.slice(0, 3).map((issue) => (
+                            <div key={issue.id} className="flex items-start justify-between gap-3 text-xs">
+                              <span className="font-semibold text-slate-700">{issue.description}</span>
+                              <span className="shrink-0 font-black text-violet-700">{money(issue.planningEstimate)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs font-semibold leading-5 text-slate-600">
+                          {conditionReviewStatus === "unknown"
+                            ? "Condition remains an explicit uncertainty in this assessment."
+                            : conditionReviewStatus === "unreviewed"
+                              ? "Review the available disclosures and inspection notes before relying on the economics."
+                              : "No material issues are currently reflected in the condition reserve."}
+                        </p>
+                      )}
+                      <button type="button" onClick={() => { setConditionStepConfirmed(false); setActiveStage("condition"); }} className="mt-3 text-xs font-black text-violet-700 hover:text-violet-900">Review condition →</button>
+                    </div>
+                  </details>
+
+                  <details className="group rounded-2xl border border-blue-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-blue-600">
+                      <span className="min-w-0">
+                        <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Next steps</span>
+                        <span className="mt-0.5 block truncate text-sm font-black text-slate-950">Improve result</span>
+                      </span>
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${confidenceIndex === 0 ? "bg-amber-100 text-amber-800" : confidenceIndex === 1 ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>{verdictFirstAssessment.confidence} confidence</span>
+                    </summary>
+                    <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                      <p className="text-xs font-semibold leading-5 text-slate-500">Confirm the inputs that can change the recommendation. Lot Logic will keep you on this verdict while it updates.</p>
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-black text-slate-900">Assessment confidence</span>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceIndex === 0 ? "bg-amber-100 text-amber-800" : confidenceIndex === 1 ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>{verdictFirstAssessment.confidence}</span>
+                        </div>
+                        <div role="img" aria-label={`Assessment confidence: ${verdictFirstAssessment.confidence}`} className="mt-2 flex gap-1.5">
+                          {confidenceLevels.map((level, index) => (
+                            <span key={level} className={`h-1.5 flex-1 rounded-full ${index <= confidenceIndex ? confidenceIndex === 0 ? "bg-amber-500" : confidenceIndex === 1 ? "bg-blue-600" : "bg-emerald-600" : "bg-slate-200"}`} />
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[11px] font-semibold leading-4 text-slate-600">{confidenceExplanation}</p>
+                      </div>
+                      {vehicleIdentityUpdating ? (
+                        <p role="status" className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">Refreshing market comparisons and recalculating the verdict…</p>
+                      ) : null}
+                      <div className="mt-3 space-y-2">
+                        <button type="button" onClick={() => setAllInCostOpen(true)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2.5 text-left hover:bg-blue-50">
+                          <span><span className="block text-xs font-black text-slate-950">Confirm deal economics</span><span className="mt-0.5 block text-[10px] font-semibold text-slate-600">Purchase price, fees, transport, and recon</span></span><span aria-hidden="true" className="text-lg font-black text-blue-700">→</span>
+                        </button>
+                        <button type="button" onClick={() => openVehicleIdentityEditor(true)} disabled={vehicleIdentityUpdating} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50">
+                          <span><span className="block text-xs font-black text-slate-950">{vehicleTrim ? "Review trim" : "Add trim"}</span><span className="mt-0.5 block text-[10px] font-semibold text-slate-500">{vehicleTrim ? `Currently: ${vehicleTrim}` : "A more specific trim can improve the comparisons"}</span></span><span aria-hidden="true" className="text-lg font-black text-blue-700">→</span>
+                        </button>
+                        <button type="button" onClick={() => openVehicleIdentityEditor(false)} disabled={vehicleIdentityUpdating} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50">
+                          <span><span className="block text-xs font-black text-slate-950">Edit vehicle</span><span className="mt-0.5 block text-[10px] font-semibold text-slate-500">Correct year, make, model, or trim and refresh the search</span></span><span aria-hidden="true" className="text-lg font-black text-blue-700">→</span>
+                        </button>
+                      </div>
+                      <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mt-3 text-left text-xs font-black text-blue-700 hover:text-blue-900">View dealer fit and market timing →</button>
+                    </div>
+                  </details>
+                </div>
+
+                <article className={`order-1 flex min-w-0 flex-col rounded-[20px] border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-2 ${decisionBannerTone}`}>
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="text-base font-black text-slate-950">Lot Logic Verdict</h2>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${decisionBadgeTone}`}>{lotLogicIcon}{lotLogicLabel}</span>
@@ -8704,6 +8734,50 @@ export function EvaluationWorkspace({
                   {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
                     <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
                   ) : null}
+                  <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/65 p-4 sm:p-5">
+                    <h3 className="text-sm font-black text-slate-950">Deal Snapshot</h3>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      {[
+                        {
+                          label: "Deal Economics",
+                          score: Math.round(profitabilityScore),
+                          color: profitabilityScore >= 70 ? "#059669" : profitabilityScore >= 45 ? "#d97706" : "#dc2626",
+                        },
+                        {
+                          label: "Dealer Fit",
+                          score: dealerFitResult.score,
+                          color: dealerFitResult.score >= 70 ? "#059669" : dealerFitResult.score >= 40 ? "#d97706" : "#dc2626",
+                        },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-xl bg-white/65 px-3 py-3 text-center">
+                          <div className="text-xs font-extrabold text-slate-600">{item.label}</div>
+                          <div
+                            role="img"
+                            aria-label={item.label + ": " + item.score + " out of 100"}
+                            className="mx-auto mt-2 flex h-[72px] w-[72px] items-center justify-center rounded-full p-[6px]"
+                            style={{ background: "conic-gradient(" + item.color + " " + item.score + "%, #e2e8f0 " + item.score + "% 100%)" }}
+                          >
+                            <div aria-hidden="true" className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white">
+                              <span className="text-xl font-black leading-none text-slate-950">{item.score}</span>
+                              <span className="mt-0.5 text-[9px] font-bold text-slate-400">/100</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3">
+                      <MarketLiquidityVisual
+                        soldLow={liquiditySoldLow}
+                        soldHigh={liquiditySoldHigh}
+                        soldMedian={liquiditySoldMedian}
+                        activeDays={liquidityActiveDays}
+                        label={liquidityLabel}
+                        confidence={liquidityConfidence}
+                        sampleSize={liquiditySampleSize}
+                      />
+                      <p className="mt-2 px-1 text-[11px] font-semibold leading-4 text-slate-500">{liquidityInterpretation}</p>
+                    </div>
+                  </div>
                   <div className="mt-auto pt-5">
                     <button
                       type="button"
@@ -8717,74 +8791,6 @@ export function EvaluationWorkspace({
                   </div>
                 </article>
 
-                <article className="order-3 flex h-full flex-col rounded-[20px] border border-blue-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_14px_34px_rgba(15,23,42,0.035)] lg:order-none lg:col-start-1 lg:row-start-2">
-                  <div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.1em] text-blue-700">Next steps</div>
-                    <h2 className="mt-1 text-base font-black text-slate-950">Improve result</h2>
-                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                      Confirm the inputs that can change the recommendation. Lot Logic will keep you on this verdict while it updates.
-                    </p>
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs font-black text-slate-900">Assessment confidence</span>
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${confidenceIndex === 0 ? "bg-amber-100 text-amber-800" : confidenceIndex === 1 ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>
-                          {verdictFirstAssessment.confidence}
-                        </span>
-                      </div>
-                      <div role="img" aria-label={`Assessment confidence: ${verdictFirstAssessment.confidence}`} className="mt-2 flex gap-1.5">
-                        {confidenceLevels.map((level, index) => (
-                          <span key={level} className={`h-1.5 flex-1 rounded-full ${index <= confidenceIndex ? confidenceIndex === 0 ? "bg-amber-500" : confidenceIndex === 1 ? "bg-blue-600" : "bg-emerald-600" : "bg-slate-200"}`} />
-                        ))}
-                      </div>
-                      <p className="mt-2 text-[11px] font-semibold leading-4 text-slate-600">{confidenceExplanation}</p>
-                    </div>
-                    {vehicleIdentityUpdating ? (
-                      <p role="status" className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">
-                        Refreshing market comparisons and recalculating the verdict…
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="mt-4 space-y-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setAllInCostOpen(true)}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3.5 py-3 text-left transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-black text-slate-950">Confirm deal economics</span>
-                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-600">Purchase price, fees, transport, and recon</span>
-                      </span>
-                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openVehicleIdentityEditor(true)}
-                      disabled={vehicleIdentityUpdating}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-black text-slate-950">{vehicleTrim ? "Review trim" : "Add trim"}</span>
-                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">{vehicleTrim ? `Currently: ${vehicleTrim}` : "A more specific trim can improve the comparisons"}</span>
-                      </span>
-                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openVehicleIdentityEditor(false)}
-                      disabled={vehicleIdentityUpdating}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-blue-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-black text-slate-950">Edit vehicle</span>
-                        <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">Correct year, make, model, or trim and refresh the market search</span>
-                      </span>
-                      <span aria-hidden="true" className="shrink-0 text-lg font-black text-blue-700">→</span>
-                    </button>
-                  </div>
-                  <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mt-auto pt-4 text-left text-xs font-black text-blue-700 hover:text-blue-900">
-                    View dealer fit and market timing →
-                  </button>
-                </article>
               </section>
 
               <section ref={compSectionRef} className={`mt-4 scroll-mt-4 transition-all delay-100 duration-300 ease-out ${
