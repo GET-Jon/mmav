@@ -3,6 +3,7 @@ import {
   canonicalDrivetrain,
   dedicatedBmwMModel,
   canonicalFuelType,
+  canonicalFuelForVehicle,
   canonicalModelFamily,
   canonicalTractionClass,
   canonicalTransmission,
@@ -11,6 +12,7 @@ import {
   compactVehicleText,
   normalizeVehicleText,
 } from "./vehicle-identity";
+import { applyConfigurationTierCeiling, materialConfigurationGuards } from "./pricing-critical-configuration";
 
 export type VehicleEquivalenceTier =
   | "direct"
@@ -107,9 +109,11 @@ function detectSpecialVariant(vehicle: VehicleIdentity) {
   }
 
   if (make === "mercedes benz") {
-    const variants = ["c63 s", "c63", "c43", "e63 s", "e63", "e53", "a45", "a35", "cla45", "cla35"];
+    // S63/S65 are materially different performance derivatives from S550/S560.
+    // Without these identities, generic S-Class Near matches can be auto-priced.
+    const variants = ["s65", "s63", "c63 s", "c63", "c43", "e63 s", "e63", "e53", "a45", "a35", "cla45", "cla35"];
     for (const variant of variants) {
-      if (phraseMatches(text, variant) || phraseMatches(text, `amg ${variant}`) || compact(vehicle.model).includes(compact(variant))) {
+      if (phraseMatches(text, variant) || phraseMatches(text, `amg ${variant}`) || (variant.startsWith("s6") && phraseMatches(text, `s ${variant.slice(1)}`)) || compact(vehicle.model).includes(compact(variant))) {
         return `amg-${compact(variant)}`;
       }
     }
@@ -515,6 +519,21 @@ function genericTrimTier(target: VehicleIdentity, candidate: VehicleIdentity) {
   if (!targetVariant || !candidateVariant) return "supporting" as const;
   if (targetVariant === candidateVariant) return "direct" as const;
 
+  // Some providers put an explicit body derivative in the model while
+  // others put it in the trim. Only reconcile that label when BOTH identities
+  // explicitly establish the same body and the remaining trim is identical.
+  // E.g. Cayenne / Turbo Coupe == Cayenne Coupe / Turbo, but never GTS.
+  const bodyNames = ["coupe", "convertible", "cabriolet", "wagon", "sedan"];
+  for (const bodyName of bodyNames) {
+    const tokens = (vehicle: VehicleIdentity) =>
+      normalize([vehicle.model, vehicle.trim].filter(Boolean).join(" ")).split(" ");
+    if (!tokens(target).includes(bodyName) || !tokens(candidate).includes(bodyName)) continue;
+    const stripBody = (value: string) => value.split(" ").filter(token => token !== bodyName).join(" ").trim();
+    const targetTrim = stripBody(targetVariant);
+    const candidateTrim = stripBody(candidateVariant);
+    if (targetTrim && candidateTrim && targetTrim === candidateTrim) return "direct" as const;
+  }
+
   // Distinct trim strings remain Near even when one contains the other.
   // Containment is unsafe for automotive derivatives: XL vs XLT, Premium vs
   // Premium Plus, and similar names can represent materially different trims.
@@ -656,7 +675,9 @@ export function evaluateVehicleEquivalence({
         if (!targetTrim || !candidateTrim) {
           tier = "supporting";
           reasons.push("special derivative aligned but trim is incomplete");
-        } else if (targetTrim !== candidateTrim) {
+        } else if (compact(targetTrim) !== compact(candidateTrim)) {
+          // Mercedes providers interchange S63 and S 63, while Audi and
+          // other true equipment variants must remain distinct.
           tier = "near";
           reasons.push(`special derivative aligned; trim differs: ${targetTrim} vs ${candidateTrim}`);
         } else {
@@ -680,8 +701,8 @@ export function evaluateVehicleEquivalence({
     }
   }
 
-  const targetFuel = canonicalFuelType(target.fuelType);
-  const candidateFuel = canonicalFuelType(candidate.fuelType);
+  const targetFuel = canonicalFuelForVehicle(target);
+  const candidateFuel = canonicalFuelForVehicle(candidate);
   if (targetFuel && candidateFuel && targetFuel !== candidateFuel) {
     return {
       tier: "reject",
@@ -692,15 +713,11 @@ export function evaluateVehicleEquivalence({
     };
   }
 
-  const targetBody = canonicalBodyClass(target);
-  const candidateBody = canonicalBodyClass(candidate);
-  if (targetBody && candidateBody && targetBody !== candidateBody) {
-    const fundamentallyDifferent =
-      (targetBody === "pickup" && candidateBody !== "pickup") ||
-      (candidateBody === "pickup" && targetBody !== "pickup");
-    tier = fundamentallyDifferent ? "reject" : "supporting";
-    reasons.push(`body configuration differs: ${targetBody} vs ${candidateBody}`);
-  }
+  // Single policy across makes: body and transmission differences are
+  // pricing-critical even if provider trims otherwise compare as identical.
+  const material = materialConfigurationGuards(target, candidate);
+  tier = applyConfigurationTierCeiling(tier, material.maxTier);
+  reasons.push(...material.reasons);
 
   const targetCab = canonicalCabClass(target);
   const candidateCab = canonicalCabClass(candidate);
@@ -735,18 +752,6 @@ export function evaluateVehicleEquivalence({
   ) {
     tier = "supporting";
     reasons.push(`engine family differs: ${target.cylinders} vs ${candidate.cylinders} cylinders`);
-  }
-
-  const targetTransmission = canonicalTransmission(target.transmission);
-  const candidateTransmission = canonicalTransmission(candidate.transmission);
-  if (
-    targetTransmission &&
-    candidateTransmission &&
-    targetTransmission !== candidateTransmission &&
-    tier === "direct"
-  ) {
-    tier = "near";
-    reasons.push(`transmission differs: ${targetTransmission} vs ${candidateTransmission}`);
   }
 
   const needsClassificationReview =

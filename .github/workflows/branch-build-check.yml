@@ -1,6 +1,9 @@
 name: Branch build check
 
 on:
+  push:
+    branches:
+      - feat/vin-identity-stage1-fast-fallback
   pull_request:
     branches:
       - main
@@ -18,6 +21,16 @@ jobs:
       - run: npm ci
       - name: Apply repository prebuild checks
         run: npm run prebuild
+      - name: VIN benchmark safety check (zero API calls)
+        run: |
+          node --check scripts/benchmark-vin-decoders.mjs
+          node scripts/benchmark-vin-decoders.mjs > /dev/null
+      - name: Verdict-first confidence and decision regression suite
+        run: npx --yes tsx@4.20.6 scripts/run-verdict-first-regressions.ts
+      - name: Provisional trim market scenario regressions
+        run: npx --yes tsx@4.20.6 scripts/run-trim-market-scenario-regressions.ts
+      - name: Fast VIN dual-provider regression suite
+        run: npx --yes tsx@4.20.6 scripts/run-vin-identity-regressions.ts
       - name: Comp regression suite
         run: npx --yes tsx@4.20.6 scripts/run-comp-regressions.ts
       - name: Billing period regression suite
@@ -28,6 +41,12 @@ jobs:
         run: npx --yes tsx@4.20.6 scripts/run-post-cancel-regressions.ts
       - name: Stripe event ordering regressions
         run: npx --yes tsx@4.20.6 scripts/run-subscription-event-regressions.ts
+      - name: Supabase email template checks
+        run: node scripts/run-supabase-email-template-regressions.mjs
+      - name: Authentication email regression suite
+        run: npx --yes tsx@4.20.6 scripts/run-auth-email-regressions.ts
+      - name: Billing email design regressions
+        run: npx --yes tsx@4.20.6 scripts/run-billing-email-template-regressions.ts
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build
