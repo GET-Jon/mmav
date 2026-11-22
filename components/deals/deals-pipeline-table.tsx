@@ -9,6 +9,8 @@ type SavedEvaluation = {
   created_at: string;
   updated_at: string;
   status: string | null;
+  payload?: Record<string, unknown> | null;
+  outcome_reason?: string | null;
   vin: string | null;
   vehicle_title: string | null;
   mileage: number | null;
@@ -37,6 +39,7 @@ type CompanyUserOption = {
 
 const statusOptions = [
   { value: "all", label: "All statuses" },
+  { value: "undecided", label: "Undecided" },
   { value: "watching", label: "Watching" },
   { value: "needs_review", label: "Needs Review" },
   { value: "bid", label: "Bid" },
@@ -55,7 +58,7 @@ const sortOptions = [
 ];
 
 function normalizeStatus(value?: string | null) {
-  return String(value || "watching").trim().toLowerCase() || "watching";
+  return String(value || "undecided").trim().toLowerCase() || "undecided";
 }
 
 function money(value: number | null) {
@@ -89,15 +92,57 @@ function formatDate(value: string) {
 }
 
 function decisionClass(decision: string | null) {
-  if (decision === "Pass") {
+  const normalized = String(decision || "").toLowerCase();
+
+  if (normalized === "pass" || normalized === "pass on this vehicle") {
     return "bg-red-100 text-red-700";
   }
 
-  if (decision === "Watch / Stretch Only") {
-    return "bg-amber-100 text-amber-700";
+  if (
+    normalized.includes("review") ||
+    normalized.includes("verify") ||
+    normalized.includes("condition") ||
+    normalized.includes("promising") ||
+    normalized.includes("above target")
+  ) {
+    return "bg-amber-100 text-amber-800";
+  }
+
+  if (normalized === "—" || !normalized) {
+    return "bg-slate-100 text-slate-600";
   }
 
   return "bg-emerald-100 text-emerald-700";
+}
+
+function recommendationLabel(evaluation: SavedEvaluation) {
+  const payload = evaluation.payload || {};
+  const snapshot =
+    payload.pipelineRecommendation &&
+    typeof payload.pipelineRecommendation === "object" &&
+    !Array.isArray(payload.pipelineRecommendation)
+      ? (payload.pipelineRecommendation as Record<string, unknown>)
+      : {};
+  const savedLabel = snapshot.label;
+  if (typeof savedLabel === "string" && savedLabel.trim()) return savedLabel;
+
+  const key =
+    typeof snapshot.key === "string"
+      ? snapshot.key
+      : typeof payload.presentationDecision === "string"
+        ? payload.presentationDecision
+        : "";
+  const labels: Record<string, string> = {
+    awaiting: "Evaluation incomplete",
+    searching: "Checking market",
+    comps: "Verify pricing",
+    condition: "Review condition",
+    pass: "Pass",
+    promising: "Promising — negotiate",
+    review: "Review required",
+    pursue: "Worth pursuing",
+  };
+  return labels[key] || evaluation.decision || "—";
 }
 
 function compactUserLabel(emailOrName?: string | null) {
@@ -135,13 +180,18 @@ export function DealsPipelineTable({
   const [sortBy, setSortBy] = useState("updated");
   const [searchText, setSearchText] = useState("");
 
-  function handleStatusChange(evaluationId: string, nextStatus: string) {
+  function handleStatusChange(
+    evaluationId: string,
+    nextStatus: string,
+    outcomeReason: string | null,
+  ) {
     setTableEvaluations((previous) =>
       previous.map((evaluation) =>
         evaluation.id === evaluationId
           ? {
               ...evaluation,
               status: nextStatus,
+              outcome_reason: outcomeReason,
               updated_at: new Date().toISOString(),
             }
           : evaluation
@@ -308,20 +358,27 @@ export function DealsPipelineTable({
             <tr>
               <th className="px-4 py-3">Saved</th>
               <th className="px-4 py-3">By</th>
-              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Dealer follow-up</th>
               <th className="px-4 py-3">Vehicle</th>
               <th className="px-4 py-3">Mileage</th>
               <th className="whitespace-nowrap px-3 py-3">Current Bid</th>
               <th className="px-4 py-3">Target</th>
               <th className="px-4 py-3">Profit</th>
               <th className="px-4 py-3">Risk</th>
-              <th className="whitespace-nowrap px-3 py-3">Decision</th>
+              <th className="whitespace-nowrap px-3 py-3">Lot Logic recommendation</th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-slate-100">
             {filteredEvaluations.map((evaluation) => (
-              <tr key={evaluation.id} className="hover:bg-slate-50">
+              <tr
+                key={evaluation.id}
+                className={
+                  normalizeStatus(evaluation.status) === "undecided"
+                    ? "bg-slate-50/70 hover:bg-slate-100"
+                    : "hover:bg-slate-50"
+                }
+              >
                 <td className="px-4 py-3 text-slate-500">
                   {formatDate(evaluation.updated_at)}
                 </td>
@@ -338,6 +395,7 @@ export function DealsPipelineTable({
                   <DealStatusSelect
                     evaluationId={evaluation.id}
                     status={evaluation.status}
+                    outcomeReason={evaluation.outcome_reason}
                     onStatusChange={handleStatusChange}
                   />
                 </td>
@@ -374,11 +432,17 @@ export function DealsPipelineTable({
                 <td className="whitespace-nowrap px-3 py-3">
                   <span
                     className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${decisionClass(
-                      evaluation.decision
+                      recommendationLabel(evaluation)
                     )}`}
                   >
-                    {evaluation.decision || "—"}
+                    {recommendationLabel(evaluation)}
                   </span>
+                  {evaluation.decision &&
+                  recommendationLabel(evaluation) !== evaluation.decision ? (
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      Bid guidance: {evaluation.decision}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}
