@@ -8747,7 +8747,7 @@ export function EvaluationWorkspace({
                   ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
-                  {currentCostPosition ? (
+                  {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
                     <button
                       type="button"
                       aria-haspopup="dialog"
