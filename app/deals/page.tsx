@@ -13,6 +13,9 @@ type SavedEvaluation = {
   created_at: string;
   updated_at: string;
   status: string | null;
+  payload: Record<string, unknown> | null;
+  outcome_reason?: string | null;
+  outcome_recorded_at?: string | null;
   vin: string | null;
   vehicle_title: string | null;
   mileage: number | null;
@@ -82,6 +85,7 @@ async function getSavedEvaluations(userId: string) {
         created_at,
         updated_at,
         status,
+        payload,
         vin,
         vehicle_title,
         mileage,
@@ -142,6 +146,14 @@ async function getSavedEvaluations(userId: string) {
   return {
     evaluations: evaluations.map((evaluation) => ({
       ...evaluation,
+      outcome_reason:
+        evaluation.payload && typeof evaluation.payload.dealerOutcomeReason === "string"
+          ? evaluation.payload.dealerOutcomeReason
+          : null,
+      outcome_recorded_at:
+        evaluation.payload && typeof evaluation.payload.dealerOutcomeRecordedAt === "string"
+          ? evaluation.payload.dealerOutcomeRecordedAt
+          : null,
       created_by_email: evaluation.created_by
         ? userEmailById.get(evaluation.created_by) || "Unknown user"
         : null,

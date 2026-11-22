@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 
-
 const statusOptions = [
+  { value: "undecided", label: "Undecided" },
   { value: "watching", label: "Watching" },
-  { value: "needs_review", label: "Needs Review" },
-  { value: "bid", label: "Bid" },
+  { value: "needs_review", label: "Needs review" },
+  { value: "bid", label: "Bid placed" },
   { value: "passed", label: "Passed" },
   { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
@@ -15,7 +15,7 @@ const statusOptions = [
 ];
 
 function normalizeStatus(value?: string | null) {
-  return String(value || "watching").trim() || "watching";
+  return String(value || "undecided").trim() || "undecided";
 }
 
 function statusClass(status: string) {
@@ -28,11 +28,13 @@ function statusClass(status: string) {
     case "passed":
     case "lost":
     case "archived":
-      return "border-red-200 bg-red-50 text-red-700";
+      return "border-slate-200 bg-slate-100 text-slate-700";
     case "needs_review":
-      return "border-amber-200 bg-amber-50 text-amber-700";
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "undecided":
+      return "border-slate-200 bg-slate-50 text-slate-500";
     default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
+      return "border-slate-200 bg-white text-slate-700";
   }
 }
 
@@ -43,100 +45,56 @@ export function DealStatusSelect({
 }: {
   evaluationId: string;
   status?: string | null;
-  onStatusChange?: (
-    evaluationId: string,
-    status: string,
-  ) => void;
+  onStatusChange?: (evaluationId: string, status: string) => void;
 }) {
   const normalizedStatus = normalizeStatus(status);
-
-  const [localStatus, setLocalStatus] =
-    useState(normalizedStatus);
+  const [localStatus, setLocalStatus] = useState(normalizedStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  async function updateStandardStatus(nextStatus: string) {
-    const previousStatus = localStatus;
 
+  async function updateStatus(nextStatus: string) {
+    const previousStatus = localStatus;
     setLocalStatus(nextStatus);
     setSaving(true);
     setError("");
 
     try {
-      const response = await fetch(
-        "/api/evaluations/status",
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: evaluationId,
-            status: nextStatus,
-          }),
-        },
-      );
-
+      const response = await fetch("/api/evaluations/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: evaluationId, status: nextStatus }),
+      });
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Status update failed.",
-        );
-      }
-
+      if (!response.ok) throw new Error(data.error || "Status update failed.");
       onStatusChange?.(evaluationId, nextStatus);
     } catch (updateError) {
       setLocalStatus(previousStatus);
       setError(
-        updateError instanceof Error
-          ? updateError.message
-          : "Status update failed.",
+        updateError instanceof Error ? updateError.message : "Status update failed.",
       );
     } finally {
       setSaving(false);
     }
   }
 
-  function handleSelection(nextStatus: string) {
-    setError("");
-
-    if (nextStatus === localStatus) {
-      return;
-    }
-
-    void updateStandardStatus(nextStatus);
-  }
-
   return (
-    <>
-      <div className="space-y-1">
-        <select
-          value={localStatus}
-          disabled={saving}
-          onChange={(event) =>
-            handleSelection(event.target.value)
-          }
-          className={`w-full rounded-full border px-3 py-1.5 text-sm font-bold outline-none ${statusClass(
-            localStatus,
-          )}`}
-        >
-          {statusOptions.map((option) => (
-            <option
-              key={option.value}
-              value={option.value}
-            >
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        {error ? (
-          <div className="text-xs font-semibold text-red-600">
-            {error}
-          </div>
-        ) : null}
-      </div>
-
-    </>
+    <div className="space-y-1">
+      <select
+        value={localStatus}
+        disabled={saving}
+        onChange={(event) => {
+          if (event.target.value !== localStatus) void updateStatus(event.target.value);
+        }}
+        className={`w-full rounded-full border px-3 py-1.5 text-sm font-bold outline-none ${statusClass(localStatus)}`}
+        aria-label="Status"
+      >
+        {statusOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {error ? <div className="text-xs font-semibold text-red-600">{error}</div> : null}
+    </div>
   );
 }

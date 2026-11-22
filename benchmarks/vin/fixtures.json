@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "description": "Reference labels transcribed from Lot Logic VIN Benchmark Expanded 15. Verify PDF accessibility and evidence authenticity before asserting strict ground truth.",
+  "cases": [
+    {
+      "vin": "1FA6P8CF4S5403012",
+      "make": "Ford",
+      "model": "Mustang",
+      "trim": "GT Premium",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FA6P8CF4S5403012"
+    },
+    {
+      "vin": "1FAGP8FFXS5115382",
+      "make": "Ford",
+      "model": "Mustang",
+      "trim": "GT Premium",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FAGP8FFXS5115382"
+    },
+    {
+      "vin": "1FMEE8BP1SLB34982",
+      "make": "Ford",
+      "model": "Bronco",
+      "trim": "Outer Banks",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FMEE8BP1SLB34982"
+    },
+    {
+      "vin": "1FTFW5LD6SFC27214",
+      "make": "Ford",
+      "model": "F-150",
+      "trim": "Lariat",
+      "year": 2025,
+      "fuel": "Hybrid",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FTFW5LD6SFC27214"
+    },
+    {
+      "vin": "1FTFW5L89SFC38520",
+      "make": "Ford",
+      "model": "F-150",
+      "trim": "Lariat",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FTFW5L89SFC38520"
+    },
+    {
+      "vin": "3FMCR9BN8SRE40921",
+      "make": "Ford",
+      "model": "Bronco Sport",
+      "trim": "Big Bend",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=3FMCR9BN8SRE40921"
+    },
+    {
+      "vin": "3FMCR9CN0SRF17764",
+      "make": "Ford",
+      "model": "Bronco Sport",
+      "trim": "Outer Banks",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=3FMCR9CN0SRF17764"
+    },
+    {
+      "vin": "1FMUK8KH5SGD03942",
+      "make": "Ford",
+      "model": "Explorer",
+      "trim": "ST-Line",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FMUK8KH5SGD03942"
+    },
+    {
+      "vin": "1FMWK8GC8SGB09525",
+      "make": "Ford",
+      "model": "Explorer",
+      "trim": "ST",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FMWK8GC8SGB09525"
+    },
+    {
+      "vin": "1FMUK7KH3SGC59482",
+      "make": "Ford",
+      "model": "Explorer",
+      "trim": "ST-Line",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "OEM Ford window sticker",
+      "evidenceUrl": "https://www.windowsticker.forddirect.com/windowsticker.pdf?vin=1FMUK7KH3SGC59482"
+    },
+    {
+      "vin": "4T1DAACK6SU615158",
+      "make": "Toyota",
+      "model": "Camry",
+      "trim": "LE",
+      "year": 2025,
+      "fuel": "Hybrid",
+      "evidence": "VIN-specific manufacturer window-label PDF",
+      "evidenceUrl": "https://s3.amazonaws.com/cdn.autoipacket.com/data/137/3921/2153008521/msrp/2153008521.20250603.230605-msrp-01.pdf"
+    },
+    {
+      "vin": "4T1DAACK1SU145136",
+      "make": "Toyota",
+      "model": "Camry",
+      "trim": "SE",
+      "year": 2025,
+      "fuel": "Hybrid",
+      "evidence": "VIN-specific manufacturer window-label PDF",
+      "evidenceUrl": "https://s3.amazonaws.com/cdn.autoipacket.com/data/137/2306/2152963376/msrp/2152963376.20250531.230533-msrp-01.pdf"
+    },
+    {
+      "vin": "2T2BBMCA3SC071213",
+      "make": "Lexus",
+      "model": "RX 350h",
+      "trim": "Premium AWD",
+      "year": 2025,
+      "fuel": "Hybrid",
+      "evidence": "VIN-specific manufacturer window-label PDF",
+      "evidenceUrl": "https://s3.amazonaws.com/cdn.autoipacket.com/data/137/2301/2150636429/msrp/2150636429.20250108.230103-msrp-01.pdf"
+    },
+    {
+      "vin": "2T3P1RFV0SC520217",
+      "make": "Toyota",
+      "model": "RAV4",
+      "trim": "XLE AWD",
+      "year": 2025,
+      "fuel": "Gasoline",
+      "evidence": "VIN-specific manufacturer window-label PDF",
+      "evidenceUrl": "https://s3.amazonaws.com/cdn.autoipacket.com/data/137/4821/2151736635/msrp/2151736635.20250320.230343-msrp-01.pdf"
+    },
+    {
+      "vin": "4T1DAACKXSU002671",
+      "make": "Toyota",
+      "model": "Camry",
+      "trim": "SE",
+      "year": 2025,
+      "fuel": "Hybrid",
+      "evidence": "VIN-specific manufacturer window-label PDF",
+      "evidenceUrl": "https://s3.amazonaws.com/cdn.autoipacket.com/data/137/2308/2150955530/msrp/2150955530.20250131.230101-msrp-01.pdf"
+    }
+  ]
+}
