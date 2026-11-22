@@ -4129,7 +4129,6 @@ export function EvaluationWorkspace({
         body: JSON.stringify({
           id: savedEvaluationId,
           evaluationUsageId,
-          status: "watching",
           vehicleTitle,
           vin,
           auctionSite,
