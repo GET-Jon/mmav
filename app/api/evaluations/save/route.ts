@@ -188,7 +188,6 @@ export async function POST(request: Request) {
 
     const row: JsonRecord = {
       company_id: company.companyId,
-      status: toStringOrNull(body.status) ?? "watching",
 
       vin: toStringOrNull(decodedVehicle.vin ?? body.vin),
       vehicle_title: toStringOrNull(body.vehicleTitle),
@@ -216,13 +215,26 @@ export async function POST(request: Request) {
 
       updated_by: user.id,
 
-      payload: { ...body, pricingEvidence: evidence },
+      payload: {
+        ...body,
+        pricingEvidence: evidence,
+        pipelineRecommendation: {
+          key: toStringOrNull(body.presentationDecision),
+          label: toStringOrNull(body.lotLogicLabel),
+          reasons: Array.isArray(body.reviewReasons) ? body.reviewReasons : [],
+        },
+      },
     };
 
     if (id) {
       const { data, error } = await supabase
         .from("auction_evaluations")
-        .update(row)
+        .update({
+          ...row,
+          ...(toStringOrNull(body.status)
+            ? { status: toStringOrNull(body.status) }
+            : {}),
+        })
         .eq("id", id)
         .eq("company_id", company.companyId)
         .select("id, updated_at")
@@ -269,6 +281,7 @@ export async function POST(request: Request) {
       .from("auction_evaluations")
       .insert({
         ...row,
+        status: toStringOrNull(body.status) ?? "undecided",
         created_by: user.id,
       })
       .select("id, created_at")
