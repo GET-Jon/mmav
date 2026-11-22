@@ -4581,20 +4581,16 @@ export function EvaluationWorkspace({
       : currentAllInDifference > 0
         ? {
             tone: "over" as const,
-            text: `Current all-in cost is ${money(
-              currentAllInDifference,
-            )} above the recommended all-in target.`,
+            text: `All-in cost is ${money(currentAllInDifference)} over Lot Logic’s ${money(recommendedAllInCost)} max all-in target.`,
           }
         : currentAllInDifference < 0
           ? {
               tone: "under" as const,
-              text: `Current all-in cost is ${money(
-                Math.abs(currentAllInDifference),
-              )} below the recommended all-in target.`,
+              text: `${money(Math.abs(currentAllInDifference))} of headroom before Lot Logic’s ${money(recommendedAllInCost)} max all-in target.`,
             }
           : {
               tone: "at" as const,
-              text: "Current all-in cost is at the recommended all-in target.",
+              text: `At Lot Logic’s ${money(recommendedAllInCost)} max all-in target.`,
             };
 
   const hasManualQuickEvalBasics =
@@ -7288,8 +7284,8 @@ export function EvaluationWorkspace({
             onClick={(event) => event.stopPropagation()}>
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
               <div>
-                <h2 className="text-xl font-black text-slate-950">Profit details</h2>
-                <p className="mt-1 text-xs font-medium text-slate-500">Understand the profit estimate and choose your target.</p>
+                <h2 className="text-xl font-black text-slate-950">Profit &amp; max-buy details</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">See how the profit estimate sets the recommended maximum purchase cost.</p>
               </div>
               <button type="button" onClick={() => setProfitDetailsOpen(false)}
                 aria-label="Close profit details"
@@ -7297,28 +7293,38 @@ export function EvaluationWorkspace({
             </div>
             <div className="min-h-0 overflow-y-auto space-y-4 px-5 py-5 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <div className="text-[10px] font-black uppercase text-slate-500">Expected gross profit</div>
-                  <div className="mt-1 text-xl font-black text-slate-950">
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-emerald-700">Projected gross profit</div>
+                  <div className="mt-1 text-xl font-black text-emerald-800">
                     {pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "Not verified"}
                   </div>
                 </div>
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-blue-700">Desired profit target</div>
+                  <div className="mt-1 text-xl font-black text-blue-800">{money(valuation.desiredProfitTarget)}</div>
+                  <p className="mt-1 text-[10px] text-blue-700">{profitTargetSource}</p>
+                </div>
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <div className="text-[10px] font-black uppercase text-slate-500">Desired profit target</div>
-                  <div className="mt-1 text-xl font-black text-slate-950">{money(valuation.desiredProfitTarget)}</div>
-                  <p className="mt-1 text-[10px] text-slate-500">{profitTargetSource}</p>
+                  <div className="text-[10px] font-black uppercase text-slate-500">Recommended max all-in</div>
+                  <div className="mt-1 text-lg font-black text-slate-950">{recommendedAllInCost > 0 ? money(recommendedAllInCost) : "Not established"}</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500">{currentCostPosition?.tone === "over" ? "Over max target" : currentCostPosition?.tone === "under" ? "Room before max target" : currentCostPosition?.tone === "at" ? "Position" : "Target position"}</div>
+                  <div className="mt-1 text-lg font-black text-slate-950">{currentCostPosition ? currentCostPosition.tone === "under" ? money(Math.abs(currentAllInDifference)) : currentCostPosition.tone === "over" ? money(currentAllInDifference) : "At target" : "Not established"}</div>
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 p-4">
                 <h3 className="text-xs font-black text-slate-950">How the numbers work</h3>
                 <p className="mt-2 text-xs leading-5 text-slate-600">
-                  Expected gross profit = estimated retail value minus the current all-in acquisition cost.
-                  This is a projection, not a guaranteed sale. Desired profit is the minimum margin Lot Logic
-                  uses to calculate its recommended maximum purchase price.
+                  Recommended max all-in cost = estimated retail value minus desired gross profit.
+                  If current all-in cost is below that ceiling, the difference is headroom and projected gross profit is above target; it is not a profit shortfall.
+                  Expected gross profit = estimated retail value minus current all-in cost. This remains a projection, not a guaranteed sale.
                 </p>
                 <div className="mt-3 space-y-1 text-xs">
                   <div className="flex justify-between gap-3"><span>Expected retail</span><strong>{pricingEvidence.decisionReady ? money(finalTargetUsed) : "Unverified"}</strong></div>
                   <div className="flex justify-between gap-3"><span>Current all-in cost</span><strong>{money(displayedCurrentCost)}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Desired gross profit</span><strong>{money(valuation.desiredProfitTarget)}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Recommended max all-in cost</span><strong>{recommendedAllInCost > 0 ? money(recommendedAllInCost) : "Not established"}</strong></div>
                   <div className="flex justify-between gap-3 border-t border-slate-200 pt-2"><span>Projected gross profit</span><strong>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</strong></div>
                 </div>
               </div>
@@ -8685,25 +8691,33 @@ export function EvaluationWorkspace({
                       disabled={!hasEvaluationData}
                       className="rounded-xl bg-white/60 px-3 py-3 text-center transition hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-default disabled:bg-white/30 sm:bg-transparent sm:px-0 sm:py-0 sm:hover:bg-white/40"
                     >
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">
+                      <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-600"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M16 14h2" /></svg>
                         All-In Cost
                       </div>
                       <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">
                         {displayedCurrentCost > 0 ? money(displayedCurrentCost) : "—"}
                       </div>
+                      <div className="mt-1 text-[10px] font-semibold text-slate-500">Your total investment</div>
                       {hasEvaluationData || displayedCurrentCost > 0 ? (
-                        <div className="mt-1 text-[10px] font-black text-blue-700">
-                          Edit Costs
-                        </div>
+                        <div className="mt-1 text-[10px] font-black text-blue-700">Edit Costs</div>
                       ) : null}
                     </button>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Sale Estimate" : "Unverified Retail Indication"}</div>
-                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-slate-950 sm:mt-2 sm:text-[25px]">{pricingEvidence.closePeerCount === 0 ? "Not established" : compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                      <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-[0.04em] text-blue-700">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M20.6 13.4 11 3.8H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8Z" /><circle cx="7.5" cy="7.5" r="1" /></svg>
+                        {pricingEvidence.closePeerCount === 0 ? "Retail pricing" : pricingEvidence.decisionReady ? "Sale Estimate" : "Unverified Retail Indication"}
+                      </div>
+                      <div className="mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] text-blue-700 sm:mt-2 sm:text-[25px]">{pricingEvidence.closePeerCount === 0 ? "Not established" : compSummary.includedCount > 0 && finalTargetUsed > 0 ? money(finalTargetUsed) : "—"}</div>
+                      <div className="mt-1 text-[10px] font-semibold text-slate-500">Expected selling price</div>
                     </div>
                     <div className="rounded-xl bg-white/45 px-3 py-3 sm:bg-transparent sm:px-0 sm:py-0">
-                      <div className="text-[9px] font-black uppercase tracking-[0.04em] text-slate-500">{pricingEvidence.decisionReady ? "Estimated Profit" : "Profit Pending Verification"}</div>
+                      <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-[0.04em] text-emerald-700">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M3 17 9 11l4 4 8-9" /><path d="M15 6h6v6" /></svg>
+                        {pricingEvidence.decisionReady ? "Estimated Profit" : "Profit Pending Verification"}
+                      </div>
                       <div className={`mt-1.5 whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.035em] sm:mt-2 sm:text-[25px] ${valuation.expectedGrossProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pricingEvidence.decisionReady && hasAcquisitionPrice ? money(valuation.expectedGrossProfit) : "—"}</div>
+                      <div className="mt-1 text-[10px] font-semibold text-slate-500">Projected gross profit</div>
                       <button type="button"
                         onClick={() => setProfitDetailsOpen(true)}
                         className="mt-1.5 text-[10px] font-black text-blue-700 hover:text-blue-900 hover:underline focus-visible:outline-2 focus-visible:outline-blue-600"
@@ -8733,8 +8747,16 @@ export function EvaluationWorkspace({
                   ) : presentationDecision === "review" && reviewReasons.length ? (
                     <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
                   ) : null}
-                  {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
-                    <div className={`mt-4 rounded-xl px-3 py-2 text-center text-xs font-extrabold ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{currentCostPosition.text}</div>
+                  {currentCostPosition ? (
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setProfitDetailsOpen(true)}
+                      className={`mt-4 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-center text-xs font-extrabold transition hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${currentCostPosition.tone === "over" ? "bg-amber-100 text-amber-800" : currentCostPosition.tone === "under" ? "bg-emerald-100 text-emerald-700" : "bg-blue-50 text-blue-800"}`}
+                    >
+                      <span>{currentCostPosition.text}</span>
+                      <span className="shrink-0 font-black underline underline-offset-2">Why?</span>
+                    </button>
                   ) : null}
                   <div className="mt-4 rounded-2xl border border-slate-200/80 bg-white/65 p-3 sm:p-4">
                     <h3 className="text-sm font-black text-slate-950">Deal Snapshot</h3>
