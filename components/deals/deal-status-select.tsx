@@ -14,15 +14,6 @@ const statusOptions = [
   { value: "archived", label: "Archived" },
 ];
 
-const outcomeReasonOptions = [
-  { value: "price", label: "Price or target" },
-  { value: "condition_title", label: "Condition or title" },
-  { value: "market_confidence", label: "Market or valuation" },
-  { value: "seller", label: "Seller or deal fell through" },
-  { value: "timing", label: "Timing or availability" },
-  { value: "other", label: "Other" },
-];
-
 function normalizeStatus(value?: string | null) {
   return String(value || "undecided").trim() || "undecided";
 }
@@ -39,7 +30,7 @@ function statusClass(status: string) {
     case "archived":
       return "border-slate-200 bg-slate-100 text-slate-700";
     case "needs_review":
-      return "border-amber-200 bg-amber-50 text-amber-700";
+      return "border-amber-200 bg-amber-50 text-amber-800";
     case "undecided":
       return "border-slate-200 bg-slate-50 text-slate-500";
     default:
@@ -47,36 +38,23 @@ function statusClass(status: string) {
   }
 }
 
-const isRecordedOutcome = (status: string) =>
-  ["passed", "won", "lost", "purchased"].includes(status);
-
 export function DealStatusSelect({
   evaluationId,
   status,
-  outcomeReason,
   onStatusChange,
 }: {
   evaluationId: string;
   status?: string | null;
-  outcomeReason?: string | null;
-  onStatusChange?: (
-    evaluationId: string,
-    status: string,
-    outcomeReason: string | null,
-  ) => void;
+  onStatusChange?: (evaluationId: string, status: string) => void;
 }) {
   const normalizedStatus = normalizeStatus(status);
   const [localStatus, setLocalStatus] = useState(normalizedStatus);
-  const [localReason, setLocalReason] = useState(outcomeReason || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function updateStatus(nextStatus: string, nextReason: string | null) {
+  async function updateStatus(nextStatus: string) {
     const previousStatus = localStatus;
-    const previousReason = localReason;
-
     setLocalStatus(nextStatus);
-    setLocalReason(nextReason || "");
     setSaving(true);
     setError("");
 
@@ -84,22 +62,13 @@ export function DealStatusSelect({
       const response = await fetch("/api/evaluations/status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: evaluationId,
-          status: nextStatus,
-          outcomeReason: nextReason,
-        }),
+        body: JSON.stringify({ id: evaluationId, status: nextStatus }),
       });
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Status update failed.");
-      }
-
-      onStatusChange?.(evaluationId, nextStatus, nextReason);
+      if (!response.ok) throw new Error(data.error || "Status update failed.");
+      onStatusChange?.(evaluationId, nextStatus);
     } catch (updateError) {
       setLocalStatus(previousStatus);
-      setLocalReason(previousReason);
       setError(
         updateError instanceof Error ? updateError.message : "Status update failed.",
       );
@@ -108,29 +77,16 @@ export function DealStatusSelect({
     }
   }
 
-  function handleSelection(nextStatus: string) {
-    setError("");
-    if (nextStatus === localStatus) return;
-
-    const keepsReason = ["passed", "lost"].includes(nextStatus);
-    void updateStatus(nextStatus, keepsReason ? localReason || null : null);
-  }
-
-  function handleReasonSelection(nextReason: string) {
-    if (nextReason === localReason) return;
-    void updateStatus(localStatus, nextReason || null);
-  }
-
-  const asksForReason = ["passed", "lost"].includes(localStatus);
-
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       <select
         value={localStatus}
         disabled={saving}
-        onChange={(event) => handleSelection(event.target.value)}
+        onChange={(event) => {
+          if (event.target.value !== localStatus) void updateStatus(event.target.value);
+        }}
         className={`w-full rounded-full border px-3 py-1.5 text-sm font-bold outline-none ${statusClass(localStatus)}`}
-        aria-label="Dealer follow-up status"
+        aria-label="Status"
       >
         {statusOptions.map((option) => (
           <option key={option.value} value={option.value}>
@@ -138,28 +94,6 @@ export function DealStatusSelect({
           </option>
         ))}
       </select>
-
-      {isRecordedOutcome(localStatus) ? (
-        <div className="text-[11px] font-bold text-emerald-700">✓ Outcome recorded</div>
-      ) : null}
-
-      {asksForReason ? (
-        <select
-          value={localReason}
-          disabled={saving}
-          onChange={(event) => handleReasonSelection(event.target.value)}
-          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 outline-none focus:border-blue-400"
-          aria-label="Optional reason for passed or lost deal"
-        >
-          <option value="">Why? (optional)</option>
-          {outcomeReasonOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      ) : null}
-
       {error ? <div className="text-xs font-semibold text-red-600">{error}</div> : null}
     </div>
   );

@@ -11,6 +11,7 @@ type SavedEvaluation = {
   status: string | null;
   payload?: Record<string, unknown> | null;
   outcome_reason?: string | null;
+  outcome_recorded_at?: string | null;
   vin: string | null;
   vehicle_title: string | null;
   mileage: number | null;
@@ -81,14 +82,16 @@ function number(value: number | null) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  }).format(new Date(value));
+function formatSavedDate(value: string) {
+  const date = new Date(value);
+  return {
+    date: new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", timeZone: "America/New_York" }).format(date),
+    time: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(date),
+  };
+}
+
+function isRecordedOutcome(status?: string | null) {
+  return ["passed", "won", "lost", "purchased"].includes(normalizeStatus(status));
 }
 
 function decisionClass(decision: string | null) {
@@ -179,21 +182,63 @@ export function DealsPipelineTable({
   const [userFilter, setUserFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
   const [searchText, setSearchText] = useState("");
+  const [outcomeEvaluationId, setOutcomeEvaluationId] = useState<string | null>(null);
+  const [outcomeReason, setOutcomeReason] = useState("");
+  const [outcomeSaving, setOutcomeSaving] = useState(false);
+  const [outcomeError, setOutcomeError] = useState("");
 
-  function handleStatusChange(
-    evaluationId: string,
-    nextStatus: string,
-    outcomeReason: string | null,
-  ) {
+  const outcomeEvaluation = tableEvaluations.find((evaluation) => evaluation.id === outcomeEvaluationId);
+
+  function openOutcomeDialog(evaluation: SavedEvaluation) {
+    setOutcomeEvaluationId(evaluation.id);
+    const savedReason = evaluation.outcome_reason || "";
+    const legacyReasonLabels: Record<string, string> = {
+      price: "Price or target",
+      condition_title: "Condition or title",
+      market_confidence: "Market or valuation",
+      seller: "Seller or deal fell through",
+      timing: "Timing or availability",
+      other: "Other",
+    };
+    setOutcomeReason(legacyReasonLabels[savedReason] || savedReason);
+    setOutcomeError("");
+  }
+
+  async function saveOutcome() {
+    if (!outcomeEvaluation) return;
+    setOutcomeSaving(true);
+    setOutcomeError("");
+    try {
+      const response = await fetch("/api/evaluations/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: outcomeEvaluation.id,
+          status: normalizeStatus(outcomeEvaluation.status),
+          outcomeReason: outcomeReason.trim() || null,
+          recordOutcome: true,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not record the outcome.");
+      setTableEvaluations((previous) => previous.map((evaluation) =>
+        evaluation.id === outcomeEvaluation.id
+          ? { ...evaluation, outcome_reason: data.outcomeReason ?? null, outcome_recorded_at: data.outcomeRecordedAt, updated_at: data.updatedAt || evaluation.updated_at }
+          : evaluation
+      ));
+      setOutcomeEvaluationId(null);
+    } catch (error) {
+      setOutcomeError(error instanceof Error ? error.message : "Could not record the outcome.");
+    } finally {
+      setOutcomeSaving(false);
+    }
+  }
+
+  function handleStatusChange(evaluationId: string, nextStatus: string) {
     setTableEvaluations((previous) =>
       previous.map((evaluation) =>
         evaluation.id === evaluationId
-          ? {
-              ...evaluation,
-              status: nextStatus,
-              outcome_reason: outcomeReason,
-              updated_at: new Date().toISOString(),
-            }
+          ? { ...evaluation, status: nextStatus, updated_at: new Date().toISOString() }
           : evaluation
       )
     );
@@ -341,28 +386,28 @@ export function DealsPipelineTable({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1120px] table-fixed text-left text-sm">
+        <table className="w-full min-w-[1060px] table-fixed text-left text-sm">
           <colgroup>
-            <col className="w-[9%]" />
+            <col className="w-[4%]" />
+            <col className="w-[8%]" />
             <col className="w-[6%]" />
             <col className="w-[12%]" />
-            <col className="w-[25%]" />
+            <col className="w-[27%]" />
             <col className="w-[8%]" />
             <col className="w-[9%]" />
             <col className="w-[8%]" />
-            <col className="w-[8%]" />
-            <col className="w-[6%]" />
-            <col className="w-[9%]" />
+            <col className="w-[7%]" />
+            <col className="w-[11%]" />
           </colgroup>
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
+              <th className="px-2 py-3" aria-label="Outcome recorded" />
               <th className="px-4 py-3">Saved</th>
               <th className="px-4 py-3">By</th>
-              <th className="px-4 py-3">Dealer follow-up</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Vehicle</th>
               <th className="px-4 py-3">Mileage</th>
               <th className="whitespace-nowrap px-3 py-3">Current Bid</th>
-              <th className="px-4 py-3">Target</th>
               <th className="px-4 py-3">Profit</th>
               <th className="px-4 py-3">Risk</th>
               <th className="whitespace-nowrap px-3 py-3">Lot Logic recommendation</th>
@@ -379,8 +424,21 @@ export function DealsPipelineTable({
                     : "hover:bg-slate-50"
                 }
               >
-                <td className="px-4 py-3 text-slate-500">
-                  {formatDate(evaluation.updated_at)}
+                <td className="px-2 py-3 text-center">
+                  {isRecordedOutcome(evaluation.status) ? (
+                    <button type="button" onClick={() => openOutcomeDialog(evaluation)}
+                      title={evaluation.outcome_recorded_at ? "Edit outcome note" : "Record outcome"}
+                      aria-label={evaluation.outcome_recorded_at ? "Edit outcome note" : "Record outcome"}
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-md border text-sm font-black transition ${
+                        evaluation.outcome_recorded_at ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white text-transparent hover:border-emerald-500"
+                      }`}>✓</button>
+                  ) : null}
+                </td>
+                <td className="px-3 py-3 text-slate-500">
+                  <div className="flex flex-col text-xs leading-4">
+                    <span>{formatSavedDate(evaluation.updated_at).date}</span>
+                    <span>{formatSavedDate(evaluation.updated_at).time}</span>
+                  </div>
                 </td>
 
                 <td className="px-4 py-3 font-semibold text-slate-700">
@@ -395,7 +453,6 @@ export function DealsPipelineTable({
                   <DealStatusSelect
                     evaluationId={evaluation.id}
                     status={evaluation.status}
-                    outcomeReason={evaluation.outcome_reason}
                     onStatusChange={handleStatusChange}
                   />
                 </td>
@@ -415,10 +472,6 @@ export function DealsPipelineTable({
                 </td>
                 <td className="whitespace-nowrap px-3 py-3">
                   {money(evaluation.current_bid)}
-                </td>
-
-                <td className="whitespace-nowrap px-3 py-3">
-                  {money(evaluation.target_resale_used)}
                 </td>
 
                 <td className="whitespace-nowrap px-3 py-3 font-semibold">
@@ -460,6 +513,34 @@ export function DealsPipelineTable({
           </tbody>
         </table>
       </div>
+
+      {outcomeEvaluation ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget && !outcomeSaving) setOutcomeEvaluationId(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="outcome-dialog-title" className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="outcome-dialog-title" className="text-lg font-black text-slate-950">Tell AI why, for improved recommendations</h2>
+                <p className="mt-1 text-sm text-slate-600">Mark the outcome recorded now. A short note is optional and helps Lot Logic improve future recommendations.</p>
+              </div>
+              <button type="button" onClick={() => setOutcomeEvaluationId(null)} disabled={outcomeSaving} aria-label="Close" className="rounded-lg px-2 py-1 text-xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
+            </div>
+            <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">{outcomeEvaluation.vehicle_title || "Untitled Vehicle"}</div>
+            <label className="mt-4 block">
+              <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">What influenced the decision? <span className="font-medium normal-case">(optional)</span></span>
+              <textarea value={outcomeReason} onChange={(event) => setOutcomeReason(event.target.value)} maxLength={1200} rows={4}
+                placeholder="For example: condition, seller response, final price, or something the estimate missed."
+                className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              <span className="mt-1 block text-right text-xs text-slate-400">{outcomeReason.length}/1,200</span>
+            </label>
+            {outcomeError ? <p className="mt-2 text-sm font-semibold text-red-600">{outcomeError}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setOutcomeEvaluationId(null)} disabled={outcomeSaving} className="rounded-xl px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={() => void saveOutcome()} disabled={outcomeSaving} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{outcomeSaving ? "Saving…" : "Mark outcome recorded"}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

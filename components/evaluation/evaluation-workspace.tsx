@@ -8745,6 +8745,9 @@ export function EvaluationWorkspace({
                         <button type="button" onClick={() => openVehicleIdentityEditor(false)} disabled={vehicleIdentityUpdating} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50">
                           <span><span className="block text-xs font-black text-slate-950">Edit vehicle</span><span className="mt-0.5 block text-[10px] font-semibold text-slate-500">Correct year, make, model, or trim and refresh the search</span></span><span aria-hidden="true" className="text-lg font-black text-blue-700">→</span>
                         </button>
+                        <button type="button" onClick={() => { setActiveStage("market"); openCompMarketEditor(); }} disabled={marketCheckLoading} className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2.5 text-left hover:bg-blue-50 disabled:cursor-wait disabled:opacity-50">
+                          <span><span className="block text-xs font-black text-slate-950">Refine comparisons</span><span className="mt-0.5 block text-[10px] font-semibold text-slate-600">Expand the market or adjust vehicle filters for the comparison search</span></span><span aria-hidden="true" className="text-lg font-black text-blue-700">→</span>
+                        </button>
                       </div>
                       <button type="button" onClick={() => setWhyLotLogicOpen(true)} className="mt-3 text-left text-xs font-black text-blue-700 hover:text-blue-900">View dealer fit and market timing →</button>
                     </div>

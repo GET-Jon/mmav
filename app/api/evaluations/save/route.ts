@@ -252,10 +252,20 @@ export async function POST(request: Request) {
           ? (row.payload as JsonRecord)
           : {};
 
-      if (Object.prototype.hasOwnProperty.call(existingPayload, "dealerOutcomeReason")) {
+      const preservedOutcomeFields = [
+        "dealerOutcomeReason",
+        "dealerOutcomeRecordedAt",
+        "dealerOutcomeRecordedBy",
+      ];
+      const preservedOutcome = Object.fromEntries(
+        preservedOutcomeFields
+          .filter((field) => Object.prototype.hasOwnProperty.call(existingPayload, field))
+          .map((field) => [field, existingPayload[field]]),
+      );
+      if (Object.keys(preservedOutcome).length > 0) {
         row.payload = {
           ...nextPayload,
-          dealerOutcomeReason: existingPayload.dealerOutcomeReason,
+          ...preservedOutcome,
         };
       }
 
