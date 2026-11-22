@@ -227,6 +227,38 @@ export async function POST(request: Request) {
     };
 
     if (id) {
+      const { data: existingEvaluation, error: existingEvaluationError } = await supabase
+        .from("auction_evaluations")
+        .select("payload")
+        .eq("id", id)
+        .eq("company_id", company.companyId)
+        .single();
+
+      if (existingEvaluationError) {
+        return NextResponse.json(
+          { error: existingEvaluationError.message },
+          { status: 500 },
+        );
+      }
+
+      const existingPayload =
+        existingEvaluation?.payload &&
+        typeof existingEvaluation.payload === "object" &&
+        !Array.isArray(existingEvaluation.payload)
+          ? (existingEvaluation.payload as JsonRecord)
+          : {};
+      const nextPayload =
+        row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+          ? (row.payload as JsonRecord)
+          : {};
+
+      if (Object.prototype.hasOwnProperty.call(existingPayload, "dealerOutcomeReason")) {
+        row.payload = {
+          ...nextPayload,
+          dealerOutcomeReason: existingPayload.dealerOutcomeReason,
+        };
+      }
+
       const { data, error } = await supabase
         .from("auction_evaluations")
         .update({
