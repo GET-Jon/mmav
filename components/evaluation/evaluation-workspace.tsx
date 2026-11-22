@@ -1104,6 +1104,7 @@ export function EvaluationWorkspace({
   const [vehicleThumbnailError, setVehicleThumbnailError] = useState("");
   const [bidLogicOpen, setBidLogicOpen] = useState(false);
   const [profitDetailsOpen, setProfitDetailsOpen] = useState(false);
+  const [reviewRequiredOpen, setReviewRequiredOpen] = useState(false);
   const [compMarketEditorOpen, setCompMarketEditorOpen] = useState(false);
   const [compEditorTab, setCompEditorTab] = useState<"geography" | "vehicle">("geography");
   const [selectedCompMarketZips, setSelectedCompMarketZips] = useState<string[]>([]);
@@ -7378,6 +7379,79 @@ export function EvaluationWorkspace({
         </div>
       ) : null}
 
+      {reviewRequiredOpen ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setReviewRequiredOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="review-required-title"
+            className="flex max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 id="review-required-title" className="text-xl font-black text-slate-950">Why review is required</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">The deal may still be worth pursuing, but Lot Logic found something to verify before relying on the recommendation.</p>
+              </div>
+              <button type="button" onClick={() => setReviewRequiredOpen(false)} aria-label="Close review required explanation" className="rounded-full p-2 text-slate-500 hover:bg-slate-100">✕</button>
+            </div>
+            <div className="min-h-0 overflow-y-auto space-y-4 px-5 py-5 text-sm">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h3 className="text-xs font-black text-amber-950">What “Review required” means</h3>
+                <p className="mt-2 text-xs font-medium leading-5 text-amber-900">
+                  This is a verification flag, not an automatic pass or a claim that the deal is bad. The headline economics are only as reliable as the vehicle details and risks behind them. Confirm the flagged items before treating this as a bid recommendation.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-black text-slate-950">What triggered it for this evaluation</h3>
+                <ul className="mt-2 space-y-2 text-xs font-semibold leading-5 text-slate-700">
+                  {reviewReasons.map((reason) => (
+                    <li key={reason} className="flex gap-2">
+                      <span aria-hidden="true" className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                      <span>{reason.charAt(0).toUpperCase() + reason.slice(1)}.</span>
+                    </li>
+                  ))}
+                </ul>
+                {conditionIssueBullets.length ? (
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Condition items currently included</div>
+                    <div className="mt-2 space-y-2">
+                      {conditionIssueBullets.slice(0, 5).map((issue) => (
+                        <div key={issue.id} className="flex items-start justify-between gap-3 text-xs">
+                          <span className="font-semibold text-slate-700">{issue.description}</span>
+                          <span className="shrink-0 font-black text-violet-700">{money(issue.planningEstimate)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-black text-slate-950">What to do next</h3>
+                <p className="mt-2 text-xs font-medium leading-5 text-slate-600">
+                  Verify the disclosure, inspection, and supporting records for the items above. Update condition or deal assumptions if needed; Lot Logic will recalculate the economics and verdict.
+                </p>
+                {conditionIssueBullets.length ? (
+                  <button
+                    type="button"
+                    onClick={() => { setReviewRequiredOpen(false); setConditionStepConfirmed(false); setActiveStage("condition"); }}
+                    className="mt-3 rounded-lg bg-violet-700 px-3 py-2 text-xs font-black text-white hover:bg-violet-800"
+                  >
+                    Review condition →
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={() => setReviewRequiredOpen(false)} className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800">Done</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {bidLogicOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -8745,7 +8819,10 @@ export function EvaluationWorkspace({
                       <strong>Positive projected economics.</strong> The current cost is {money(currentAllInDifference)} above the recommended buy target. Negotiate toward that target before committing; the purchase still requires review.
                     </div>
                   ) : presentationDecision === "review" && reviewReasons.length ? (
-                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800">Review required: {reviewReasons.join(", ")}.</div>
+                    <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-100/70 px-3 py-3 text-center text-xs font-bold text-amber-800 sm:flex-row">
+                      <span>Review required: {reviewReasons.join(", ")}.</span>
+                      <button type="button" aria-haspopup="dialog" onClick={() => setReviewRequiredOpen(true)} className="shrink-0 font-black underline underline-offset-2 hover:text-amber-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">What does this mean?</button>
+                    </div>
                   ) : null}
                   {pricingEvidence.decisionReady && !needsCompSearch && currentCostPosition ? (
                     <button
