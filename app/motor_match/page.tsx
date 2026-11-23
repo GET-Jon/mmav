@@ -289,7 +289,19 @@ Customer priority: ${priority}`),
    <div className={styles.heroProcess}><strong>THREE QUICK CHOICES</strong><span>1. Choose your car</span><span>2. Set your budget</span><span>3. Pick your priorities</span><span className={styles.heroProcessResult}>Details optional · Then see what's realistic ↓</span></div>
   </section>:null}
 
-  {embedded?<div className={styles.embedProcess}><strong>THREE QUICK CHOICES</strong><span>Car → Budget → Priorities → Optional details → Market results</span></div>:null}
+  {embedded?<div className={styles.embedProcess} aria-label="How Motor Match works">
+   <strong className={styles.embedProcessTitle}>THREE QUICK CHOICES</strong>
+   <ol className={styles.embedSteps}>
+    <li><b>1</b><span>Choose a car</span></li>
+    <li><b>2</b><span>Set a budget</span></li>
+    <li><b>3</b><span>Pick a priority</span></li>
+   </ol>
+   <div className={styles.embedProcessFinish}>
+    <span><b>OPTIONAL</b> Fine-tune details</span>
+    <span className={styles.embedProcessArrow} aria-hidden="true">→</span>
+    <strong>View market matches</strong>
+   </div>
+  </div>:null}
 
   <section ref={builderRef} className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
    <div className={styles.panelTrack+(activePanel===null?" "+styles.panelTrackAllClosed:"")} data-active={activePanel===null?"all":activePanel}>
