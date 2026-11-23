@@ -338,596 +338,88 @@
 .heroProcess strong,.embedProcess strong{color:#987344;font-weight:900;letter-spacing:.09em;font-size:10px}
 .heroProcess>span:not(:last-child){padding-right:14px;border-right:1px solid #1112}
 .heroProcessResult{font-weight:800;color:#151515}
-.embedProcess{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:4px 0 11px;padding:0 3px;font-size:12px;font-weight:700;color:#444}
-.panelBuilder{margin-top:0;border-radius:18px}
-.panelTrack{min-height:308px}
-.expandPanel{flex:0 0 15%;background:#f3f2ee}
-.expandPanelOpen{flex:1 1 70%;background:#fff}
-.expandPanelClosed:hover{background:#eaf0ff}
-.panelHandle{min-height:308px;padding:17px 11px;gap:11px}
-.panelHandleWords{max-height:none;flex:1;justify-content:center;gap:12px;overflow:visible}
-.panelHandleWords strong{font-size:16px;white-space:normal;max-height:230px}
-.panelHandleWords small{font-size:11px;max-height:150px}
-.panelHandleChevron{font-size:19px;margin-top:0;font-weight:850}
-.panelInner{min-height:308px;padding:23px 27px 20px;gap:10px}
-.panelInner h3{font-size:clamp(22px,2vw,27px)}
-.panelInner p{font-size:12px;margin:0 0 1px}
-.panelInner .guidedVehicleGrid{gap:10px}
-.panelInner .guidedVehicleGrid .field select{min-height:43px}
-.panelInner .dreamLink{margin-top:0}
-.panelActions{padding-top:7px}
-.panelNext{padding:12px 17px}
-.panelInner .priorityChoice{padding:8px 11px}
-.answer{margin-top:16px}
-.shellEmbedded{max-width:1260px;margin-inline:auto;padding:0 16px 18px}
-@media(max-width:900px){
- .shell{padding:0 18px 28px}
- .hero{padding:26px 0 18px}
- .hero h1{font-size:clamp(38px,6.3vw,58px)}
- .heroProcess{gap:9px 12px}
- .panelTrack{min-height:0}
- .expandPanel,.expandPanelOpen{flex:0 0 auto}
- .panelHandle,.expandPanelOpen .panelHandle{min-height:61px;padding:12px 15px}
- .panelHandleWords{flex:1;max-height:none;gap:2px;justify-content:center;overflow:hidden}
- .panelHandleWords strong{font-size:15px;max-height:none}
- .panelHandleWords small{font-size:11px;max-height:none}
- .panelInner{min-height:0;padding:15px 19px 18px}
- .panelBuilder{border-radius:15px}
- .shellEmbedded{padding:0 10px 16px}
-}
-@media(max-width:520px){
- .shell{padding:0 12px 24px}
- .hero{padding:20px 0 16px}
- .hero h1{font-size:clamp(36px,9.4vw,46px)}
- .heroProcess{font-size:11px;align-items:flex-start;gap:6px 10px}
- .heroProcess strong{width:100%}
- .heroProcess>span:not(:last-child){padding-right:9px}
- .heroProcessResult{width:100%;margin-top:2px}
- .panelInner{padding:15px}
- .panelHandle,.expandPanelOpen .panelHandle{padding:12px 14px}
- .embedProcess{padding:0 3px;gap:6px}
- .shellEmbedded{padding:0 6px 14px}
-}
-
-
-/* V3 Mindful Motors visual alignment: understated cream, ink and muted brass */
-.shell{background:#f6f4ee;color:#171715}
-.shellEmbedded{background:transparent}
-.hero .eyebrow{color:#80603a}
-.heroProcess strong,.embedProcess strong{color:#80603a}
-.heroProcessResult{color:#181818}
-.panelBuilder{border-color:#e2dfd8;box-shadow:0 14px 36px #1818180a}
-.panelTrack{background:#f1efe9}
-.expandPanelClosed{background:#eeeae3}
-.expandPanelClosed:hover,.panelHandle:hover{background:#e9e4da}
-.expandPanelOpen{background:#fff}
-.panelBadge{background:#1a1a19}
-.panelHandleChevron{color:#987344}
-.panelHandleWords{gap:0}
-.panelHandleWords strong{font-size:15px;letter-spacing:-.012em;line-height:1.2;max-height:200px;overflow:hidden;text-overflow:ellipsis}
-.panelHandle{padding:16px 11px}
-.panelNext,.panelActions .primary{background:#181818!important;color:#fff!important;box-shadow:none}
-.panelNext:hover:not(:disabled),.panelActions .primary:hover:not(:disabled){background:#39332d!important}
-.panelNext:disabled{background:#aaa!important}
-.panelInner .priorityChoice:has(input:checked){background:#f6f0e6;border-color:#987344}
-.panelInner .priorityChoice input{accent-color:#987344}
-.panelInner .budgetPanel input[type=range]{accent-color:#987344}
-.field select:focus,.field input:focus{border-color:#987344;box-shadow:0 0 0 2px #98734420}
-.answer{scroll-margin-top:26px}
-.answer .cta button{background:#181818;color:#fff;box-shadow:none}
-.answer .cta button:hover{background:#39332d}
-@media(max-width:900px){
- .expandPanelOpen .panelHandle{background:#f3eee5}
- .expandPanelOpen .panelBadge{background:#1a1a19}
- .panelHandleWords strong{font-size:15px;white-space:normal;max-height:none}
- .panelHandleChevron{color:#987344}
-}
-
-
-/* Keep horizontal geometry stable as results, tabs, and forms change. */
-.shell,.shellEmbedded{width:100%;max-width:1260px;min-width:0;box-sizing:border-box}
-.panelBuilder,.panelTrack,.answer{width:100%;min-width:0;box-sizing:border-box}
-.panelTrack{overflow:hidden}
-.panelInner,.panelInner .advancedGrid,.panelInner .budgetPanel{min-width:0;max-width:100%;box-sizing:border-box}
-.answer{scroll-margin-top:18px}
-.fallbackExplanation{margin:0 0 14px;font-size:12px;line-height:1.5;color:#686158}
-.nextMoves .option{min-width:0}
-.nextMoves .option strong{font-size:clamp(16px,1.7vw,23px);line-height:1.2;white-space:normal;overflow-wrap:anywhere}
-.nextMoves .option b{white-space:normal;line-height:1.45}
-.vehicleSuggestionButton{border:0;background:#171715;color:#fff;border-radius:9px;padding:11px 14px;font-size:12px;font-weight:800;cursor:pointer}
-.vehicleSuggestionButton:hover{background:#3e362e}
-@media(max-width:900px){.nextMoves .option strong{font-size:19px}}
-
-
-/* Results V4: choices/confirmation first; market verdict second; lead handoff last */
-.refinementTop{padding:23px 26px 25px;background:#f7f5f0;border-bottom:1px solid #dedad2}
-.refinementTop .sectionKicker{margin-bottom:10px}
-.refinementTop .sectionKicker span{color:#876039}
-.refinementTop .sectionKicker strong{font-size:19px}
-.refinementIntro{font-size:13px;line-height:1.55;color:#615f59;max-width:840px;margin:0 0 16px}
-.refinementGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.refinementCard{text-align:left;min-width:0;display:flex;flex-direction:column;gap:8px;border:1px solid #ded6cb;border-radius:15px;padding:18px 19px;background:#fff;color:#181818;cursor:pointer;transition:border-color 180ms ease,box-shadow 180ms ease,transform 180ms ease}
-.refinementCard:hover{border-color:#9b7850;box-shadow:0 8px 18px #1b18130c;transform:translateY(-1px)}
-.refinementCard:focus-visible{outline:2px solid #927047;outline-offset:2px}
-.refinementCard>span{color:#866038;font-weight:800;font-size:12px}
-.refinementCard>strong{font-size:clamp(19px,2vw,25px);line-height:1.2;letter-spacing:-.028em;overflow-wrap:anywhere}
-.refinementCard>small{font-size:12px;color:#625f59;line-height:1.45;flex:1}
-.refinementCard>b{font-size:10px;letter-spacing:.075em;color:#876039;margin-top:8px}
-.refinementSuccess{background:#f4f8f4;border:1px solid #a1c7ac;border-radius:14px;padding:18px 20px;margin-bottom:12px;display:flex;flex-direction:column;gap:5px}
-.refinementSuccess>strong{font-size:23px;letter-spacing:-.03em;color:#1f5136}
-.refinementSuccess>span{font-size:14px;font-weight:750;color:#273d30}
-.refinementSuccess>p{font-size:12px;line-height:1.45;color:#506353;margin:5px 0 0}
-.answer .refinementTop .resetTarget{margin:14px 0 0;padding:0}
-.answer .refinementTop .suggestionHint{padding:0;margin:9px 0 0}
-.answer .answerLead{padding:22px 26px 20px}
-.answer .answerLead h2{font-size:clamp(29px,3vw,43px)}
-.answer .evidenceBar{padding:12px 26px}
-@media(max-width:720px){
- .refinementTop{padding:20px 18px}
- .refinementGrid{grid-template-columns:1fr}
- .refinementCard{padding:16px}
- .refinementTop .sectionKicker strong{font-size:17px}
- .refinementSuccess>strong{font-size:20px}
- .answer .answerLead{padding:20px 18px}
-}
-@media(prefers-reduced-motion:reduce){.refinementCard{transition:none}.refinementCard:hover{transform:none}}
-
-
-/* V3 form completion: all panels collapse into an editable three-part summary. */
-.panelTrackAllClosed{min-height:0}
-.panelTrackAllClosed .expandPanel{flex:1 1 0;min-width:0;transition:background 180ms ease}
-.panelTrackAllClosed .panelHandle{
- display:flex;flex-direction:row;align-items:center;justify-content:flex-start;
- min-height:98px;height:98px;padding:16px 19px;gap:13px
-}
-.panelTrackAllClosed .panelHandleWords{
- writing-mode:horizontal-tb;transform:none;min-width:0;max-height:none;
- display:flex;flex-direction:column;align-items:flex-start;justify-content:center;
- flex:1;gap:5px;overflow:hidden
-}
-.panelTrackAllClosed .panelHandleWords small{
- display:block;max-height:none;max-width:100%;color:#846645;opacity:1;
- font-size:10px;font-weight:900;letter-spacing:.12em;white-space:nowrap
-}
-.panelTrackAllClosed .panelHandleWords strong{
- max-height:none;font-size:16px;font-weight:850;letter-spacing:-.02em;
- white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%
-}
-.panelTrackAllClosed .panelHandleChevron{margin:0;flex-shrink:0;font-size:23px}
-.panelTrackAllClosed .panelContent{display:none}
-.panelHandleWords small{display:block;color:#80603a;opacity:1;font-size:10px;font-weight:900;letter-spacing:.08em}
-.panelInner .budgetInputLabel>div{
- display:flex;align-items:center;gap:8px;padding:9px 14px;
- background:#fff;border:1.5px solid #b7aa98;border-radius:11px;
- transition:border-color 160ms ease,box-shadow 160ms ease
-}
-.panelInner .budgetInputLabel>div:focus-within{
- border-color:#987344;box-shadow:0 0 0 3px #98734420
-}
-.panelInner .budgetInputLabel input[type=number]{width:100%;background:transparent;border:0;box-shadow:none;outline:0}
-.panelInner .budgetInputLabel input[type=number]:focus{box-shadow:none}
-@media(max-width:900px){
- .panelTrackAllClosed .expandPanel{flex:0 0 auto}
- .panelTrackAllClosed .panelHandle{height:auto;min-height:64px;padding:12px 15px}
- .panelTrackAllClosed .panelHandleWords strong{font-size:14px}
-}
-@media(max-width:520px){
- .panelTrackAllClosed .panelHandle{min-height:60px;padding:11px 13px}
- .panelTrackAllClosed .panelHandleWords small{font-size:9px}
- .panelTrackAllClosed .panelHandleWords strong{font-size:13px}
-}
-
-
-/* Three side-by-side choices at desktop size, responsive below. */
-.refinementGrid{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
-.refinementCard{height:100%;box-sizing:border-box}
-.refinementCard>strong{font-size:clamp(17px,1.75vw,23px)}
-/* Market verdict leads; evidence stays after refinement options. */
-.answer .answerLead{border-bottom:1px solid #eadad5}
-@media(max-width:900px){
- .refinementGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media(max-width:650px){
- .refinementGrid{grid-template-columns:1fr}
-}
-
-
-/* Small V3 polish: compact typed-budget field and clearer collapsed summaries. */
-.panelInner .budgetInputLabel>div{
- width:50%;
- max-width:340px;
- min-width:220px;
- box-sizing:border-box;
-}
-.panelTrackAllClosed .panelHandleWords{
- gap:10px;
-}
-.panelTrackAllClosed .panelHandleWords small,
-.panelTrackAllClosed .panelHandleWords strong{
- display:block;
- line-height:1.35;
-}
-@media(max-width:520px){
- .panelInner .budgetInputLabel>div{
-  width:100%;
-  max-width:100%;
-  min-width:0;
- }
- .panelTrackAllClosed .panelHandleWords{gap:7px}
-}
-
-
-/* Separate label from selected value on the vertical, partially collapsed tabs. */
-@media(min-width:901px){
- .expandPanelClosed .panelHandleWords{
-  gap:18px;
- }
- .expandPanelClosed .panelHandleWords small{
-  flex:none;
-  padding-inline-end:14px;
-  border-inline-end:1px solid #b8ab98;
-  line-height:1.2;
-  white-space:nowrap;
- }
- .expandPanelClosed .panelHandleWords strong{
-  flex:none;
-  line-height:1.25;
- }
-}
-/* The fully collapsed, horizontal summary retains its own spacing. */
-
-
-/* Two independently constrained vertical text lines between the navigation controls. */
-@media(min-width:901px){
- .expandPanelClosed .panelHandle{
-  display:grid;
-  grid-template-rows:34px minmax(0,1fr) 24px;
-  justify-items:center;
-  align-items:center;
-  gap:12px;
-  padding:17px 12px;
-  box-sizing:border-box;
- }
- .expandPanelClosed .panelBadge{grid-row:1}
- .expandPanelClosed .panelHandleWords{
-  grid-row:2;
-  writing-mode:horizontal-tb;
-  transform:none;
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  align-items:center;
-  justify-items:center;
-  gap:9px;
-  width:100%;
-  min-width:0;
-  height:100%;
-  max-height:none;
-  overflow:hidden;
- }
- .expandPanelClosed .panelHandleWords small,
- .expandPanelClosed .panelHandleWords strong{
-  writing-mode:vertical-rl;
-  transform:rotate(180deg);
-  display:block;
-  box-sizing:border-box;
-  height:auto;
-  max-height:100%;
-  max-width:100%;
-  margin:0;
-  padding:0;
-  border:0;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  line-height:1.3;
- }
- .expandPanelClosed .panelHandleWords small{
-  font-size:10px;
-  letter-spacing:.09em;
- }
- .expandPanelClosed .panelHandleWords strong{
-  font-size:14px;
-  font-weight:850;
- }
- .expandPanelClosed .panelHandleChevron{
-  grid-row:3;
-  margin:0;
-  align-self:center;
-  justify-self:center;
- }
-}
-
-
-/* Scope the two-line rotated tab treatment ONLY to partly collapsed tabs.
-   The all-closed results summary must retain horizontal labels and values. */
-@media(min-width:901px){
- .panelTrackAllClosed .expandPanelClosed .panelHandle{
-  display:flex;
-  flex-direction:row;
-  align-items:center;
-  justify-content:flex-start;
-  min-height:98px;
-  height:98px;
-  padding:16px 19px;
-  gap:13px;
- }
- .panelTrackAllClosed .expandPanelClosed .panelHandleWords{
-  display:flex;
-  flex:1;
-  flex-direction:column;
-  justify-content:center;
-  align-items:flex-start;
-  width:auto;
-  height:auto;
-  min-width:0;
-  max-height:none;
-  gap:9px;
-  overflow:hidden;
-  writing-mode:horizontal-tb;
-  transform:none;
- }
- .panelTrackAllClosed .expandPanelClosed .panelHandleWords small,
- .panelTrackAllClosed .expandPanelClosed .panelHandleWords strong{
-  writing-mode:horizontal-tb;
-  transform:none;
-  flex:initial;
-  display:block;
-  padding:0;
-  border:0;
-  width:100%;
-  height:auto;
-  max-height:none;
-  max-width:100%;
-  line-height:1.3;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
- }
- .panelTrackAllClosed .expandPanelClosed .panelHandleWords small{font-size:10px;letter-spacing:.12em}
- .panelTrackAllClosed .expandPanelClosed .panelHandleWords strong{font-size:16px}
- .panelTrackAllClosed .expandPanelClosed .panelHandleChevron{margin:0}
-}
-.refinementOutcome,.refinementProgress{border-radius:12px;padding:13px 16px;margin-bottom:16px;display:flex;flex-direction:column;gap:4px;font-size:13px}
-.refinementOutcome{background:#f0f6ee;border:1px solid #b8cfb5;color:#24462b}
-.refinementProgress{background:#f1ede5;border:1px solid #d7c8af;color:#5b4428}
-.refinementOutcome strong{font-size:15px}
-.refinementOutcome span{font-size:12px;line-height:1.45}
-
-/* Clear click affordance for each refinement choice. */
-.refinementCard>b{display:inline-flex;align-self:flex-start;align-items:center;margin-top:auto;padding:9px 11px;background:#1b1a18;color:#fff;border-radius:8px;font-size:10px;letter-spacing:.035em}
-.refinementCard:hover>b{background:#7b5a33}
-
-
-/* Four-stage search: three quick choices and one genuinely optional Details stage. */
-@media(min-width:901px){
- .panelTrack:not(.panelTrackAllClosed) .expandPanelClosed{flex:0 0 11%}
- .panelTrack:not(.panelTrackAllClosed) .expandPanelOpen{flex:1 1 67%;min-width:0}
- .panelTrackAllClosed .expandPanel{flex:1 1 25%;min-width:0}
- .panelTrackAllClosed .expandPanelClosed .panelHandle{padding:14px 12px;gap:10px}
- .panelTrackAllClosed .expandPanelClosed .panelHandleWords strong{font-size:14px}
- .panelTrack:not(.panelTrackAllClosed) .expandPanelClosed .panelHandleWords{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px}
- .panelTrack:not(.panelTrackAllClosed) .expandPanelClosed .panelHandle{padding:15px 9px}
-}
-.optionalPanel{background:#f2eee5}
-.optionalPanel.expandPanelClosed{background:#f0e9dd}
-.optionalPanel .panelBadge{background:#886a45;color:#fff}
-.optionalPanel .panelHandleWords small{color:#866543}
-.optionalPanel.expandPanelClosed:hover{background:#e9dfd0}
-.optionalKicker{display:inline-flex;width:max-content;color:#785a35;border:1px solid #c8b695;border-radius:999px;background:#f5eee2;padding:5px 10px;font-size:10px;font-weight:900;letter-spacing:.1em}
-.optionalPanel .panelInner .detailsGrid{margin:2px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;background:#f8f6f1;border:1px solid #e4dcca;border-radius:14px;padding:15px}
-.optionalPanel .panelInner .detailsGrid .field{min-width:0}
-.optionalPanel .panelInner .detailsGrid .field input,.optionalPanel .panelInner .detailsGrid .field select{width:100%;min-width:0;box-sizing:border-box}
-.priorityActions{display:flex;align-items:stretch;flex-wrap:wrap;gap:10px}
-.optionalButton{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:1px solid #99856a;border-radius:10px;padding:12px 16px;background:#fff;color:#25211c;font-size:12px;font-weight:850;cursor:pointer}
-.optionalButton span{font-size:10px;color:#896946;font-weight:900;letter-spacing:.07em}
-.optionalButton:hover{background:#f1eadd;border-color:#83613e}
-.optionalButton:focus-visible{outline:2px solid #987344;outline-offset:2px}
-@media(max-width:900px){
- .optionalPanel.expandPanelOpen .panelHandle{background:#f1e9db}
- .optionalPanel .panelInner .detailsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
- .priorityActions{flex-direction:column;align-items:stretch}
- .priorityActions .primary,.priorityActions .optionalButton{width:100%;max-width:none}
-}
-@media(max-width:520px){
- .optionalPanel .panelInner .detailsGrid{grid-template-columns:1fr;padding:12px}
- .panelTrackAllClosed .panelHandleWords strong{white-space:normal;overflow-wrap:anywhere}
-}
-
-
-/* Mindful Motor Co. dark brand palette */
-.shell{background:#050505;color:#f4f4f2}
-.topbar{border-color:#ffffff1c}
-.brand small,.apiMeter span{color:#f4f4f2}
-.mark,.stepNumber{background:#b51f2e;color:#fff}
-.apiMeter>div{border-color:#ffffff24}
-.apiMeter summary{background:#141414;border-color:#ffffff26;color:#f4f4f2}
-.hero .eyebrow,.sectionKicker span,.targetBlock .sectionKicker span,.nextMoves .sectionKicker span{color:#d13440}
-.builder,.panelBuilder,.answer,.modal{background:#101010;color:#f4f4f2;border-color:#ffffff1a;box-shadow:0 18px 50px #0008}
-.step,.constraintRow,.constraint,.options,.option,.leadForm,.targetBlock,.nextMoves,.evidenceBar,.cta,.panelActions{border-color:#ffffff16}
-.stepCar,.stepLimits,.stepSearch,.stepActive{background:#121212}
-.stepSearch,.stepActive{border-top-color:#b51f2e55}
-.stepSearch .stepNumber,.stepActive .stepNumber{background:#b51f2e}
-.stepSearch .stepCopy span,.stepActive .stepCopy span{color:#e24b56}
-.stepSearch .primary,.stepSearch .primaryReady,.primaryReady{background:#b51f2e!important;box-shadow:0 8px 22px #b51f2e38;color:#fff}
-.stepSearch .primaryReady:hover:not(:disabled),.primaryReady:hover:not(:disabled){background:#d02b39!important}
-.stepLimits .limitCard,.limitCard,.targetBlock .constraint,.steadyCard,.refinementCard,.refinementSuccess,.evidenceBar{background:#171717;border-color:#ffffff18;color:#f4f4f2}
-.field input,.field select,.leadForm input,.leadForm textarea,.optionalPanel .panelInner .detailsGrid,.budgetPanel,.budgetInputLabel>div{background:#171717;border-color:#ffffff24;color:#f4f4f2}
-.field input::placeholder,.leadForm input::placeholder,.leadForm textarea::placeholder{color:#a5a5a5}
-.field input:focus,.field select:focus,.makeFocus{border-color:#d13440!important;box-shadow:0 0 0 3px #b51f2e2b!important}
-.limitCard span,.field span,.stepCopy span,.resultVehicle,.constraint>span,.optionsTitle span,.cta span,.leadForm label>span{color:#c4c4c4}
-.limitCard input{accent-color:#c62836}
-.primary,.primaryReady,.panelNext,.cta button,.leadForm button{background:#b51f2e;color:#fff}
-.primary:hover:not(:disabled),.panelNext:hover:not(:disabled),.cta button:hover,.leadForm button:hover:not(:disabled){background:#d02b39}
-.panelTrack,.expandPanel,.panelInner,.panelHandle,.panelContent{background:#111}
-.expandPanelClosed,.expandPanelClosed:hover{background:#141414}
-.expandPanelOpen,.optionalPanel,.optionalPanel.expandPanelClosed{background:#171717}
-.panelHandle{color:#f4f4f2}
-.panelHandle:hover,.optionalPanel.expandPanelClosed:hover,.optionalPanel.expandPanelOpen .panelHandle{background:#202020}
-.panelBadge,.optionalPanel .panelBadge{background:#b51f2e;color:#fff}
-.panelHandleWords small,.optionalPanel .panelHandleWords small,.optionalKicker{color:#e04a55}
-.panelHandleWords strong{color:#f4f4f2}
-.optionalKicker{border-color:#b51f2e66;background:#241114}
-.optionalButton{background:#1c1c1c;border-color:#b51f2e88;color:#f4f4f2}
-.optionalButton span{color:#e04a55}
-.optionalButton:hover{background:#2a1316;border-color:#d13440}
-.optionalButton:focus-visible{outline-color:#d13440}
-.answerLead,.answer_green .answerLead,.answer_yellow .answerLead,.answer_red .answerLead{background:#151515;color:#f4f4f2;border-color:#ffffff18}
-.answer_green .answerLead{background:#102018}
-.answer_yellow .answerLead{background:#211b0e}
-.answer_red .answerLead{background:#241214}
-.answerLead h2,.resultVehicle{color:#f4f4f2}
-.answerLead p,.cta p,.refinementIntro{color:#c8c8c8}
-.answerLead:before{background:#b51f2e}
-.answer_green .answerLead:before{background:#20a466}
-.answer_yellow .answerLead:before{background:#d59b18}
-.answer_red .answerLead:before{background:#d94b43}
-.resultStatus{background:#1b1b1b;border-color:#ffffff28;color:#f4f4f2!important}
-.answer_green .resultStatus{background:#153122;color:#76d19f!important;border-color:#20a46666}
-.answer_yellow .resultStatus{background:#30250d;color:#f3cd70!important;border-color:#d59b1866}
-.answer_red .resultStatus{background:#351718;color:#ff9c94!important;border-color:#d94b4366}
-.good{background:#153b2b;color:#86dfae}
-.bad{background:#421b1c;color:#ffaaa3}
-.options,.optionsTitle,.nextMoves{background:#121212}
-.option{background:#171717;color:#f4f4f2;border-color:#ffffff1c}
-.option:hover:not(:disabled),.moveGrid .option:hover:not(:disabled){background:#222;border-color:#b51f2e88}
-.moveGrid .option{background:#171717;border-color:#b51f2e55}
-.moveGrid .option:after,.moveGrid .option span,.moveGrid .option b{color:#e04a55}
-.moveGrid .option:after{content:"APPLY";color:#e04a55}
-.answer .cta{background:#151515;color:#f4f4f2;border-color:#ffffff18}
-.answer .cta span{color:#e04a55}
-.answer .cta strong{color:#f4f4f2}
-.answer .cta p{color:#c8c8c8}
-.answer .cta button{background:#b51f2e;color:#fff;box-shadow:0 8px 22px #b51f2e38}
-.answer .cta button:hover{background:#d02b39}
-.refinementCard>b{background:#b51f2e;color:#fff}
-.refinementCard:hover>b{background:#d02b39}
-.refinementOutcome{background:#10271b;border-color:#236d44;color:#b9edcd}
-.refinementProgress{background:#211b0e;border-color:#70551f;color:#f1d898}
-.refreshStatus{background:#211416;border-color:#b51f2e55}
-.refreshDot{background:#d13440;box-shadow:0 0 0 0 #d1344055}
-.loadingModal{background:#141414;border-color:#ffffff24;color:#f4f4f2}
-.loadingCopy>span{color:#e04a55}
-.modalClose{background:#202020;border-color:#ffffff25;color:#f4f4f2}
-.modalIntro span{color:#e04a55}
-.success{background:#10271b;border-color:#20b66b55;color:#d5f2e1}
-.formError,.error,.vehicleError{background:#351718;border-color:#d94b4366;color:#ffaaa3}
-.dreamLink,.resetTarget,.vehicleSuggestionButton{color:#e04a55}
-@media(max-width:720px){
- .stepCar,.stepLimits,.stepSearch,.stepSearch.stepActive{background:#121212}
- .optionalPanel.expandPanelOpen .panelHandle{background:#202020}
-}
-
-
-/* Black canvas, clearer guidance, and stronger action contrast */
-.shell{background:#000;color:#f5f5f5}
-.shellEmbedded{background:#000}
-.builder,.panelBuilder,.answer,.modal{background:#000;border-color:#ffffff26}
-.panelTrack,.expandPanel,.expandPanelOpen,.expandPanelClosed,.expandPanelClosed:hover,
-.panelInner,.panelHandle,.panelContent,.optionalPanel,.optionalPanel.expandPanelClosed,
-.stepCar,.stepLimits,.stepSearch,.stepActive,.options,.optionsTitle,.nextMoves,
-.targetBlock,.answer .cta{background:#000}
-.expandPanelClosed:hover,.panelHandle:hover,.optionalPanel.expandPanelClosed:hover,
-.optionalPanel.expandPanelOpen .panelHandle{background:#101010}
-.expandPanel{border-color:#ffffff28}
-.panelBuilder{box-shadow:0 14px 36px #000}
-.apiMeter summary,.field input,.field select,.leadForm input,.leadForm textarea,
-.limitCard,.targetBlock .constraint,.steadyCard,.refinementSuccess,.evidenceBar,
-.moveGrid .option,.refinementCard,.optionalPanel .panelInner .detailsGrid,.budgetPanel,
-.budgetInputLabel>div{background:#0c0c0c;border-color:#ffffff2b;color:#f5f5f5}
-.panelHandleWords strong,.stepCopy strong,.panelInner h3,.hero h1,.modalIntro h2,
-.answerLead h2,.cta strong,.optionsTitle strong{color:#f5f5f5}
-.panelInner>p,.hero p,.fallbackExplanation,.refinementIntro,.cta p,
-.modalIntro p,.answerLead p,.evidenceBar span{color:#dedede;opacity:1;font-size:15px;line-height:1.55}
-.panelInner h3{font-size:24px;line-height:1.2;margin-bottom:8px}
-.stepCopy span,.field span,.budgetInputLabel>span,.limitCard span,
-.panelHandleWords small,.rangeEnds,.priorityChoice,.optionalKicker,
-.sectionKicker span,.dreamLink{font-size:12px}
-.field span,.budgetInputLabel>span,.limitCard span{color:#dedede;opacity:1}
-.rangeEnds{color:#bdbdbd}
-.panelHandleWords small{color:#ef737c;letter-spacing:.09em}
-.panelHandleWords strong{font-size:16px}
-.priorityChoice{background:#0c0c0c;border-color:#ffffff30;color:#f5f5f5;line-height:1.4}
-.dreamLink,.resetTarget,.vehicleSuggestionButton{font-size:14px;font-weight:750;color:#ff707a}
-.hero .eyebrow,.sectionKicker span,.targetBlock .sectionKicker span,
-.nextMoves .sectionKicker span,.optionalKicker{color:#ff707a}
-
-/* Make every action visible at rest, with a clear hover and keyboard focus */
-.primary,.primaryReady,.panelNext,.cta button,.leadForm button,
-.answer .cta button,.refinementCard>b{
- background:linear-gradient(145deg,#e23b49 0%,#a90f20 100%);
- color:#fff;border:1px solid #ff6a75;box-shadow:0 0 0 1px #b51f2e55,0 8px 22px #b51f2e55;
- font-size:12px;font-weight:900;letter-spacing:.07em;
-}
-.primary,.primaryReady,.panelNext,.cta button,.leadForm button,.answer .cta button{min-height:46px;padding:13px 18px}
-.primary:hover:not(:disabled),.primaryReady:hover:not(:disabled),.panelNext:hover:not(:disabled),
-.cta button:hover,.leadForm button:hover:not(:disabled),.answer .cta button:hover,
-.refinementCard:hover>b{background:linear-gradient(145deg,#ff5865 0%,#c61a2b 100%);transform:translateY(-1px);box-shadow:0 0 0 2px #ff536055,0 10px 26px #b51f2e66}
-.primary:focus-visible,.primaryReady:focus-visible,.panelNext:focus-visible,
-.cta button:focus-visible,.leadForm button:focus-visible,.optionalButton:focus-visible,
-.refinementCard:focus-visible,.dreamLink:focus-visible,.resetTarget:focus-visible{
- outline:3px solid #ff8790;outline-offset:3px
-}
-.primary:disabled,.panelNext:disabled,.cta button:disabled,.leadForm button:disabled{opacity:.58}
-.optionalButton,.resetTarget,.dreamLink,.vehicleSuggestionButton{
- border-color:#ff6a75;color:#fff;background:#0c0c0c;box-shadow:0 0 0 1px #b51f2e44
-}
-.optionalButton{min-height:46px;padding:12px 18px;font-size:13px;font-weight:900}
-.optionalButton span{font-size:11px;color:#ff8790}
-.optionalButton:hover{background:#241014;border-color:#ff8790}
-.panelBadge,.mark,.stepNumber{background:linear-gradient(145deg,#e23b49,#a90f20);color:#fff}
-.stepSearch .primaryReady,.stepActive .primaryReady{background:linear-gradient(145deg,#e23b49,#a90f20)!important}
-.field input:focus,.field select:focus,.makeFocus{border-color:#ff707a!important;box-shadow:0 0 0 3px #b51f2e45!important}
-.refinementCard{border:1px solid #ff707a66!important}
-.refinementCard:hover:not(:disabled){border-color:#ff8790!important;box-shadow:0 0 0 2px #b51f2e44,0 10px 26px #000}
-.refinementCard>b{align-self:flex-start}
-.resultStatus{font-size:11px!important}
-
-
-/* Embedded Wix canvas: extend the black page background to the full iframe */
-.shellEmbedded{
-  width:100%;
-  max-width:none;
-  min-height:0;
-  margin:0;
-  padding:10px 16px 22px;
-  box-sizing:border-box;
-  background:#000!important;
-}
-.shellEmbedded .builder{
-  width:100%;
-  max-width:none;
-  margin:0;
-  background:#000;
-}
 .embedProcess{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  justify-content:center;
-  gap:5px;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
   margin:0 0 14px;
-  padding:12px 16px 14px;
-  background:#000;
+  padding:14px 18px;
+  border:1px solid #ffffff22;
+  border-radius:12px;
+  background:linear-gradient(110deg,#080808,#111);
   color:#f4f4f4;
-  font-size:16px;
-  line-height:1.45;
+  line-height:1.4;
 }
-.embedProcess strong{
+.embedProcessTitle{
   color:#ff707a;
-  font-size:13px;
+  font-size:11px;
   font-weight:900;
   letter-spacing:.12em;
 }
-.embedProcess span{
-  color:#f4f4f4;
-  font-size:16px;
-  font-weight:650;
-  letter-spacing:.01em;
+.embedSteps{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin:0;
+  padding:0;
+  list-style:none;
 }
-@media(max-width:520px){
+.embedSteps li{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  min-height:40px;
+  padding:7px 11px;
+  border:1px solid #ffffff20;
+  border-radius:9px;
+  background:#111;
+  color:#f4f4f4;
+}
+.embedSteps li>b{
+  display:grid;
+  flex:0 0 24px;
+  width:24px;
+  height:24px;
+  place-items:center;
+  border-radius:50%;
+  background:linear-gradient(145deg,#e23b49,#a90f20);
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+}
+.embedSteps li>span{
+  color:#f4f4f4;
+  font-size:14px;
+  font-weight:700;
+}
+.embedProcessFinish{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  color:#c8c8c8;
+  font-size:12px;
+}
+.embedProcessFinish>span:first-child>b{
+  margin-right:6px;
+  color:#ff8790;
+  font-size:10px;
+  letter-spacing:.08em;
+}
+.embedProcessFinish>strong{
+  color:#f4f4f4;
+  font-size:12px;
+  font-weight:800;
+}
+.embedProcessArrow{color:#b68b4a;font-size:15px;font-weight:800}
+@media(max-width:720px){
   .shellEmbedded{padding:8px 10px 18px}
-  .embedProcess{padding:10px 8px 12px;margin-bottom:12px}
-  .embedProcess span{font-size:14px;line-height:1.5}
+  .embedProcess{padding:11px 12px;margin-bottom:12px;gap:9px}
+  .embedSteps{grid-template-columns:1fr}
+  .embedSteps li{min-height:36px}
+  .embedSteps li>span{font-size:13px}
+  .embedProcessFinish{gap:7px;font-size:11px}
 }
 
 
