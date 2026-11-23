@@ -816,3 +816,68 @@
  .stepCar,.stepLimits,.stepSearch,.stepSearch.stepActive{background:#121212}
  .optionalPanel.expandPanelOpen .panelHandle{background:#202020}
 }
+
+
+/* Black canvas, clearer guidance, and stronger action contrast */
+.shell{background:#000;color:#f5f5f5}
+.shellEmbedded{background:#000}
+.builder,.panelBuilder,.answer,.modal{background:#000;border-color:#ffffff26}
+.panelTrack,.expandPanel,.expandPanelOpen,.expandPanelClosed,.expandPanelClosed:hover,
+.panelInner,.panelHandle,.panelContent,.optionalPanel,.optionalPanel.expandPanelClosed,
+.stepCar,.stepLimits,.stepSearch,.stepActive,.options,.optionsTitle,.nextMoves,
+.targetBlock,.answer .cta{background:#000}
+.expandPanelClosed:hover,.panelHandle:hover,.optionalPanel.expandPanelClosed:hover,
+.optionalPanel.expandPanelOpen .panelHandle{background:#101010}
+.expandPanel{border-color:#ffffff28}
+.panelBuilder{box-shadow:0 14px 36px #000}
+.apiMeter summary,.field input,.field select,.leadForm input,.leadForm textarea,
+.limitCard,.targetBlock .constraint,.steadyCard,.refinementSuccess,.evidenceBar,
+.moveGrid .option,.refinementCard,.optionalPanel .panelInner .detailsGrid,.budgetPanel,
+.budgetInputLabel>div{background:#0c0c0c;border-color:#ffffff2b;color:#f5f5f5}
+.panelHandleWords strong,.stepCopy strong,.panelInner h3,.hero h1,.modalIntro h2,
+.answerLead h2,.cta strong,.optionsTitle strong{color:#f5f5f5}
+.panelInner>p,.hero p,.fallbackExplanation,.refinementIntro,.cta p,
+.modalIntro p,.answerLead p,.evidenceBar span{color:#dedede;opacity:1;font-size:15px;line-height:1.55}
+.panelInner h3{font-size:24px;line-height:1.2;margin-bottom:8px}
+.stepCopy span,.field span,.budgetInputLabel>span,.limitCard span,
+.panelHandleWords small,.rangeEnds,.priorityChoice,.optionalKicker,
+.sectionKicker span,.dreamLink{font-size:12px}
+.field span,.budgetInputLabel>span,.limitCard span{color:#dedede;opacity:1}
+.rangeEnds{color:#bdbdbd}
+.panelHandleWords small{color:#ef737c;letter-spacing:.09em}
+.panelHandleWords strong{font-size:16px}
+.priorityChoice{background:#0c0c0c;border-color:#ffffff30;color:#f5f5f5;line-height:1.4}
+.dreamLink,.resetTarget,.vehicleSuggestionButton{font-size:14px;font-weight:750;color:#ff707a}
+.hero .eyebrow,.sectionKicker span,.targetBlock .sectionKicker span,
+.nextMoves .sectionKicker span,.optionalKicker{color:#ff707a}
+
+/* Make every action visible at rest, with a clear hover and keyboard focus */
+.primary,.primaryReady,.panelNext,.cta button,.leadForm button,
+.answer .cta button,.refinementCard>b{
+ background:linear-gradient(145deg,#e23b49 0%,#a90f20 100%);
+ color:#fff;border:1px solid #ff6a75;box-shadow:0 0 0 1px #b51f2e55,0 8px 22px #b51f2e55;
+ font-size:12px;font-weight:900;letter-spacing:.07em;
+}
+.primary,.primaryReady,.panelNext,.cta button,.leadForm button,.answer .cta button{min-height:46px;padding:13px 18px}
+.primary:hover:not(:disabled),.primaryReady:hover:not(:disabled),.panelNext:hover:not(:disabled),
+.cta button:hover,.leadForm button:hover:not(:disabled),.answer .cta button:hover,
+.refinementCard:hover>b{background:linear-gradient(145deg,#ff5865 0%,#c61a2b 100%);transform:translateY(-1px);box-shadow:0 0 0 2px #ff536055,0 10px 26px #b51f2e66}
+.primary:focus-visible,.primaryReady:focus-visible,.panelNext:focus-visible,
+.cta button:focus-visible,.leadForm button:focus-visible,.optionalButton:focus-visible,
+.refinementCard:focus-visible,.dreamLink:focus-visible,.resetTarget:focus-visible{
+ outline:3px solid #ff8790;outline-offset:3px
+}
+.primary:disabled,.panelNext:disabled,.cta button:disabled,.leadForm button:disabled{opacity:.58}
+.optionalButton,.resetTarget,.dreamLink,.vehicleSuggestionButton{
+ border-color:#ff6a75;color:#fff;background:#0c0c0c;box-shadow:0 0 0 1px #b51f2e44
+}
+.optionalButton{min-height:46px;padding:12px 18px;font-size:13px;font-weight:900}
+.optionalButton span{font-size:11px;color:#ff8790}
+.optionalButton:hover{background:#241014;border-color:#ff8790}
+.panelBadge,.mark,.stepNumber{background:linear-gradient(145deg,#e23b49,#a90f20);color:#fff}
+.stepSearch .primaryReady,.stepActive .primaryReady{background:linear-gradient(145deg,#e23b49,#a90f20)!important}
+.field input:focus,.field select:focus,.makeFocus{border-color:#ff707a!important;box-shadow:0 0 0 3px #b51f2e45!important}
+.refinementCard{border:1px solid #ff707a66!important}
+.refinementCard:hover:not(:disabled){border-color:#ff8790!important;box-shadow:0 0 0 2px #b51f2e44,0 10px 26px #000}
+.refinementCard>b{align-self:flex-start}
+.resultStatus{font-size:11px!important}
