@@ -732,3 +732,87 @@
  .optionalPanel .panelInner .detailsGrid{grid-template-columns:1fr;padding:12px}
  .panelTrackAllClosed .panelHandleWords strong{white-space:normal;overflow-wrap:anywhere}
 }
+
+
+/* Mindful Motor Co. dark brand palette */
+.shell{background:#050505;color:#f4f4f2}
+.topbar{border-color:#ffffff1c}
+.brand small,.apiMeter span{color:#f4f4f2}
+.mark,.stepNumber{background:#b51f2e;color:#fff}
+.apiMeter>div{border-color:#ffffff24}
+.apiMeter summary{background:#141414;border-color:#ffffff26;color:#f4f4f2}
+.hero .eyebrow,.sectionKicker span,.targetBlock .sectionKicker span,.nextMoves .sectionKicker span{color:#d13440}
+.builder,.panelBuilder,.answer,.modal{background:#101010;color:#f4f4f2;border-color:#ffffff1a;box-shadow:0 18px 50px #0008}
+.step,.constraintRow,.constraint,.options,.option,.leadForm,.targetBlock,.nextMoves,.evidenceBar,.cta,.panelActions{border-color:#ffffff16}
+.stepCar,.stepLimits,.stepSearch,.stepActive{background:#121212}
+.stepSearch,.stepActive{border-top-color:#b51f2e55}
+.stepSearch .stepNumber,.stepActive .stepNumber{background:#b51f2e}
+.stepSearch .stepCopy span,.stepActive .stepCopy span{color:#e24b56}
+.stepSearch .primary,.stepSearch .primaryReady,.primaryReady{background:#b51f2e!important;box-shadow:0 8px 22px #b51f2e38;color:#fff}
+.stepSearch .primaryReady:hover:not(:disabled),.primaryReady:hover:not(:disabled){background:#d02b39!important}
+.stepLimits .limitCard,.limitCard,.targetBlock .constraint,.steadyCard,.refinementCard,.refinementSuccess,.evidenceBar{background:#171717;border-color:#ffffff18;color:#f4f4f2}
+.field input,.field select,.leadForm input,.leadForm textarea,.optionalPanel .panelInner .detailsGrid,.budgetPanel,.budgetInputLabel>div{background:#171717;border-color:#ffffff24;color:#f4f4f2}
+.field input::placeholder,.leadForm input::placeholder,.leadForm textarea::placeholder{color:#a5a5a5}
+.field input:focus,.field select:focus,.makeFocus{border-color:#d13440!important;box-shadow:0 0 0 3px #b51f2e2b!important}
+.limitCard span,.field span,.stepCopy span,.resultVehicle,.constraint>span,.optionsTitle span,.cta span,.leadForm label>span{color:#c4c4c4}
+.limitCard input{accent-color:#c62836}
+.primary,.primaryReady,.panelNext,.cta button,.leadForm button{background:#b51f2e;color:#fff}
+.primary:hover:not(:disabled),.panelNext:hover:not(:disabled),.cta button:hover,.leadForm button:hover:not(:disabled){background:#d02b39}
+.panelTrack,.expandPanel,.panelInner,.panelHandle,.panelContent{background:#111}
+.expandPanelClosed,.expandPanelClosed:hover{background:#141414}
+.expandPanelOpen,.optionalPanel,.optionalPanel.expandPanelClosed{background:#171717}
+.panelHandle{color:#f4f4f2}
+.panelHandle:hover,.optionalPanel.expandPanelClosed:hover,.optionalPanel.expandPanelOpen .panelHandle{background:#202020}
+.panelBadge,.optionalPanel .panelBadge{background:#b51f2e;color:#fff}
+.panelHandleWords small,.optionalPanel .panelHandleWords small,.optionalKicker{color:#e04a55}
+.panelHandleWords strong{color:#f4f4f2}
+.optionalKicker{border-color:#b51f2e66;background:#241114}
+.optionalButton{background:#1c1c1c;border-color:#b51f2e88;color:#f4f4f2}
+.optionalButton span{color:#e04a55}
+.optionalButton:hover{background:#2a1316;border-color:#d13440}
+.optionalButton:focus-visible{outline-color:#d13440}
+.answerLead,.answer_green .answerLead,.answer_yellow .answerLead,.answer_red .answerLead{background:#151515;color:#f4f4f2;border-color:#ffffff18}
+.answer_green .answerLead{background:#102018}
+.answer_yellow .answerLead{background:#211b0e}
+.answer_red .answerLead{background:#241214}
+.answerLead h2,.resultVehicle{color:#f4f4f2}
+.answerLead p,.cta p,.refinementIntro{color:#c8c8c8}
+.answerLead:before{background:#b51f2e}
+.answer_green .answerLead:before{background:#20a466}
+.answer_yellow .answerLead:before{background:#d59b18}
+.answer_red .answerLead:before{background:#d94b43}
+.resultStatus{background:#1b1b1b;border-color:#ffffff28;color:#f4f4f2!important}
+.answer_green .resultStatus{background:#153122;color:#76d19f!important;border-color:#20a46666}
+.answer_yellow .resultStatus{background:#30250d;color:#f3cd70!important;border-color:#d59b1866}
+.answer_red .resultStatus{background:#351718;color:#ff9c94!important;border-color:#d94b4366}
+.good{background:#153b2b;color:#86dfae}
+.bad{background:#421b1c;color:#ffaaa3}
+.options,.optionsTitle,.nextMoves{background:#121212}
+.option{background:#171717;color:#f4f4f2;border-color:#ffffff1c}
+.option:hover:not(:disabled),.moveGrid .option:hover:not(:disabled){background:#222;border-color:#b51f2e88}
+.moveGrid .option{background:#171717;border-color:#b51f2e55}
+.moveGrid .option:after,.moveGrid .option span,.moveGrid .option b{color:#e04a55}
+.moveGrid .option:after{content:"APPLY";color:#e04a55}
+.answer .cta{background:#151515;color:#f4f4f2;border-color:#ffffff18}
+.answer .cta span{color:#e04a55}
+.answer .cta strong{color:#f4f4f2}
+.answer .cta p{color:#c8c8c8}
+.answer .cta button{background:#b51f2e;color:#fff;box-shadow:0 8px 22px #b51f2e38}
+.answer .cta button:hover{background:#d02b39}
+.refinementCard>b{background:#b51f2e;color:#fff}
+.refinementCard:hover>b{background:#d02b39}
+.refinementOutcome{background:#10271b;border-color:#236d44;color:#b9edcd}
+.refinementProgress{background:#211b0e;border-color:#70551f;color:#f1d898}
+.refreshStatus{background:#211416;border-color:#b51f2e55}
+.refreshDot{background:#d13440;box-shadow:0 0 0 0 #d1344055}
+.loadingModal{background:#141414;border-color:#ffffff24;color:#f4f4f2}
+.loadingCopy>span{color:#e04a55}
+.modalClose{background:#202020;border-color:#ffffff25;color:#f4f4f2}
+.modalIntro span{color:#e04a55}
+.success{background:#10271b;border-color:#20b66b55;color:#d5f2e1}
+.formError,.error,.vehicleError{background:#351718;border-color:#d94b4366;color:#ffaaa3}
+.dreamLink,.resetTarget,.vehicleSuggestionButton{color:#e04a55}
+@media(max-width:720px){
+ .stepCar,.stepLimits,.stepSearch,.stepSearch.stepActive{background:#121212}
+ .optionalPanel.expandPanelOpen .panelHandle{background:#202020}
+}
