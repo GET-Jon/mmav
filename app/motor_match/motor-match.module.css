@@ -1064,3 +1064,21 @@
   .shell .answer .refinementTop{padding:20px 18px}
   .shell .answer .refinementCard{padding:16px}
 }
+
+
+/* Keep the refinement section label at full contrast over black. */
+.shell .answer .refinementTop .sectionKicker{
+  gap:12px;
+  align-items:baseline;
+}
+.shell .answer .refinementTop .sectionKicker span{
+  color:#ff8790!important;
+  opacity:1!important;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.11em;
+}
+.shell .answer .refinementTop .sectionKicker strong{
+  color:#fff!important;
+  opacity:1!important;
+}
