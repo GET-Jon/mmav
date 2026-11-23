@@ -929,3 +929,13 @@
   .embedProcess{padding:10px 8px 12px;margin-bottom:12px}
   .embedProcess span{font-size:14px;line-height:1.5}
 }
+
+
+/* Keep the iframe's root canvas and scrollbar track black as well. */
+:global(html):has(.shellEmbedded),
+:global(body):has(.shellEmbedded){
+  background:#000!important;
+  color-scheme:dark;
+  scrollbar-color:#242424 #000;
+}
+:global(body):has(.shellEmbedded)::-webkit-scrollbar-track{background:#000}
