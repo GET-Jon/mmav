@@ -2,7 +2,6 @@ class MotorMatchEmbed extends HTMLElement {
   constructor() {
     super();
     this._onMessage = this._onMessage.bind(this);
-    this._fitWidth = this._fitWidth.bind(this);
   }
 
   connectedCallback() {
@@ -12,7 +11,12 @@ class MotorMatchEmbed extends HTMLElement {
     this.style.display = "block";
     this.style.minWidth = "0";
     this.style.height = "620px";
-    this.style.transition = "height 180ms ease,width 180ms ease,transform 180ms ease";
+    this.style.transition = "height 180ms ease";
+    this.style.boxSizing = "border-box";
+    this.style.width = "min(1260px, calc(100vw - 48px))";
+    this.style.maxWidth = "none";
+    this.style.left = "50%";
+    this.style.transform = "translateX(-50%)";
     this.style.position = "relative";
     this.style.zIndex = "1";
 
@@ -33,49 +37,31 @@ class MotorMatchEmbed extends HTMLElement {
     this._iframe = iframe;
     this.appendChild(iframe);
     window.addEventListener("message", this._onMessage);
-    window.addEventListener("resize", this._fitWidth);
-    this._fitWidth();
-    this._fitTimers = [80, 300, 900].map(ms => window.setTimeout(this._fitWidth, ms));
   }
 
   disconnectedCallback() {
     window.removeEventListener("message", this._onMessage);
-    window.removeEventListener("resize", this._fitWidth);
-    (this._fitTimers || []).forEach(clearTimeout);
-  }
-
-  _fitWidth() {
-    const viewport = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
-    if (!viewport) return;
-
-    if (viewport < 760) {
-      this.style.width = "100%";
-      this.style.maxWidth = "100%";
-      this.style.transform = "none";
-      return;
-    }
-
-    const targetWidth = Math.min(1440, Math.max(980, viewport - 64));
-    const rect = this.getBoundingClientRect();
-    const currentCenter = rect.left + rect.width / 2;
-    const viewportCenter = viewport / 2;
-    const shift = viewportCenter - currentCenter;
-
-    this.style.width = targetWidth + "px";
-    this.style.maxWidth = "none";
-    this.style.transform = "translateX(" + Math.round(shift) + "px)";
   }
 
   _onMessage(event) {
     if (event.origin !== "https://yourlotlogic.com") return;
     if (event.source !== this._iframe?.contentWindow) return;
     const data = event.data;
-    if (!data || data.type !== "motor-match:resize") return;
+    if (!data) return;
+    if (data.type === "motor-match:scroll-results") {
+      const offset = Number(data.offset);
+      if (!Number.isFinite(offset) || offset < 0 || offset > 10000) return;
+      const top = window.scrollY + this._iframe.getBoundingClientRect().top + offset - 90;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduced ? "auto" : "smooth" });
+      return;
+    }
+    if (data.type !== "motor-match:resize") return;
 
     const requested = Number(data.height);
     if (!Number.isFinite(requested)) return;
 
-    const next = Math.max(420, Math.min(2400, Math.ceil(requested)));
+    const next = Math.max(420, Math.min(12000, Math.ceil(requested)));
     const current = parseFloat(this.style.height) || 0;
     if (Math.abs(next - current) < 2) return;
     this.style.height = `${next}px`;
