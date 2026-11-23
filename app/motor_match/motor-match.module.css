@@ -1082,3 +1082,104 @@
   color:#fff!important;
   opacity:1!important;
 }
+
+
+/* Make alternatives read as choices, with OR in the space between cards. */
+.closeRefinementGrid{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  column-gap:38px!important;
+  row-gap:30px!important;
+}
+.refinementChoice{position:relative;min-width:0;min-height:100%}
+.refinementChoice .refinementCard{width:100%;height:100%;box-sizing:border-box}
+.refinementOr{
+  position:absolute;
+  z-index:2;
+  right:0;
+  top:50%;
+  transform:translate(50%,-50%);
+  padding:6px 8px;
+  border:1px solid #ff707a75;
+  border-radius:999px;
+  background:#000;
+  color:#ff9aa1;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.1em;
+  line-height:1;
+}
+@media(max-width:900px){
+  .closeRefinementGrid{
+    grid-template-columns:minmax(0,1fr)!important;
+    row-gap:32px!important;
+  }
+  .refinementOr{
+    right:50%;
+    top:auto;
+    bottom:-25px;
+    transform:translateX(50%);
+    background:#000;
+  }
+}
+
+/* Successful searches: one clear yes and one direct request action. */
+.successNextStep{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  margin-top:8px;
+  padding:22px 24px;
+  border:1px solid #ffffff28;
+  border-radius:14px;
+  background:#0c0c0c;
+}
+.successNextStep>div{flex:1 1 auto;min-width:0}
+.successNextStep>div>span{
+  display:block;
+  margin-bottom:5px;
+  color:#ff8790;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.12em;
+}
+.successNextStep>div>strong{
+  display:block;
+  color:#fff;
+  font-size:22px;
+  line-height:1.2;
+}
+.successNextStep>div>p{
+  margin:6px 0 0;
+  color:#d0d0d0;
+  font-size:14px;
+  line-height:1.5;
+}
+.successNextStep>button{
+  flex:0 1 340px;
+  min-height:50px;
+  max-width:100%;
+  padding:14px 18px;
+  border:1px solid #ff6a75;
+  border-radius:10px;
+  background:linear-gradient(145deg,#e23b49 0%,#a90f20 100%);
+  box-shadow:0 0 0 1px #b51f2e55,0 8px 22px #b51f2e55;
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.07em;
+  cursor:pointer;
+}
+.successNextStep>button:hover{
+  background:linear-gradient(145deg,#ff5865 0%,#c61a2b 100%);
+  transform:translateY(-1px);
+  box-shadow:0 0 0 2px #ff536055,0 10px 26px #b51f2e66;
+}
+.successNextStep>button:focus-visible{
+  outline:3px solid #ff8790;
+  outline-offset:3px;
+}
+@media(max-width:900px){
+  .successNextStep{align-items:stretch;flex-direction:column;gap:16px}
+  .successNextStep>button{width:100%;flex:1 1 auto}
+}
