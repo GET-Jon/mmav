@@ -27,6 +27,8 @@ const LOADING_MESSAGES=[
 
 export default function MotorMatchPage(){
  const [year,setYear]=useState<number|null>(null),[make,setMake]=useState(""),[model,setModel]=useState(""),[trim,setTrim]=useState(""),[budget,setBudget]=useState(30000),[mileage,setMileage]=useState(60000),[zip,setZip]=useState(""),[distance,setDistance]=useState(500);
+ const [mileageDraft,setMileageDraft]=useState("60000"),[mileageError,setMileageError]=useState("");
+ const mileageDraftRef=useRef("60000");
  const [started,setStarted]=useState(false),[result,setResult]=useState<MatchResponse|null>(null),[loading,setLoading]=useState(false),[loadingMessageIndex,setLoadingMessageIndex]=useState(0),[error,setError]=useState(""),[vehicleError,setVehicleError]=useState(""),[sessionCalls,setSessionCalls]=useState(0),[showForm,setShowForm]=useState(false);
  const [name,setName]=useState(""),[email,setEmail]=useState(""),[phone,setPhone]=useState(""),[notes,setNotes]=useState(""),[sending,setSending]=useState(false),[sent,setSent]=useState(false),[formError,setFormError]=useState("");
  const [makes,setMakes]=useState<string[]>([]),[models,setModels]=useState<string[]>([]),[validYears,setValidYears]=useState<number[]>([]);
@@ -50,12 +52,31 @@ export default function MotorMatchPage(){
  const builderRef=useRef<HTMLElement|null>(null);
  const scrollAfterSearch=useRef(false);
  const makeInputRef=useRef<HTMLSelectElement|null>(null);
+ const mileageInputRef=useRef<HTMLInputElement|null>(null);
+ const validateMileageDraft=useCallback((focusField=true)=>{
+  const raw=mileageDraftRef.current.trim();
+  const value=Number(raw);
+  if(!Number.isInteger(value)||value<1000||value>500000){
+   setMileageError("Enter a whole-number maximum mileage between 1,000 and 500,000.");
+   if(focusField){
+    setActivePanel(3);
+    window.requestAnimationFrame(()=>mileageInputRef.current?.focus());
+   }
+   return false;
+  }
+  setMileage(value);
+  setMileageDraft(String(value));
+  mileageDraftRef.current=String(value);
+  setMileageError("");
+  return true;
+ },[]);
  const rounded=(value:number,step:number)=>Math.ceil(value/step)*step;
  const vehicleReady=Boolean(year&&make.trim()&&model.trim());
  const makeNeedsFocus=!make.trim();
 
  const analyze=useCallback(async()=>{
   if(!vehicleReady||!year){scrollAfterSearch.current=false;setError("Add a year, make, and model first.");return}
+  if(!validateMileageDraft()){scrollAfterSearch.current=false;return}
   const id=++requestId.current;setLoading(true);setError("");setVehicleError("");setVehicleSuggestion(null);
   try{
    const response=await fetch("/api/motor_match",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year,make:make.trim(),model:model.trim(),trim:trim.trim(),budget,mileage,zip:zip.trim(),distance})});
@@ -77,7 +98,7 @@ export default function MotorMatchPage(){
    }
   }catch(cause){if(id===requestId.current){scrollAfterSearch.current=false;setError(cause instanceof Error?cause.message:"We could not check the market.")}}
   finally{if(id===requestId.current)setLoading(false)}
- },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip,started]);
+ },[budget,distance,make,mileage,model,trim,vehicleReady,year,zip,started,validateMileageDraft]);
 
  useEffect(()=>{
   const originalGutter=document.documentElement.style.scrollbarGutter;
@@ -173,7 +194,9 @@ export default function MotorMatchPage(){
  },[loading,started]);
 
  async function submitLead(e:React.FormEvent){
-  e.preventDefault();if(!manualInquiry&&(!result||!year))return;setSending(true);setFormError("");
+  e.preventDefault();if(!manualInquiry&&(!result||!year))return;
+  if(!validateMileageDraft(false)){setFormError("Please correct the maximum mileage in Optional details before submitting.");setActivePanel(3);return}
+  setSending(true);setFormError("");
   try{
    const response=await fetch("/api/motor_match/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     manualInquiry,name,email,phone,notes:notes+(manualInquiry?"":`
@@ -195,7 +218,7 @@ Customer priority: ${priority}`),
  const applySuggestion=(kind:"price"|"mileage"|"year",value:number)=>{
   saveOriginal();setAppliedSuggestion(kind);
   if(kind==="price"){setBudget(value);setBudgetDraft(String(value))}
-  if(kind==="mileage")setMileage(value);
+  if(kind==="mileage"){setMileage(value);setMileageDraft(String(value));mileageDraftRef.current=String(value);setMileageError("")}
   if(kind==="year")setYear(value);
  };
  const queueRefinement=(label:string,action:()=>void,verified:boolean)=>{
@@ -203,7 +226,7 @@ Customer priority: ${priority}`),
   else{pendingRefinement.current=null;setRefinementOutcome(null);}
   action();
  };
- const restoreOriginal=()=>{if(!originalTarget)return;setYear(originalTarget.year);setBudget(originalTarget.budget);setBudgetDraft(String(originalTarget.budget));setMileage(originalTarget.mileage);setOriginalTarget(null);setAppliedSuggestion("");};
+ const restoreOriginal=()=>{if(!originalTarget)return;setYear(originalTarget.year);setBudget(originalTarget.budget);setBudgetDraft(String(originalTarget.budget));setMileage(originalTarget.mileage);setMileageDraft(String(originalTarget.mileage));mileageDraftRef.current=String(originalTarget.mileage);setMileageError("");setOriginalTarget(null);setAppliedSuggestion("");};
  const refinementOptions=useMemo(()=>{
   if(!result||result.state==="green")return [];
   type Choice={key:string;heading:string;value:string;detail:string;verified:boolean;action:()=>void;focus:"year"|"mileage"|"budget"|"other"};
@@ -313,7 +336,7 @@ Customer priority: ${priority}`),
       <p>Fine-tune your search before checking the market. All fields have usable defaults.</p>
       <div className={styles.advancedGrid+" "+styles.detailsGrid}>
        <Field label="MODEL YEAR"><select tabIndex={activePanel===3?0:-1} value={year??""} disabled={!model} onChange={e=>setYear(e.target.value?Number(e.target.value):null)}><option value="">{model?"Select year":"Choose model first"}</option>{validYears.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
-       <Field label="MAXIMUM MILEAGE"><input tabIndex={activePanel===3?0:-1} inputMode="numeric" type="number" min={1000} max={500000} step={1000} value={mileage} onChange={e=>setMileage(Math.max(1000,Math.min(500000,Number(e.target.value)||1000)))}/></Field>
+       <Field label="MAXIMUM MILEAGE"><input ref={mileageInputRef} tabIndex={activePanel===3?0:-1} inputMode="numeric" type="number" min={1000} max={500000} step={1000} value={mileageDraft} aria-invalid={Boolean(mileageError)} aria-describedby={mileageError?"mm-mileage-error":undefined} onChange={e=>{mileageDraftRef.current=e.target.value;setMileageDraft(e.target.value)}} onBlur={()=>validateMileageDraft(false)} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur()}}/>{mileageError?<small id="mm-mileage-error" className={styles.fieldValidationError} role="alert">{mileageError}</small>:null}</Field>
        <Field label="TRIM (OPTIONAL)"><input tabIndex={activePanel===3?0:-1} value={trim} placeholder="Any trim" onChange={e=>setTrim(e.target.value)}/></Field>
        <Field label="ZIP CODE (OPTIONAL)"><input tabIndex={activePanel===3?0:-1} inputMode="numeric" maxLength={5} value={zip} onChange={e=>setZip(e.target.value.replace(/\D/g,"").slice(0,5))} placeholder="Nationwide"/></Field>
        <Field label="SEARCH RADIUS"><select tabIndex={activePanel===3?0:-1} value={distance} onChange={e=>setDistance(Number(e.target.value))}><option value={100}>100 miles</option><option value={250}>250 miles</option><option value={500}>500 miles</option><option value={1000}>1,000 miles</option></select></Field>
