@@ -977,3 +977,90 @@
   outline:2px solid #ff8790;
   outline-offset:2px;
 }
+
+
+/* Dark result surface: keep the complete results flow readable and on-brand. */
+.shell .answer{
+  background:#000!important;
+  color:#f5f5f5;
+  border-color:#ffffff24;
+}
+.shell .answer .refinementTop{
+  background:#000!important;
+  color:#f5f5f5!important;
+  border-bottom:1px solid #ffffff20;
+}
+.shell .answer .refinementTop .sectionKicker strong{color:#f5f5f5}
+.shell .answer .refinementTop .sectionKicker span{color:#ff707a}
+.shell .answer .refinementIntro{color:#d0d0d0!important}
+.shell .answer .refinementCard{
+  background:#101010!important;
+  border:1px solid #ff707a66!important;
+  color:#f5f5f5!important;
+}
+.shell .answer .refinementCard>span{color:#ff8790!important}
+.shell .answer .refinementCard>strong{color:#fff!important}
+.shell .answer .refinementCard>small{color:#c8c8c8!important}
+.shell .answer .refinementCard>b{
+  background:linear-gradient(145deg,#e23b49,#a90f20)!important;
+  color:#fff!important;
+}
+.shell .answer .refinementCard:hover>b{
+  background:linear-gradient(145deg,#ff5865,#c61a2b)!important;
+}
+.shell .answer .refinementSuccess{
+  background:#102018!important;
+  border-color:#236d44!important;
+  color:#f2fff6!important;
+}
+.shell .answer .refinementSuccess>span,
+.shell .answer .refinementSuccess>p{color:#c8dfd0!important}
+.shell .answer .refinementProgress{
+  background:#211b0e!important;
+  border-color:#70551f!important;
+  color:#f1d898!important;
+}
+.shell .answer .refinementOutcome{
+  background:#10271b!important;
+  border-color:#236d44!important;
+  color:#d9f4e3!important;
+}
+.shell .answer .evidenceBar{
+  background:#090909!important;
+  border-color:#ffffff20!important;
+  color:#f5f5f5!important;
+}
+.shell .answer .evidenceBar strong{color:#fff!important}
+.shell .answer .evidenceBar span{color:#c8c8c8!important}
+.shell .answer .cta{
+  background:#050505!important;
+  color:#f5f5f5!important;
+  border-color:#ffffff20!important;
+  flex-wrap:wrap;
+}
+.shell .answer .cta>div{flex:1 1 480px;min-width:0}
+.shell .answer .ctaSummary{
+  width:100%;
+  box-sizing:border-box;
+  background:#101010!important;
+  border:1px solid #ffffff28!important;
+  color:#e8e8e8!important;
+}
+.shell .answer .ctaSummary b{color:#fff!important}
+.shell .answer .cta button{
+  box-sizing:border-box;
+  flex:0 1 320px;
+  width:auto;
+  max-width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+@media(max-width:900px){
+  .shell .answer .cta{align-items:stretch}
+  .shell .answer .cta>div{flex-basis:100%}
+  .shell .answer .cta button{flex:1 1 100%;width:100%;max-width:none}
+}
+@media(max-width:720px){
+  .shell .answer .refinementTop{padding:20px 18px}
+  .shell .answer .refinementCard{padding:16px}
+}
