@@ -242,14 +242,14 @@ Customer priority: ${priority}`),
  },[result,priority,year,make,model,budget,mileage]);
  const headline=useMemo(()=>{
   if(!result)return "";
-  if(result.state==="green")return "Yes — this is realistic.";
+  if(result.state==="green")return "Yes — your search is a match.";
   if(result.state==="yellow")return "Your search is possible, but choices are limited.";
   return "You're close, but something has to give.";
  },[result]);
 
  const subhead=useMemo(()=>{
   if(!result)return "";
-  if(result.state==="green")return result.depth==="strong"?"Strong availability around your target.":"Healthy availability around your target.";
+  if(result.state==="green")return `We found ${result.matchCount} matching ${result.matchCount===1?"listing":"listings"} in the current market sample.`;
   if(result.state==="yellow")return "Some listings may fit, but finding the right condition, history, and options could take patience.";
   return "We couldn't find enough current inventory satisfying both limits at once.";
  },[result]);
@@ -333,50 +333,44 @@ Customer priority: ${priority}`),
   {result?<section ref={resultsRef} id="motor-match-results" className={styles.answer+" "+styles["answer_"+result.state]}>
    <div className={styles.answerLead}>
     <div className={styles.resultStatusRow}>
-     <span className={styles.resultStatus}>{result.state==="green"?"REALISTIC TARGET":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
+     <span className={styles.resultStatus}>{result.state==="green"?"MATCH FOUND":result.state==="yellow"?"THIN MARKET":"MARKET MISMATCH"}</span>
      <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
     </div>
     <h2>{headline}</h2>
     <p>{subhead}</p>
    </div>
    <div className={styles.refinementTop}>
-    {loading&&pendingRefinement.current?<div className={styles.refinementProgress} role="status">Checking how your updated criteria change the available listings…</div>:null}
-    {refinementOutcome&&!loading?<div className={styles.refinementOutcome} role="status">
+    {result.state!=="green"&&loading&&pendingRefinement.current?<div className={styles.refinementProgress} role="status">Checking how your updated criteria change the available listings…</div>:null}
+    {result.state!=="green"&&refinementOutcome&&!loading?<div className={styles.refinementOutcome} role="status">
      <strong>{refinementOutcome.after>refinementOutcome.before?"Your updated search found more matches.":refinementOutcome.after>0?"Your updated search has matching listings.":"No confirmed matches with this adjustment yet."}</strong>
      <span>{refinementOutcome.label} · {refinementOutcome.before} → {refinementOutcome.after} matching listings in the respective market samples.</span>
     </div>:null}
     {result.state==="green"?<>
-     <div className={styles.sectionKicker}><span>YOUR MOTOR MATCH</span><strong>Your search is realistic.</strong></div>
-     <div className={styles.refinementSuccess}>
-      <strong>{year} {make} {model}</strong>
-      <span>{money(budget)} budget · up to {num(mileage)} miles</span>
-      <p>{result.matchCount} matching listings in the current market sample. Vehicle condition and availability still require verification.</p>
+     <div className={styles.successNextStep}>
+      <div><span>YOUR NEXT STEP</span><strong>Have Mindful Motors take it from here.</strong><p>Submit your request and we’ll confirm availability, check condition, and coordinate the purchase.</p></div>
+      {!showForm&&!sent?<button type="button" onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>SUBMIT MY REQUEST TO MINDFUL →</button>:null}
      </div>
     </>:result.state==="yellow"?<>
-     <div className={styles.sectionKicker}><span>YOUR MOTOR MATCH</span><strong>Possible, but choices are limited.</strong></div>
-     <div className={styles.refinementSuccess}>
-      <strong>{year} {make} {model}</strong>
-      <span>{money(budget)} budget · up to {num(mileage)} miles</span>
-      <p>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in the current sample. If you'd like more options, consider either direction below.</p>
-     </div>
-     <div className={styles.refinementGrid}>
-      {refinementOptions.slice(0,3).map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>)}
+     <div className={styles.sectionKicker}><span>YOUR OPTIONS</span><strong>Choose one change to explore.</strong></div>
+     <p className={styles.refinementIntro}>Each option opens a different path to a stronger match:</p>
+     <div className={styles.refinementGrid+" "+styles.closeRefinementGrid}>
+      {refinementOptions.slice(0,3).map((choice,index)=><div className={styles.refinementChoice} key={choice.key}><button type="button" className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>{index<Math.min(2,refinementOptions.length-1)?<span className={styles.refinementOr}>OR</span>:null}</div>)}
      </div>
     </>:<>
      <div className={styles.sectionKicker}><span>REFINE YOUR SEARCH</span><strong>Choose what matters more to you.</strong></div>
      <p className={styles.refinementIntro}>We couldn't verify a listing that meets all your limits. Try one of these approaches—verified adjustments are labeled, and exploratory choices are not guarantees.</p>
-     <div className={styles.refinementGrid}>
-      {refinementOptions.map(choice=><button type="button" key={choice.key} className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>)}
+     <div className={styles.refinementGrid+" "+styles.closeRefinementGrid}>
+      {refinementOptions.map((choice,index)=><div className={styles.refinementChoice} key={choice.key}><button type="button" className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>{index<refinementOptions.length-1?<span className={styles.refinementOr}>OR</span>:null}</div>)}
      </div>
     </>}
     {originalTarget?<button type="button" className={styles.resetTarget} onClick={restoreOriginal}>↶ Return to my original search</button>:null}
     {appliedSuggestion&&loading?<p className={styles.suggestionHint}>Rechecking the market with your revised preference…</p>:null}
    </div>
-   <div className={styles.evidenceBar}>{result.matchCount>0?<><strong>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in our market sample</strong><span>Availability isn't a condition or purchase recommendation. Check vehicle history and mechanical condition.</span></>:<><strong>No listings currently meet every limit together.</strong><span>We cannot confirm a viable purchase with the available sample.</span></>}</div>
+   {result.state!=="green"?<><div className={styles.evidenceBar}>{result.matchCount>0?<><strong>{result.matchCount} matching {result.matchCount===1?"listing":"listings"} in our market sample</strong><span>Availability isn't a condition or purchase recommendation. Check vehicle history and mechanical condition.</span></>:<><strong>No listings currently meet every limit together.</strong><span>We cannot confirm a viable purchase with the available sample.</span></>}</div>
    <div className={styles.cta}>
     <div><span>MINDFUL MOTOR CO.</span><strong>Want us to find it for you?</strong><p>We have your search preferences. Let us find the right vehicle, check its condition, negotiate the deal, and coordinate delivery.</p><p className={styles.ctaSummary}><b>Your search:</b> {year} {make} {model}{trim?" · "+trim:""} · {money(budget)} · {num(mileage)}-mile target</p></div>
-    {!showForm&&!sent?<button onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>HAVE MINDFUL MOTORS FIND MY CAR →</button>:null}
-   </div>
+    {!showForm&&!sent?<button type="button" onClick={()=>{setManualInquiry(false);setFormError("");setShowForm(true)}}>HAVE MINDFUL MOTORS FIND MY CAR →</button>:null}
+   </div></>:null}
 
    {sent?<div className={styles.success}><strong>Got it.</strong><span>Your Motor Match has been sent to Mindful Motors.</span></div>:null}
   </section>:null}
