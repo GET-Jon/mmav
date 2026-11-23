@@ -887,7 +887,7 @@
 .shellEmbedded{
   width:100%;
   max-width:none;
-  min-height:100vh;
+  min-height:0;
   margin:0;
   padding:10px 16px 22px;
   box-sizing:border-box;
