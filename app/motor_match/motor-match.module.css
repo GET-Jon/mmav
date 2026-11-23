@@ -883,11 +883,11 @@
 .resultStatus{font-size:11px!important}
 
 
-/* Embedded Wix canvas: extend the black page background to the full iframe */
+/* Embedded Wix canvas: content-driven height with compact text instructions */
 .shellEmbedded{
   width:100%;
   max-width:none;
-  min-height:100vh;
+  min-height:0;
   margin:0;
   padding:10px 16px 22px;
   box-sizing:border-box;
@@ -901,24 +901,22 @@
 }
 .embedProcess{
   display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  justify-content:center;
-  gap:5px;
+  align-items:baseline;
+  flex-wrap:wrap;
+  gap:8px 10px;
   margin:0 0 14px;
-  padding:12px 16px 14px;
+  padding:12px 16px 10px;
   background:#000;
   color:#f4f4f4;
-  font-size:16px;
   line-height:1.45;
 }
-.embedProcess strong{
+.embedProcessTitle{
   color:#ff707a;
   font-size:13px;
   font-weight:900;
-  letter-spacing:.12em;
+  letter-spacing:.06em;
 }
-.embedProcess span{
+.embedProcess>span{
   color:#f4f4f4;
   font-size:16px;
   font-weight:650;
@@ -926,10 +924,9 @@
 }
 @media(max-width:520px){
   .shellEmbedded{padding:8px 10px 18px}
-  .embedProcess{padding:10px 8px 12px;margin-bottom:12px}
-  .embedProcess span{font-size:14px;line-height:1.5}
+  .embedProcess{padding:10px 8px 12px;margin-bottom:12px;gap:5px 8px}
+  .embedProcess>span{font-size:14px;line-height:1.5}
 }
-
 
 /* Keep the iframe's root canvas and scrollbar track black as well. */
 :global(html):has(.shellEmbedded),
@@ -1182,4 +1179,18 @@
 @media(max-width:900px){
   .successNextStep{align-items:stretch;flex-direction:column;gap:16px}
   .successNextStep>button{width:100%;flex:1 1 auto}
+}
+
+/* Inline mileage validation shown after blur; the value is never clamped while typing. */
+.shellEmbedded .fieldValidationError{
+  display:block;
+  margin-top:5px;
+  color:#ff9c94;
+  font-size:12px;
+  font-weight:750;
+  line-height:1.4;
+}
+.shellEmbedded .detailsGrid input[aria-invalid="true"]{
+  border-color:#ff707a!important;
+  box-shadow:0 0 0 2px #b51f2e45!important;
 }
