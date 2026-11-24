@@ -1,5 +1,5 @@
 import {NextResponse} from "next/server";
-import {closestListings,getCachedMotorMatch,getMotorMatchCohort} from "@/lib/motor-match/server";
+import {closestListings,getCachedMotorMatch,getMotorMatchCohort,solveMotorMatch} from "@/lib/motor-match/server";
 
 export const dynamic="force-dynamic";
 // Resend delivery is configured server-side via Netlify environment variables.
@@ -23,6 +23,16 @@ export async function POST(request:Request){
     cohort=loaded.cohort;
    }
    closest=closestListings(cohort.listings,{budget,mileage},3);
+   // Recompute against the exact cohort shown in this email. Serverless instances
+   // may not share the browser search's in-memory cache, so client result fields can be stale.
+   const verified=solveMotorMatch(cohort.listings,budget,mileage);
+   Object.assign(res,{
+    state:verified.state,
+    depth:verified.depth,
+    matchCount:verified.matchCount,
+    priceNeeded:verified.market.priceNeeded,
+    mileageNeeded:verified.market.mileageNeeded
+   });
   }
   const lines=closest.map((l,i)=>[
    `${i+1}. ${[l.year,l.make,l.model,l.trim].filter(Boolean).join(" ")}`,
