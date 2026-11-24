@@ -1194,3 +1194,42 @@
   border-color:#ff707a!important;
   box-shadow:0 0 0 2px #b51f2e45!important;
 }
+
+
+/* Contrast safety net for dark embeds and host-page style leakage. */
+.shell .heroProcess{
+  color:#e2e2e2!important;
+  font-size:14px;
+  line-height:1.55;
+  opacity:1!important;
+}
+.shell .heroProcess strong{
+  color:#ff707a!important;
+  font-size:12px;
+  opacity:1!important;
+}
+.shell .heroProcess>span,
+.shell .heroProcess .heroProcessResult{
+  color:#ededed!important;
+  opacity:1!important;
+}
+.shell .panelInner .priorityChoice{
+  background:#101010!important;
+  border:1px solid #555!important;
+  color:#fff!important;
+  opacity:1!important;
+}
+.shell .panelInner .priorityChoice>span{
+  color:#fff!important;
+  opacity:1!important;
+}
+.shell .panelInner .priorityChoice:has(input:checked){
+  background:#321419!important;
+  border-color:#ff707a!important;
+  color:#fff!important;
+  box-shadow:inset 0 0 0 1px #ff707a55!important;
+}
+.shell .panelInner .priorityChoice:has(input:checked)>span{
+  color:#fff!important;
+}
+.shell .panelInner .priorityChoice input{accent-color:#ff707a!important}
