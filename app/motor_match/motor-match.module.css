@@ -1279,3 +1279,20 @@
   .shell .answer .refinementTop .mismatchArrow{font-size:54px}
   .shell .answer .refinementTop .mismatchPrompt>strong{font-size:19px}
 }
+
+
+/* Match-found action: green signals a positive next step. */
+.shell .answer .successNextStep>button{
+  border:1px solid #73e5a9;
+  background:linear-gradient(140deg,#20b96b 0%,#117847 100%);
+  color:#fff;
+  box-shadow:0 0 0 1px #20b96b55,0 8px 22px #11784766;
+}
+.shell .answer .successNextStep>button:hover{
+  background:linear-gradient(140deg,#38d985 0%,#15945a 100%);
+  box-shadow:0 0 0 2px #38d98566,0 10px 26px #11784777;
+}
+.shell .answer .successNextStep>button:focus-visible{
+  outline:3px solid #87f0b7;
+  outline-offset:3px;
+}
