@@ -1237,3 +1237,45 @@
 
 /* Red step marker used before the first vehicle question. */
 .shell .panelInner h3 .stepPrefix{color:#ff707a!important}
+
+
+/* A cleaner market-mismatch path: one arrow, one prompt, then the choices. */
+.shell .answer .refinementTop .mismatchPrompt{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:10px;
+  padding:4px 4px 20px;
+  color:#fff;
+}
+.shell .answer .refinementTop .mismatchArrow{
+  display:block;
+  color:#fff;
+  font-size:64px;
+  font-weight:900;
+  line-height:.8;
+}
+.shell .answer .refinementTop .mismatchPrompt>strong{
+  color:#fff!important;
+  font-size:21px;
+  line-height:1.25;
+}
+.shell .answer .cta button{
+  border:1px solid #78a5ff!important;
+  background:linear-gradient(140deg,#347bff 0%,#194bc7 100%)!important;
+  color:#fff!important;
+  box-shadow:0 8px 24px #245fe766!important;
+}
+.shell .answer .cta button:hover{
+  background:linear-gradient(140deg,#5592ff 0%,#2862e1 100%)!important;
+  box-shadow:0 10px 28px #245fe788!important;
+}
+.shell .answer .cta button:focus-visible{
+  outline:3px solid #91b8ff!important;
+  outline-offset:3px;
+}
+@media(max-width:720px){
+  .shell .answer .refinementTop .mismatchPrompt{padding:2px 0 16px}
+  .shell .answer .refinementTop .mismatchArrow{font-size:54px}
+  .shell .answer .refinementTop .mismatchPrompt>strong{font-size:19px}
+}
