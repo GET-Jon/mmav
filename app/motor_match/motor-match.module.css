@@ -1233,3 +1233,7 @@
   color:#fff!important;
 }
 .shell .panelInner .priorityChoice input{accent-color:#ff707a!important}
+
+
+/* Red step marker used before the first vehicle question. */
+.shell .panelInner h3 .stepPrefix{color:#ff707a!important}
