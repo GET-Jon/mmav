@@ -9,6 +9,16 @@ const s=(v:unknown)=>String(v||"").trim();
 
 function map(payload:any):Listing[]{return (Array.isArray(payload?.data)?payload.data:[]).map((row:any)=>{const v=row?.vehicle||{};const r=row?.retailListing||{};return{vin:s(v.vin||row?.vin)||null,year:n(v.year),make:s(v.make)||null,model:s(v.model)||null,trim:s(v.trim)||null,price:n(r.price),miles:n(r.miles??r.mileage),dealer:s(r.dealer)||null,city:s(r.city)||null,state:s(r.state)||null,url:s(r.vdp)||null}}).filter((l:Listing)=>typeof l.price==="number"&&l.price>0&&typeof l.miles==="number"&&l.miles>=0)}
 
+function filterImplausibleLowPrices(listings:Listing[]){
+ const prices=listings.map(l=>l.price).filter((p):p is number=>typeof p==="number"&&p>0).sort((a,b)=>a-b);
+ if(!prices.length)return [];
+ const upperQuartile=prices[Math.floor((prices.length-1)*0.75)];
+ // Exclude likely placeholder/deposit prices that can otherwise create false budget matches.
+ // The cap keeps the floor conservative for low-priced and older vehicles.
+ const minimumPlausiblePrice=Math.max(1000,Math.min(5000,upperQuartile*0.2));
+ return listings.filter(l=>(l.price??0)>=minimumPlausiblePrice);
+}
+
 function keyFor({make,model,trim,zip,distance,year}:{make:string;model:string;trim:string;zip:string;distance:number;year:number}){
  return [make,model,trim||"*",zip||"national",zip?distance:"all",year].map(v=>String(v).trim().toLowerCase()).join("|");
 }
@@ -50,7 +60,7 @@ export async function getMotorMatchCohort(input:{make:string;model:string;trim:s
  ]);
  const successful=settled.flatMap(item=>item.status==="fulfilled"?[item.value]:[]);
  if(!successful.length)throw new Error("The market data provider is taking too long. Please try again.");
- const listings=dedupe(successful.map(item=>item.listings));
+ const listings=filterImplausibleLowPrices(dedupe(successful.map(item=>item.listings)));
  const cohort={expiresAt:now+CACHE_TTL_MS,listings,providerTotal:Math.max(...successful.map(item=>item.total)),calls:2,trim:input.trim};
  cache.set(key,cohort);
  if(cache.size>200){for(const [k,v] of cache){if(v.expiresAt<=now)cache.delete(k)}}
