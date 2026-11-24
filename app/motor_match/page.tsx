@@ -359,7 +359,7 @@ Customer priority: ${priority}`),
      <span className={styles.resultVehicle}>{year} {make} {model}{trim?" · "+trim:""}</span>
     </div>
     <h2>{headline}</h2>
-    <p>{subhead}</p>
+    {result.state==="red"?null:<p>{subhead}</p>}
    </div>
    <div className={styles.refinementTop}>
     {result.state!=="green"&&loading&&pendingRefinement.current?<div className={styles.refinementProgress} role="status">Checking how your updated criteria change the available listings…</div>:null}
@@ -379,8 +379,10 @@ Customer priority: ${priority}`),
       {refinementOptions.slice(0,3).map((choice,index)=><div className={styles.refinementChoice} key={choice.key}><button type="button" className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>{index<Math.min(2,refinementOptions.length-1)?<span className={styles.refinementOr}>OR</span>:null}</div>)}
      </div>
     </>:<>
-     <div className={styles.sectionKicker}><span>REFINE YOUR SEARCH</span><strong>Choose what matters more to you.</strong></div>
-     <p className={styles.refinementIntro}>We couldn't verify a listing that meets all your limits. Try one of these approaches—verified adjustments are labeled, and exploratory choices are not guarantees.</p>
+     <div className={styles.mismatchPrompt}>
+      <span className={styles.mismatchArrow} aria-hidden="true">⬇</span>
+      <strong>Would you like to…</strong>
+     </div>
      <div className={styles.refinementGrid+" "+styles.closeRefinementGrid}>
       {refinementOptions.map((choice,index)=><div className={styles.refinementChoice} key={choice.key}><button type="button" className={styles.refinementCard} onClick={()=>queueRefinement(choice.value,choice.action,choice.verified)}><span>{choice.heading}</span><strong>{choice.value}</strong><small>{choice.detail}</small><b>{choice.verified?"APPLY & CHECK MARKET →":"EDIT SEARCH PREFERENCES →"}</b></button>{index<refinementOptions.length-1?<span className={styles.refinementOr}>OR</span>:null}</div>)}
      </div>
