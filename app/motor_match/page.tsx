@@ -289,19 +289,18 @@ Customer priority: ${priority}`),
    <div className={styles.heroProcess}><strong>THREE QUICK CHOICES</strong><span>1. Choose your car</span><span>2. Set your budget</span><span>3. Pick your priorities</span><span className={styles.heroProcessResult}>Details optional · Then see what's realistic ↓</span></div>
   </section>:null}
 
-  {embedded?<div className={styles.embedProcess} aria-label="Three quick choices"><strong className={styles.embedProcessTitle}>Three Quick Choices:</strong><span>Car → Budget → Priorities (+ refinements)</span></div>:null}
 
   <section ref={builderRef} className={styles.builder+" "+styles.guidedBuilder+" "+styles.panelBuilder}>
    <div className={styles.panelTrack+(activePanel===null?" "+styles.panelTrackAllClosed:"")} data-active={activePanel===null?"all":activePanel}>
     <section className={styles.expandPanel+" "+(activePanel===0?styles.expandPanelOpen:styles.expandPanelClosed)}>
      <button className={styles.panelHandle} type="button" aria-expanded={activePanel===0} aria-controls="mm-car" onClick={()=>setActivePanel(activePanel===0?null:0)}><span className={styles.panelBadge}>1</span><span className={styles.panelHandleWords}><small>CAR</small><strong>{make&&model?make+" "+model:"Choose your car"}</strong></span><span className={styles.panelHandleChevron} aria-hidden="true">{activePanel===0?"−":"+"}</span></button>
      <div className={styles.panelContent} id="mm-car" aria-hidden={activePanel!==0}><div className={styles.panelInner}>
-      <h3>What car do you have in mind?</h3><p>Start with a make and model. We can help with the rest.</p>
+      <h3><span className={styles.stepPrefix}>First,</span> what car do you have in mind?</h3>
       <div className={styles.guidedVehicleGrid}>
        <Field label="MAKE"><select ref={makeInputRef} tabIndex={activePanel===0?0:-1} className={makeNeedsFocus?styles.makeFocus:""} value={make} onChange={e=>{setMake(e.target.value);setModel("");setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("")}}><option value="">Select make</option>{makes.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
        <Field label="MODEL"><select tabIndex={activePanel===0?0:-1} value={model} disabled={!make} onChange={e=>{setModel(e.target.value);setYear(null);setTrim("");setResult(null);setStarted(false);setOriginalTarget(null);setVehicleError("")}}><option value="">{make?"Select model":"Choose make first"}</option>{models.map(value=><option key={value} value={value}>{value}</option>)}</select></Field>
       </div>
-      <button type="button" tabIndex={activePanel===0?0:-1} className={styles.dreamLink} onClick={()=>{setDiscoveryMode(true);setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Not sure what car to buy? Let us help you choose →</button>
+      <button type="button" tabIndex={activePanel===0?0:-1} className={styles.dreamLink} onClick={()=>{setDiscoveryMode(true);setManualInquiry(true);setSent(false);setFormError("");setShowForm(true)}}>Let us help you choose →</button>
       <div className={styles.panelActions}><button type="button" tabIndex={activePanel===0?0:-1} className={styles.panelNext} disabled={!make||!model} onClick={()=>setActivePanel(1)}>Next: Set your budget →</button></div>
      </div></div>
     </section>
